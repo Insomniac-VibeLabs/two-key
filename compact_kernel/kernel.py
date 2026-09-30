@@ -2,8 +2,9 @@
 Compact Kernel: dual-path constitutional enforcement
 ====================================================
 1. Load the principal's signed constitution: plain-English text for Path B
-   and hard rules compiled for Path A. The Ed25519 signature is verified
-   first; unsigned or modified constitutions are refused.
+   and hard rules compiled for Path A. The principal's signature (Ed25519, ECDSA
+   P-384, or hybrid ML-DSA-65) is verified first; unsigned or modified
+   constitutions are refused.
 2. Receive a proposed action plus the literal tool-call arguments.
    Normalize and validate the action.
 3. Path A: deterministic Policy VM. Fail closed.
@@ -13,7 +14,17 @@ Compact Kernel: dual-path constitutional enforcement
 5. Only if BOTH paths pass, issue a short-lived, single-use capability token
    bound to tool, scope, args hash, and the current ledger root.
 6. Every step is appended to the principal's signed ledger. If the ledger
-   cannot append, the result is deny.
+   cannot append, the result is deny. The ledger head is signed once per
+   decision (``head_signing="decision"``, default) or after every append
+   (``head_signing="append"``); if the signed-head checkpoint fails, the
+   decision is a deny.
+
+Crypto (compact_kernel.crypto): a CryptoProvider runs its known-answer
+self-test before the kernel starts; ``fips_mode`` refuses non-approved
+algorithms. The principal key may be legacy Ed25519, ECDSA P-384, or a hybrid
+ML-DSA-65 suite; ``require_pq=True`` refuses to start without a hybrid key and
+a working ML-DSA backend. Non-legacy suites default to SHA-384 digests and
+HMAC-SHA-384 tokens.
 """
 
 from __future__ import annotations
@@ -22,13 +33,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
-
-from . import keys
 from .action import Action, ActionValidationError, normalize_action
 from .canonical import canonical_hash, sha256_hex
 from .capability import CapabilityIssuer, args_hash
 from .constitution import Constitution, verify_signed
+from .crypto.provider import CryptoProvider, default_provider
+from .crypto.signatures import LEGACY_SUITE, as_public_keyset
 from .gateway import Extractor, ToolGateway
 from .judges.base import Judge
 from .ledger import LedgerError, PersonalLedger
@@ -59,11 +69,11 @@ class CompactKernel:
     def __init__(
         self,
         signed_constitution: dict,
-        trusted_public_key: Ed25519PublicKey,
+        trusted_public_key: Any,
         ledger_path: Path,
         judges: Sequence[Judge],
         *,
-        ledger_signing_key: Ed25519PrivateKey | None = None,
+        ledger_signing_key: Any = None,
         allow_unsigned_ledger: bool = False,
         quorum_policy: QuorumPolicy | None = None,
         ttl_seconds: int = 30,
@@ -72,7 +82,25 @@ class CompactKernel:
         clock: Callable[[], float] | None = None,
         allow_test_doubles: bool = False,
         short_circuit_path_b: bool = True,
+        crypto: CryptoProvider | None = None,
+        require_pq: bool = False,
+        digest_alg: str | None = None,
+        token_mode: str | None = None,
+        token_signing_key: Any = None,
+        head_signing: str = "decision",
+        ledger_fsync: bool = True,
     ):
+        # Crypto first: the known-answer self-test must pass before anything else (raises SelfTestError).
+        self.crypto = crypto or default_provider()
+        self.selftest = self.crypto.ensure_selftest()
+        trusted = as_public_keyset(trusted_public_key, self.crypto)  # PQUnavailableError if hybrid w/o backend
+        if require_pq:
+            if not trusted.is_pq:
+                raise KernelConfigError(f"require_pq=True but the principal key suite {trusted.suite!r} "
+                                        "is not a hybrid ML-DSA suite")
+            self.crypto.require_pq()
+        if head_signing not in ("decision", "append"):
+            raise KernelConfigError("head_signing must be 'decision' or 'append'")
         if not judges:
             raise KernelConfigError("at least one Path B judge is required")
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
@@ -80,28 +108,37 @@ class CompactKernel:
         if ledger_signing_key is None and not allow_unsigned_ledger:
             raise KernelConfigError("ledger_signing_key required (or allow_unsigned_ledger=True for testing)")
         if ledger_signing_key is not None and \
-                keys.public_key_raw(ledger_signing_key) != keys.public_key_raw(trusted_public_key):
+                as_public_keyset(ledger_signing_key, self.crypto).encoded != trusted.encoded:
             raise KernelConfigError("ledger_signing_key must be the principal's key")
+        legacy = trusted.suite == LEGACY_SUITE
+        self.digest_alg = digest_alg or ("sha256" if legacy else "sha384")
+        self.crypto.check("hash", self.digest_alg)
+        self.token_mode = token_mode or ("ck1" if legacy else "ck1-hs384")
 
         # Refuse unsigned, modified, or foreign-signed constitutions (spec 5.1 item 2).
-        self.constitution: Constitution = verify_signed(signed_constitution, trusted_public_key)
+        self.constitution: Constitution = verify_signed(signed_constitution, trusted, self.crypto)
         self.trusted_public_key = trusted_public_key
+        self.trusted_keyset = trusted
         self.principal = self.constitution.principal
         self.constitution_text = self.constitution.text
         self.bytecode = compile_constitution(self.constitution.hard_rules, max_steps=max_steps)
         self.vm = PolicyVM(self.bytecode, max_steps=max_steps)
 
-        self.ledger = PersonalLedger(Path(ledger_path), signing_key=ledger_signing_key)
+        self.head_signing = head_signing
+        self.ledger = PersonalLedger(Path(ledger_path), signing_key=ledger_signing_key, digest_alg=self.digest_alg,
+                                     auto_sign_every=1 if head_signing == "append" else 0,
+                                     fsync=ledger_fsync, crypto=self.crypto)
         if self.ledger.entries:
             if ledger_signing_key is not None:
-                rep = self.ledger.verify(trusted_public_key)
+                rep = self.ledger.verify(trusted)
                 if not rep.ok:
                     raise LedgerError(f"existing ledger failed verification: {rep.reason}")
             elif not self.ledger.verify_chain():
                 raise LedgerError("existing ledger hash chain is broken")
 
         issuer_kw = {"clock": clock} if clock else {}
-        self.issuer = CapabilityIssuer(capability_secret, **issuer_kw)
+        self.issuer = CapabilityIssuer(capability_secret, mode=self.token_mode, signing_key=token_signing_key,
+                                       crypto=self.crypto, **issuer_kw)
         self.judges = list(judges)
         self.quorum_policy = quorum_policy or QuorumPolicy(required_yes=min(2, len(self.judges)))
         if self.quorum_policy.required_yes > len(self.judges):
@@ -121,17 +158,27 @@ class CompactKernel:
             "short_circuit_path_b": self.short_circuit_path_b,
             "quorum": {"required_yes": self.quorum_policy.required_yes,
                        "min_responding": self.quorum_policy.effective_min_responding,
-                       "min_distinct_providers": self.quorum_policy.min_distinct_providers},
+                       "min_distinct_providers": self.quorum_policy.min_distinct_providers,
+                       "timeout_seconds": self.quorum_policy.timeout_seconds},
+            "crypto": self.crypto_profile(),
         })
+        self.ledger.checkpoint()
+
+    def crypto_profile(self) -> dict:
+        be = self.crypto.pq_backend()
+        return {"signature_suite": self.trusted_keyset.suite, "digest_alg": self.digest_alg,
+                "token_mode": self.token_mode, "fips_mode": self.crypto.fips_mode,
+                "pq_backend": None if be is None else be.describe(), "head_signing": self.head_signing,
+                "selftest": {"ok": self.selftest["ok"], "tests": len(self.selftest["passed"])}}
 
     # ------------------------------------------------------------------
     def gateway(self, tools: Mapping[str, Callable[..., Any]] | None = None,
                 extractors: Mapping[str, Extractor] | None = None) -> ToolGateway:
-        return ToolGateway(self.issuer, self.ledger, self.principal, tools, extractors)
+        return ToolGateway(self.issuer, self.ledger, self.principal, tools, extractors, digest_alg=self.digest_alg)
 
     def _deny(self, reason: str, action_rec: dict | None = None, **kw) -> Decision:
         body = {"allowed": False, "reason": reason, "denied_by_rule": kw.get("denied_by_rule"),
-                "action_digest": canonical_hash(action_rec) if action_rec else None}
+                "action_digest": self._h(action_rec) if action_rec else None}
         try:
             self.ledger.append("decision", body)
         except Exception:
@@ -141,9 +188,19 @@ class CompactKernel:
     def authorize(self, proposed: Action | Mapping[str, Any], proposal: str,
                   tool_args: Mapping[str, Any] | None = None) -> Decision:
         try:
-            return self._authorize(proposed, proposal, {} if tool_args is None else tool_args)
+            d = self._authorize(proposed, proposal, {} if tool_args is None else tool_args)
         except Exception as e:  # spec 5.7: no best-effort allow; the ledger or any component failing means deny
-            return Decision(False, f"internal_error:{type(e).__name__}", ledger_digest=self.ledger.root())
+            d = Decision(False, f"internal_error:{type(e).__name__}", ledger_digest=self.ledger.root())
+        try:
+            self.ledger.checkpoint()  # one signed head per decision
+        except Exception as e:
+            if d.allowed:  # never release a token whose decision is not covered by a signed head
+                return Decision(False, f"internal_error:ledger_checkpoint:{type(e).__name__}",
+                                ledger_digest=self.ledger.root())
+        return d
+
+    def _h(self, obj: Any) -> str:
+        return canonical_hash(obj, self.digest_alg, self.crypto)
 
     def _authorize(self, proposed, proposal: str, tool_args: Mapping[str, Any]) -> Decision:
         if not isinstance(proposal, str):
@@ -153,11 +210,11 @@ class CompactKernel:
                                         "tool_args": _safe_record(tool_args)})
         try:
             action = normalize_action(proposed)
-            a_hash = args_hash(action.tool, tool_args)
+            a_hash = args_hash(action.tool, tool_args, self.digest_alg, self.crypto)
         except (ActionValidationError, TypeError, ValueError) as e:
             return self._deny(f"invalid_action:{e}")
         rec = action.to_record()
-        self.ledger.append("action_normalized", {"action": rec, "action_digest": canonical_hash(rec),
+        self.ledger.append("action_normalized", {"action": rec, "action_digest": self._h(rec),
                                                  "args_hash": a_hash})
 
         vm_res = self.vm.eval(action)
@@ -194,7 +251,7 @@ class CompactKernel:
             "jti": p["jti"], "token_sha256": cap.token_hash, "tool": p["tool"], "scope": p["scope"],
             "args_hash": p["args_hash"], "expires_at": p["expires_at"], "ledger_root": p["ledger_root"]})
         self.ledger.append("decision", {"allowed": True, "reason": "dual_path_pass", "denied_by_rule": None,
-                                        "action_digest": canonical_hash(rec)})
+                                        "action_digest": self._h(rec)})
         return Decision(True, "dual_path_pass", True, vm_res.reason, None, True, qsum, cap.token, cap.payload,
                         self.ledger.root(), rec)
 
