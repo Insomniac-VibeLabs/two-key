@@ -29,5 +29,36 @@ separately in `CHANGES.md` and in git history. It is not conception.
 
 ---
 
+## Entry 2
+
+- **Attributed to:** Stephan Busch
+- **Date/time:** 2026-09-30, about 7:02 AM Mountain Time (MDT, UTC-6)
+- **How it was captured:** Stephan's selection was relayed to the AI
+  engineering assistant through his patent-attorney assistant (another AI
+  agent). The quoted text is reproduced word for word as relayed.
+- **Context:** Given after reviewing the patent-attorney agent's prior-art
+  triage (`PRIOR_ART.md`, kept outside this repository), §4 "Suggested
+  narrower claim directions", and the related action-record normalization
+  question.
+
+> "A, B, C, and F all together"
+
+### What the selection refers to (as relayed; assistant's note, not conception)
+
+| Letter | Refers to | Source |
+|---|---|---|
+| A | Ledger-root-bound token | `PRIOR_ART.md` §4 direction (i) |
+| B | One signed constitution, two compilations | `PRIOR_ART.md` §4 direction (ii) |
+| C | Quorum protocol specifics | `PRIOR_ART.md` §4 direction (iii) |
+| F | The action-record normalization problem (who produces the fields Path A reads) | `DESIGN_OPTIONS.md` §1; `PRIOR_ART.md` §3 |
+
+This entry records a *selection* among directions that the attorney agent
+proposed. The directions' wording comes from `PRIOR_ART.md`, which is an
+AI-prepared document; this entry does not attribute that wording to Stephan.
+For F, the selection identifies the problem; no solution option has been
+chosen or implemented.
+
+---
+
 *Future entries: add a new dated section. Don't edit earlier entries. If
 something needs correcting, add a later entry that says so.*
