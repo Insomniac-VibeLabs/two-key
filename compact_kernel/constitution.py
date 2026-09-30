@@ -10,6 +10,11 @@ key: legacy Ed25519 (default), ECDSA P-384, or a hybrid ML-DSA-65 suite
 signature against a public key the principal trusts. Unsigned, modified,
 or foreign-signed constitutions are rejected (spec 5.1 item 2: "Changing it
 requires a fresh signature. Model vendors cannot push a new constitution.").
+
+Two document formats are accepted (both signed as one document):
+  compact-kernel-constitution/1  separate ``constitution_text`` and ``hard_rules`` fields
+  compact-kernel-constitution/2  one Markdown ``source``; compiler.split_source
+                                 extracts the ```ck-rules block (PRIOR_ART.md §4 (ii))
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from .crypto.signatures import LEGACY_SUITE, SUITES, as_private_keyset, as_publi
 from .policy_vm import ConstitutionError, validate_rules
 
 FORMAT = "compact-kernel-constitution/1"
+FORMAT_V2 = "compact-kernel-constitution/2"
 TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
 RULES_SUFFIXES = {".json", ".yaml", ".yml"}
 MAX_TEXT_BYTES = 1_000_000
@@ -99,6 +105,26 @@ def build_document(principal: str, text: str, hard_rules: list, created_at: str 
     }
 
 
+def build_source_document(principal: str, source: str, created_at: str | None = None) -> dict:
+    """Single-source (/2) document: prose plus exactly one ```ck-rules JSON block."""
+    from .compiler import split_source
+    if not isinstance(principal, str) or not principal.strip():
+        raise ConstitutionError("principal identifier required")
+    _, rules = split_source(source)
+    validate_rules(rules)
+    return {
+        "format": FORMAT_V2,
+        "principal": principal,
+        "created_at": created_at or _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+        "source": source,
+        "source_sha256": sha256_hex(source.encode("utf-8")),
+    }
+
+
+def sign_source_file(source_path: Path, principal: str, key: Any) -> dict:
+    return sign_document(build_source_document(principal, load_text_file(source_path)), key)
+
+
 def sign_document(document: dict, key: Any, provider: CryptoProvider | None = None) -> dict:
     """Sign with an Ed25519 private key (legacy format) or any PrivateKeySet (e.g. hybrid ML-DSA-65)."""
     ks = as_private_keyset(key, provider)
@@ -149,13 +175,22 @@ def verify_signed(envelope: Any, trusted_key: Any, provider: CryptoProvider | No
         raise ConstitutionSignatureError("malformed constitution document")
     if not trusted.verify(canonical_bytes(doc), sig["sig"]):
         raise ConstitutionSignatureError("signature does not match: constitution was modified or forged")
-    if doc.get("format") != FORMAT:
+    if doc.get("format") == FORMAT:
+        text, rules = doc.get("constitution_text"), doc.get("hard_rules")
+        if not isinstance(text, str) or sha256_hex(text.encode("utf-8")) != doc.get("constitution_text_sha256"):
+            raise ConstitutionError("constitution text hash mismatch")
+    elif doc.get("format") == FORMAT_V2:
+        from .compiler import split_source
+        src = doc.get("source")
+        if not isinstance(src, str) or sha256_hex(src.encode("utf-8")) != doc.get("source_sha256"):
+            raise ConstitutionError("constitution source hash mismatch")
+        text, rules = split_source(src)
+    else:
         raise ConstitutionError(f"unsupported constitution format {doc.get('format')!r}")
-    text = doc.get("constitution_text")
-    if not isinstance(text, str) or sha256_hex(text.encode("utf-8")) != doc.get("constitution_text_sha256"):
-        raise ConstitutionError("constitution text hash mismatch")
-    validate_rules(doc.get("hard_rules"))
-    return Constitution(doc["principal"], text, doc["hard_rules"], doc["created_at"], doc,
+    validate_rules(rules)
+    if not isinstance(doc.get("principal"), str) or not isinstance(doc.get("created_at"), str):
+        raise ConstitutionError("principal and created_at are required")
+    return Constitution(doc["principal"], text, rules, doc["created_at"], doc,
                         trusted.fingerprint, trusted.suite,
                         "sha256" if trusted.suite == LEGACY_SUITE else "sha384")
 

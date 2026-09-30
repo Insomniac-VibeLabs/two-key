@@ -12,9 +12,29 @@ any tool runs, it checks everything spec 5.5 lists, plus single-use:
   6. amount within scope       -> amount_exceeds_scope
   7. counterparty matches      -> counterparty_mismatch
   8. data class matches        -> data_class_mismatch
-  9. ledger_root is the current head or an ancestor, and no constitution was
-     loaded after it           -> unknown_ledger_root / constitution_changed_since_issue
- 10. single use (jti)          -> replayed
+  9. ledger_root (chain digest) is a known entry -> unknown_ledger_root
+     (checked after 10a)
+ 10. ledger-root binding, PRIOR_ART.md §4 (i), selected by Stephan Busch on
+     2026-09-30 (CONCEPTION_NOTES.md Entry 2):
+     a. the gateway keeps its own last-known view (size, Merkle root) of the
+        principal's ledger. On every call it first checks, with an RFC 9162
+        consistency proof, that the current ledger extends that view
+                               -> ledger_fork_detected
+     b. the token's root R (ledger_size, ledger_merkle_root) equals the view
+        or is proven an ancestor of it by a consistency proof
+                               -> token_missing_ledger_binding / ledger_root_not_ancestor
+     c. H(bytecode), H(NL constitution), and the constitution digest in the
+        token equal those in the latest constitution_loaded entry
+                               -> constitution_hash_mismatch
+     d. no constitution reload or revocation entry after issuance
+                               -> constitution_changed_since_issue / revoked
+     e. the token's own capability_issued entry exists and matches
+                               -> capability_not_recorded
+ 11. single use (jti)          -> replayed
+
+On success, capability_redeemed and tool_executed/tool_error entries link to
+the token's capability_issued entry (seq and digest). tool_executed also
+records H(result); the result itself is not stored (DESIGN_OPTIONS.md §7).
 
 Call fields (amount, counterparty, data class) come from ``call_fields``
 supplied by the caller or from a per-tool extractor. Who derives these fields
@@ -39,7 +59,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
+from . import merkle
 from .action import ActionValidationError, normalize_action
+from .canonical import canonical_hash
 from .capability import CapabilityIssuer, TokenError, args_hash, token_sha256
 from .ledger import PersonalLedger
 
@@ -70,6 +92,64 @@ class ToolGateway:
         self.extractors = dict(extractors or {})
         # Rebuild the single-use set from the ledger so replay protection survives restarts.
         self._redeemed = {e.body.get("jti") for e in ledger.entries if e.kind == "capability_redeemed"}
+        # Last-known ledger view (§4 (i)). Taken from the ledger at construction; the kernel has
+        # verified the ledger against the principal's signed head by then.
+        self._view_size = ledger.size
+        self._view_root = ledger.root_bytes(self._view_size)
+
+    @property
+    def view(self) -> tuple[int, str]:
+        return self._view_size, self._view_root.hex()
+
+    def _refresh_view(self) -> bool:
+        """Advance the last-known view to the current ledger, if and only if it is an extension."""
+        n = self.ledger.size
+        if n == self._view_size:
+            return self.ledger.root_bytes(n) == self._view_root
+        if n < self._view_size:
+            return False
+        new_root = self.ledger.root_bytes(n)
+        if self._view_size and not merkle.verify_consistency(
+                self._view_size, n, self._view_root, new_root,
+                self.ledger.consistency_path(self._view_size, n), self.ledger.hash_fn()):
+            return False
+        self._view_size, self._view_root = n, new_root
+        return True
+
+    def _check_ledger_binding(self, p: dict) -> tuple[str | None, Any]:
+        """PRIOR_ART.md §4 (i) checks a-e. Returns (deny reason or None, capability_issued entry)."""
+        size, root_hex = p.get("ledger_size"), p.get("ledger_merkle_root")
+        if isinstance(size, bool) or not isinstance(size, int) or not isinstance(root_hex, str) \
+                or not p.get("bytecode_hash") or not p.get("nl_hash"):
+            return "token_missing_ledger_binding", None
+        try:
+            token_root = bytes.fromhex(root_hex)
+        except ValueError:
+            return "token_missing_ledger_binding", None
+        if not 0 < size <= self._view_size:
+            return "ledger_root_not_ancestor", None
+        if size == self._view_size:
+            ok = token_root == self._view_root
+        else:
+            ok = merkle.verify_consistency(size, self._view_size, token_root, self._view_root,
+                                           self.ledger.consistency_path(size, self._view_size),
+                                           self.ledger.hash_fn())
+        # The chain digest in the token must be the last entry covered by R.
+        if not ok or self.ledger.entries[size - 1].digest != p.get("ledger_root"):
+            return "ledger_root_not_ancestor", None
+        loaded = self.ledger.latest_constitution()
+        if loaded is None or loaded.body.get("bytecode_hash") != p.get("bytecode_hash") \
+                or loaded.body.get("nl_hash") != p.get("nl_hash") \
+                or loaded.body.get("constitution_digest") != p.get("constitution_digest"):
+            return "constitution_hash_mismatch", None
+        if loaded.seq >= size:
+            return "constitution_changed_since_issue", None
+        if self.ledger.revocation_for(p.get("jti", ""), size) is not None:
+            return "revoked", None
+        cap = self.ledger.capability_entry(p.get("jti", ""))
+        if cap is None or cap.seq != size:
+            return "capability_not_recorded", None
+        return None, cap
 
     def _deny(self, reason: str, token: Any, tool: Any) -> GatewayResult:
         th = token_sha256(token) if isinstance(token, str) else None
@@ -135,25 +215,40 @@ class ToolGateway:
             return self._deny("counterparty_mismatch", token, tool)
         if fields["data_class"] != scope.get("data_class"):
             return self._deny("data_class_mismatch", token, tool)
-        idx = self.ledger.index_of(p.get("ledger_root", ""))
-        if idx is None:
+        if not self._refresh_view():  # §4 (i): the ledger must extend the gateway's last-known view
+            return self._deny("ledger_fork_detected", token, tool)
+        if self.ledger.index_of(p.get("ledger_root", "")) is None:
             return self._deny("unknown_ledger_root", token, tool)
-        if "constitution_loaded" in self.ledger.kinds_after(idx):
-            return self._deny("constitution_changed_since_issue", token, tool)
+        reason, cap = self._check_ledger_binding(p)
+        if reason is not None:
+            return self._deny(reason, token, tool)
+        tok_hash = token_sha256(token)
+        if cap.body.get("token_sha256") != tok_hash:
+            return self._deny("capability_not_recorded", token, tool)
         jti = p.get("jti")
         if not jti or jti in self._redeemed:
             return self._deny("replayed", token, tool)
 
+        link = {"capability_entry_seq": cap.seq, "capability_entry_digest": cap.digest}
         self._redeemed.add(jti)
-        self.ledger.append("capability_redeemed", {"jti": jti, "token_sha256": token_sha256(token),
-                                                   "tool": call_tool, "args_hash": call_args_hash})
+        self.ledger.append("capability_redeemed", {"jti": jti, "token_sha256": tok_hash,
+                                                   "tool": call_tool, "args_hash": call_args_hash, **link})
         fn = self.tools.get(call_tool)
         if fn is None:
             return GatewayResult(True, "authorized_no_executor")
         try:
             result = fn(**dict(args))
         except Exception as e:
-            self.ledger.append("tool_error", {"jti": jti, "error": type(e).__name__})
+            self.ledger.append("tool_error", {"jti": jti, "error": type(e).__name__, **link})
             return GatewayResult(True, f"tool_error:{type(e).__name__}")
-        self.ledger.append("tool_executed", {"jti": jti, "tool": call_tool})
+        self.ledger.append("tool_executed", {"jti": jti, "tool": call_tool, **link,
+                                             "result_hash": _result_hash(result, self.digest_alg, self.ledger)})
         return GatewayResult(True, "executed", result)
+
+
+def _result_hash(result: Any, alg: str, ledger: PersonalLedger) -> str:
+    """H(canonical JSON of the result), or H(repr) for results that are not JSON-serializable."""
+    try:
+        return canonical_hash(result, alg, ledger.crypto)
+    except (TypeError, ValueError):
+        return canonical_hash({"repr": repr(result)}, alg, ledger.crypto)

@@ -6,6 +6,13 @@ Format (see examples/judges.yaml):
       required_yes: 2          # k-of-n
       min_responding: 2        # spec 5.4 "K"
       min_distinct_providers: 1
+      # PRIOR_ART.md §4 (iii) options (defaults shown; see quorum.QuorumPolicy):
+      min_vendors: 1           # >= 2 in the §4 reference profile
+      min_local_judges: 0      # >= 1 in the §4 reference profile
+      heterogeneity_scope: selection   # selection | responding
+      judge_inputs: record_only        # record_only | record_and_proposal
+      ballot_binding: stamp            # stamp | echo
+      require_path_a_first: false
     judges:
       - id: grok
         type: openai_compatible   # openai_compatible | anthropic | gemini | ollama
@@ -13,6 +20,9 @@ Format (see examples/judges.yaml):
         base_url: https://api.x.ai/v1
         model: REPLACE_WITH_MODEL
         auth: {type: env, var: XAI_API_KEY}
+        vendor: xai               # optional; defaults to provider
+        local_weights: false      # optional; ollama defaults to true
+        echo_binding: false       # optional; required true when ballot_binding: echo
 
 Auth types: none | env | keyring | username_password | oauth_device_code | callback.
 Hooks (``login``, ``fetch_token``, ``callback``) are "module:function" strings
@@ -29,7 +39,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-from ..quorum import QuorumPolicy
+from ..quorum import QuorumConfigError, QuorumPolicy, check_judge_set
 from .anthropic import AnthropicJudge
 from .base import Judge
 from .credentials import (CallbackTokenProvider, CredentialProvider, EnvApiKey, KeyringApiKey, NoCredential,
@@ -47,7 +57,11 @@ ADAPTERS = {
 DEFAULT_PROVIDER = {"openai_compatible": "openai-compatible", "anthropic": "anthropic",
                     "gemini": "google", "ollama": "ollama-local"}
 JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", "json_mode",
-              "max_tokens", "auth_header", "allow_insecure_http"}
+              "max_tokens", "auth_header", "allow_insecure_http", "vendor", "local_weights", "weights_sha256",
+              "echo_binding"}
+QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
+               "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
+               "require_path_a_first"}
 
 
 class JudgeConfigError(ValueError):
@@ -106,7 +120,8 @@ def build_judge(spec: dict, transport=None) -> Judge:
         "judge_id": spec.get("id"), "provider": spec.get("provider", DEFAULT_PROVIDER[t]), "model": model,
         "credential": build_credential(spec.get("auth")), "transport": transport,
     }
-    for k in ("base_url", "timeout", "auth_header", "allow_insecure_http", "json_mode", "max_tokens"):
+    for k in ("base_url", "timeout", "auth_header", "allow_insecure_http", "json_mode", "max_tokens",
+              "vendor", "local_weights", "weights_sha256", "echo_binding"):
         if k in spec:
             kw[k] = spec[k]
     if t == "openai_compatible" and "base_url" not in kw:
@@ -125,11 +140,18 @@ def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
     if len(set(ids)) != len(ids):
         raise JudgeConfigError("judge ids must be unique")
     q = data.get("quorum") or {}
-    if set(q) - {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel"}:
-        raise JudgeConfigError("unknown quorum keys")
-    policy = QuorumPolicy(**q) if q else QuorumPolicy(required_yes=min(2, len(judges)))
+    if set(q) - QUORUM_KEYS:
+        raise JudgeConfigError(f"unknown quorum keys {sorted(set(q) - QUORUM_KEYS)}")
+    try:
+        policy = QuorumPolicy(**q) if q else QuorumPolicy(required_yes=min(2, len(judges)))
+    except QuorumConfigError as e:
+        raise JudgeConfigError(str(e)) from e
     if policy.required_yes > len(judges):
         raise JudgeConfigError(f"required_yes={policy.required_yes} exceeds number of judges {len(judges)}")
+    try:
+        check_judge_set(judges, policy)
+    except QuorumConfigError as e:
+        raise JudgeConfigError(str(e)) from e
     return judges, policy
 
 

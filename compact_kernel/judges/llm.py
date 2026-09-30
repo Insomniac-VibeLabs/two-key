@@ -8,6 +8,12 @@ Every connector:
   Anything else (prose, code fences, extra keys, wrong types) is malformed,
   and a malformed response is an ABSTAIN, never a yes,
 - turns transport, HTTP, and credential errors into abstentions,
+- with ``echo_binding=True`` (PRIOR_ART.md §4 (iii)), gives the model the
+  ballot binding (H(action record), H(constitution)) and requires it to be
+  echoed as two extra JSON keys. A missing or different echo is malformed,
+  that is, an abstention,
+- omits the proposal section when the kernel sends record-only judge inputs
+  (proposal == ""),
 - enforces HTTPS except for loopback hosts, unless allow_insecure_http is set.
 """
 
@@ -36,6 +42,11 @@ SYSTEM_PROMPT = (
     '{"consistent": true or false, "confidence": a number from 0 to 1, "rationale": a short string}.'
 )
 BALLOT_KEYS = {"consistent", "confidence", "rationale"}
+BINDING_KEYS = ("action_hash", "constitution_hash")
+ECHO_INSTRUCTION = (
+    " Also copy the two hashes given in <ballot_binding> into your JSON object unchanged as "
+    '"action_hash" and "constitution_hash" (so the object has exactly five keys).'
+)
 MAX_RATIONALE = 2000
 
 
@@ -43,25 +54,34 @@ class MalformedBallot(ValueError):
     pass
 
 
-def build_user_prompt(constitution_text: str, action: Action, proposal: str) -> str:
-    return (
-        "<principal_constitution>\n" + constitution_text + "\n</principal_constitution>\n\n"
-        "<untrusted_action_record>\n" + canonical_bytes(action.to_record()).decode() +
-        "\n</untrusted_action_record>\n\n"
-        "<untrusted_proposal>\n" + proposal + "\n</untrusted_proposal>\n\n"
-        "Is the proposed action consistent with the principal's constitution? Reply with the JSON object only."
-    )
+def build_user_prompt(constitution_text: str, action: Action, proposal: str,
+                      binding: dict | None = None) -> str:
+    parts = ["<principal_constitution>\n" + constitution_text + "\n</principal_constitution>\n\n",
+             "<untrusted_action_record>\n" + canonical_bytes(action.to_record()).decode() +
+             "\n</untrusted_action_record>\n\n"]
+    if proposal:
+        parts.append("<untrusted_proposal>\n" + proposal + "\n</untrusted_proposal>\n\n")
+    if binding:
+        parts.append("<ballot_binding>\n" + canonical_bytes({k: binding[k] for k in BINDING_KEYS}).decode() +
+                     "\n</ballot_binding>\n\n")
+    parts.append("Is the proposed action consistent with the principal's constitution? "
+                 "Reply with the JSON object only.")
+    return "".join(parts)
 
 
-def parse_ballot_strict(text: Any) -> tuple[bool, float, str]:
+def parse_ballot_strict(text: Any, *, echo: bool = False) -> tuple[bool, float, str] | tuple:
+    """Strict schema check. With echo=True returns (consistent, confidence, rationale, echoed hashes)."""
     if not isinstance(text, str):
         raise MalformedBallot("response is not text")
     try:
         obj = json.loads(text.strip())
     except json.JSONDecodeError as e:
         raise MalformedBallot(f"not valid JSON: {e.msg}") from None
-    if not isinstance(obj, dict) or set(obj) != BALLOT_KEYS:
-        raise MalformedBallot(f"expected exactly keys {sorted(BALLOT_KEYS)}")
+    keys = BALLOT_KEYS | set(BINDING_KEYS) if echo else BALLOT_KEYS
+    if not isinstance(obj, dict) or set(obj) != keys:
+        raise MalformedBallot(f"expected exactly keys {sorted(keys)}")
+    if echo and any(not isinstance(obj[k], str) for k in BINDING_KEYS):
+        raise MalformedBallot("echoed hashes must be strings")
     c, conf, why = obj["consistent"], obj["confidence"], obj["rationale"]
     if not isinstance(c, bool):
         raise MalformedBallot("consistent must be a JSON boolean")
@@ -69,6 +89,8 @@ def parse_ballot_strict(text: Any) -> tuple[bool, float, str]:
         raise MalformedBallot("confidence must be a number in [0, 1]")
     if not isinstance(why, str):
         raise MalformedBallot("rationale must be a string")
+    if echo:
+        return c, float(conf), why[:MAX_RATIONALE], {k: obj[k] for k in BINDING_KEYS}
     return c, float(conf), why[:MAX_RATIONALE]
 
 
@@ -90,7 +112,9 @@ class LLMJudge(Judge):
     def __init__(self, judge_id: str, provider: str, model: str, base_url: str,
                  credential: CredentialProvider | None = None, *, timeout: float = 30.0,
                  transport: Transport | None = None, auth_header: str | None = None,
-                 allow_insecure_http: bool = False):
+                 allow_insecure_http: bool = False, vendor: str | None = None,
+                 local_weights: bool | None = None, weights_sha256: str | None = None,
+                 echo_binding: bool = False):
         if not judge_id or not model or not base_url:
             raise ValueError("judge_id, model and base_url are required")
         u = urlparse(base_url)
@@ -104,6 +128,12 @@ class LLMJudge(Judge):
         self.timeout = timeout
         self.transport = transport or urllib_transport
         self.auth_header = auth_header or self.default_auth_header
+        if vendor:
+            self.vendor = vendor
+        if local_weights is not None:
+            self.local_weights = bool(local_weights)
+        self.weights_sha256 = weights_sha256
+        self.echo_binding = bool(echo_binding)
 
     # -- hooks -------------------------------------------------------------
     def _request(self, system: str, user: str) -> tuple[str, dict]:
@@ -126,13 +156,19 @@ class LLMJudge(Judge):
         raise ValueError(f"unknown auth_header {self.auth_header!r}")
 
     def score(self, constitution_text: str, action: Action, proposal: str) -> Ballot:
+        return self.score_bound(constitution_text, action, proposal, None)
+
+    def score_bound(self, constitution_text: str, action: Action, proposal: str, binding) -> Ballot:
+        echo = self.echo_binding and binding is not None
         if not isinstance(constitution_text, str) or not constitution_text.strip():
             return self.abstain("empty constitution text")
         try:
             headers = self._auth_headers()
         except (CredentialError, NotImplementedError, ValueError) as e:
             return self.abstain(f"credential: {e}")
-        url, body = self._request(SYSTEM_PROMPT, build_user_prompt(constitution_text, action, proposal))
+        system = SYSTEM_PROMPT + (ECHO_INSTRUCTION if echo else "")
+        url, body = self._request(system, build_user_prompt(constitution_text, action, proposal,
+                                                            dict(binding) if echo else None))
         try:
             resp = self.transport(url, headers, body, self.timeout)
         except urllib.error.HTTPError as e:
@@ -141,9 +177,15 @@ class LLMJudge(Judge):
             return self.abstain(f"transport: {type(e).__name__}")
         try:
             text = self._extract_text(resp)
-            consistent, conf, why = parse_ballot_strict(text)
+            parsed = parse_ballot_strict(text, echo=echo)
         except MalformedBallot as e:
             return self.abstain(f"malformed_ballot: {e}")
         except Exception as e:
             return self.abstain(f"malformed_response: {type(e).__name__}")
+        if echo:
+            consistent, conf, why, echoed = parsed
+            return Ballot(self.judge_id, self.provider, "yes" if consistent else "no", conf, why,
+                          action_hash=echoed["action_hash"], constitution_hash=echoed["constitution_hash"],
+                          binding="echo")
+        consistent, conf, why = parsed
         return Ballot(self.judge_id, self.provider, "yes" if consistent else "no", conf, why)

@@ -45,8 +45,12 @@ class FixedJudge(Judge):
 
     is_test_double = True
 
-    def __init__(self, judge_id: str, vote: str, provider: str = "test-double"):
+    def __init__(self, judge_id: str, vote: str, provider: str = "test-double", *, vendor: str | None = None,
+                 local_weights: bool = False):
         self.judge_id, self.vote, self.provider = judge_id, vote, provider
+        if vendor:
+            self.vendor = vendor
+        self.local_weights = local_weights
 
     def score(self, constitution_text: str, action: Action, proposal: str) -> Ballot:
         return Ballot(self.judge_id, self.provider, self.vote, 0.9, "fixed")  # type: ignore[arg-type]

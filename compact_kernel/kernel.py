@@ -19,6 +19,20 @@ Compact Kernel: dual-path constitutional enforcement
    (``head_signing="append"``); if the signed-head checkpoint fails, the
    decision is a deny.
 
+PRIOR_ART.md §4 directions selected by Stephan Busch on 2026-09-30
+(CONCEPTION_NOTES.md Entry 2):
+(i)   tokens bind the ledger Merkle root R and size at issuance plus
+      H(bytecode) and H(NL constitution). The gateway checks ancestry by
+      consistency proof, the hashes against the latest constitution_loaded
+      entry, reload/revocation after issuance, and links results to the
+      token's ledger entry (gateway.py). ``revoke()`` appends revocation entries.
+(ii)  one principal-signed constitution document is compiled into both
+      the Path A bytecode and the Path B prose (compiler.py). Both hashes are
+      recorded at load and bound into ballots and tokens.
+      ``reload_constitution()`` accepts only principal-signed documents.
+(iii) judge-set heterogeneity, the availability floor K, bound ballots, and
+      record-only judge inputs (quorum.py); Path B runs only after Path A passes.
+
 Crypto (compact_kernel.crypto): a CryptoProvider runs its known-answer
 self-test before the kernel starts; ``fips_mode`` refuses non-approved
 algorithms. The principal key may be legacy Ed25519, ECDSA P-384, or a hybrid
@@ -36,14 +50,15 @@ from typing import Any, Callable, Mapping, Sequence
 from .action import Action, ActionValidationError, normalize_action
 from .canonical import canonical_hash, sha256_hex
 from .capability import CapabilityIssuer, args_hash
+from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, verify_signed
 from .crypto.provider import CryptoProvider, default_provider
 from .crypto.signatures import LEGACY_SUITE, as_public_keyset
 from .gateway import Extractor, ToolGateway
 from .judges.base import Judge
 from .ledger import LedgerError, PersonalLedger
-from .policy_vm import DEFAULT_MAX_STEPS, PolicyVM, compile_constitution
-from .quorum import QuorumPolicy, convene
+from .policy_vm import DEFAULT_MAX_STEPS, PolicyVM
+from .quorum import QuorumConfigError, QuorumPolicy, check_judge_set, convene
 
 
 class KernelConfigError(ValueError):
@@ -116,13 +131,11 @@ class CompactKernel:
         self.token_mode = token_mode or ("ck1" if legacy else "ck1-hs384")
 
         # Refuse unsigned, modified, or foreign-signed constitutions (spec 5.1 item 2).
-        self.constitution: Constitution = verify_signed(signed_constitution, trusted, self.crypto)
         self.trusted_public_key = trusted_public_key
         self.trusted_keyset = trusted
+        self.max_steps = max_steps
+        self._install(verify_signed(signed_constitution, trusted, self.crypto))
         self.principal = self.constitution.principal
-        self.constitution_text = self.constitution.text
-        self.bytecode = compile_constitution(self.constitution.hard_rules, max_steps=max_steps)
-        self.vm = PolicyVM(self.bytecode, max_steps=max_steps)
 
         self.head_signing = head_signing
         self.ledger = PersonalLedger(Path(ledger_path), signing_key=ledger_signing_key, digest_alg=self.digest_alg,
@@ -143,26 +156,85 @@ class CompactKernel:
         self.quorum_policy = quorum_policy or QuorumPolicy(required_yes=min(2, len(self.judges)))
         if self.quorum_policy.required_yes > len(self.judges):
             raise KernelConfigError("required_yes exceeds the number of judges")
+        try:  # §4 (iii): judge-set selection must meet the heterogeneity floor
+            check_judge_set(self.judges, self.quorum_policy)
+        except QuorumConfigError as e:
+            raise KernelConfigError(str(e)) from e
         self.ttl_seconds = ttl_seconds
         # Ordering option (DESIGN_OPTIONS.md section 4). Default: skip Path B when Path A
         # denies, so forbidden proposals are never sent to external judges (privacy).
+        if self.quorum_policy.require_path_a_first and not short_circuit_path_b:
+            raise KernelConfigError("quorum policy requires Path B only after Path A passes "
+                                    "(short_circuit_path_b must be True)")
         self.short_circuit_path_b = short_circuit_path_b
 
+        self._append_loaded()
+        self.ledger.checkpoint()
+
+    # -- constitution (§4 (ii)) ------------------------------------------------
+    def _install(self, constitution: Constitution) -> None:
+        compiled = compile_both(constitution, max_steps=self.max_steps, digest_alg=self.digest_alg,
+                                provider=self.crypto)
+        self.constitution: Constitution = constitution
+        self.compiled: CompiledConstitution = compiled
+        self.constitution_text = compiled.judge_text
+        self.bytecode = compiled.bytecode
+        self.vm = PolicyVM(self.bytecode, max_steps=self.max_steps)
+
+    def _append_loaded(self, **extra) -> None:
         self.ledger.append("constitution_loaded", {
             "principal": self.principal,
             "constitution_digest": self.constitution.digest,
             "signer": self.constitution.signer_fingerprint,
+            "source_format": self.compiled.source_format,
+            "compiler": self.compiled.compiler,
+            "bytecode_hash": self.compiled.bytecode_hash,
+            "nl_hash": self.compiled.nl_hash,
             "rules": self.constitution.hard_rules,
             "bytecode_len": len(self.bytecode),
-            "judges": [{"id": j.judge_id, "provider": j.provider} for j in self.judges],
+            "judges": [_describe(j) for j in self.judges],
             "short_circuit_path_b": self.short_circuit_path_b,
-            "quorum": {"required_yes": self.quorum_policy.required_yes,
-                       "min_responding": self.quorum_policy.effective_min_responding,
-                       "min_distinct_providers": self.quorum_policy.min_distinct_providers,
-                       "timeout_seconds": self.quorum_policy.timeout_seconds},
+            "quorum": self.quorum_policy.to_record(),
             "crypto": self.crypto_profile(),
+            **extra,
         })
+
+    def reload_constitution(self, signed_constitution: dict) -> None:
+        """Load a new constitution. Only a document signed by the principal's trusted key is accepted.
+
+        A refused reload is recorded as ``constitution_reload_refused`` and re-raised. On success a new
+        constitution_loaded entry is appended; tokens issued before it are refused by the gateway.
+        """
+        try:
+            c = verify_signed(signed_constitution, self.trusted_keyset, self.crypto)
+            if c.principal != self.principal:
+                raise KernelConfigError("reloaded constitution names a different principal")
+            prev = self.constitution, self.compiled
+            self._install(c)
+        except Exception as e:
+            self.ledger.append("constitution_reload_refused", {"error": f"{type(e).__name__}: {e}"[:500]})
+            self.ledger.checkpoint()
+            raise
+        try:
+            self._append_loaded(previous_constitution_digest=prev[0].digest)
+        except Exception:
+            self.constitution, self.compiled = prev
+            self._install(prev[0])
+            raise
         self.ledger.checkpoint()
+
+    def revoke(self, jti: str | None = None, reason: str = "") -> dict:
+        """Append a revocation entry (§4 (i)): one token by jti, or all tokens issued so far (jti=None)."""
+        if jti is not None and (not isinstance(jti, str) or not jti):
+            raise ValueError("jti must be a non-empty string or None")
+        e = self.ledger.append("revocation", {"jti": jti, "scope": "token" if jti else "all_issued",
+                                              "reason": str(reason)[:500]})
+        self.ledger.checkpoint()
+        return {"seq": e.seq, "digest": e.digest}
+
+    def ballot_binding(self, action_record: dict) -> dict:
+        return {"action_hash": self._h(action_record), "constitution_hash": self.constitution.digest,
+                "nl_hash": self.compiled.nl_hash, "bytecode_hash": self.compiled.bytecode_hash}
 
     def crypto_profile(self) -> dict:
         be = self.crypto.pq_backend()
@@ -215,7 +287,8 @@ class CompactKernel:
         except (ActionValidationError, TypeError, ValueError) as e:
             return self._deny(f"invalid_action:{e}")
         rec = action.to_record()
-        self.ledger.append("action_normalized", {"action": rec, "action_digest": self._h(rec),
+        binding = self.ballot_binding(rec)
+        self.ledger.append("action_normalized", {"action": rec, "action_digest": binding["action_hash"],
                                                  "args_hash": a_hash})
 
         vm_res = self.vm.eval(action)
@@ -225,7 +298,7 @@ class CompactKernel:
             self.ledger.append("quorum_skipped", {"reason": "path_a_denied", "short_circuit_path_b": True})
             return self._deny(f"path_a_denied:{vm_res.reason}", rec, vm_allowed=False, vm_reason=vm_res.reason,
                               denied_by_rule=vm_res.denied_by, quorum_passed=None, quorum=None)
-        q = convene(self.judges, self.constitution_text, action, proposal, self.quorum_policy)
+        q = convene(self.judges, self.constitution_text, action, proposal, self.quorum_policy, binding)
         self.ledger.append("quorum_result", q.to_record())
         qsum = {"yes": q.yes, "no": q.no, "abstain": q.abstain, "reason": q.reason}
 
@@ -241,7 +314,9 @@ class CompactKernel:
             scope={"amount_usd": action.amount_usd, "counterparty": action.counterparty,
                    "data_class": action.data_class},
             args_digest=a_hash, ledger_root=self.ledger.root(),
-            constitution_digest=self.constitution.digest, ttl_seconds=self.ttl_seconds)
+            constitution_digest=self.constitution.digest, ttl_seconds=self.ttl_seconds,
+            ledger_size=self.ledger.size, ledger_merkle_root=self.ledger.merkle_root(),
+            bytecode_hash=self.compiled.bytecode_hash, nl_hash=self.compiled.nl_hash)
         try:
             self.issuer.verify(cap.token)
         except Exception:
@@ -250,11 +325,22 @@ class CompactKernel:
         p = cap.payload
         self.ledger.append("capability_issued", {
             "jti": p["jti"], "token_sha256": cap.token_hash, "tool": p["tool"], "scope": p["scope"],
-            "args_hash": p["args_hash"], "expires_at": p["expires_at"], "ledger_root": p["ledger_root"]})
+            "args_hash": p["args_hash"], "expires_at": p["expires_at"], "ledger_root": p["ledger_root"],
+            "ledger_size": p["ledger_size"], "ledger_merkle_root": p["ledger_merkle_root"],
+            "bytecode_hash": p["bytecode_hash"], "nl_hash": p["nl_hash"]})
         self.ledger.append("decision", {"allowed": True, "reason": "dual_path_pass", "denied_by_rule": None,
-                                        "action_digest": self._h(rec)})
+                                        "action_digest": binding["action_hash"]})
         return Decision(True, "dual_path_pass", True, vm_res.reason, None, True, qsum, cap.token, cap.payload,
                         self.ledger.root(), rec)
+
+
+def _describe(j: Any) -> dict:
+    d = getattr(j, "describe", None)
+    if callable(d):
+        return d()
+    return {"id": getattr(j, "judge_id", "?"), "provider": getattr(j, "provider", "?"),
+            "vendor": getattr(j, "vendor", None) or getattr(j, "provider", "?"),
+            "local_weights": bool(getattr(j, "local_weights", False))}
 
 
 def _safe_record(obj: Any) -> Any:

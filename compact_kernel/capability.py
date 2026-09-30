@@ -22,6 +22,15 @@ Payload fields: v, jti (unique id for single-use), principal, tool,
 scope{amount_usd, counterparty, data_class}, args_hash, issued_at,
 expires_at, ledger_root, constitution_digest.
 
+Ledger-root binding (PRIOR_ART.md §4 (i) and (ii), selected by Stephan Busch
+on 2026-09-30): the kernel also binds
+  ledger_size, ledger_merkle_root  the principal's Merkle ledger root R and the
+                                   ledger size at issuance (before the token's
+                                   own capability_issued entry)
+  bytecode_hash, nl_hash           H(Path A bytecode) and H(Path B prose) of
+                                   the constitution that authorized the action
+The gateway refuses tokens that lack these fields.
+
 Reference option (per Stephan's instructions, 2026-09-30): the token is bound
 to ``args_hash``, the SHA-256 of the canonical JSON of {tool, args} for the
 literal tool-call arguments. Alternatives are listed in DESIGN_OPTIONS.md
@@ -132,7 +141,9 @@ class CapabilityIssuer:
         return self._verifier.verify(signing_input.encode("ascii"), sig)
 
     def issue(self, *, principal: str, tool: str, scope: dict, args_digest: str, ledger_root: str,
-              constitution_digest: str, ttl_seconds: int) -> IssuedCapability:
+              constitution_digest: str, ttl_seconds: int, ledger_size: int | None = None,
+              ledger_merkle_root: str | None = None, bytecode_hash: str | None = None,
+              nl_hash: str | None = None) -> IssuedCapability:
         if not isinstance(ttl_seconds, int) or ttl_seconds < 1:
             raise ValueError("ttl_seconds must be a positive integer")
         now = self.clock()
@@ -141,6 +152,9 @@ class CapabilityIssuer:
             "args_hash": args_digest, "issued_at": now, "expires_at": now + ttl_seconds,
             "ledger_root": ledger_root, "constitution_digest": constitution_digest,
         }
+        extra = {"ledger_size": ledger_size, "ledger_merkle_root": ledger_merkle_root,
+                 "bytecode_hash": bytecode_hash, "nl_hash": nl_hash}
+        payload.update({k: v for k, v in extra.items() if v is not None})
         body = _b64u(canonical_bytes(payload))
         signing_input = f"{self.mode}.{body}"
         return IssuedCapability(f"{signing_input}.{self._tag(signing_input)}", payload)

@@ -23,7 +23,8 @@ import sys
 from pathlib import Path
 
 from . import keys
-from .constitution import ConstitutionSignatureError, load_envelope, save_envelope, sign_files, verify_signed
+from .constitution import (ConstitutionSignatureError, load_envelope, save_envelope, sign_files, sign_source_file,
+                           verify_signed)
 from .policy_vm import ConstitutionError, compile_constitution
 
 
@@ -68,7 +69,14 @@ def cmd_keygen(args) -> int:
 def cmd_sign(args) -> int:
     k = keys.load_private_any(Path(args.key), _passphrase(args))
     try:
-        env = sign_files(Path(args.text), Path(args.rules), args.principal, k)
+        if args.document:
+            if args.text or args.rules:
+                sys.exit("use either --document or --text/--rules, not both")
+            env = sign_source_file(Path(args.document), args.principal, k)
+        else:
+            if not (args.text and args.rules):
+                sys.exit("--text and --rules are required (or use --document)")
+            env = sign_files(Path(args.text), Path(args.rules), args.principal, k)
     except ConstitutionError as e:
         sys.exit(f"constitution rejected: {e}")
     save_envelope(Path(args.out), env)
@@ -150,9 +158,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--suite", default="ed25519", choices=sorted(SUITES),
                    help="ed25519 (legacy PEM), ecdsa-p384, or a hybrid ML-DSA-65 suite")
     s.set_defaults(fn=cmd_keygen)
-    s = sub.add_parser("sign-constitution", help="sign constitution text + hard rules")
-    s.add_argument("--text", required=True, help=".txt/.md plain-English constitution")
-    s.add_argument("--rules", required=True, help=".json/.yaml hard rules for Path A")
+    s = sub.add_parser("sign-constitution", help="sign constitution text + hard rules, or one single-source document")
+    s.add_argument("--text", help=".txt/.md plain-English constitution")
+    s.add_argument("--rules", help=".json/.yaml hard rules for Path A")
+    s.add_argument("--document", help="single .md source with one ```ck-rules JSON block (format /2)")
     s.add_argument("--principal", required=True, help="principal identifier, e.g. did:ck:alice")
     s.add_argument("--key", required=True, help="principal private key (PEM or .keys.json bundle)")
     s.add_argument("--out", required=True); pw(s); s.set_defaults(fn=cmd_sign)
