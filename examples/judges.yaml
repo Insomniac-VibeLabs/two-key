@@ -9,6 +9,14 @@ quorum:
   min_responding: 2          # refuse to decide if fewer valid ballots arrive
   min_distinct_providers: 1  # 1 = not enforced (see DESIGN_OPTIONS.md section 2)
   timeout_seconds: 45        # judges run in parallel; any judge not done by then abstains
+  # PRIOR_ART.md §4 (iii) options (defaults shown; QuorumPolicy.section4() in code
+  # uses min_vendors: 2, min_local_judges: 1, require_path_a_first: true):
+  # min_vendors: 1
+  # min_local_judges: 0
+  # heterogeneity_scope: selection   # selection | responding
+  # judge_inputs: record_only        # record_only | record_and_proposal
+  # ballot_binding: stamp            # stamp | echo (echo needs echo_binding: true on every judge)
+  # require_path_a_first: false
 
 judges:
   - id: grok
@@ -35,6 +43,10 @@ judges:
     provider: local
     base_url: http://localhost:11434
     model: REPLACE_WITH_MODEL
+    # local_weights: true            # the default for ollama; counts toward min_local_judges
+    # weights_sha256: <hash of the weight file>   # optional, recorded in ballots
+
+# Optional per-judge keys: vendor (defaults to provider), local_weights, weights_sha256, echo_binding.
 
 # Other auth modes (interfaces; see compact_kernel/judges/credentials.py):
 #   auth: {type: keyring, service: compact-kernel, username: openai}

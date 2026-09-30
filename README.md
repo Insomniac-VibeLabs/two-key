@@ -15,6 +15,28 @@ any LLM ─▶ Compact Kernel ─▶ single-use capability token ─▶ tool gat
                └─ Personal ledger: hash chain + Merkle root, head signed by your key
 ```
 
+Also implemented, from the directions Stephan selected in PRIOR_ART.md §4
+(`CONCEPTION_NOTES.md` entry 2):
+- **(i) Ledger-root-bound token.** The token carries the ledger's Merkle root R
+  at issuance, H(bytecode), and H(constitution). The gateway checks that R is an
+  ancestor of its last-known root with an RFC 9162 consistency proof, and checks
+  the hashes against the latest constitution load. It refuses tokens issued
+  before a later reload or revocation (`kernel.revoke()`). Results are linked
+  to the token's ledger entry.
+- **(ii) One signed constitution, two compilations.** One signed source is
+  compiled into Path A bytecode, which reads structured fields only, and the
+  Path B prose. Both hashes are recorded at load and bound into ballots and
+  tokens. A reload not signed by the principal is refused.
+- **(iii) Quorum protocol.** A vendor-heterogeneity floor (≥ 2 vendors,
+  ≥ 1 local weight file via `QuorumPolicy.section4()`). Availability floor K:
+  below it, deny without counting. Ballots bound to H(action record) and
+  H(constitution); malformed means abstain. Judges see the record and the
+  constitution only. Path A runs first.
+
+Who produces the action record (problem F, `DESIGN_OPTIONS.md` §1) is still
+open; no option is implemented. The details §4 left open are listed in
+`DESIGN_OPTIONS.md` §7.
+
 Crypto: FIPS-approved algorithms only, routed through a pluggable provider
 with an optional `fips_mode` and a start-up self-test; optional hybrid
 post-quantum signatures (ML-DSA-65 + Ed25519 or ECDSA P-384). **Not FIPS
@@ -30,7 +52,7 @@ Requires Python ≥ 3.10 and `cryptography`. PyYAML is needed for YAML files.
 
 ```bash
 pip install cryptography pyyaml         # add 'cryptography>=50' for ML-DSA (hybrid PQ)
-python -m unittest discover -s tests     # 173 tests, no network (PQ tests skip without ML-DSA)
+python -m unittest discover -s tests     # 234 tests, no network (PQ tests skip without ML-DSA)
 python -m compact_kernel demo            # offline demo (test-double judges)
 python -m compact_kernel selftest        # crypto known-answer self-test + provider info
 python bench.py --quick                  # latency and memory benchmarks
@@ -45,6 +67,9 @@ python -m compact_kernel sign-constitution \
     --principal did:ck:me --key ~/.compact-kernel/principal.pem --out my-constitution.signed.json
 python -m compact_kernel verify-constitution \
     --signed my-constitution.signed.json --pub ~/.compact-kernel/principal.pub.pem
+# or sign ONE Markdown source with a single ```ck-rules JSON block (§4 (ii)):
+python -m compact_kernel sign-constitution --document examples/constitution_single_source.md \
+    --principal did:ck:me --key ~/.compact-kernel/principal.pem --out my-constitution.signed.json
 ```
 
 Other key suites (JSON key bundle, encrypted with PBKDF2 + AES-256-GCM):
@@ -100,15 +125,16 @@ if d.allowed:
 |---|---|
 | `compact_kernel/action.py` | Normalized action record, validation, conservative defaults |
 | `compact_kernel/policy_vm.py` | Path A compiler (strict) and VM |
-| `compact_kernel/quorum.py` | Path B k-of-n quorum (parallel judges, overall timeout) |
+| `compact_kernel/compiler.py` | One signed source → Path A bytecode + Path B prose; static structured-only check; hashes |
+| `compact_kernel/quorum.py` | Path B k-of-n quorum (parallel judges, overall timeout, heterogeneity and K floors, bound ballots) |
 | `compact_kernel/judges/` | Judge interface, OpenAI-compatible / Anthropic / Gemini / Ollama adapters, credentials, config |
 | `compact_kernel/constitution.py`, `keys.py` | Constitution upload and signing (Ed25519, ECDSA P-384, hybrid ML-DSA-65), key bundles |
 | `compact_kernel/crypto/` | Crypto provider (`fips_mode`, approved-algorithm policy), signature suites, self-test |
-| `compact_kernel/capability.py`, `gateway.py` | Tokens and the tool gateway |
-| `compact_kernel/ledger.py`, `merkle.py`, `anchoring.py` | Signed ledger, Merkle tree, anchoring stub |
+| `compact_kernel/capability.py`, `gateway.py` | Tokens (ledger-root-bound) and the tool gateway (ancestry, hash, reload, revocation checks) |
+| `compact_kernel/ledger.py`, `merkle.py`, `anchoring.py` | Signed ledger, Merkle tree with inclusion and consistency proofs, anchoring stub |
 | `compact_kernel/kernel.py` | `CompactKernel.authorize` |
 | `compact_kernel/testing.py` | Offline test-double judges (not for deployment) |
-| `examples/` | Example constitution, hard rules (JSON/YAML), judges.yaml |
+| `examples/` | Example constitution, hard rules (JSON/YAML), single-source constitution, judges.yaml |
 | `docs/INVENTION_DISCLOSURE.md` | Original disclosure, **unchanged** |
 | `docs/SPEC_DRAFT.md` | Updated working specification draft |
 | `docs/figures/` | Diagrams (Mermaid sources plus SVG/PNG) |
@@ -127,7 +153,8 @@ if d.allowed:
 - Not FIPS validated. The development machine had no FIPS provider; see `docs/CRYPTO.md`.
 - The liboqs backend adapter has been tested only against a fake module.
 - The ledger is not encrypted, and public anchoring is a stub.
-- Open design questions are listed in `DESIGN_OPTIONS.md`.
+- The strict §4 (iii) quorum floors are off by default (`QuorumPolicy.section4()` turns them on); which default to use is open.
+- Open design questions are listed in `DESIGN_OPTIONS.md`, including action-record normalization (F), which is not implemented.
 
 ## Patent posture
 

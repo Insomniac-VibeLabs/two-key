@@ -6,6 +6,7 @@ done 2026-09-30 by the AI engineering assistant at Stephan Busch's direction.
 
 **"Decided by" key:**
 - **Stephan**: Stephan Busch's own conception (`CONCEPTION_NOTES.md`) or his explicit instruction for this work (2026-09-30).
+- **Stephan (selection)**: Stephan's selection, `CONCEPTION_NOTES.md` entry 2 (2026-09-30 ~7:02 AM MT, relayed through his patent-attorney assistant), of directions proposed in `PRIOR_ART.md` §4 by the patent-attorney agent. The mechanism wording is the attorney agent's; the choice is Stephan's.
 - **Disclosure spec**: behavior already specified in the original `docs/INVENTION_DISCLOSURE.md`.
 - **Attorney recommendation**: guidance from the patent-attorney agent (keep the conception record separate; for open design questions, implement only a minimal configurable reference and list options for Stephan).
 - **Engineering bug fix**: a defect correction or ordinary implementation detail, not asserted as inventive.
@@ -73,8 +74,24 @@ Conception is recorded only in `CONCEPTION_NOTES.md`.
 | 56 | 58 new tests (173 total): fips_mode rejection, self-test incl. forced failure, hybrid tamper/strip/reorder/downgrade, missing-PQ behaviour, fake-liboqs adapter, parallel judges/timeout, no-network hot path, checkpoints | `tests/` | Stephan (instruction) | 22cfc2e, ee862b1 |
 | 57 | `bench.py` and `docs/PERFORMANCE.md` (measured latency and memory, classic vs hybrid) | `bench.py`, `docs/PERFORMANCE.md` | Stephan (instruction) | bae09cd |
 | 58 | `docs/CRYPTO.md` (not FIPS validated; candidate modules; algorithm/standard map; PQ notes) | `docs/CRYPTO.md` | Stephan (instruction) | a286ac4 |
-| 59 | README, CHANGES, DESIGN_OPTIONS (token-scheme row), `pyproject.toml` (`compact_kernel.crypto` package, `pq`/`liboqs` extras) | docs, `pyproject.toml` | Engineering | (this commit) |
+| 59 | README, CHANGES, DESIGN_OPTIONS (token-scheme row), `pyproject.toml` (`compact_kernel.crypto` package, `pq`/`liboqs` extras) | docs, `pyproject.toml` | Engineering | 3b69259 |
+| 60 | Record Stephan's selection "A, B, C, and F all together" verbatim (dated, relayed through his patent-attorney assistant); map A/B/C/F to §4 (i)/(ii)/(iii)/normalization | `CONCEPTION_NOTES.md` | Stephan (content) / Attorney recommendation (separate record) | 8b11066 |
+| 61 | RFC 9162 Merkle consistency proofs, cached `MerkleTree`, O(log n) inclusion proofs; ledger indexes (latest constitution load, revocations, capability entries) | `merkle.py`, `ledger.py`, `tests/test_merkle_consistency.py` | Stephan (selection, §4 (i)) / Engineering (data structures) | ec06ade |
+| 62 | (i) Ledger-root-bound token: payload carries `ledger_size`, `ledger_merkle_root` R, `bytecode_hash`, `nl_hash`. Gateway checks R is an ancestor of its last-known root via a consistency proof, checks hashes against the latest `constitution_loaded`, rejects tokens issued before a later reload or revocation, and links results (`capability_entry_seq`/`digest`, `result_hash`). `kernel.revoke()` | `capability.py`, `gateway.py`, `kernel.py`, `tests/test_ledger_root_token.py` | Stephan (selection, §4 (i)); mechanism as worded in PRIOR_ART.md §4 (i); check order, deny reasons, view handling: Engineering (open points DESIGN_OPTIONS §7.1–7.7) | 21bc62d |
+| 63 | (ii) One signed constitution, two compilations: `compiler.py` (split, `verify_structured_only`, hashes), format `/2` single source, `sign-constitution --document`, hashes in `constitution_loaded` and bound into ballots and tokens, `reload_constitution` refuses non-principal signatures | `compiler.py`, `constitution.py`, `cli.py`, `kernel.py`, `examples/constitution_single_source.md`, `tests/test_two_compilations.py` | Stephan (selection, §4 (ii)); `/2` format, split rules, static-check scope: Engineering (open §7.8–7.13) | 21bc62d |
+| 64 | (iii) Quorum protocol: `min_vendors`/`min_local_judges` floor at kernel start, config load, and convene (`heterogeneity_scope`); K floor denies without counting; ballots bound to H(action record), H(constitution), nl/bytecode hashes (`stamp`/`echo`, LLM `echo_binding`); malformed or mismatched means abstain; `require_path_a_first`; `QuorumPolicy.section4()`; judge `vendor`/`local_weights`/`weights_sha256` | `quorum.py`, `judges/`, `kernel.py`, `testing.py`, `tests/test_quorum_protocol.py` | Stephan (selection, §4 (iii)); permissive defaults and `section4()` profile: Engineering (open §7.14–7.18, 7.20–7.21) | 21bc62d |
+| 65 | `judge_inputs="record_only"` as the default: judges get the constitution and normalized record, not the proposal text | `quorum.py`, `judges/` | PRIOR_ART.md §4 (iii) text (Stephan's selection) / Engineering (default; open §7.19) | 21bc62d |
+| 66 | 61 new tests (234 total): consistency proofs against a reference for all size pairs ≤ 65, gateway ancestry/fork/truncation/hash/reload/revocation/linking (incl. FIPS mode and SHA-384), two compilations, quorum floors and binding | `tests/` | Stephan (instruction: full tests) | ec06ade, 21bc62d, a963ab0 |
+| 67 | Performance: one consistency proof per invoke (gateway last-known view, `view_refresh`), memoized Merkle ranges, faster ledger entry serialization, ballot binding written once per `quorum_result`; bench rows for proofs, binding checks, 18k-entry ledger, `compile_both` | `gateway.py`, `merkle.py`, `ledger.py`, `quorum.py`, `kernel.py`, `bench.py` | Stephan (instruction: keep performance) / Engineering | a963ab0 |
+| 68 | `docs/PERFORMANCE.md` re-measured; old-vs-new table; hot-path regressions flagged (invoke +9–18%, authorize +6–12%) | `docs/PERFORMANCE.md` | Stephan (instruction: re-run bench, flag regressions) | ac2c12b |
+| 69 | Figures 5–7 (ledger-root-bound token, two compilations, quorum protocol) and updates to Figures 2–3 | `docs/figures/` | Stephan (instruction) / Engineering (drawing) | 9154b9b |
+| 70 | SPEC_DRAFT: [SB-2] selection tag, §4 (i)–(iii) sections, crypto profile and performance sections; CRYPTO.md hash-use rows | `docs/SPEC_DRAFT.md`, `docs/CRYPTO.md` | Stephan (instruction) / Attorney recommendation (source tagging) | faa0ccf |
+| 71 | DESIGN_OPTIONS §7: 21 open points §4 left open; §1 (F) still open | `DESIGN_OPTIONS.md` | Attorney recommendation (list options, don't decide) / Stephan (instruction) | 68fe1bb |
+| 72 | README, `examples/judges.yaml` comments for the new keys, this CHANGES update | `README.md`, `examples/judges.yaml`, `CHANGES.md` | Engineering | (this commit) |
+| — | **Not implemented:** any option for action-record normalization (F). The existing hooks (caller-supplied record, gateway extractor) are unchanged | — | Stephan (flagged the problem; no option chosen) | — |
+| — | **Not implemented:** PRIOR_ART.md §4 (iv) replay audit, (v) conservative imputation logging, (vi) model-swap | — | Not selected by Stephan | — |
 
 **Not changed:** `docs/INVENTION_DISCLOSURE.md` (byte-identical to the
-received file). No LICENSE file has been added or changed; licensing is
-Stephan's decision.
+received file). `LICENSE` comes from the original repository's history
+(merged in 0d3a3c9) and has not been changed by this work; licensing is
+Stephan's decision. Repository visibility was not changed.
