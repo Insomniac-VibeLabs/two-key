@@ -4,6 +4,9 @@ Commands:
   keygen               generate the principal's Ed25519 key pair
   sign-constitution    bundle a plain-English constitution plus a hard-rules file and sign them
   verify-constitution  verify a signed constitution against the principal's public key
+  verify-ledger        verify a ledger's hash chain, signed head and Merkle root
+  check-judges         validate a judges.yaml (no network calls)
+  demo                 run the offline demo
 """
 
 from __future__ import annotations
@@ -71,6 +74,38 @@ def cmd_verify(args) -> int:
     return 0
 
 
+def cmd_verify_ledger(args) -> int:
+    from .ledger import LedgerError, PersonalLedger
+    try:
+        rep = PersonalLedger(Path(args.ledger)).verify(keys.load_public_key(Path(args.pub)))
+    except LedgerError as e:
+        print(f"REJECTED: {e}")
+        return 1
+    print(f"{'OK' if rep.ok else 'REJECTED'}: {rep.reason} (entries={rep.size})")
+    return 0 if rep.ok else 1
+
+
+def cmd_check_judges(args) -> int:
+    from .judges.config import JudgeConfigError, load_config_file
+    try:
+        judges, pol = load_config_file(Path(args.config))
+    except (JudgeConfigError, ValueError, KeyError) as e:
+        print(f"INVALID: {e}")
+        return 1
+    for j in judges:
+        print(f"  {j.judge_id:<16} {type(j).__name__:<22} provider={j.provider} model={j.model} "
+              f"endpoint={j.base_url} auth={j.credential!r}")
+    print(f"OK: {len(judges)} judges; required_yes={pol.required_yes} "
+          f"min_responding={pol.effective_min_responding} min_distinct_providers={pol.min_distinct_providers}")
+    return 0
+
+
+def cmd_demo(args) -> int:
+    from .demo import main as demo_main
+    demo_main()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="compact_kernel", description="Compact Kernel prototype CLI")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -89,6 +124,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--out", required=True); pw(s); s.set_defaults(fn=cmd_sign)
     s = sub.add_parser("verify-constitution", help="verify a signed constitution")
     s.add_argument("--signed", required=True); s.add_argument("--pub", required=True); s.set_defaults(fn=cmd_verify)
+    s = sub.add_parser("verify-ledger", help="verify a ledger against the principal's public key")
+    s.add_argument("--ledger", required=True); s.add_argument("--pub", required=True)
+    s.set_defaults(fn=cmd_verify_ledger)
+    s = sub.add_parser("check-judges", help="validate judges.yaml without calling any API")
+    s.add_argument("--config", required=True); s.set_defaults(fn=cmd_check_judges)
+    s = sub.add_parser("demo", help="run the offline demo"); s.set_defaults(fn=cmd_demo)
     return p
 
 

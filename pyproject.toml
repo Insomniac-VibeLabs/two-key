@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compact-kernel"
+version = "0.2.0.dev0"
+description = "Dual-path constitutional enforcement for AI agents (prototype, not production crypto)"
+requires-python = ">=3.10"
+dependencies = ["cryptography>=41"]
+# No license is declared here on purpose: licensing is Stephan's decision.
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6"]
+keyring = ["keyring>=24"]
+
+[project.scripts]
+compact-kernel = "compact_kernel.cli:main"
+
+[tool.setuptools]
+packages = ["compact_kernel", "compact_kernel.judges"]
