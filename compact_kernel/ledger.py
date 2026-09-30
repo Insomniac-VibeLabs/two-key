@@ -3,8 +3,12 @@ Compact Kernel: personal ledger
 ===============================
 An append-only JSONL hash chain owned by the principal (spec 5.6), plus:
 
-- a Merkle tree (RFC 6962 style) over entry digests, with inclusion proofs.
-  The root is maintained incrementally (merkle.MerkleFrontier);
+- a Merkle tree (RFC 6962/9162) over entry digests, with inclusion proofs
+  and consistency proofs between any two sizes (merkle.MerkleTree). The
+  tool gateway uses the consistency proofs to check that the root bound
+  into a token is an ancestor of the ledger it knows (PRIOR_ART.md §4 (i));
+- O(1) indexes for the gateway: capability_issued entry by jti, the latest
+  constitution_loaded entry, and revocation entries;
 - a signed chain head: the principal's key signs {size, head digest, merkle
   root}. Rewriting the whole chain, which the original prototype could not
   detect, fails verification because the attacker cannot produce a head
@@ -105,6 +109,10 @@ class PersonalLedger:
         self.fsync = bool(fsync)
         self.entries: list[Entry] = []
         self._index: dict[str, int] = {}
+        self._issued: dict[str, int] = {}          # jti -> seq of its capability_issued entry
+        self._latest_constitution: int | None = None
+        self._revoke_all_seq = -1                   # seq of the latest "revoke all" entry
+        self._revoked_jti: dict[str, int] = {}
         self._unsigned = 0
         if self.path.exists():
             self._load()
@@ -117,9 +125,9 @@ class PersonalLedger:
         self.crypto.check("hash", digest_alg)
         self.digest_alg = digest_alg
         self._h = self.crypto.hash_fn(digest_alg)
-        self._frontier = merkle.MerkleFrontier(self._h)
+        self._tree = merkle.MerkleTree(self._h)
         for e in self.entries:
-            self._frontier.append(bytes.fromhex(e.digest))
+            self._tree.append(bytes.fromhex(e.digest))
 
     # -- storage -------------------------------------------------------------
     def _load(self) -> None:
@@ -133,6 +141,21 @@ class PersonalLedger:
                 raise LedgerError(f"malformed ledger line {n + 1}") from ex
             self.entries.append(e)
             self._index[e.digest] = e.seq
+            self._track(e)
+
+    def _track(self, e: Entry) -> None:
+        if e.kind == "capability_issued":
+            jti = e.body.get("jti")
+            if isinstance(jti, str):
+                self._issued.setdefault(jti, e.seq)
+        elif e.kind == "constitution_loaded":
+            self._latest_constitution = e.seq
+        elif e.kind == "revocation":
+            jti = e.body.get("jti")
+            if jti is None:
+                self._revoke_all_seq = e.seq
+            elif isinstance(jti, str):
+                self._revoked_jti.setdefault(jti, e.seq)
 
     def append(self, kind: str, body: dict) -> Entry:
         prev = self.tip()
@@ -144,7 +167,8 @@ class PersonalLedger:
         _write_private(self.path, entry.to_json() + "\n", append=True, fsync=self.fsync)
         self.entries.append(entry)
         self._index[digest] = seq
-        self._frontier.append(bytes.fromhex(digest))
+        self._track(entry)
+        self._tree.append(bytes.fromhex(digest))
         self._unsigned += 1
         if self.signing_key is not None and self.auto_sign_every and self._unsigned >= self.auto_sign_every:
             self._write_head()
@@ -175,6 +199,26 @@ class PersonalLedger:
     def kinds_after(self, seq: int) -> list[str]:
         return [e.kind for e in self.entries[seq + 1:]]
 
+    @property
+    def size(self) -> int:
+        return len(self.entries)
+
+    def capability_entry(self, jti: str) -> Entry | None:
+        seq = self._issued.get(jti)
+        return None if seq is None else self.entries[seq]
+
+    def latest_constitution(self) -> Entry | None:
+        return None if self._latest_constitution is None else self.entries[self._latest_constitution]
+
+    def revocation_for(self, jti: str, issued_at_size: int) -> Entry | None:
+        """The revocation entry that covers a token issued when the ledger had ``issued_at_size`` entries."""
+        seq = self._revoked_jti.get(jti)
+        if seq is not None:
+            return self.entries[seq]
+        if self._revoke_all_seq >= issued_at_size:
+            return self.entries[self._revoke_all_seq]
+        return None
+
     def verify_chain(self) -> bool:
         prev = genesis(self.digest_alg)
         for i, e in enumerate(self.entries):
@@ -190,15 +234,40 @@ class PersonalLedger:
         return [bytes.fromhex(e.digest) for e in es]
 
     def merkle_root(self, size: int | None = None) -> str:
-        if size is None or size == len(self.entries):
-            return self._frontier.root().hex()
-        return merkle.root(self._leaves(size), self._h).hex()
+        return self._tree.root(size).hex()
 
     def inclusion_proof(self, seq: int) -> dict:
-        leaves = self._leaves()
-        return {"seq": seq, "size": len(leaves), "leaf": self.entries[seq].digest, "alg": self.digest_alg,
-                "proof": [p.hex() for p in merkle.inclusion_proof(leaves, seq, self._h)],
-                "merkle_root": self._frontier.root().hex()}
+        return {"seq": seq, "size": self.size, "leaf": self.entries[seq].digest, "alg": self.digest_alg,
+                "proof": [p.hex() for p in self._tree.inclusion_proof(seq)],
+                "merkle_root": self._tree.root().hex()}
+
+    def consistency_proof(self, first: int, second: int | None = None) -> dict:
+        """RFC 9162 consistency proof that the tree of size ``first`` is a prefix of size ``second``."""
+        second = self.size if second is None else second
+        return {"first": first, "second": second, "alg": self.digest_alg,
+                "first_root": self._tree.root(first).hex(), "second_root": self._tree.root(second).hex(),
+                "proof": [p.hex() for p in self._tree.consistency_proof(first, second)]}
+
+    def consistency_path(self, first: int, second: int | None = None) -> list[bytes]:
+        """Raw proof nodes (hot path for the gateway; no hex encoding)."""
+        return self._tree.consistency_proof(first, second)
+
+    def root_bytes(self, size: int | None = None) -> bytes:
+        return self._tree.root(size)
+
+    def hash_fn(self):
+        return self._h
+
+    @staticmethod
+    def verify_consistency_proof(p: dict, first_root: str, second_root: str,
+                                 crypto: CryptoProvider | None = None) -> bool:
+        """Check a proof against roots the verifier already holds (not the roots inside the proof)."""
+        try:
+            h = (crypto or default_provider()).hash_fn(p.get("alg", "sha256"))
+            return merkle.verify_consistency(int(p["first"]), int(p["second"]), bytes.fromhex(first_root),
+                                             bytes.fromhex(second_root), [bytes.fromhex(x) for x in p["proof"]], h)
+        except (KeyError, TypeError, ValueError):
+            return False
 
     @staticmethod
     def verify_inclusion_proof(p: dict, crypto: CryptoProvider | None = None) -> bool:
