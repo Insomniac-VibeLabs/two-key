@@ -18,7 +18,7 @@ CONST = "I am the principal. UNIQUE-CONSTITUTION-MARKER-7731. Never wire money."
 ACTION = normalize_action({"tool": "email_draft", "data_class": "personal", "irreversible": False})
 GOOD = json.dumps({"consistent": True, "confidence": 0.9, "rationale": "fine"})
 NO = json.dumps({"consistent": False, "confidence": 0.8, "rationale": "violates"})
-SECRET = "sk-test-NOT-A-REAL-KEY-0000"
+SECRET = "fake-credential-for-tests-0000"  # not a real key
 
 
 class Recorder:
