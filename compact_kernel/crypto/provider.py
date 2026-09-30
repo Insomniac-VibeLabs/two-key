@@ -111,6 +111,9 @@ class CryptoProvider:
                  pq_backend: str = "auto", name: str = "openssl-default"):
         if pq_backend not in PQ_BACKENDS:
             raise CryptoPolicyError(f"pq_backend must be one of {PQ_BACKENDS}")
+        if fips_mode and pq_backend == "liboqs":
+            raise CryptoPolicyError("pq_backend='liboqs' refused in fips_mode: liboqs is not a FIPS 140-3 "
+                                    "validated module")
         self.fips_mode = bool(fips_mode)
         self.require_fips_module = bool(require_fips_module)
         self.pq_backend_choice = pq_backend

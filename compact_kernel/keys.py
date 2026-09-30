@@ -1,4 +1,10 @@
-"""Ed25519 key handling for the principal (uses the `cryptography` library).
+"""Principal key handling (uses the `cryptography` library).
+
+Legacy Ed25519 keys are PEM files (PKCS#8 private, SPKI public), as before.
+Other suites (ECDSA P-384, hybrid ML-DSA-65 + Ed25519/P-384; see
+compact_kernel.crypto.signatures) are stored as a JSON key bundle. The
+private components are encrypted with AES-256-GCM under a key derived by
+PBKDF2-HMAC-SHA-256 (600,000 iterations, SP 800-132) from the passphrase.
 
 Private keys are written with mode 0600 and can be encrypted with a
 passphrase. Keys are never hardcoded, and none are shipped in this repo
@@ -38,9 +44,9 @@ def public_key_from_raw(raw: bytes) -> Ed25519PublicKey:
     return Ed25519PublicKey.from_public_bytes(raw)
 
 
-def fingerprint(key: Ed25519PublicKey | Ed25519PrivateKey) -> str:
-    import hashlib
-    return "ed25519:" + hashlib.sha256(public_key_raw(key)).hexdigest()[:32]
+def fingerprint(key) -> str:
+    from .crypto.signatures import as_public_keyset
+    return as_public_keyset(key).fingerprint
 
 
 def save_private_key(path: Path, key: Ed25519PrivateKey, passphrase: bytes | None = None) -> None:
@@ -73,6 +79,117 @@ def load_public_key(path: Path) -> Ed25519PublicKey:
     if not isinstance(key, Ed25519PublicKey):
         raise ValueError("not an Ed25519 public key")
     return key
+
+
+# ---------------------------------------------------------------------------
+# Key sets (non-legacy suites)
+# ---------------------------------------------------------------------------
+KEYSET_FORMAT = "compact-kernel-keyset/1"
+PUBLIC_KEYSET_FORMAT = "compact-kernel-public-keyset/1"
+PBKDF2_ITERATIONS = 600_000
+
+
+def generate_keyset(suite: str, provider=None):
+    from .crypto.signatures import LEGACY_SUITE, PrivateKeySet
+    if suite == LEGACY_SUITE:
+        return generate_private_key()
+    return PrivateKeySet.generate(suite, provider)
+
+
+def _kdf(passphrase: bytes, salt: bytes, iterations: int, provider) -> bytes:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    provider.check("kdf", "pbkdf2-hmac-sha256")
+    return PBKDF2HMAC(hashes.SHA256(), 32, salt, iterations).derive(passphrase)
+
+
+def save_keyset(path: Path, ks, passphrase: bytes | None = None, provider=None) -> None:
+    import json
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from .canonical import canonical_bytes
+    from .crypto.provider import default_provider
+    provider = provider or default_provider()
+    header = {"format": KEYSET_FORMAT, "suite": ks.suite, "public_key": ks.public().encoded}
+    plain = canonical_bytes(ks.export_components())
+    if passphrase:
+        provider.check("cipher", "aes-256-gcm")
+        salt, nonce = provider.random_bytes(16), provider.random_bytes(12)
+        enc = {"kdf": "pbkdf2-hmac-sha256", "iterations": PBKDF2_ITERATIONS, "salt": b64e(salt),
+               "cipher": "aes-256-gcm", "nonce": b64e(nonce)}
+        header["encryption"] = enc
+        ct = AESGCM(_kdf(passphrase, salt, PBKDF2_ITERATIONS, provider)).encrypt(nonce, plain, canonical_bytes(header))
+        header["private"] = b64e(ct)
+    else:
+        header["encryption"] = None
+        header["private"] = b64e(plain)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps(header, indent=1, sort_keys=True) + "\n")
+
+
+def load_keyset(path: Path, passphrase: bytes | None = None, provider=None):
+    import json
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from .canonical import canonical_bytes
+    from .crypto.provider import default_provider
+    from .crypto.signatures import PrivateKeySet
+    provider = provider or default_provider()
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+    if d.get("format") != KEYSET_FORMAT:
+        raise ValueError("not a compact-kernel key bundle")
+    enc = d.get("encryption")
+    if enc:
+        if not passphrase:
+            raise ValueError("key bundle is encrypted; passphrase required")
+        if enc.get("kdf") != "pbkdf2-hmac-sha256" or enc.get("cipher") != "aes-256-gcm" or \
+                int(enc.get("iterations", 0)) < 100_000:
+            raise ValueError("unsupported key bundle encryption parameters")
+        header = {k: d[k] for k in ("format", "suite", "public_key", "encryption")}
+        try:
+            plain = AESGCM(_kdf(passphrase, b64d(enc["salt"]), int(enc["iterations"]), provider)).decrypt(
+                b64d(enc["nonce"]), b64d(d["private"]), canonical_bytes(header))
+        except InvalidTag:
+            raise ValueError("wrong passphrase or corrupted key bundle") from None
+    else:
+        plain = b64d(d["private"])
+    ks = PrivateKeySet.from_components(d["suite"], json.loads(plain), provider)
+    if ks.public().encoded != d["public_key"]:
+        raise ValueError("key bundle public key does not match its private components")
+    return ks
+
+
+def save_public_keyset(path: Path, pub) -> None:
+    import json
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(json.dumps({"format": PUBLIC_KEYSET_FORMAT, "suite": pub.suite,
+                                      "public_key": pub.encoded, "fingerprint": pub.fingerprint},
+                                     indent=1, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def load_public_any(path: Path, provider=None):
+    """Load a legacy Ed25519 PEM public key or a JSON public key set."""
+    import json
+    from .crypto.signatures import public_keyset_from_encoded
+    data = Path(path).read_bytes()
+    if data.lstrip().startswith(b"-----BEGIN"):
+        return load_public_key(path)
+    d = json.loads(data)
+    if d.get("format") != PUBLIC_KEYSET_FORMAT:
+        raise ValueError("not a compact-kernel public key set")
+    pub = public_keyset_from_encoded(d["public_key"], provider)
+    if pub.suite != d.get("suite"):
+        raise ValueError("public key set suite mismatch")
+    return pub
+
+
+def load_private_any(path: Path, passphrase: bytes | None = None, provider=None):
+    """Load a legacy Ed25519 PEM private key or a JSON key bundle."""
+    if Path(path).read_bytes().lstrip().startswith(b"-----BEGIN"):
+        return load_private_key(path, passphrase)
+    return load_keyset(path, passphrase, provider)
 
 
 def sign(key: Ed25519PrivateKey, data: bytes) -> str:
