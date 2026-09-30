@@ -24,9 +24,8 @@ Fixes from the original prototype (see CHANGES.md):
 
 from __future__ import annotations
 
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as _FutTimeout
 from dataclasses import asdict, dataclass
 from typing import Sequence
 
@@ -101,24 +100,33 @@ def _collect(judges: Sequence[Judge], constitution_text: str, action: Action, pr
         return []
     if not policy.parallel and policy.timeout_seconds is None:
         return [_score_one(j, constitution_text, action, proposal) for j in judges]
-    workers = len(judges) if policy.parallel else 1
-    ex = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="ck-judge")
-    try:
-        futs = [ex.submit(_score_one, j, constitution_text, action, proposal) for j in judges]
-        deadline = None if policy.timeout_seconds is None else time.monotonic() + policy.timeout_seconds
-        ballots = []
-        for j, f in zip(judges, futs):
-            remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
-            try:
-                ballots.append(f.result(timeout=remaining))
-            except _FutTimeout:
-                f.cancel()
-                ballots.append(Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
-                                      None, "", error=f"timeout: no ballot within {policy.timeout_seconds}s"))
-        return ballots
-    finally:
-        # Do not wait for hung judges; their threads finish when their own HTTP timeout fires.
-        ex.shutdown(wait=False, cancel_futures=True)
+    # One daemon thread per judge: a hung judge can neither delay the decision past the deadline
+    # nor keep the process alive at exit (its HTTP timeout ends the thread eventually).
+    results: list[Ballot | None] = [None] * len(judges)
+    done = [threading.Event() for _ in judges]
+
+    def run(i: int, j: Judge) -> None:
+        results[i] = _score_one(j, constitution_text, action, proposal)
+        done[i].set()
+
+    deadline = None if policy.timeout_seconds is None else time.monotonic() + policy.timeout_seconds
+    if policy.parallel:
+        for i, j in enumerate(judges):
+            threading.Thread(target=run, args=(i, j), name=f"ck-judge-{i}", daemon=True).start()
+    else:  # sequential, but still under the overall deadline
+        def run_all() -> None:
+            for i, j in enumerate(judges):
+                run(i, j)
+        threading.Thread(target=run_all, name="ck-judge-seq", daemon=True).start()
+    ballots = []
+    for i, j in enumerate(judges):
+        remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+        if done[i].wait(remaining) and results[i] is not None:
+            ballots.append(results[i])
+        else:
+            ballots.append(Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
+                                  None, "", error=f"timeout: no ballot within {policy.timeout_seconds}s"))
+    return ballots
 
 
 def convene(
