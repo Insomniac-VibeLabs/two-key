@@ -1,0 +1,32 @@
+sequenceDiagram
+  autonumber
+  participant M as Proposing LLM / agent
+  participant K as Compact Kernel
+  participant J as Path B judges
+  participant L as Personal ledger
+  participant G as Tool gateway
+  participant T as Tool (bank, mail, ...)
+  M->>K: authorize(action record, proposal, literal args)
+  K->>L: proposal, action_normalized, vm_result
+  K->>J: constitution text + action + proposal
+  J-->>K: strict JSON ballots
+  K->>L: quorum_result
+  K->>K: both paths pass, so sign token<br/>{jti, tool, scope, args_hash, ledger_root, exp}
+  K->>L: capability_issued (SHA-256 of token only)
+  K-->>M: full token
+  M->>G: invoke(token, tool, args, call fields)
+  G->>G: signature, expiry, principal, tool,<br/>args_hash, amount, counterparty, data class
+  G->>L: ledger_root known ancestor?<br/>constitution reloaded since?
+  G->>G: jti unused?
+  alt all checks pass
+    G->>L: capability_redeemed (jti)
+    G->>T: execute(args)
+    T-->>G: result
+    G->>L: tool_executed
+    G-->>M: result
+  else any check fails
+    G->>L: gateway_denied (reason)
+    G-->>M: denied (reason)
+  end
+  M->>G: same token again (replay)
+  G-->>M: denied: replayed

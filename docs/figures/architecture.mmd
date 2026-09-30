@@ -1,0 +1,27 @@
+flowchart TB
+  subgraph Principal["Principal device (user-controlled)"]
+    KEY["Ed25519 principal key"]
+    CONST["Signed constitution<br/>plain-English text + hard rules"]
+    LEDGER[("Personal ledger<br/>hash chain + Merkle root<br/>signed head")]
+  end
+  LLM["Any proposing LLM<br/>(vendor or local)"] -->|"proposed action record<br/>+ literal tool args"| K
+  subgraph K["Compact Kernel"]
+    NORM["Normalize / validate<br/>action record"]
+    VM["Path A<br/>Deterministic Policy VM<br/>(bytecode, no English)"]
+    Q["Path B<br/>Intent quorum convenor<br/>k-of-n, min responding"]
+    ISS["Capability issuer<br/>(HMAC prototype)"]
+    NORM --> VM --> Q --> ISS
+  end
+  CONST -->|"verify signature,<br/>compile rules"| VM
+  CONST -->|"constitution text"| Q
+  Q <-->|"constitution + proposal<br/>strict JSON ballot"| J1["Judge 1<br/>e.g. OpenAI-compatible / xAI"]
+  Q <--> J2["Judge 2<br/>e.g. Anthropic"]
+  Q <--> J3["Judge 3<br/>e.g. Gemini / local Ollama"]
+  ISS -->|"single-use token<br/>(both paths passed)"| AGENT["Caller / agent runtime"]
+  AGENT -->|"token + tool + args"| GW["Tool gateway<br/>verifies all scope checks"]
+  GW --> TOOLS["Real-world tools<br/>bank, mail, browser, ..."]
+  K -. "append every step" .-> LEDGER
+  GW -. "redeemed / denied" .-> LEDGER
+  KEY -. "signs" .-> CONST
+  KEY -. "signs head" .-> LEDGER
+  LEDGER -. "anchor hook (stub)" .-> ANCH["Public log<br/>(not implemented)"]

@@ -1,0 +1,19 @@
+flowchart TD
+  A(["authorize(action, proposal, tool_args)"]) --> L0["Ledger: proposal"]
+  L0 --> N{"Normalize and validate<br/>amount >= 0, finite, numeric;<br/>data_class enum; canonical strings;<br/>missing fields -> irreversible=true, classified"}
+  N -- invalid --> D1["DENY invalid_action"]
+  N -- ok --> L1["Ledger: action_normalized<br/>(full record, args_hash)"]
+  L1 --> VM{"Path A: Policy VM<br/>ASSERT per rule"}
+  VM -- "rule fails / fault / no PASS" --> SC{"short_circuit_path_b?"}
+  SC -- "yes (default)" --> D2["Ledger: quorum_skipped<br/>DENY path_a_denied:rule"]
+  SC -- no --> QB["Convene Path B anyway<br/>(logged)"] --> D2b["DENY path_a_denied:rule"]
+  VM -- PASS --> Q{"Path B quorum<br/>yes >= k, responding >= K,<br/>distinct providers >= P"}
+  Q -- fail --> D3["DENY path_b_denied:reason"]
+  Q -- pass --> T["Issue single-use token<br/>tool, scope, args_hash,<br/>ledger_root, constitution digest, TTL"]
+  T --> L2["Ledger: capability_issued (token hash)<br/>Ledger: decision allowed"]
+  L2 --> OK(["ALLOW: return full token"])
+  D1 --> LD["Ledger: decision (reason, rule)"]
+  D2 --> LD
+  D2b --> LD
+  D3 --> LD
+  X["Any exception, including<br/>ledger append failure"] -.-> D4(["DENY internal_error<br/>(no token)"])

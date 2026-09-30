@@ -1,0 +1,24 @@
+flowchart TB
+  subgraph Chain["Append-only hash chain (ledger.jsonl, mode 0600)"]
+    direction LR
+    E0["Entry 0<br/>seq, ts, kind, body<br/>prev = 000…0<br/>digest d0"] --> E1["Entry 1<br/>prev = d0<br/>digest d1"] --> E2["Entry 2<br/>prev = d1<br/>digest d2"] --> E3["Entry 3<br/>prev = d2<br/>digest d3"]
+  end
+  subgraph Merkle["Merkle tree over digests (RFC 6962 style)"]
+    R["Merkle root<br/>H(0x01 | n01 | n23)"]
+    N01["n01 = H(0x01 | l0 | l1)"] --> R
+    N23["n23 = H(0x01 | l2 | l3)"] --> R
+    L0["l0 = H(0x00 | d0)"] --> N01
+    L1["l1 = H(0x00 | d1)"] --> N01
+    L2["l2 = H(0x00 | d2)"] --> N23
+    L3["l3 = H(0x00 | d3)"] --> N23
+  end
+  E0 -.-> L0
+  E1 -.-> L1
+  E2 -.-> L2
+  E3 -.-> L3
+  HEAD["Signed head (ledger.jsonl.head.json)<br/>{size: 4, head: d3, merkle_root}<br/>Ed25519 signature by principal key"]
+  E3 --> HEAD
+  R --> HEAD
+  HEAD -. "Anchor.publish() (stub)" .-> PUB["Public transparency log<br/>(not implemented)"]
+  NOTE["Full rewrite without the key: chain re-hashes fine,<br/>but head signature or size check fails"]
+  HEAD --- NOTE
