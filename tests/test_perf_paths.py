@@ -144,6 +144,19 @@ class MerkleAndCheckpoints(unittest.TestCase):
             self.assertEqual(k.ledger.unsigned_entries, 0)
             self.assertEqual(k.ledger.verify(k.trusted_public_key).reason, "ok")
 
+    def test_gateway_checkpoint_every(self):
+        with KernelFixture(RULES, YES) as k:
+            gw = k.gateway(checkpoint_every=0)
+            decs = [k.authorize(PAY, "Pay.", PAY_ARGS) for _ in range(3)]
+            for d in decs:
+                gw.invoke(d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
+            self.assertEqual(k.ledger.unsigned_entries, 3)  # one capability_redeemed per call, unsigned
+            self.assertTrue(k.ledger.verify(k.trusted_public_key).reason.startswith("size_mismatch"))
+            k.ledger.checkpoint()
+            self.assertEqual(k.ledger.verify(k.trusted_public_key).reason, "ok")
+            with self.assertRaises(ValueError):
+                k.gateway(checkpoint_every=-1)
+
     def test_kernel_per_append_mode(self):
         with KernelFixture(RULES, YES, head_signing="append") as k:
             with mock.patch.object(k.ledger, "_write_head", wraps=k.ledger._write_head) as w:

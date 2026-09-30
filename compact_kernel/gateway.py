@@ -27,7 +27,11 @@ Every outcome is written to the ledger. A token is marked redeemed before the
 tool executes, so a failing tool cannot be retried with the same token.
 
 Hot path: no network I/O, no key parsing (the issuer caches its MAC key
-schedule / parsed verify key), one ledger checkpoint (signed head) per call.
+schedule / parsed verify key). By default one ledger checkpoint (signed head)
+per call; ``checkpoint_every=N`` signs after every N calls, and 0 leaves
+checkpointing to the caller (e.g. a timer calling ``ledger.checkpoint()``).
+Entries not yet covered by a signed head show up as ``size_mismatch`` in
+``ledger.verify`` until the next checkpoint.
 """
 
 from __future__ import annotations
@@ -53,9 +57,14 @@ class GatewayResult:
 class ToolGateway:
     def __init__(self, issuer: CapabilityIssuer, ledger: PersonalLedger, principal: str,
                  tools: Mapping[str, Callable[..., Any]] | None = None,
-                 extractors: Mapping[str, Extractor] | None = None, *, digest_alg: str = "sha256"):
+                 extractors: Mapping[str, Extractor] | None = None, *, digest_alg: str = "sha256",
+                 checkpoint_every: int = 1):
         self.issuer, self.ledger, self.principal = issuer, ledger, principal
         self.digest_alg = digest_alg
+        if not isinstance(checkpoint_every, int) or isinstance(checkpoint_every, bool) or checkpoint_every < 0:
+            raise ValueError("checkpoint_every must be an integer >= 0")
+        self.checkpoint_every = checkpoint_every
+        self._calls_since_checkpoint = 0
         self.checkpoint_error: str | None = None
         self.tools = dict(tools or {})
         self.extractors = dict(extractors or {})
@@ -90,12 +99,15 @@ class ToolGateway:
         try:
             return self._invoke(token, tool, args, call_fields)
         finally:
-            # One signed head per gateway call (no-op if the ledger signs every append).
-            try:
-                self.ledger.checkpoint()
-                self.checkpoint_error = None
-            except Exception as e:  # recorded; the next checkpoint covers these entries
-                self.checkpoint_error = f"{type(e).__name__}: {e}"
+            # Signed head per checkpoint_every calls (no-op if the ledger already signs every append).
+            self._calls_since_checkpoint += 1
+            if self.checkpoint_every and self._calls_since_checkpoint >= self.checkpoint_every:
+                try:
+                    self.ledger.checkpoint()
+                    self._calls_since_checkpoint = 0
+                    self.checkpoint_error = None
+                except Exception as e:  # recorded; the next checkpoint covers these entries
+                    self.checkpoint_error = f"{type(e).__name__}: {e}"
 
     def _invoke(self, token: Any, tool: str, args: Mapping[str, Any],
                 call_fields: Mapping[str, Any] | None) -> GatewayResult:
