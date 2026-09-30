@@ -26,8 +26,12 @@ class KernelFixture:
         self.key = key
         kw = dict(self.kw)
         kw.setdefault("allow_test_doubles", True)
-        self.kernel = CompactKernel(env, key.public_key(), Path(self.tmp.name) / "ledger.jsonl",
-                                    self.judges, **self._extra(key, kw))
+        try:
+            self.kernel = CompactKernel(env, key.public_key(), Path(self.tmp.name) / "ledger.jsonl",
+                                        self.judges, **self._extra(key, kw))
+        except Exception:
+            self.tmp.cleanup()
+            raise
         return self.kernel
 
     def _extra(self, key, kw):
