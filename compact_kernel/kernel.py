@@ -8,7 +8,8 @@ Compact Kernel: dual-path constitutional enforcement
    Normalize and validate the action.
 3. Path A: deterministic Policy VM. Fail closed.
 4. Path B: multi-model intent quorum over the judges the user chose. Fail closed.
-   By default Path B is skipped when Path A denies (privacy); this is configurable.
+   By default Path B is skipped when Path A denies (privacy); set
+   short_circuit_path_b=False to run both paths on every proposal.
 5. Only if BOTH paths pass, issue a short-lived, single-use capability token
    bound to tool, scope, args hash, and the current ledger root.
 6. Every step is appended to the principal's signed ledger. If the ledger
@@ -70,6 +71,7 @@ class CompactKernel:
         capability_secret: bytes | None = None,
         clock: Callable[[], float] | None = None,
         allow_test_doubles: bool = False,
+        short_circuit_path_b: bool = True,
     ):
         if not judges:
             raise KernelConfigError("at least one Path B judge is required")
@@ -105,6 +107,9 @@ class CompactKernel:
         if self.quorum_policy.required_yes > len(self.judges):
             raise KernelConfigError("required_yes exceeds the number of judges")
         self.ttl_seconds = ttl_seconds
+        # Ordering option (DESIGN_OPTIONS.md section 4). Default: skip Path B when Path A
+        # denies, so forbidden proposals are never sent to external judges (privacy).
+        self.short_circuit_path_b = short_circuit_path_b
 
         self.ledger.append("constitution_loaded", {
             "principal": self.principal,
@@ -113,6 +118,7 @@ class CompactKernel:
             "rules": self.constitution.hard_rules,
             "bytecode_len": len(self.bytecode),
             "judges": [{"id": j.judge_id, "provider": j.provider} for j in self.judges],
+            "short_circuit_path_b": self.short_circuit_path_b,
             "quorum": {"required_yes": self.quorum_policy.required_yes,
                        "min_responding": self.quorum_policy.effective_min_responding,
                        "min_distinct_providers": self.quorum_policy.min_distinct_providers},
@@ -157,6 +163,10 @@ class CompactKernel:
         vm_res = self.vm.eval(action)
         self.ledger.append("vm_result", {"allowed": vm_res.allowed, "reason": vm_res.reason,
                                          "steps": vm_res.steps, "denied_by": vm_res.denied_by})
+        if not vm_res.allowed and self.short_circuit_path_b:
+            self.ledger.append("quorum_skipped", {"reason": "path_a_denied", "short_circuit_path_b": True})
+            return self._deny(f"path_a_denied:{vm_res.reason}", rec, vm_allowed=False, vm_reason=vm_res.reason,
+                              denied_by_rule=vm_res.denied_by, quorum_passed=None, quorum=None)
         q = convene(self.judges, self.constitution_text, action, proposal, self.quorum_policy)
         self.ledger.append("quorum_result", q.to_record())
         qsum = {"yes": q.yes, "no": q.no, "abstain": q.abstain, "reason": q.reason}
