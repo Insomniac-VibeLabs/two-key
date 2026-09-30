@@ -56,7 +56,24 @@ Conception is recorded only in `CONCEPTION_NOTES.md`.
 | 39 | Figures (Mermaid plus SVG/PNG) | `docs/figures/` | Stephan (instruction) | a379291 |
 | 40 | Design options memo (no decisions) | `DESIGN_OPTIONS.md` | Attorney recommendation | 98fd90e |
 | 41 | Specification draft with source tags; advocacy removed; original disclosure unchanged | `docs/SPEC_DRAFT.md` | Stephan (instruction) | 9160844 |
-| 42 | README rewritten for the new layout | `README.md` | Engineering | (this commit) |
+| 42 | README rewritten for the new layout | `README.md` | Engineering | 39305e3 |
+| 43 | Pluggable `CryptoProvider`: approved-algorithm list, `fips_mode` refusal, `require_fips_module` check, RNG only via `os.urandom`/`secrets` | `crypto/provider.py`, `canonical.py` | Stephan (instruction: FIPS 140-3 requirements) | ccf92cf |
+| 44 | Start-up self-test (SHA-2/SHA-3/HMAC/Ed25519 KATs, ECDSA and ML-DSA pairwise tests); kernel refuses to start on failure | `crypto/selftest.py`, `kernel.py` | Stephan (instruction) | ccf92cf, ea42dc6 |
+| 45 | Signature suites: ECDSA P-384; hybrid ML-DSA-65 + Ed25519 / P-384, both halves must verify; verifier requires the trusted key's suite (no downgrade) | `crypto/signatures.py` | Stephan (instruction) | ccf92cf, 5ae5dda |
+| 46 | Suite name bound into each component's signing input (domain separation); canonical JSON encoding of hybrid keys/signatures | `crypto/signatures.py` | Engineering | ccf92cf |
+| 47 | Selectable ML-DSA backend (auto / pyca / liboqs / none); `PQUnavailableError` when hybrid is required and no backend exists; no silent downgrade | `crypto/`, `kernel.py` | Stephan (instruction) | ccf92cf, ea42dc6 |
+| 48 | liboqs backend refused in `fips_mode` (not a validated module); key sets built under another provider are re-checked under the caller's provider | `crypto/` | Engineering | ccf92cf, 5ae5dda |
+| 49 | Ledger: SHA-384 digests for PQ profiles (algorithm bound into each digest), hybrid-signed chain head, `auto_sign_every` batching, configurable fsync | `ledger.py` | Stephan (instruction: SHA-384+, PQ chain head, batching) | f749c4b |
+| 50 | Incremental Merkle root (`MerkleFrontier`, O(log n)), replacing a full rebuild on every signed head | `merkle.py`, `ledger.py` | Engineering (performance) | f749c4b |
+| 51 | Constitution signing/verification for all suites; SHA-384 constitution digest for non-legacy suites; encrypted JSON key bundles (PBKDF2-HMAC-SHA-256 + AES-256-GCM); CLI `keygen --suite`, `selftest`, `--fips`, `--pq-backend` | `constitution.py`, `keys.py`, `cli.py` | Stephan (instruction) / Engineering (bundle format) | fc979ca |
+| 52 | Token modes: `ck1` (HMAC-SHA-256), `ck1-hs384` (HMAC-SHA-384, default for non-legacy suites), optional `ck1-sig` (hybrid-signed); HMAC keys ≥ 256 bits; MAC key schedule cached | `capability.py` | Stephan (instruction: optional PQ tokens, ≥256-bit HMAC keys) | e7be218 |
+| 53 | Gateway checkpoints the signed head per call (`checkpoint_every`, 0 = caller-managed) | `gateway.py`, `kernel.py` | Stephan (instruction: batched/configurable head updates) | e7be218, ee862b1 |
+| 54 | Path B judges in parallel with an overall `timeout_seconds` (default 45 s); late judges abstain; daemon threads | `quorum.py`, `judges/config.py`, `examples/judges.yaml` | Stephan (instruction: parallel with timeouts) | 615f89e, 2752c5b |
+| 55 | Kernel: `crypto=` provider, `require_pq`, PQ-profile defaults (SHA-384, `ck1-hs384`), one signed head per decision (`head_signing`), checkpoint failure → deny | `kernel.py` | Stephan (instruction) / Engineering (fail closed on checkpoint) | ea42dc6 |
+| 56 | 58 new tests (173 total): fips_mode rejection, self-test incl. forced failure, hybrid tamper/strip/reorder/downgrade, missing-PQ behaviour, fake-liboqs adapter, parallel judges/timeout, no-network hot path, checkpoints | `tests/` | Stephan (instruction) | 22cfc2e, ee862b1 |
+| 57 | `bench.py` and `docs/PERFORMANCE.md` (measured latency and memory, classic vs hybrid) | `bench.py`, `docs/PERFORMANCE.md` | Stephan (instruction) | bae09cd |
+| 58 | `docs/CRYPTO.md` (not FIPS validated; candidate modules; algorithm/standard map; PQ notes) | `docs/CRYPTO.md` | Stephan (instruction) | a286ac4 |
+| 59 | README, CHANGES, DESIGN_OPTIONS (token-scheme row), `pyproject.toml` (`compact_kernel.crypto` package, `pq`/`liboqs` extras) | docs, `pyproject.toml` | Engineering | (this commit) |
 
 **Not changed:** `docs/INVENTION_DISCLOSURE.md` (byte-identical to the
 received file). No LICENSE file has been added or changed; licensing is

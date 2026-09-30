@@ -15,6 +15,13 @@ any LLM ─▶ Compact Kernel ─▶ single-use capability token ─▶ tool gat
                └─ Personal ledger: hash chain + Merkle root, head signed by your key
 ```
 
+Crypto: FIPS-approved algorithms only, routed through a pluggable provider
+with an optional `fips_mode` and a start-up self-test; optional hybrid
+post-quantum signatures (ML-DSA-65 + Ed25519 or ECDSA P-384). **Not FIPS
+certified or validated.** Compliance requires deployment on a validated
+module; see `docs/CRYPTO.md`. Measured latency and memory:
+`docs/PERFORMANCE.md`.
+
 See `docs/figures/` for the architecture, flow, sequence, and ledger diagrams.
 
 ## Quick start
@@ -22,9 +29,11 @@ See `docs/figures/` for the architecture, flow, sequence, and ledger diagrams.
 Requires Python ≥ 3.10 and `cryptography`. PyYAML is needed for YAML files.
 
 ```bash
-pip install cryptography pyyaml
-python -m unittest discover -s tests     # 115 tests, no network
+pip install cryptography pyyaml         # add 'cryptography>=50' for ML-DSA (hybrid PQ)
+python -m unittest discover -s tests     # 173 tests, no network (PQ tests skip without ML-DSA)
 python -m compact_kernel demo            # offline demo (test-double judges)
+python -m compact_kernel selftest        # crypto known-answer self-test + provider info
+python bench.py --quick                  # latency and memory benchmarks
 ```
 
 ### Use your own constitution
@@ -37,6 +46,20 @@ python -m compact_kernel sign-constitution \
 python -m compact_kernel verify-constitution \
     --signed my-constitution.signed.json --pub ~/.compact-kernel/principal.pub.pem
 ```
+
+Other key suites (JSON key bundle, encrypted with PBKDF2 + AES-256-GCM):
+
+```bash
+python -m compact_kernel keygen --out ~/.ck-pq --suite hybrid-mldsa65-ed25519   # or hybrid-mldsa65-p384, ecdsa-p384
+python -m compact_kernel sign-constitution ... --key ~/.ck-pq/principal.keys.json ...
+python -m compact_kernel verify-constitution --signed ... --pub ~/.ck-pq/principal.pub.json
+python -m compact_kernel --fips selftest --require-pq    # refuse non-approved algorithms; fail without ML-DSA
+```
+
+In code: `CompactKernel(..., crypto=CryptoProvider(fips_mode=True), require_pq=True)`.
+A hybrid principal key switches the defaults to SHA-384 digests and
+HMAC-SHA-384 tokens. If ML-DSA is missing, the kernel raises
+`PQUnavailableError`; it never falls back to classical-only.
 
 ### Choose your judges
 
@@ -77,9 +100,10 @@ if d.allowed:
 |---|---|
 | `compact_kernel/action.py` | Normalized action record, validation, conservative defaults |
 | `compact_kernel/policy_vm.py` | Path A compiler (strict) and VM |
-| `compact_kernel/quorum.py` | Path B k-of-n quorum |
+| `compact_kernel/quorum.py` | Path B k-of-n quorum (parallel judges, overall timeout) |
 | `compact_kernel/judges/` | Judge interface, OpenAI-compatible / Anthropic / Gemini / Ollama adapters, credentials, config |
-| `compact_kernel/constitution.py`, `keys.py` | Constitution upload and Ed25519 signing |
+| `compact_kernel/constitution.py`, `keys.py` | Constitution upload and signing (Ed25519, ECDSA P-384, hybrid ML-DSA-65), key bundles |
+| `compact_kernel/crypto/` | Crypto provider (`fips_mode`, approved-algorithm policy), signature suites, self-test |
 | `compact_kernel/capability.py`, `gateway.py` | Tokens and the tool gateway |
 | `compact_kernel/ledger.py`, `merkle.py`, `anchoring.py` | Signed ledger, Merkle tree, anchoring stub |
 | `compact_kernel/kernel.py` | `CompactKernel.authorize` |
@@ -88,6 +112,8 @@ if d.allowed:
 | `docs/INVENTION_DISCLOSURE.md` | Original disclosure, **unchanged** |
 | `docs/SPEC_DRAFT.md` | Updated working specification draft |
 | `docs/figures/` | Diagrams (Mermaid sources plus SVG/PNG) |
+| `docs/CRYPTO.md` | FIPS 140-3 posture, candidate modules, algorithm map, PQ design |
+| `docs/PERFORMANCE.md`, `bench.py` | Measured latency and memory; the benchmark script |
 | `CONCEPTION_NOTES.md` | Dated conception statements by the inventor |
 | `DESIGN_OPTIONS.md` | Open design questions and options (no decisions) |
 | `CHANGES.md` | Every change and who decided it |
@@ -96,8 +122,10 @@ if d.allowed:
 
 - The connectors to real judges are tested only against mocked HTTP. No live API call has been made.
 - Username/password and OAuth device-code auth are interface stubs.
-- Capability tokens use HMAC with a secret shared between issuer and gateway.
+- Capability tokens use HMAC with a secret shared between issuer and gateway by default (an optional signed-token mode exists).
 - Keys are file-based, not held in TEE/HSM hardware.
+- Not FIPS validated. The development machine had no FIPS provider; see `docs/CRYPTO.md`.
+- The liboqs backend adapter has been tested only against a fake module.
 - The ledger is not encrypted, and public anchoring is a stub.
 - Open design questions are listed in `DESIGN_OPTIONS.md`.
 

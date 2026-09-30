@@ -13,9 +13,13 @@ dependencies = ["cryptography>=41"]
 [project.optional-dependencies]
 yaml = ["pyyaml>=6"]
 keyring = ["keyring>=24"]
+# ML-DSA-65 (FIPS 204) for the hybrid post-quantum suites; tested with 50.0.1 (bundled OpenSSL 4.0.2).
+pq = ["cryptography>=50"]
+# Alternative PQ backend (not FIPS-validated; refused in fips_mode). Not exercised against real liboqs.
+liboqs = ["liboqs-python"]
 
 [project.scripts]
 compact-kernel = "compact_kernel.cli:main"
 
 [tool.setuptools]
-packages = ["compact_kernel", "compact_kernel.judges"]
+packages = ["compact_kernel", "compact_kernel.judges", "compact_kernel.crypto"]
