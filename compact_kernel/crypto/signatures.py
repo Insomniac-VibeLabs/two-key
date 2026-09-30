@@ -163,8 +163,9 @@ class PycaMLDSA65:
     private_format = "seed"
 
     def __init__(self):
+        import importlib
         try:
-            from cryptography.hazmat.primitives.asymmetric import mldsa  # noqa: F401
+            mldsa = importlib.import_module("cryptography.hazmat.primitives.asymmetric.mldsa")
             from cryptography.hazmat.backends.openssl.backend import backend
         except ImportError as e:
             raise ImportError(f"cryptography has no ML-DSA module: {e}") from e
@@ -460,18 +461,26 @@ def public_keyset_from_encoded(encoded: str, provider: CryptoProvider | None = N
 
 
 def as_private_keyset(key: Any, provider: CryptoProvider | None = None) -> PrivateKeySet:
+    """Wrap/convert a private key. A key set built under a different provider is rebuilt under
+    ``provider`` so that provider's policy (fips_mode, PQ backend choice) applies."""
     if isinstance(key, PrivateKeySet):
-        return key
+        if provider is None or key.provider is provider:
+            return key
+        return PrivateKeySet.from_components(key.suite, key.export_components(), provider)
     if isinstance(key, Ed25519PrivateKey):
         return PrivateKeySet(LEGACY_SUITE, [key], provider)
     raise TypeError(f"unsupported private key type {type(key).__name__}")
 
 
 def as_public_keyset(key: Any, provider: CryptoProvider | None = None) -> PublicKeySet:
-    if isinstance(key, PublicKeySet):
-        return key
+    """Wrap/convert a public key. A key set parsed under a different provider is re-parsed under
+    ``provider`` so that provider's policy (fips_mode, PQ backend choice) applies."""
     if isinstance(key, PrivateKeySet):
-        return key.public()
+        key = key.public()
+    if isinstance(key, PublicKeySet):
+        if provider is None or key.provider is provider:
+            return key
+        return public_keyset_from_encoded(key.encoded, provider)
     if isinstance(key, Ed25519PrivateKey):
         key = key.public_key()
     if isinstance(key, Ed25519PublicKey):
