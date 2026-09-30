@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 *.pem
 *.key
+*.keys.json
 keys/
 *.jsonl
 *.head.json
