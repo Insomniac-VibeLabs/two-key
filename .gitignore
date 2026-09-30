@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.pem
+*.key
+keys/
+*.jsonl
+*.head.json
+.anchor*
+/build/
+/dist/
+*.egg-info/
+.DS_Store

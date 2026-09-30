@@ -1,0 +1,1 @@
+# Compact Kernel package marker
