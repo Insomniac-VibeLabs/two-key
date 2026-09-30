@@ -25,6 +25,9 @@ requires exact equality with the token scope. That is stricter than spec
 
 Every outcome is written to the ledger. A token is marked redeemed before the
 tool executes, so a failing tool cannot be retried with the same token.
+
+Hot path: no network I/O, no key parsing (the issuer caches its MAC key
+schedule / parsed verify key), one ledger checkpoint (signed head) per call.
 """
 
 from __future__ import annotations
@@ -50,8 +53,10 @@ class GatewayResult:
 class ToolGateway:
     def __init__(self, issuer: CapabilityIssuer, ledger: PersonalLedger, principal: str,
                  tools: Mapping[str, Callable[..., Any]] | None = None,
-                 extractors: Mapping[str, Extractor] | None = None):
+                 extractors: Mapping[str, Extractor] | None = None, *, digest_alg: str = "sha256"):
         self.issuer, self.ledger, self.principal = issuer, ledger, principal
+        self.digest_alg = digest_alg
+        self.checkpoint_error: str | None = None
         self.tools = dict(tools or {})
         self.extractors = dict(extractors or {})
         # Rebuild the single-use set from the ledger so replay protection survives restarts.
@@ -83,13 +88,25 @@ class ToolGateway:
     def invoke(self, token: Any, tool: str, args: Mapping[str, Any],
                call_fields: Mapping[str, Any] | None = None) -> GatewayResult:
         try:
+            return self._invoke(token, tool, args, call_fields)
+        finally:
+            # One signed head per gateway call (no-op if the ledger signs every append).
+            try:
+                self.ledger.checkpoint()
+                self.checkpoint_error = None
+            except Exception as e:  # recorded; the next checkpoint covers these entries
+                self.checkpoint_error = f"{type(e).__name__}: {e}"
+
+    def _invoke(self, token: Any, tool: str, args: Mapping[str, Any],
+                call_fields: Mapping[str, Any] | None) -> GatewayResult:
+        try:
             p = self.issuer.verify(token)
         except TokenError as e:
             return self._deny(e.reason, token, tool)
         try:
             call_tool = normalize_action({"tool": tool}).tool
             fields = self._call_fields(call_tool, args, call_fields)
-            call_args_hash = args_hash(call_tool, args)
+            call_args_hash = args_hash(call_tool, args, self.digest_alg, self.ledger.crypto)
         except (ActionValidationError, TypeError, ValueError) as e:
             return self._deny(f"invalid_call:{e}", token, tool)
 
