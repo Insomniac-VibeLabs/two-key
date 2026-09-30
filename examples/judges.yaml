@@ -8,6 +8,7 @@ quorum:
   required_yes: 2            # k-of-n: how many judges must say "consistent"
   min_responding: 2          # refuse to decide if fewer valid ballots arrive
   min_distinct_providers: 1  # 1 = not enforced (see DESIGN_OPTIONS.md section 2)
+  timeout_seconds: 45        # judges run in parallel; any judge not done by then abstains
 
 judges:
   - id: grok

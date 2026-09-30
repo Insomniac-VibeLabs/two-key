@@ -125,7 +125,7 @@ def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
     if len(set(ids)) != len(ids):
         raise JudgeConfigError("judge ids must be unique")
     q = data.get("quorum") or {}
-    if set(q) - {"required_yes", "min_responding", "min_distinct_providers"}:
+    if set(q) - {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel"}:
         raise JudgeConfigError("unknown quorum keys")
     policy = QuorumPolicy(**q) if q else QuorumPolicy(required_yes=min(2, len(judges)))
     if policy.required_yes > len(judges):

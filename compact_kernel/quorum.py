@@ -15,10 +15,18 @@ Fixes from the original prototype (see CHANGES.md):
 - ``min_distinct_providers`` is an optional, configurable independence
   check. It defaults to 1, meaning not enforced. How independence should be
   ensured is an open design question; see DESIGN_OPTIONS.md section 2.
+- Judges run in parallel (one thread per judge) under an overall deadline
+  ``timeout_seconds`` (default 45 s). A judge that has not answered by the
+  deadline is recorded as an abstention (``error="timeout..."``), so a slow or
+  hung provider can never produce a "yes" and cannot stall the kernel beyond
+  the deadline. Per-request HTTP timeouts are still set on each LLM judge.
 """
 
 from __future__ import annotations
 
+import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as _FutTimeout
 from dataclasses import asdict, dataclass
 from typing import Sequence
 
@@ -35,6 +43,8 @@ class QuorumPolicy:
     required_yes: int = 2            # k in k-of-n
     min_responding: int | None = None  # K in spec 5.4; defaults to required_yes
     min_distinct_providers: int = 1  # 1 = not enforced (open design question)
+    timeout_seconds: float | None = 45.0  # overall deadline for all judges; None = no deadline
+    parallel: bool = True
 
     def __post_init__(self):
         if isinstance(self.required_yes, bool) or not isinstance(self.required_yes, int) or self.required_yes < 1:
@@ -44,6 +54,11 @@ class QuorumPolicy:
             raise QuorumConfigError("min_responding must be an integer >= 1")
         if not isinstance(self.min_distinct_providers, int) or self.min_distinct_providers < 1:
             raise QuorumConfigError("min_distinct_providers must be an integer >= 1")
+        t = self.timeout_seconds
+        if t is not None and (isinstance(t, bool) or not isinstance(t, (int, float)) or not t > 0):
+            raise QuorumConfigError("timeout_seconds must be a positive number or None")
+        if not isinstance(self.parallel, bool):
+            raise QuorumConfigError("parallel must be a boolean")
 
     @property
     def effective_min_responding(self) -> int:
@@ -68,6 +83,44 @@ class QuorumResult:
         }
 
 
+def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str) -> Ballot:
+    try:
+        b = j.score(constitution_text, action, proposal)
+        if not isinstance(b, Ballot) or b.vote not in ("yes", "no", "abstain"):
+            b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
+                       None, "", error="judge returned an invalid ballot object")
+    except Exception as e:  # a failing judge is an abstention, never a yes
+        b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
+                   None, "", error=f"{type(e).__name__}: {e}")
+    return b
+
+
+def _collect(judges: Sequence[Judge], constitution_text: str, action: Action, proposal: str,
+             policy: QuorumPolicy) -> list[Ballot]:
+    if not judges:
+        return []
+    if not policy.parallel and policy.timeout_seconds is None:
+        return [_score_one(j, constitution_text, action, proposal) for j in judges]
+    workers = len(judges) if policy.parallel else 1
+    ex = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="ck-judge")
+    try:
+        futs = [ex.submit(_score_one, j, constitution_text, action, proposal) for j in judges]
+        deadline = None if policy.timeout_seconds is None else time.monotonic() + policy.timeout_seconds
+        ballots = []
+        for j, f in zip(judges, futs):
+            remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+            try:
+                ballots.append(f.result(timeout=remaining))
+            except _FutTimeout:
+                f.cancel()
+                ballots.append(Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
+                                      None, "", error=f"timeout: no ballot within {policy.timeout_seconds}s"))
+        return ballots
+    finally:
+        # Do not wait for hung judges; their threads finish when their own HTTP timeout fires.
+        ex.shutdown(wait=False, cancel_futures=True)
+
+
 def convene(
     judges: Sequence[Judge],
     constitution_text: str,
@@ -76,17 +129,7 @@ def convene(
     policy: QuorumPolicy | None = None,
 ) -> QuorumResult:
     policy = policy or QuorumPolicy()
-    ballots: list[Ballot] = []
-    for j in judges:
-        try:
-            b = j.score(constitution_text, action, proposal)
-            if not isinstance(b, Ballot) or b.vote not in ("yes", "no", "abstain"):
-                b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
-                           None, "", error="judge returned an invalid ballot object")
-        except Exception as e:  # a failing judge is an abstention, never a yes
-            b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
-                       None, "", error=f"{type(e).__name__}: {e}")
-        ballots.append(b)
+    ballots = _collect(judges, constitution_text, action, proposal, policy)
 
     yes = sum(1 for b in ballots if b.vote == "yes")
     no = sum(1 for b in ballots if b.vote == "no")
