@@ -7,9 +7,9 @@ flowchart TD
   VM -- "rule fails / fault / no PASS" --> SC{"short_circuit_path_b?"}
   SC -- "yes (default)" --> D2["Ledger: quorum_skipped<br/>DENY path_a_denied:rule"]
   SC -- no --> QB["Convene Path B anyway<br/>(logged)"] --> D2b["DENY path_a_denied:rule"]
-  VM -- PASS --> Q{"Path B quorum<br/>yes >= k, responding >= K,<br/>distinct providers >= P"}
+  VM -- PASS --> Q{"Path B quorum (Figure 7)<br/>judges see record + constitution only;<br/>valid ballots >= K else deny uncounted;<br/>yes >= T; vendor / local-weights floor"}
   Q -- fail --> D3["DENY path_b_denied:reason"]
-  Q -- pass --> T["Issue single-use token<br/>tool, scope, args_hash,<br/>ledger_root, constitution digest, TTL"]
+  Q -- pass --> T["Issue single-use token<br/>tool, scope, args_hash, ledger_root,<br/>ledger_size + Merkle root R,<br/>constitution digest, bytecode_hash, nl_hash, TTL"]
   T --> L2["Ledger: capability_issued (token hash)<br/>Ledger: decision allowed"]
   L2 --> OK(["ALLOW: return full token"])
   D1 --> LD["Ledger: decision (reason, rule)"]

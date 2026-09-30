@@ -1,0 +1,32 @@
+sequenceDiagram
+  autonumber
+  participant K as Compact Kernel (issuer)
+  participant L as Principal's ledger<br/>(hash chain + Merkle tree)
+  participant G as Tool gateway<br/>(last-known view: size V, root R_V)
+  participant T as Tool
+  Note over K,L: PRIOR_ART.md §4 (i), selected by Stephan Busch 2026-09-30
+  K->>L: size n, Merkle root R = root(n)
+  K->>K: token {jti, tool, scope, args_hash,<br/>ledger_size=n, ledger_merkle_root=R,<br/>bytecode_hash, nl_hash, constitution_digest}
+  K->>L: capability_issued at seq n (token hash + binding)
+  G->>G: verify tag, expiry, principal, tool, args, scope
+  G->>L: still contains the view? root(V) == R_V
+  alt n < V
+    G->>L: consistency proof PROOF(n, V)
+    G->>G: verify: R is an ancestor of R_V
+  else n > V
+    G->>L: consistency proof PROOF(V, n)
+    G->>G: verify: R_V is an ancestor of R, then view := (n, R)
+  else n == V
+    G->>G: R == R_V
+  end
+  G->>L: latest constitution_loaded entry
+  G->>G: bytecode_hash, nl_hash, digest match?<br/>no reload after n? no revocation?
+  G->>L: capability_issued entry for jti at seq n, token hash matches?
+  alt all pass
+    G->>L: capability_redeemed {jti, capability_entry_seq, capability_entry_digest}
+    G->>T: execute(args)
+    T-->>G: result
+    G->>L: tool_executed {capability_entry_seq, capability_entry_digest, result_hash}
+  else any check fails
+    G->>L: gateway_denied (ledger_fork_detected / ledger_root_not_ancestor /<br/>constitution_hash_mismatch / constitution_changed_since_issue /<br/>revoked / capability_not_recorded / ...)
+  end

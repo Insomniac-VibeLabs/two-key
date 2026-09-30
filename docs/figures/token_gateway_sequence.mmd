@@ -8,21 +8,21 @@ sequenceDiagram
   participant T as Tool (bank, mail, ...)
   M->>K: authorize(action record, proposal, literal args)
   K->>L: proposal, action_normalized, vm_result
-  K->>J: constitution text + action + proposal
+  K->>J: constitution prose + normalized action record<br/>+ ballot binding (proposal text not sent by default)
   J-->>K: strict JSON ballots
   K->>L: quorum_result
-  K->>K: both paths pass, so sign token<br/>{jti, tool, scope, args_hash, ledger_root, exp}
+  K->>K: both paths pass, so sign token<br/>{jti, tool, scope, args_hash, ledger_root, exp,<br/>ledger_size, Merkle root R, bytecode_hash, nl_hash}
   K->>L: capability_issued (SHA-256 of token only)
   K-->>M: full token
   M->>G: invoke(token, tool, args, call fields)
   G->>G: signature, expiry, principal, tool,<br/>args_hash, amount, counterparty, data class
-  G->>L: ledger_root known ancestor?<br/>constitution reloaded since?
+  G->>L: view intact? R ancestor via consistency proof (Figure 5)<br/>hashes = latest constitution_loaded? reload or revocation since?
   G->>G: jti unused?
   alt all checks pass
     G->>L: capability_redeemed (jti)
     G->>T: execute(args)
     T-->>G: result
-    G->>L: tool_executed
+    G->>L: tool_executed (linked to capability_issued, result hash)
     G-->>M: result
   else any check fails
     G->>L: gateway_denied (reason)

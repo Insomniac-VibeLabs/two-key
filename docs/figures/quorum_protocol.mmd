@@ -1,0 +1,20 @@
+flowchart TB
+  A{"Path A (policy VM)<br/>returned true?"} -- no --> DA["deny; Path B is not convened"]
+  A -- yes --> H{"judge-set selection:<br/>>= min_vendors distinct vendors and<br/>>= min_local_judges on local weight files?<br/>(checked at kernel start and at convene)"}
+  H -- no --> DH["deny: judge_set_not_heterogeneous<br/>(kernel refuses to start)"]
+  H -- yes --> IN["Judge inputs: constitution prose + normalized action record only<br/>(judge_inputs=record_only; no agent transcript, no tool outputs)<br/>+ binding {H(action record), H(constitution), nl_hash, bytecode_hash}"]
+  IN --> J1["Judge 1 (vendor A)"]
+  IN --> J2["Judge 2 (vendor B)"]
+  IN --> J3["Judge 3 (local weights)"]
+  J1 --> B["Schema check: exactly {consistent, confidence, rationale}<br/>(+ echoed hashes when echo_binding)<br/>malformed, timeout, error, wrong binding: abstain"]
+  J2 --> B
+  J3 --> B
+  B --> K{"valid ballots >= K<br/>(availability floor, min_responding)?"}
+  K -- no --> DK["deny WITHOUT counting<br/>counted=false, yes/no not tallied"]
+  K -- yes --> HR{"heterogeneity_scope=responding:<br/>floor met by responding judges?"}
+  HR -- no --> DR["deny: responding_not_heterogeneous"]
+  HR -- "yes / not enabled" --> T{"yes votes >= T<br/>(approval threshold, required_yes)?"}
+  T -- no --> DT["deny: insufficient_yes"]
+  T -- yes --> OK["Path B passes; the ballots and the binding are written once to quorum_result"]
+  classDef deny fill:#fde2e2,stroke:#b33;
+  class DA,DH,DK,DR,DT deny;

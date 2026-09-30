@@ -1,0 +1,25 @@
+flowchart TB
+  subgraph P["Principal (PRIOR_ART.md §4 (ii), selected by Stephan Busch 2026-09-30)"]
+    D["ONE constitution document<br/>/1: constitution_text + hard_rules<br/>/2: Markdown source with one ck-rules block"]
+    S["Principal's signature<br/>(Ed25519 / ECDSA P-384 / hybrid ML-DSA-65)"]
+  end
+  D --> S
+  S --> V{"verify_signed under the<br/>principal's trusted key"}
+  X["Vendor-signed or modified update"] --> V
+  V -- "not the principal's signature" --> R["refused<br/>(ledger: constitution_reload_refused)"]
+  V -- ok --> SP["Deterministic split<br/>(compiler.split_source for /2)"]
+  SP --> RU["Structured rules"]
+  SP --> PR["Prose"]
+  RU --> C["compile_constitution<br/>stack bytecode"]
+  C --> SC{"verify_structured_only<br/>LOAD structured fields only,<br/>no string ops, ends in PASS"}
+  SC -- fail --> R2["refused at load"]
+  SC -- ok --> BC["Path A bytecode"]
+  PR --> JP["Path B judge prompt text"]
+  BC --> HB["bytecode_hash = H(canonical bytecode)"]
+  JP --> HN["nl_hash = H(prose)"]
+  HB --> LE["ledger: constitution_loaded<br/>{constitution_digest, bytecode_hash, nl_hash, ...}"]
+  HN --> LE
+  HB --> BT["bound into every ballot<br/>and every capability token"]
+  HN --> BT
+  LE --> GW["gateway compares token hashes<br/>with the latest constitution_loaded entry"]
+  BT --> GW
