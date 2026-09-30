@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from compact_kernel.action import normalize_action
-from compact_kernel.kernel import CompactKernel
+from helpers import KernelFixture
 from compact_kernel.policy_vm import PolicyVM, compile_constitution
 from compact_kernel.testing import HeuristicJudge
 
@@ -58,12 +58,11 @@ class VMTests(unittest.TestCase):
 
 class KernelTests(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.TemporaryDirectory()
-        self.k = CompactKernel("did:ck:test", "Be my fiduciary. No wires. No medical exfil.", RULES,
-                               Path(self.dir.name) / "l.jsonl", JUDGES, allow_test_doubles=True)
+        self.fx = KernelFixture(RULES, JUDGES, text="Be my fiduciary. No wires. No medical exfil.")
+        self.k = self.fx.__enter__()
 
     def tearDown(self):
-        self.dir.cleanup()
+        self.fx.__exit__(None, None, None)
 
     def test_benign_passes(self):
         d = self.k.authorize({"tool": "email_draft", "data_class": "personal", "irreversible": False},

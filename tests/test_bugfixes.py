@@ -7,6 +7,7 @@ from pathlib import Path
 from compact_kernel.action import ActionValidationError, normalize_action
 from compact_kernel.judges.base import Ballot
 from compact_kernel.kernel import CompactKernel
+from helpers import KernelFixture, signed
 from compact_kernel.policy_vm import ConstitutionError, Op, PolicyVM, compile_constitution
 from compact_kernel.quorum import QuorumPolicy, convene
 from compact_kernel.testing import FixedJudge, HeuristicJudge, RaisingJudge
@@ -42,10 +43,8 @@ class AmountValidation(unittest.TestCase):
                 normalize_action({"tool": "pay_bill", "amount_usd": v})
 
     def test_original_negative_wire_exploit_denied_end_to_end(self):
-        with tempfile.TemporaryDirectory() as d:
-            k = CompactKernel("p", "No wires.", DEMO_RULES, Path(d) / "l.jsonl",
-                              [HeuristicJudge("a", .3), HeuristicJudge("b", .6), HeuristicJudge("c", .9)],
-                              allow_test_doubles=True)
+        with KernelFixture(DEMO_RULES, [HeuristicJudge("a", .3), HeuristicJudge("b", .6),
+                                        HeuristicJudge("c", .9)]) as k:
             dec = k.authorize({"tool": "wire_transfer", "amount_usd": -4800, "counterparty": "new-payee.example",
                                "irreversible": True, "data_class": "financial"}, "Process the refund.")
             self.assertFalse(dec.allowed)
@@ -156,9 +155,7 @@ class VMFaults(unittest.TestCase):
         self.assertEqual(r.reason, "no_pass")
 
     def test_vm_fault_logged_as_decision(self):
-        with tempfile.TemporaryDirectory() as d:
-            k = CompactKernel("p", "c", DEMO_RULES, Path(d) / "l.jsonl", [FixedJudge("a", "yes")],
-                              quorum_policy=QuorumPolicy(required_yes=1), allow_test_doubles=True)
+        with KernelFixture(DEMO_RULES, [FixedJudge("a", "yes")], quorum_policy=QuorumPolicy(required_yes=1)) as k:
             k.vm = PolicyVM([(Op.PUSH, None), (Op.PUSH, 1.0), (Op.GT,), (Op.PASS,)])
             dec = k.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "x")
             self.assertFalse(dec.allowed)
@@ -215,12 +212,14 @@ class Quorum(unittest.TestCase):
 
 class KernelGuards(unittest.TestCase):
     def test_test_doubles_refused_by_default(self):
-        with tempfile.TemporaryDirectory() as d, self.assertRaises(ValueError):
-            CompactKernel("p", "c", DEMO_RULES, Path(d) / "l.jsonl", [FixedJudge("a", "yes")])
+        with self.assertRaises(ValueError):
+            with KernelFixture(DEMO_RULES, [FixedJudge("a", "yes")], allow_test_doubles=False):
+                pass
 
     def test_no_judges_refused(self):
-        with tempfile.TemporaryDirectory() as d, self.assertRaises(ValueError):
-            CompactKernel("p", "c", DEMO_RULES, Path(d) / "l.jsonl", [])
+        with self.assertRaises(ValueError):
+            with KernelFixture(DEMO_RULES, []):
+                pass
 
 
 if __name__ == "__main__":

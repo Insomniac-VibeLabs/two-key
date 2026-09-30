@@ -18,6 +18,7 @@ from typing import Any, Mapping, Sequence
 
 from .action import Action, ActionValidationError, normalize_action
 from .capability import CapabilityIssuer
+from .constitution import Constitution, verify_signed
 from .judges.base import Judge
 from .ledger import PersonalLedger
 from .policy_vm import DEFAULT_MAX_STEPS, PolicyVM, compile_constitution
@@ -44,9 +45,8 @@ class Decision:
 class CompactKernel:
     def __init__(
         self,
-        principal: str,
-        constitution_text: str,
-        hard_rules: list[dict],
+        signed_constitution: dict,
+        trusted_public_key,
         ledger_path: Path,
         judges: Sequence[Judge],
         quorum_policy: QuorumPolicy | None = None,
@@ -58,8 +58,11 @@ class CompactKernel:
             raise KernelConfigError("at least one Path B judge is required")
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
             raise KernelConfigError("test-double judges supplied; pass allow_test_doubles=True for demos/tests only")
-        self.principal = principal
-        self.constitution_text = constitution_text
+        # Refuse unsigned, modified, or foreign-signed constitutions (spec 5.1 item 2).
+        self.constitution: Constitution = verify_signed(signed_constitution, trusted_public_key)
+        self.principal = self.constitution.principal
+        self.constitution_text = self.constitution.text
+        hard_rules = self.constitution.hard_rules
         self.bytecode = compile_constitution(hard_rules, max_steps=max_steps)
         self.vm = PolicyVM(self.bytecode, max_steps=max_steps)
         self.ledger = PersonalLedger(ledger_path)
@@ -67,8 +70,13 @@ class CompactKernel:
         self.judges = list(judges)
         self.quorum_policy = quorum_policy or QuorumPolicy()
         self.ttl_seconds = ttl_seconds
-        self.ledger.append("constitution_loaded",
-                           {"principal": principal, "rules": hard_rules, "bytecode_len": len(self.bytecode)})
+        self.ledger.append("constitution_loaded", {
+            "principal": self.principal,
+            "constitution_digest": self.constitution.digest,
+            "signer": self.constitution.signer_fingerprint,
+            "rules": hard_rules,
+            "bytecode_len": len(self.bytecode),
+        })
 
     def _deny(self, reason: str, **kw) -> Decision:
         self.ledger.append("decision", {"allowed": False, "reason": reason,
