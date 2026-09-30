@@ -73,6 +73,10 @@ key is a hybrid ML-DSA suite (it also applies to the `ecdsa-p384` suite).
 | Ledger chain-head signature | Ed25519 | same suite as the principal key (hybrid) | FIPS 186-5, FIPS 204 |
 | Capability token tag | HMAC-SHA-256 (`ck1`), key ≥ 256 bits | HMAC-SHA-384 (`ck1-hs384`), 384-bit key; optional `ck1-sig` signed tokens (hybrid ML-DSA-65) | FIPS 198-1 + FIPS 180-4; FIPS 204 |
 | Tool-call argument binding (`args_hash`) | SHA-256 | SHA-384 | FIPS 180-4 |
+| Ledger consistency and inclusion proofs (RFC 9162), the gateway's ancestor check for the token's root R (PRIOR_ART.md §4 (i)) | SHA-256 | SHA-384 | FIPS 180-4 |
+| `bytecode_hash` = H(canonical Path A bytecode), `nl_hash` = H(Path B prose) (§4 (ii)); bound into ballots and tokens | SHA-256 | SHA-384 | FIPS 180-4 |
+| Ballot binding H(action record) (§4 (iii)); `result_hash` of executed tools (§4 (i)) | SHA-256 | SHA-384 | FIPS 180-4 |
+| Source hash inside a single-source (`/2`) constitution document | SHA-256 | SHA-256 (the source is covered by the signature) | FIPS 180-4 |
 | Token identifier in ledger (`token_sha256`) | SHA-256 | SHA-256 (an identifier; the binding is the tag) | FIPS 180-4 |
 | Token `jti`, HMAC keys, salts, nonces | `os.urandom` / `secrets` | same | OS CSPRNG. In a FIPS deployment the entropy source and DRBG must be the ones covered by the platform's validation (e.g. a validated kernel crypto module and an SP 800-90B entropy source); check the module's Security Policy. |
 | Key bundle encryption (non-legacy suites) | n/a (legacy keys: PEM PKCS#8 via `BestAvailableEncryption`, whose algorithm is chosen by the `cryptography` library) | PBKDF2-HMAC-SHA-256, 600,000 iterations, 128-bit salt → AES-256-GCM, 96-bit nonce, header as AAD | SP 800-132, SP 800-38D, FIPS 197 |
