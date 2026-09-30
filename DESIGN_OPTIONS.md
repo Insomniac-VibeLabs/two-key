@@ -1,7 +1,16 @@
 # Design options memo: open questions for Stephan
 
 **Prepared:** 2026-09-30, by the AI engineering assistant, for Stephan Busch.
-**Status:** options only. **No decision has been made on any item below.**
+**Status:** options only. **No decision has been made on any item below**,
+except where a section says so. **Update 2026-09-30, ~7:02 AM MT:** Stephan
+selected the patent-attorney agent's `PRIOR_ART.md` §4 directions (i)
+ledger-root-bound token, (ii) one signed constitution / two compilations,
+and (iii) quorum protocol specifics, and flagged the normalization problem
+(§1 below, "F") (`CONCEPTION_NOTES.md` Entry 2). (i)–(iii) are now
+implemented as `PRIOR_ART.md` §4 describes them. The details §4 leaves open
+are listed in **§7** with the reference behaviour chosen. **§1 is still
+open:** no normalization option was implemented. (`PRIOR_ART.md` is the
+attorney agent's memo and is kept outside this repository.)
 
 The prototype needs *some* behavior to run. Where a question is still open,
 the code uses a minimal, clearly configurable reference behavior and marks
@@ -26,6 +35,10 @@ canonicalization (`action.py`) and conservative defaults for missing fields
 (`capability.args_hash`). The gateway has a per-tool extractor hook
 (`ToolGateway(extractors=...)`).
 
+**Status after 2026-09-30 (Entry 2, "F"):** Stephan flagged this problem
+together with §4 (i)–(iii). **No option has been chosen or implemented.**
+The hooks below are unchanged.
+
 **Current prototype default:** the caller supplies the action record (option
 A). The gateway compares caller-declared call fields, or extractor output if
 an extractor is registered, against the token scope.
@@ -49,7 +62,11 @@ least two distinct model vendors or local weight files". How to *ensure*
 independence is open.
 
 **Current prototype default:** no independence enforcement.
-`min_distinct_providers: 1`; the check exists but is off. Quorum is an exact
+`min_distinct_providers: 1`; the check exists but is off. Since Stephan's
+2026-09-30 selection of §4 (iii), a vendor and local-weights floor exists
+(`min_vendors`, `min_local_judges`; `QuorumPolicy.section4()` sets §4's
+figures of ≥ 2 vendors including ≥ 1 local weight file). It is still off by
+default; see §7.14–7.16. Quorum is an exact
 k-of-n (`required_yes`) with a minimum number of valid responses
 (`min_responding`).
 
@@ -81,7 +98,7 @@ literal tool-call args), ledger root, and constitution digest; TTL 30 s.
 | Holder binding | **Bearer** (current); proof-of-possession (the caller signs each call with its own key, DPoP-style) | PoP stops stolen-token use |
 | Uses | **Single-use jti** (current); multi-use within TTL; N uses | Single-use means retries need a new authorization |
 | Counterparty check | **Strict equality** (current, stricter than spec's "matches if present"); spec's "matches if present" | Strict equality rejects a call naming a counterparty when the token has none |
-| Ledger-root freshness | **Any ancestor of the current head, and no constitution reload since** (current); exact current head only; within N entries or T seconds | Exact-head breaks under concurrent authorizations |
+| Ledger-root freshness | **Any ancestor of the current head, and no constitution reload since** (current); exact current head only; within N entries or T seconds | Exact-head breaks under concurrent authorizations. Since 2026-09-30 (§4 (i)), ancestry is proven with an RFC 9162 consistency proof against the gateway's last-known view (§7.1–7.2) |
 | TTL | **30 s default** (spec 5.5); per-tool TTLs | |
 | Amount semantics | **Call amount ≤ scope amount** (current); exact equality | |
 
@@ -89,7 +106,9 @@ literal tool-call args), ledger root, and constitution digest; TTL 30 s.
 
 **Current prototype default** (per Stephan's 2026-09-30 instructions, for
 privacy): `short_circuit_path_b=True`, so Path B is skipped if Path A denies.
-Set `False` to run both.
+Set `False` to run both. §4 (iii), which Stephan selected, says "Path B
+invoked only after Path A returns true". `require_path_a_first=True` (set
+by `QuorumPolicy.section4()`) makes the kernel refuse `False`; see §7.21.
 
 | Option | Pros | Cons |
 |---|---|---|
@@ -128,3 +147,54 @@ hook) and `OAuthDeviceCodeProvider` (RFC 8628 steps documented; needs a
 - **Capability secret management:** it is currently random per process unless supplied. Options: a derived key, an HSM, asymmetric keys (section 3).
 - **Constitution lifecycle:** versioning, rollback, multi-device sync, key loss or recovery, and key rotation.
 - **Proposal logging:** the full proposal text is logged in the principal's ledger. Should it be hash-only, truncated, or full (current)?
+
+## 7. Open points in the PRIOR_ART.md §4 (i)–(iii) implementation
+
+Stephan selected these three directions on 2026-09-30 (`CONCEPTION_NOTES.md`
+Entry 2). The code follows the text of `PRIOR_ART.md` §4. Where §4 does not
+settle a detail, the prototype uses the minimal, configurable reference
+behaviour listed here. **These are engineering placeholders, not decisions.**
+
+### (i) Ledger-root-bound token (`gateway.py`, `ledger.py`, `merkle.py`, `capability.py`)
+
+| # | Open point | Current reference behaviour | Alternatives |
+|---|---|---|---|
+| 7.1 | Where the gateway's "last-known root" comes from and when it moves | Gateway memory: taken from the (kernel-verified) ledger when the gateway is built. It advances only along a verified consistency proof: to a newer token's root R (the token authenticates R), or to the current ledger with `view_refresh="every_call"` / `refresh_view()`. On restart the view is re-read from the ledger. | Take the view only from a signed head (verify the principal's signature each time); persist the view separately from the ledger; take it from an external witness or anchor; refresh on a timer |
+| 7.2 | Where consistency proofs come from | In process, the gateway asks the same ledger object (`consistency_path`). `PersonalLedger.consistency_proof()` also returns a serializable proof for a separate verifier | A ledger service API; proofs attached to the token; gossip between gateways |
+| 7.3 | Which later entries invalidate a token | Any `constitution_loaded` after issuance (even a byte-identical reload), and `revocation` entries | Only reloads whose hashes differ; key-rotation entries; judge-set changes |
+| 7.4 | Revocation granularity and authority | `kernel.revoke(jti)` for one token, `kernel.revoke()` for all tokens issued so far. Anyone who can call the kernel may revoke; the entry is covered by the next signed head | Per tool, per counterparty, time-window; require a principal signature on each revocation; revocation by the gateway itself |
+| 7.5 | What "appends the execution result" stores | `tool_executed` carries the capability entry's seq and digest plus `result_hash` = H(canonical JSON of the result), or H(repr) if the result isn't JSON. The result itself is not stored | Store the full result; store an encrypted result; store nothing but the link |
+| 7.6 | Which root R the token binds | Root of the ledger just before the token's own `capability_issued` entry (`ledger_size` = that entry's seq) | Include the decision entries; two-phase issuance that also covers the capability entry |
+| 7.7 | Tokens without the new fields | Refused (`token_missing_ledger_binding`); no compatibility mode | Accept with a legacy flag during migration |
+
+### (ii) One signed constitution, two compilations (`compiler.py`, `constitution.py`)
+
+| # | Open point | Current reference behaviour | Alternatives |
+|---|---|---|---|
+| 7.8 | How rules sit inside the single document | Format `/2`: a Markdown `source` with exactly one fenced ```` ```ck-rules ```` block of JSON. Format `/1` (separate fields in one signed document) is still accepted | YAML in the fence; several blocks merged; inline annotations in the prose; a controlled-English rule syntax compiled directly |
+| 7.9 | Whether judges also see the rules | No. Judges get the prose only; the rule block is removed (headings and other text around it stay) | Include the rules as context; include a rendered English summary of the rules |
+| 7.10 | Exact bytes hashed as H(NL constitution) | The judge prompt text: the source minus the rule block, CRLF turned into LF, leading and trailing whitespace stripped | Unicode NFC normalization; whitespace canonicalization; hash the whole signed source instead |
+| 7.11 | What H(bytecode) covers | Canonical JSON of `[[opcode name, operands...], ...]`. The compiler id (`ck-compiler/1`) and `max_steps` are recorded next to it, not inside it | Bind compiler version and limits into the hash |
+| 7.12 | "No string operations on NL fields": what the static check allows | LOAD only of structured action fields (every field except `raw`); opcodes emitted by the compiler only (CONTAINS excluded); scalar or list constants; program ends in PASS | Typed field schema; a per-field operation whitelist (this depends on §1 / F: which fields exist and who fills them) |
+| 7.13 | Reload ordering and rollback | Any document signed by the principal's key is accepted by `reload_constitution`; no version counter | Require a monotonic version or `created_at`; require a signed reference to the previous digest |
+
+### (iii) Quorum protocol specifics (`quorum.py`, `judges/`)
+
+| # | Open point | Current reference behaviour | Alternatives |
+|---|---|---|---|
+| 7.14 | Whether §4's heterogeneity figures are the default | Off by default (`min_vendors=1`, `min_local_judges=0`) so existing configurations keep working. `QuorumPolicy.section4()` applies ≥ 2 vendors, ≥ 1 local weight file, record-only inputs, and Path A first | Make `section4()` the default; refuse any configuration below it |
+| 7.15 | What counts as a vendor, and as a "local weight file" | Self-declared: `vendor` (defaults to `provider`) and `local_weights` (defaults to true for Ollama, false otherwise). `weights_sha256` is recorded in the ledger but not verified | Derive the vendor from the endpoint; hash the weight file at start-up; attestation (see §2 options C, F) |
+| 7.16 | Whether heterogeneity must also hold among the judges that answered | `heterogeneity_scope="selection"` (checked at kernel start and at each convene); `"responding"` also checks the judges that returned valid ballots | Also require it among the yes votes |
+| 7.17 | How a ballot is "bound" to H(action record) and H(constitution) | `ballot_binding="stamp"` (default): the convenor attaches the round's binding (H(action record), constitution digest, nl_hash, bytecode_hash) to every ballot. A judge that reports different hashes abstains. `"echo"`: every yes/no ballot must carry hashes the judge itself returned (LLM judges with `echo_binding: true` get them in the prompt and must copy them) | Judge-signed ballots (a key per judge); a provider-side structured-output schema; a MAC over the ballot. Note that an echo from an LLM is a consistency check, not a cryptographic binding |
+| 7.18 | How much of a round below the floor K is logged | Not counted: `counted=false`, and `yes`/`no` are null. The individual ballots, including their votes, are still logged | Log only abstention reasons; log ballot hashes only |
+| 7.19 | What exactly judges receive | `judge_inputs="record_only"` (default): constitution prose + normalized action record (+ binding). The proposal text is not sent (it is still logged in the ledger, §6). `"record_and_proposal"` restores the earlier behaviour. The record's free-form `raw` field is still part of the record (§1 / F) | Drop `raw`; send a redacted record; per-judge input policies |
+| 7.20 | Values of K and T | The principal's choice; K (`min_responding`) defaults to T (`required_yes`) | Require K > T; derive K from n |
+| 7.21 | Whether "Path B only after Path A" is mandatory | Default behaviour (`short_circuit_path_b=True`), enforced only with `require_path_a_first=True` | Remove the option to run both (§4 option B) |
+
+### Not built
+
+`PRIOR_ART.md` §4 also lists (iv) third-party replay audit, (v)
+conservative imputation logging, and (vi) model-swap invariance. They were
+not selected, and §4 does not make them part of (i)–(iii), so they were not
+implemented. (v) overlaps the normalization problem (§1 / F), which stays
+open.
