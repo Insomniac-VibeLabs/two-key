@@ -52,7 +52,7 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, fields, replace
 from typing import Mapping, Sequence
 
 from .action import Action
@@ -138,13 +138,33 @@ class QuorumResult:
     counted: bool = True
     valid: int = 0           # valid ballots (the availability measure compared with K)
     min_responding: int = 0
+    binding: dict | None = None  # the round's ballot binding (§4 (iii)), shared by every ballot
 
     def to_record(self) -> dict:
+        """Ledger record. The binding is written once. A ballot's hash fields appear only where they
+        differ from it (a judge that reported a different binding); ``ballot.binding`` says how each
+        ballot was bound."""
         return {
             "passed": self.passed, "reason": self.reason, "counted": self.counted, "yes": self.yes,
             "no": self.no, "abstain": self.abstain, "valid": self.valid, "required_yes": self.required_yes,
-            "min_responding": self.min_responding, "ballots": [asdict(b) for b in self.ballots],
+            "min_responding": self.min_responding, "binding": self.binding,
+            "ballots": [_ballot_record(b, self.binding) for b in self.ballots],
         }
+
+
+_BALLOT_FIELDS = tuple(f.name for f in fields(Ballot))
+_BINDING_SET = frozenset(("action_hash", "constitution_hash", "nl_hash", "bytecode_hash"))
+
+
+def _ballot_record(b: Ballot, binding: Mapping[str, str] | None = None) -> dict:
+    """Like dataclasses.asdict(b) (all fields are scalars), minus hash fields equal to the round binding."""
+    out = {}
+    for f in _BALLOT_FIELDS:
+        v = getattr(b, f)
+        if f in _BINDING_SET and (v is None or (binding is not None and binding.get(f) == v)):
+            continue
+        out[f] = v
+    return out
 
 
 def _local(j) -> bool:
@@ -179,17 +199,18 @@ def _bind(b: Ballot, binding: Mapping[str, str] | None, policy: QuorumPolicy) ->
     """Check a judge-reported binding and stamp the expected one (§4 (iii))."""
     if binding is None:
         return b
-    stamp = {k: binding.get(k) for k in BINDING_FIELDS}
-    reported = {k: getattr(b, k) for k in BINDING_FIELDS if getattr(b, k) is not None}
-    if any(stamp[k] != v for k, v in reported.items()):
-        return replace(b, vote="abstain", error="binding_mismatch: ballot bound to a different action "
-                       "record or constitution", **stamp, binding="stamp")
-    echoed = b.binding == "echo" and reported.get("action_hash") == stamp["action_hash"] and \
-        reported.get("constitution_hash") == stamp["constitution_hash"]
+    ah, ch, nh, bh = (binding.get(k) for k in BINDING_FIELDS)
+    reported = (b.action_hash, b.constitution_hash, b.nl_hash, b.bytecode_hash)
+    if any(r is not None and r != e for r, e in zip(reported, (ah, ch, nh, bh))):
+        # Keep what the judge reported, for the audit record; the vote becomes an abstention.
+        return replace(b, vote="abstain", binding="mismatch",
+                       error="binding_mismatch: ballot bound to a different action record or constitution")
+    echoed = b.binding == "echo" and reported[0] == ah and reported[1] == ch
+    vote, error = b.vote, b.error
     if policy.ballot_binding == "echo" and b.responded and not echoed:
-        return replace(b, vote="abstain", error="unbound_ballot: judge did not echo the ballot binding",
-                       **stamp, binding="stamp")
-    return replace(b, **stamp, binding="echo" if echoed else "stamp")
+        vote, error = "abstain", "unbound_ballot: judge did not echo the ballot binding"
+    return Ballot(b.judge_id, b.provider, vote, b.confidence, b.rationale, error, ah, ch, nh, bh,
+                  "echo" if echoed else "stamp")
 
 
 def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
@@ -269,7 +290,8 @@ def convene(
         yes = sum(1 for b in ballots if b.vote == "yes") if counted else None
         no = sum(1 for b in ballots if b.vote == "no") if counted else None
         return QuorumResult(passed, reason, yes, no, abstain, policy.required_yes, tuple(ballots),
-                            counted, len(responding), k_floor)
+                            counted, len(responding), k_floor,
+                            None if binding is None else {k: binding.get(k) for k in BINDING_FIELDS})
 
     if not judges:
         return result(False, "no_judges", counted=False)

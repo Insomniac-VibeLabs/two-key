@@ -41,10 +41,8 @@ def node_hash(left: bytes, right: bytes, h: HashFn = _sha256) -> bytes:
 
 
 def _split(n: int) -> int:
-    k = 1
-    while k << 1 < n:
-        k <<= 1
-    return k
+    """Largest power of two strictly less than n (n >= 2)."""
+    return 1 << ((n - 1).bit_length() - 1)
 
 
 def root(leaves: Sequence[bytes], h: HashFn = _sha256) -> bytes:
@@ -124,6 +122,10 @@ class MerkleTree:
         # levels[j][i] = root of leaves [i * 2**j, (i + 1) * 2**j)
         self.levels: list[list[bytes]] = [[]]
         self._root_cache: tuple[int, bytes] | None = None
+        # Memo for non-perfect ranges. In proofs these all end at the queried tree size
+        # (right-edge subtrees), so consecutive proofs for the same size share them. Ranges are
+        # immutable once complete, so entries never go stale; the memo is bounded.
+        self._memo: dict[tuple[int, int], bytes] = {}
 
     def append(self, leaf: bytes) -> None:
         node = leaf_hash(leaf, self.h)
@@ -144,8 +146,15 @@ class MerkleTree:
         if n & (n - 1) == 0 and start % n == 0:
             j = n.bit_length() - 1
             return self.levels[j][start >> j]
-        k = _split(n)
-        return node_hash(self._mth(start, k), self._mth(start + k, n - k), self.h)
+        key = (start, n)
+        r = self._memo.get(key)
+        if r is None:
+            k = _split(n)
+            r = node_hash(self._mth(start, k), self._mth(start + k, n - k), self.h)
+            if len(self._memo) >= 4096:
+                self._memo.clear()
+            self._memo[key] = r
+        return r
 
     def root(self, size: int | None = None) -> bytes:
         size = self.size if size is None else size

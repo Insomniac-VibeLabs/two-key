@@ -125,6 +125,12 @@ class AncestorCheck(Base):
         self.gw.ledger = self._rewritten_ledger(1)
         self.assertEqual(self.invoke(self.d.capability).reason, "unknown_ledger_root")
 
+    def test_fork_detected_in_every_call_mode(self):
+        gw = self.k.gateway(view_refresh="every_call")
+        self.assertTrue(gw.refresh_view())
+        gw.ledger = self._rewritten_ledger(2)
+        self.assertEqual(gw.invoke(self.d.capability, "pay_bill", ARGS, FIELDS).reason, "ledger_fork_detected")
+
     def test_fork_detected_against_last_known_view(self):
         d2 = self.k.authorize(PAY, "Pay again.", ARGS)
         self.assertEqual(self.invoke(d2.capability).reason, "executed")  # view now covers the token's entry
@@ -155,6 +161,20 @@ class AncestorCheck(Base):
         proof = self.k.ledger.consistency_path(size, n)
         self.assertTrue(merkle.verify_consistency(size, n, bytes.fromhex(root), self.k.ledger.root_bytes(),
                                                   proof, self.k.ledger.hash_fn()))
+        self.assertTrue(self.gw.refresh_view())
+        self.assertEqual(self.gw.view, (n, self.k.ledger.merkle_root()))
+
+    def test_view_advances_only_to_token_roots_by_default(self):
+        self.assertEqual(self.invoke(self.d.capability).reason, "executed")
+        self.assertEqual(self.gw.view, (self.d.token_payload["ledger_size"], self.d.token_payload["ledger_merkle_root"]))
+
+    def test_every_call_refresh_mode(self):
+        gw = self.k.gateway(view_refresh="every_call")
+        self.k.authorize(SEARCH, "look")
+        self.assertEqual(gw.invoke(self.d.capability, "pay_bill", ARGS, FIELDS).reason, "authorized_no_executor")
+        self.assertGreater(gw.view[0], self.d.token_payload["ledger_size"])
+        with self.assertRaises(ValueError):
+            self.k.gateway(view_refresh="sometimes")
 
 
 class ConstitutionHashesAndRevocation(Base):

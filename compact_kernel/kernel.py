@@ -245,9 +245,10 @@ class CompactKernel:
 
     # ------------------------------------------------------------------
     def gateway(self, tools: Mapping[str, Callable[..., Any]] | None = None,
-                extractors: Mapping[str, Extractor] | None = None, *, checkpoint_every: int = 1) -> ToolGateway:
+                extractors: Mapping[str, Extractor] | None = None, *, checkpoint_every: int = 1,
+                view_refresh: str = "token") -> ToolGateway:
         return ToolGateway(self.issuer, self.ledger, self.principal, tools, extractors, digest_alg=self.digest_alg,
-                           checkpoint_every=checkpoint_every)
+                           checkpoint_every=checkpoint_every, view_refresh=view_refresh)
 
     def _deny(self, reason: str, action_rec: dict | None = None, **kw) -> Decision:
         body = {"allowed": False, "reason": reason, "denied_by_rule": kw.get("denied_by_rule"),

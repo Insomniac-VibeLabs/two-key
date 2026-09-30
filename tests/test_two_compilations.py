@@ -143,9 +143,9 @@ class OneDocumentTwoCompilations(unittest.TestCase):
         self.assertTrue(all(t == PROSE for j in judges for t, _ in j.seen))
         self.assertTrue(all("ck-rules" not in t for j in judges for t, _ in j.seen))
         q = next(e for e in k.ledger.entries if e.kind == "quorum_result").body
-        for b in q["ballots"]:
-            self.assertEqual((b["nl_hash"], b["bytecode_hash"], b["constitution_hash"]),
-                             (k.compiled.nl_hash, k.compiled.bytecode_hash, k.constitution.digest))
+        self.assertEqual((q["binding"]["nl_hash"], q["binding"]["bytecode_hash"], q["binding"]["constitution_hash"]),
+                         (k.compiled.nl_hash, k.compiled.bytecode_hash, k.constitution.digest))
+        self.assertEqual({b["binding"] for b in q["ballots"]}, {"stamp"})
         self.assertEqual((d.token_payload["bytecode_hash"], d.token_payload["nl_hash"]),
                          (k.compiled.bytecode_hash, k.compiled.nl_hash))
 

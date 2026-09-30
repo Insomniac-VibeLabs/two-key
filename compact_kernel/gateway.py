@@ -17,11 +17,17 @@ any tool runs, it checks everything spec 5.5 lists, plus single-use:
  10. ledger-root binding, PRIOR_ART.md §4 (i), selected by Stephan Busch on
      2026-09-30 (CONCEPTION_NOTES.md Entry 2):
      a. the gateway keeps its own last-known view (size, Merkle root) of the
-        principal's ledger. On every call it first checks, with an RFC 9162
-        consistency proof, that the current ledger extends that view
+        principal's ledger and checks on every call that the ledger still
+        contains it (same root at that size)
                                -> ledger_fork_detected
+        With ``view_refresh="every_call"`` it also advances the view to the
+        current ledger on every call, by RFC 9162 consistency proof.
      b. the token's root R (ledger_size, ledger_merkle_root) equals the view
-        or is proven an ancestor of it by a consistency proof
+        or is proven an ancestor of it by a consistency proof. If R is newer
+        than the view (the usual case: a token issued since the last call),
+        a consistency proof must show that the view is an ancestor of R; R, which the
+        issuer authenticated inside the token, then becomes the new view. One proof
+        per call either way.
                                -> token_missing_ledger_binding / ledger_root_not_ancestor
      c. H(bytecode), H(NL constitution), and the constitution digest in the
         token equal those in the latest constitution_loaded entry
@@ -80,7 +86,7 @@ class ToolGateway:
     def __init__(self, issuer: CapabilityIssuer, ledger: PersonalLedger, principal: str,
                  tools: Mapping[str, Callable[..., Any]] | None = None,
                  extractors: Mapping[str, Extractor] | None = None, *, digest_alg: str = "sha256",
-                 checkpoint_every: int = 1):
+                 checkpoint_every: int = 1, view_refresh: str = "token"):
         self.issuer, self.ledger, self.principal = issuer, ledger, principal
         self.digest_alg = digest_alg
         if not isinstance(checkpoint_every, int) or isinstance(checkpoint_every, bool) or checkpoint_every < 0:
@@ -92,8 +98,12 @@ class ToolGateway:
         self.extractors = dict(extractors or {})
         # Rebuild the single-use set from the ledger so replay protection survives restarts.
         self._redeemed = {e.body.get("jti") for e in ledger.entries if e.kind == "capability_redeemed"}
-        # Last-known ledger view (§4 (i)). Taken from the ledger at construction; the kernel has
-        # verified the ledger against the principal's signed head by then.
+        # Last-known ledger view (§4 (i)): (size, Merkle root). Taken from the ledger at construction;
+        # the kernel has verified the ledger against the principal's signed head by then. The view
+        # only ever moves forward along a verified consistency proof.
+        if view_refresh not in ("token", "every_call"):
+            raise ValueError("view_refresh must be 'token' or 'every_call'")
+        self.view_refresh = view_refresh
         self._view_size = ledger.size
         self._view_root = ledger.root_bytes(self._view_size)
 
@@ -101,13 +111,18 @@ class ToolGateway:
     def view(self) -> tuple[int, str]:
         return self._view_size, self._view_root.hex()
 
-    def _refresh_view(self) -> bool:
-        """Advance the last-known view to the current ledger, if and only if it is an extension."""
+    def _view_intact(self) -> bool:
+        """The ledger still contains the view: same root at the view size (no rewrite or truncation)."""
+        return self.ledger.size >= self._view_size and \
+            self.ledger.root_bytes(self._view_size) == self._view_root  # memoized in the tree: O(1) typically
+
+    def refresh_view(self) -> bool:
+        """Advance the view to the current ledger, if and only if a consistency proof shows it extends it."""
         n = self.ledger.size
-        if n == self._view_size:
-            return self.ledger.root_bytes(n) == self._view_root
-        if n < self._view_size:
+        if not self._view_intact():
             return False
+        if n == self._view_size:
+            return True
         new_root = self.ledger.root_bytes(n)
         if self._view_size and not merkle.verify_consistency(
                 self._view_size, n, self._view_root, new_root,
@@ -117,7 +132,7 @@ class ToolGateway:
         return True
 
     def _check_ledger_binding(self, p: dict) -> tuple[str | None, Any]:
-        """PRIOR_ART.md §4 (i) checks a-e. Returns (deny reason or None, capability_issued entry)."""
+        """PRIOR_ART.md §4 (i) checks b-e. Returns (deny reason or None, capability_issued entry)."""
         size, root_hex = p.get("ledger_size"), p.get("ledger_merkle_root")
         if isinstance(size, bool) or not isinstance(size, int) or not isinstance(root_hex, str) \
                 or not p.get("bytecode_hash") or not p.get("nl_hash"):
@@ -126,27 +141,33 @@ class ToolGateway:
             token_root = bytes.fromhex(root_hex)
         except ValueError:
             return "token_missing_ledger_binding", None
-        if not 0 < size <= self._view_size:
+        led, v_size, v_root = self.ledger, self._view_size, self._view_root
+        if not 0 < size <= led.size:
             return "ledger_root_not_ancestor", None
-        if size == self._view_size:
-            ok = token_root == self._view_root
-        else:
-            ok = merkle.verify_consistency(size, self._view_size, token_root, self._view_root,
-                                           self.ledger.consistency_path(size, self._view_size),
-                                           self.ledger.hash_fn())
+        h = led.hash_fn()
+        if size == v_size:        # R is the last-known root
+            ok = token_root == v_root
+        elif size < v_size:       # R must be an ancestor of the last-known root
+            ok = merkle.verify_consistency(size, v_size, token_root, v_root, led.consistency_path(size, v_size), h)
+        else:                     # R is newer: the view must be an ancestor of R, then R becomes the view
+            ok = (merkle.verify_consistency(v_size, size, v_root, token_root, led.consistency_path(v_size, size), h)
+                  if v_size else led.root_bytes(size) == token_root)
         # The chain digest in the token must be the last entry covered by R.
-        if not ok or self.ledger.entries[size - 1].digest != p.get("ledger_root"):
-            return "ledger_root_not_ancestor", None
-        loaded = self.ledger.latest_constitution()
+        if not ok or led.entries[size - 1].digest != p.get("ledger_root"):
+            return ("ledger_root_not_ancestor" if self._view_intact() else "ledger_fork_detected"), None
+        if size > v_size:
+            led.root_bytes(size)  # warm the tree memo so the next _view_intact() is a lookup
+            self._view_size, self._view_root = size, token_root
+        loaded = led.latest_constitution()
         if loaded is None or loaded.body.get("bytecode_hash") != p.get("bytecode_hash") \
                 or loaded.body.get("nl_hash") != p.get("nl_hash") \
                 or loaded.body.get("constitution_digest") != p.get("constitution_digest"):
             return "constitution_hash_mismatch", None
         if loaded.seq >= size:
             return "constitution_changed_since_issue", None
-        if self.ledger.revocation_for(p.get("jti", ""), size) is not None:
+        if led.revocation_for(p.get("jti", ""), size) is not None:
             return "revoked", None
-        cap = self.ledger.capability_entry(p.get("jti", ""))
+        cap = led.capability_entry(p.get("jti", ""))
         if cap is None or cap.seq != size:
             return "capability_not_recorded", None
         return None, cap
@@ -215,7 +236,9 @@ class ToolGateway:
             return self._deny("counterparty_mismatch", token, tool)
         if fields["data_class"] != scope.get("data_class"):
             return self._deny("data_class_mismatch", token, tool)
-        if not self._refresh_view():  # §4 (i): the ledger must extend the gateway's last-known view
+        # §4 (i): the ledger must still contain the gateway's last-known view.
+        intact = self.refresh_view() if self.view_refresh == "every_call" else self._view_intact()
+        if not intact:
             return self._deny("ledger_fork_detected", token, tool)
         if self.ledger.index_of(p.get("ledger_root", "")) is None:
             return self._deny("unknown_ledger_root", token, tool)

@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -65,9 +65,11 @@ class Entry:
     alg: str = "sha256"
 
     def to_json(self) -> str:
-        d = asdict(self)
-        if self.alg == "sha256":
-            del d["alg"]  # keep the legacy on-disk format byte-identical
+        # Same output as json.dumps(asdict(self)), without asdict's deep copy of the body.
+        d = {"seq": self.seq, "ts": self.ts, "kind": self.kind, "body": self.body, "prev": self.prev,
+             "digest": self.digest}
+        if self.alg != "sha256":
+            d["alg"] = self.alg  # legacy (sha256) entries omit it, keeping the on-disk format byte-identical
         return json.dumps(d, sort_keys=True)
 
 

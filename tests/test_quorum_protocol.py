@@ -171,16 +171,22 @@ class BallotBinding(unittest.TestCase):
             an = next(e for e in k.ledger.entries if e.kind == "action_normalized").body
             self.assertEqual(expect["action_hash"], an["action_digest"])
             self.assertEqual(expect["constitution_hash"], k.constitution.digest)
+            self.assertEqual(qr["binding"], expect)  # written once per round
             for b in qr["ballots"]:
-                self.assertEqual({f: b[f] for f in expect}, expect)
                 self.assertEqual(b["binding"], "stamp")
+                self.assertFalse(set(expect) & set(b))  # equal to the round binding, so not repeated
+            for b in convene(k.judges, "t", normalize_action(SEARCH), "", k.quorum_policy, expect).ballots:
+                self.assertEqual({f: getattr(b, f) for f in expect}, expect)  # in memory every ballot carries it
 
     def test_mismatched_binding_is_abstain(self):
         js = [Recording("a", "v1", echo="wrong"), Recording("b", "v2"), Recording("c", "v3")]
         q = convene(js, "c", A, "p", QuorumPolicy(required_yes=2), BIND)
         self.assertEqual(q.ballots[0].vote, "abstain")
         self.assertTrue(q.ballots[0].error.startswith("binding_mismatch"))
-        self.assertEqual(q.ballots[0].action_hash, BIND["action_hash"])  # the record shows the expected binding
+        self.assertEqual((q.ballots[0].action_hash, q.ballots[0].binding), ("ff" * 32, "mismatch"))
+        rec = q.to_record()
+        self.assertEqual(rec["ballots"][0]["action_hash"], "ff" * 32)  # what the judge reported is kept
+        self.assertNotIn("constitution_hash", rec["ballots"][0])       # equal to the round binding
         self.assertTrue(q.passed)  # the other two still meet T=2
         q = convene(js[:2], "c", A, "p", QuorumPolicy(required_yes=2), BIND)
         self.assertFalse(q.passed)

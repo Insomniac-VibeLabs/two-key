@@ -10,6 +10,10 @@ gateway check (invoke), ledger append with a signed head, signature
 sign/verify for classic vs hybrid post-quantum suites, the full authorize
 path with local test-double judges, simulated network-bound judges
 (parallel vs sequential), and memory (peak RSS and tracemalloc peaks).
+Also the PRIOR_ART.md §4 additions: Merkle consistency and inclusion
+proofs, the gateway's ledger-root binding checks (view refresh, ancestor
+proof, hash and revocation lookups) on short and 10,000-entry ledgers, and
+load-time constitution compilation (both paths plus hashes).
 
 Numbers depend on the machine; PERFORMANCE.md records one run and its
 environment. Real judge latency is dominated by the network and the model
@@ -36,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from compact_kernel import keys  # noqa: E402
 from compact_kernel.action import normalize_action  # noqa: E402
 from compact_kernel.capability import CapabilityIssuer, args_hash  # noqa: E402
-from compact_kernel.constitution import build_document, sign_document  # noqa: E402
+from compact_kernel.constitution import build_document, sign_document, verify_signed  # noqa: E402
 from compact_kernel.crypto import CryptoProvider, PrivateKeySet, openssl_fips_status  # noqa: E402
 from compact_kernel.judges.base import Ballot, Judge  # noqa: E402
 from compact_kernel.kernel import CompactKernel  # noqa: E402
@@ -223,6 +227,23 @@ def main() -> int:
     for i in range(10_000):
         big.append("e", {"i": i})
     add("Ledger", "merkle_root() on a 10,000-entry ledger (incremental)", timeit(big.merkle_root, N))
+    if hasattr(big, "consistency_proof"):  # §4 (i) additions (absent in older revisions)
+        import random
+        from compact_kernel import merkle as _mk
+        rnd = random.Random(1)
+        h = big.hash_fn()
+        new_root = big.root_bytes()
+
+        def cons_far():
+            m = rnd.randrange(1, 10_000)
+            return _mk.verify_consistency(m, 10_000, big.root_bytes(m), new_root, big.consistency_path(m), h)
+        add("Ledger", "consistency proof + verify, random old size -> 10,000 entries", timeit(cons_far, N))
+        add("Ledger", "consistency proof + verify, 9,994 -> 10,000 (typical gateway view refresh)",
+            timeit(lambda: _mk.verify_consistency(9_994, 10_000, big.root_bytes(9_994), new_root,
+                                                  big.consistency_path(9_994), h), N))
+        add("Ledger", "merkle_root(size) for a historical size, 10,000 entries",
+            timeit(lambda: big.root_bytes(rnd.randrange(1, 10_000)), N))
+    add("Ledger", "inclusion_proof() on a 10,000-entry ledger", timeit(lambda: big.inclusion_proof(4321), N // 10))
     mem.append(("10,000-entry ledger in memory (tracemalloc)",
                 f"{traced_peak_kib(lambda: PersonalLedger(d / 'big.jsonl')) / 1024:.2f} MiB"))
 
@@ -261,11 +282,47 @@ def main() -> int:
                         {"tool": "pay_bill", **PAY_FIELDS}) and kk.ledger.index_of(p_["ledger_root"])
                 add("Gateway", "checks only: token verify + args hash + field normalize + root lookup",
                     timeit(checks_only, n, warmup=5))
+                if hasattr(gw0, "_check_ledger_binding"):
+                    decs = [kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
+                    it2 = iter(decs)
+
+                    def binding_only():
+                        # each token is newer than the view by one decision (8 entries), as in real use
+                        p_ = kk.issuer.verify(next(it2).capability)
+                        assert gw0._view_intact() and gw0._check_ledger_binding(p_)[0] is None
+                    add("Gateway", "§4 (i) binding checks only: token verify + view check + 1 consistency proof "
+                        "+ hash/revocation lookups", timeit(binding_only, n, warmup=5))
+                    kk.ledger.checkpoint()
             add("Authorize", f"authorize (A + B[3 local judges] + token + ledger), {s}, fsync={fs}",
                 timeit(lambda: kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS), n, warmup=5))
+            if s == "ed25519" and not fsync:
+                for _ in range(10_000):  # long ledger: the §4 (i) proofs are O(log^2 n)
+                    kk.ledger.append("filler", {"i": 1})
+                kk.ledger.checkpoint()
+                gwl = kk.gateway(tools={"pay_bill": lambda **a: "paid"})
+                decs = [kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
+                itl = iter(decs)
+                add("Gateway", f"invoke on a ledger with >10,000 entries ({len(kk.ledger.entries)}), {s}, fsync=off",
+                    timeit(lambda: gwl.invoke(next(itl).capability, "pay_bill", PAY_ARGS, PAY_FIELDS), n, warmup=5))
+                add("Authorize", f"authorize on a ledger with >10,000 entries, {s}, fsync=off",
+                    timeit(lambda: kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS), n, warmup=5))
             if not fsync:
                 mem.append((f"kernel construction incl. self-test, {s} (tracemalloc)",
                             f"{traced_peak_kib(lambda: CompactKernel(env, pub, d / f'm-{s}.jsonl', [FixedJudge('a', 'yes')], ledger_signing_key=ks, allow_test_doubles=True, quorum_policy=QuorumPolicy(required_yes=1), crypto=CryptoProvider())):.1f} KiB"))
+
+    # ---- constitution load (not on the hot path) -------------------------------------------
+    try:
+        from compact_kernel.compiler import compile_both
+        from compact_kernel.constitution import build_source_document
+        src = (Path(__file__).resolve().parent / "examples" / "constitution_single_source.md").read_text()
+        env2 = sign_document(build_source_document("did:ck:bench", src), ks0)
+        add("Constitution", "verify_signed + split (single-source /2 document, Ed25519)",
+            timeit(lambda: verify_signed(env2, ks0.public_key()), N // 4))
+        c2 = verify_signed(env2, ks0.public_key())
+        add("Constitution", "compile_both: bytecode + static check + both hashes (sha256)",
+            timeit(lambda: compile_both(c2), N // 4))
+    except ImportError:
+        pass
 
     # ---- judge fan-out (simulated network latency; not real provider numbers) ------------
     for ms in (50, 200):
