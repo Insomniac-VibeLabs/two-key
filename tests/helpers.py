@@ -35,6 +35,7 @@ class KernelFixture:
         return self.kernel
 
     def _extra(self, key, kw):
+        kw.setdefault("ledger_signing_key", key)
         return kw
 
     def __exit__(self, *exc):

@@ -71,11 +71,11 @@ class SignVerify(unittest.TestCase):
             env = copy.deepcopy(self.env)
             env["constitution"]["constitution_text"] += " (edited by vendor)"
             with self.assertRaises(ConstitutionSignatureError):
-                CompactKernel(env, self.key.public_key(), Path(d) / "l", [FixedJudge("a", "yes")],
+                CompactKernel(env, self.key.public_key(), Path(d) / "l", [FixedJudge("a", "yes")], ledger_signing_key=self.key,
                               allow_test_doubles=True)
             with self.assertRaises(ConstitutionSignatureError):
                 CompactKernel({"constitution": self.env["constitution"]}, self.key.public_key(),
-                              Path(d) / "l", [FixedJudge("a", "yes")], allow_test_doubles=True)
+                              Path(d) / "l", [FixedJudge("a", "yes")], allow_test_doubles=True, ledger_signing_key=self.key)
 
 
 class FileUpload(unittest.TestCase):
