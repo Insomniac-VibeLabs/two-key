@@ -10,9 +10,9 @@ Approved actions get a short-lived, single-use capability token, and every
 decision is written to a tamper-evident ledger signed with your key.
 
 > **Status: prototype.** It has not had an independent security review and
-> has not been deployed in production. It uses only FIPS-approved
-> algorithms, but **it is not FIPS validated**; compliance requires running
-> it on a validated module. Read [Security model and
+> has not been deployed in production. Algorithms were chosen so a later
+> build can run on a FIPS 140-3 validated module. **This release is not
+> validated.** Read [Security model and
 > limitations](#security-model-and-limitations) before relying on it.
 
 ## Contents
@@ -68,7 +68,7 @@ a valid token for exactly the arguments that were approved.
 | **Capability token** | Short-lived (30 s default) and single-use. Bound to the tool, the exact argument bytes, the scope (amount, counterparty, data class), the ledger's Merkle root, and the constitution hashes. HMAC-SHA-384 by default, or signed (`tk1-sig`) | |
 | **Tool gateway (frozen bytes)** | The only component that runs tools. The call is serialized once into immutable bytes. Those bytes are hashed, checked against the token, scanned, and passed to the tool, so arguments can't change between check and use. It also checks scope, expiry, revocation, constitution reloads, single use (shared by every gateway on a ledger), and, via a Merkle consistency proof, that the token's ledger root is an ancestor of the current ledger | [HOWTO §9](docs/HOWTO.md) |
 | **Signed Merkle ledger** | Every proposal, VM result, ballot, token, scan, and execution is appended to a JSONL hash chain with an RFC 9162 Merkle tree. The head is signed with your key, so rewriting, truncating, or unsigned appends are detected. Inclusion and consistency proofs are available | [HOWTO §12](docs/HOWTO.md) |
-| **Anchoring and `deployment_mode`** | `personal` (default): the ledger stays local, optionally anchored to a local file. `enterprise`: every signed head is anchored to a permissioned chain (Hyperledger Fabric or a REST adapter), failing closed, and PKI identities are required. The mode is fixed once per ledger | [DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) |
+| **Anchoring and `deployment_mode`** | `personal` (default): the ledger stays local, optionally anchored to a local file. `enterprise`: every signed head is anchored to a permissioned chain (Hyperledger Fabric or a REST adapter), failing closed, PKI identities are required, and each decision is sent to a SIEM over syslog TLS (RFC 5424, port 6514). A down SIEM is recorded and does not change the decision. The mode is fixed once per ledger | [DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) |
 | **DLP / AV scanning hooks** | Optional third-party scanners see the exact bytes leaving (outbound) and the tool results or files coming back (inbound). There are five hook types: vendor API, ICAP, in-process plugin, local sidecar, and async webhook. Any conviction denies; timeouts and errors block by default | [SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) |
 | **Hybrid post-quantum crypto** | Ed25519, ECDSA P-384, and hybrid **ML-DSA-65** + Ed25519/P-384 (FIPS 204), where both halves must verify and downgrades are refused. Hashes are SHA-384 and HMAC-SHA-384. All crypto goes through one provider with an approved-algorithm list, `fips_mode`, and a known-answer self-test at startup | [CRYPTO.md](docs/CRYPTO.md) |
 | **Seed-phrase backup** | Optional (personal mode): the key can be derived from a 24-word BIP-39 phrase plus an optional passphrase. Per-algorithm keys come from HKDF-SHA-384, and recovery and verification commands are included. Refused in `fips_mode` and in enterprise mode | [KEYS_AND_PKI.md §1](docs/KEYS_AND_PKI.md) |
@@ -270,7 +270,8 @@ if decision.allowed:
 ```bash
 python my_agent.py
 python -m two_key verify-ledger --ledger ~/.two-key/ledger.jsonl \
-    --pub ~/.two-key/principal.pub.pem
+    --pub ~/.two-key/principal.pub.pem --key ~/.two-key/principal.pem \
+    --passphrase-env TWOKEY_KEY_PASSPHRASE
 ```
 
 Expected output with working judges (the quorum counts will vary):

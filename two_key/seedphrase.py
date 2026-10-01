@@ -4,7 +4,7 @@ The author, 2026-10-01 (CONCEPTION_NOTES.md Entry 11): "add a seed phrase
 backup for personal use". Before this, keys were random and kept only in a
 passphrase-encrypted file; losing the file lost the key. This module is
 AI-prepared engineering. The open settings are listed in
-docs/PROVISIONAL_READINESS.md.
+the README limitations section.
 
 How it works
 ------------

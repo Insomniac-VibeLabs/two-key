@@ -323,7 +323,7 @@ class CryptoDefaultsAndLegacy(unittest.TestCase):
         old = self.make(path, digest_alg="sha256", token_mode="tk1")   # what the earlier default wrote
         old.authorize(PAY, "Pay.", HONEST)
         self.assertTrue(all(e.alg == "sha256" for e in old.ledger.entries))
-        self.assertTrue(PersonalLedger(path).verify(self.key.public_key()).ok)       # legacy reader
+        self.assertTrue(PersonalLedger(path, signing_key=self.key).verify(self.key.public_key()).ok)       # legacy reader
         with self.assertRaises(TwoKeyConfigError) as cm:
             self.make(path)
         self.assertIn("digest_alg='sha256'", str(cm.exception))

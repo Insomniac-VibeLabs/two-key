@@ -6,15 +6,15 @@
 
 **Draft prepared:** 2026-09-30. Derived from the original design notes and updated to match the prototype in this repository. **Updated 2026-09-30, about 7:40 AM MT:** added the cryptographic profile (`docs/CRYPTO.md`), the measured performance (`docs/PERFORMANCE.md`), and the three `PRIOR_ART.md` §4 directions that the author selected at about 7:02 AM MT (§§5.6–5.13, Figures 5–7). **Updated 2026-10-01:** §5.14 (seed-phrase backup and enterprise PKI, Entry 11) and the §6 status table; current limitations are in the README section "Security model and limitations".
 
-**Status:** Working draft for review by a registered patent attorney. Not a filed application. Not legal advice.
+**Status:** Working draft for review by a registered reviewer. Not a filed application. Not legal advice.
 
 ### Source tags used in this draft
 
 | Tag | Meaning |
 |---|---|
-| **[D §n]** | Carried over from the original invention disclosure, section n |
+| **[D §n]** | Carried over from the original original design note, section n |
 | **[CN-1]** | The author's conception statement, `CONCEPTION_NOTES.md` entry 1 (2026-09-30, ~4:03 AM MT) |
-| **[CN-2 (i)/(ii)/(iii)]** | The author's **selection**, `CONCEPTION_NOTES.md` entry 2 (2026-09-30, ~7:02 AM MT, relayed through the author's patent-attorney assistant): "A, B, C, and F all together", choosing directions (i), (ii), (iii) of `PRIOR_ART.md` §4 and flagging the normalization problem (F). The wording of each direction comes from `PRIOR_ART.md` §4, an AI-prepared prior-art memo by the patent-attorney agent that is kept outside this repository. Selecting among proposed directions is recorded as a selection, not as conception; counsel should assess |
+| **[CN-2 (i)/(ii)/(iii)]** | The author's **selection**, `CONCEPTION_NOTES.md` entry 2 (2026-09-30, ~7:02 AM MT, relayed through the author's design assistant): "A, B, C, and F all together", choosing directions (i), (ii), (iii) of `PRIOR_ART.md` §4 and flagging the normalization problem (F). The wording of each direction comes from `PRIOR_ART.md` §4, an AI-prepared prior-art memo by the design reviewer that is kept outside this repository. Selecting among proposed directions is recorded as a selection, not as conception; counsel should assess |
 | **[CN-11]** | The author's direction, `CONCEPTION_NOTES.md` entry 11 (2026-10-01, 9:56 AM MT): "add a seed phrase backup for personal use and PKI for enterprise use". The mechanisms in §5.14 were proposed by the AI assistant that morning (recorded there as not conception) and are tagged [IMPL] |
 | **[IMPL]** | How the prototype implements something. It is an engineering detail, not asserted as inventive. Where several designs are possible, see `DESIGN_OPTIONS.md` |
 
@@ -54,8 +54,8 @@ Technical improvements stated in the disclosure [D §3]:
 
 ## 4. Known prior-art families [D §4]
 
-These are not claimed as the invention:
-- binding an AI agent to a person with a TEE-sealed key and biometric template (the disclosure refers to "issued U.S. patents in 2025–2026"; **specific references still need to be identified**);
+These are not pointed as the invention:
+- binding an AI agent to a person with a TEE-sealed key and biometric template (the disclosure refers to "issued U.S. filings in 2025–2026"; **specific references still need to be identified**);
 - policy engines and allow-lists in API gateways (e.g. OPA, Cedar, IAM);
 - multi-party computation and threshold signatures;
 - verifiable credentials and decentralized identifiers;
@@ -81,7 +81,7 @@ The principal provides (a) a plain-English constitution file (`.txt`/`.md`) and 
 
 ### 5.3 Action record and normalization [D §5.2]
 
-Fields: tool, amount_usd, currency, counterparty, data_class ∈ {public, personal, medical, financial, classified}, destination, duration_hours, irreversible, tags, raw. Missing high-impact fields default to conservative values (irreversible = true, data_class = classified) or cause rejection [D §5.2, Claim 5].
+Fields: tool, amount_usd, currency, counterparty, data_class ∈ {public, personal, medical, financial, classified}, destination, duration_hours, irreversible, tags, raw. Missing high-impact fields default to conservative values (irreversible = true, data_class = classified) or cause rejection [D §5.2, the missing-field rule].
 
 [IMPL] Validation rejects negative, non-finite, and non-numeric amounts, unknown fields, and non-boolean `irreversible`. Strings are trimmed and case-folded, and data_class must be one of the enum values. Invalid records become an explicit, logged deny.
 
@@ -89,7 +89,7 @@ Fields: tool, amount_usd, currency, counterparty, data_class ∈ {public, person
 
 ### 5.4 Path A: constitution compilation and VM [D §5.3]
 
-The hard rules use a restricted schema: `allow_only_tools`, `deny_counterparties`, `deny_if {tool, amount_usd_gt, data_class_in, irreversible}`, and `deny_if_irreversible_over`. They compile to stack operations, and the VM evaluates them against the action. Compilation happens when the principal saves the constitution, so an attacker who can only talk to the model can't alter the bytecode [D §5.3, Claim 2].
+The hard rules use a restricted schema: `allow_only_tools`, `deny_counterparties`, `deny_if {tool, amount_usd_gt, data_class_in, irreversible}`, and `deny_if_irreversible_over`. They compile to stack operations, and the VM evaluates them against the action. Compilation happens when the principal saves the constitution, so an attacker who can only talk to the model can't alter the bytecode [D §5.3].
 
 [IMPL]
 - Each rule compiles to a block ending in `ASSERT <rule id>`, so the deny reason names the rule.
@@ -134,7 +134,7 @@ Each judge receives the constitution text and the proposal and returns a structu
 
 ### 5.7 Quorum protocol specifics (Figure 7: `docs/figures/quorum_protocol.svg`) [CN-2 (iii)]
 
-Judge-set selection enforces vendor heterogeneity, with at least two vendors including at least one local weight file [CN-2 (iii); cf. D Claim 4, "at least two distinct model vendors or local weight files"]. An availability floor K, distinct from the approval threshold T, means fewer than K valid ballots is a deny without counting [CN-2 (iii); K itself is D §5.4]. Ballots are schema-constrained Booleans bound to H(action record) and H(constitution), and a malformed ballot is an abstention, which counts as deny [CN-2 (iii)]. Judge inputs are restricted to the normalized record and the constitution, never the agent transcript or tool outputs [CN-2 (iii)]. Path B is invoked only after Path A returns true [CN-2 (iii); previously a configurable default, §5.10a].
+Judge-set selection enforces vendor heterogeneity, with at least two vendors including at least one local weight file [CN-2 (iii); cf. D the two-vendor rule, "at least two distinct model vendors or local weight files"]. An availability floor K, distinct from the approval threshold T, means fewer than K valid ballots is a deny without counting [CN-2 (iii); K itself is D §5.4]. Ballots are schema-constrained Booleans bound to H(action record) and H(constitution), and a malformed ballot is an abstention, which counts as deny [CN-2 (iii)]. Judge inputs are restricted to the normalized record and the constitution, never the agent transcript or tool outputs [CN-2 (iii)]. Path B is invoked only after Path A returns true [CN-2 (iii); previously a configurable default, §5.10a].
 
 [IMPL]
 - Each judge has `vendor` (defaulting to its provider label) and `local_weights` (true by default for Ollama judges; configurable), plus an optional recorded `weights_sha256`. `QuorumPolicy.min_vendors` and `min_local_judges` are checked when Two-Key starts, and it refuses to start below the floor. The convenor checks again (`judge_set_not_heterogeneous`). With `heterogeneity_scope="responding"`, the floor must also hold among the judges that returned valid ballots. `QuorumPolicy.section4()` applies §4's figures (2 vendors, 1 local). The general default is still permissive (open point).
@@ -270,22 +270,22 @@ The author's direction [CN-11]: a seed-phrase backup for personal use and PKI fo
 | Hardware-backed keys (TEE/HSM) | PKCS#11 signer interface (2026-10-01): tested with SoftHSM 2.6 and a fake token, no real HSM or smart card; TEE not implemented |
 | Ledger encryption | Not implemented |
 
-## 7. Example claims
+## 7. Example points
 
-Patent claim language was removed from the public tree in v0.1.0. This draft describes the mechanism only.
+This draft describes the mechanism only.
 
-Themes the attorney may want to consider, by source:
+Themes the reviewer may want to consider, by source:
 - User-uploaded human-language constitution, signed by the principal, as the input to Path B, together with compiled hard rules as the input to Path A [CN-1; D §5.1 item 2].
 - Path B judges connected to principal-selected AI providers, local or vendor, through principal-selected authentication (API key, username/password, SSO) [CN-1].
-- Both paths must agree before any action occurs [CN-1; D §3; Claim 1(d)].
-- The three narrower directions the author selected on 2026-09-30 [CN-2 (i), (ii), (iii)]. Their wording is from the patent-attorney agent's `PRIOR_ART.md` §4, and §§5.5, 5.7, and 5.8 above describe how they are implemented. Whether they are claimable, and whether a selection among AI-proposed directions supports inventorship, is for counsel.
+- Both paths must agree before any action occurs [CN-1; D §3; the dual-path rule].
+- The three narrower directions the author selected on 2026-09-30 [CN-2 (i), (ii), (iii)]. Their wording is from the design reviewer's `PRIOR_ART.md` §4, and §§5.5, 5.7, and 5.8 above describe how they are implemented. Whether they are usable, and whether a selection among AI-proposed directions supports inventorship, is for counsel.
 
-The open design questions in `DESIGN_OPTIONS.md` (including §7, the details §4 left open, and §1, the normalization problem F) are not reflected in any claim theme.
+The open design questions in `DESIGN_OPTIONS.md` (including §7, the details §4 left open, and §1, the normalization problem F) are not reflected in any point theme.
 
 ## 8. Notes for counsel
 
-- The original disclosure cites USPTO guidance (revised 28 Nov 2025) on AI-assisted inventions and *Ex parte Desjardins* on technical-improvement framing [D §1, §9]. Neither has been verified by the assistant.
+- The original disclosure cites the filing office guidance (revised 28 Nov 2025) on AI-assisted inventions and *Ex parte Desjardins* on technical-improvement framing [D §1, §9]. Neither has been verified by the assistant.
 - Licensing: the repository's license is the author's decision. The `LICENSE` file comes from the original repository's history and was not changed by this work. Whether the repository or package has ever been public is unknown; please check the commit history and visibility history.
-- `PRIOR_ART.md` (the patent-attorney agent's prior-art triage) is referenced here but is kept outside this repository. Its §4 wording is quoted only as the source of the [CN-2] directions.
+- `PRIOR_ART.md` (the design reviewer's prior-art triage) is referenced here but is kept outside this repository. Its §4 wording is quoted only as the source of the [CN-2] directions.
 - Problem F (who produces the action record) was flagged by the author but is deliberately unimplemented; the (i)–(iii) guarantees depend on the fields Path A reads, which F would settle.
 - The original disclosure's advocacy sections (§8, and most of §9 on institutional risk surveys and climate funding) are left out of this draft. They remain in the original file.

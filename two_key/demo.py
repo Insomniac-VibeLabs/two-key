@@ -16,7 +16,7 @@ from pathlib import Path
 from . import keys
 from .constitution import build_document, sign_document
 from .core import TwoKey
-from .ledger import PersonalLedger
+from .ledger import LedgerError, PersonalLedger
 from .quorum import QuorumPolicy
 from .testing import HeuristicJudge
 
@@ -92,10 +92,11 @@ def main() -> None:
 
         # Simulate a full rewrite by someone without the principal's key.
         ledger_path.unlink()
-        forged = PersonalLedger(ledger_path)
-        forged.append("constitution_loaded", {"principal": "did:twokey:demo-principal", "rules": []})
-        print(f"After forged full rewrite: hash chain ok={forged.verify_chain()}, "
-              f"signed verify={PersonalLedger(ledger_path).verify(key.public_key()).reason}")
+        try:
+            PersonalLedger(ledger_path)
+            print("After forged full rewrite: opened without the principal key")
+        except LedgerError as e:
+            print(f"After forged full rewrite: refused ({e})")
 
 
 if __name__ == "__main__":

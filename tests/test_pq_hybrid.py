@@ -130,13 +130,15 @@ class HybridConstitutionLedgerTokens(unittest.TestCase):
         for i in range(5):
             L.append("e", {"i": i})
         self.assertEqual((L.digest_alg, len(L.tip())), ("sha384", 96))
-        self.assertEqual(PersonalLedger(self.d / "l.jsonl").verify(self.ks.public()).reason, "ok")
+        self.assertEqual(PersonalLedger(self.d / "l.jsonl", signing_key=self.ks).verify(self.ks.public()).reason, "ok")
+        from two_key import ledger_at_rest
         good = L.head_path.read_text()
+        plain = ledger_at_rest.open_record(L._data_key, good.strip())
         for i in (0, 1):
-            h = json.loads(good)
+            h = json.loads(plain)
             h["sig"] = flip_component(h["sig"], i)
-            L.head_path.write_text(json.dumps(h))
-            self.assertEqual(PersonalLedger(self.d / "l.jsonl").verify(self.ks.public()).reason,
+            L.head_path.write_text(ledger_at_rest.seal(L._data_key, json.dumps(h)) + "\n")
+            self.assertEqual(PersonalLedger(self.d / "l.jsonl", signing_key=self.ks).verify(self.ks.public()).reason,
                              "head_signature_invalid")
         L.head_path.write_text(good)
         p = L.inclusion_proof(2)
@@ -146,10 +148,11 @@ class HybridConstitutionLedgerTokens(unittest.TestCase):
     def test_ledger_head_suite_downgrade_refused(self):
         L = PersonalLedger(self.d / "l.jsonl", signing_key=self.ks)
         L.append("e", {})
-        h = json.loads(L.head_path.read_text())
+        from two_key import ledger_at_rest
+        h = json.loads(ledger_at_rest.open_record(L._data_key, L.head_path.read_text().strip()))
         h["head"].pop("suite")
-        L.head_path.write_text(json.dumps(h))
-        self.assertEqual(PersonalLedger(self.d / "l.jsonl").verify(self.ks.public()).reason, "head_suite_mismatch")
+        L.head_path.write_text(ledger_at_rest.seal(L._data_key, json.dumps(h)) + "\n")
+        self.assertEqual(PersonalLedger(self.d / "l.jsonl", signing_key=self.ks).verify(self.ks.public()).reason, "head_suite_mismatch")
 
     def test_two_key_end_to_end_require_pq(self):
         tk = TwoKey(self.env, self.ks.public(), self.d / "k.jsonl", YES, ledger_signing_key=self.ks,
@@ -161,7 +164,7 @@ class HybridConstitutionLedgerTokens(unittest.TestCase):
         self.assertEqual(len(dec.token_payload["constitution_digest"]), 96)
         r = tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
         self.assertEqual(r.reason, "authorized_no_executor")
-        self.assertEqual(PersonalLedger(self.d / "k.jsonl").verify(self.ks.public()).reason, "ok")
+        self.assertEqual(PersonalLedger(self.d / "k.jsonl", signing_key=self.ks).verify(self.ks.public()).reason, "ok")
 
     def test_signed_capability_tokens(self):
         tk = PrivateKeySet.generate("hybrid-mldsa65-ed25519")

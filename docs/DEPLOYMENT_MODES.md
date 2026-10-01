@@ -179,3 +179,13 @@ bearer token. A custom `transport=` can replace HTTP.
 7. **Which chain.** Fabric is implemented. Should others (for example
    Besu with permissioning, or Corda) get their own adapters, or is the
    REST adapter enough?
+
+
+## Enterprise SIEM
+
+Enterprise mode requires `siem_host` (or `siem.host` in the deployment config).
+Each decision is one RFC 5424 message over TLS to that host, port 6514 unless
+`siem_port` is set. The message carries the decision, the tool name, and
+digests. It does not carry raw arguments or the ledger key. If the SIEM cannot
+be reached, the local ledger still records the decision and the action is not
+denied for that reason.

@@ -3,7 +3,7 @@
 The author, 2026-10-01 (CONCEPTION_NOTES.md Entry 11): "add ... PKI for
 enterprise use". This module is AI-prepared engineering. Every setting not
 yet decided by the maintainers is marked PLACEHOLDER and listed in
-docs/PROVISIONAL_READINESS.md.
+the README limitations section.
 
 What a certificate is checked for (``PkiVerifier.verify``)
 ----------------------------------------------------------

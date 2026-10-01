@@ -57,8 +57,7 @@ class CLI(unittest.TestCase):
         self.assertIn("invalid_action:amount_usd", txt)
         self.assertIn("replay        : replayed", txt)
         self.assertIn("verify: ok", txt)
-        self.assertIn("signed verify=", txt)
-        self.assertNotIn("signed verify=ok", txt)
+        self.assertIn("After forged full rewrite: refused", txt)
 
 
 if __name__ == "__main__":

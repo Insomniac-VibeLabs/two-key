@@ -250,7 +250,7 @@ class ClassicSuites(unittest.TestCase):
             self.assertEqual(len(tk.ledger.tip()), 96)
             self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
                              "authorized_no_executor")
-            self.assertEqual(PersonalLedger(Path(d) / "l.jsonl").verify(ks.public()).reason, "ok")
+            self.assertEqual(PersonalLedger(Path(d) / "l.jsonl", signing_key=ks).verify(ks.public()).reason, "ok")
 
     def test_legacy_signature_refused_for_p384_trusted_key(self):
         ks = PrivateKeySet.generate("ecdsa-p384")

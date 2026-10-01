@@ -105,7 +105,7 @@ class Modes(unittest.TestCase):
     def test_enterprise_without_an_anchor_fails_at_startup(self):
         for kw in ({}, {"anchor": NullAnchor()}, {"anchor": LocalFileAnchor(Path("x"))}):
             with self.assertRaisesRegex(TwoKeyConfigError, "requires a permissioned-ledger anchor"):
-                with TwoKeyFixture(RULES, YES, quorum_policy=QP, deployment_mode="enterprise", **kw):
+                with TwoKeyFixture(RULES, YES, quorum_policy=QP, deployment_mode="enterprise", siem_host="127.0.0.1", **kw):
                     pass
         with mock.patch.dict("os.environ", {"TWOKEY_DEPLOYMENT_MODE": "enterprise"}):
             with self.assertRaises(TwoKeyConfigError):
@@ -120,7 +120,7 @@ class Modes(unittest.TestCase):
     def test_enterprise_anchors_every_signed_head_with_verifiable_receipts(self):
         gw = FakeFabricGateway()
         anchor = fabric(gw, min_endorsing_orgs=2, required_orgs=["Org2MSP"])
-        fx = TwoKeyFixture(RULES, YES, quorum_policy=QP, deployment_mode="enterprise", anchor=anchor)
+        fx = TwoKeyFixture(RULES, YES, quorum_policy=QP, deployment_mode="enterprise", siem_host="127.0.0.1", anchor=anchor)
         with fx as tk:
             args = {"to": "a@example.com", "body": "hi"}
             d = tk.authorize({"tool": "email_send", "counterparty": "a@example.com", "data_class": "public",
@@ -153,18 +153,18 @@ class Modes(unittest.TestCase):
                    allow_test_doubles=True)
             with self.assertRaisesRegex(TwoKeyConfigError, "set once"):
                 TwoKey(env, key.public_key(), path, YES, ledger_signing_key=key, quorum_policy=QP,
-                       allow_test_doubles=True, deployment_mode="enterprise", anchor=fabric(),
+                       allow_test_doubles=True, deployment_mode="enterprise", siem_host="127.0.0.1", anchor=fabric(),
                        **enterprise_pki(key)[0])
             TwoKey(env, key.public_key(), path, YES, ledger_signing_key=key, quorum_policy=QP,
                    allow_test_doubles=True, deployment_mode="personal")      # same mode reopens fine
 
     def test_anchor_failure_fails_startup_and_denies_a_decision(self):
         with self.assertRaises(AnchorError):
-            with TwoKeyFixture(RULES, YES, quorum_policy=QP, deployment_mode="enterprise",
+            with TwoKeyFixture(RULES, YES, quorum_policy=QP, deployment_mode="enterprise", siem_host="127.0.0.1",
                                anchor=fabric(FakeFabricGateway(fail=True))):
                 pass
         gw = FakeFabricGateway()
-        with TwoKeyFixture(RULES, YES, quorum_policy=QP, deployment_mode="enterprise", anchor=fabric(gw)) as tk:
+        with TwoKeyFixture(RULES, YES, quorum_policy=QP, deployment_mode="enterprise", siem_host="127.0.0.1", anchor=fabric(gw)) as tk:
             gw.fail = True
             d = tk.authorize({"tool": "email_send", "counterparty": "a@example.com", "data_class": "public",
                               "irreversible": False}, "Send it.", {"to": "a@example.com"})

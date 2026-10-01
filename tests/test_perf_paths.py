@@ -123,7 +123,7 @@ class MerkleAndCheckpoints(unittest.TestCase):
         self.assertEqual(L.unsigned_entries, 4)
         self.assertTrue(L.checkpoint())
         self.assertFalse(L.checkpoint())  # nothing new to cover
-        self.assertEqual(PersonalLedger(self.d / "l.jsonl").verify(key.public_key()).reason, "ok")
+        self.assertEqual(PersonalLedger(self.d / "l.jsonl", signing_key=key).verify(key.public_key()).reason, "ok")
 
         L3 = PersonalLedger(self.d / "l3.jsonl", signing_key=key, auto_sign_every=3)
         with mock.patch.object(L3, "_write_head", wraps=L3._write_head) as w:

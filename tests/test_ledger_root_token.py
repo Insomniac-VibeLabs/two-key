@@ -106,16 +106,20 @@ class AncestorCheck(Base):
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, True)
         dst = tmp / "l.jsonl"
+        from two_key import ledger_at_rest
         shutil.copy(src, dst)
-        rows = [json.loads(x) for x in dst.read_text().splitlines()]
+        shutil.copy(src.with_name(src.name + ".key.json"), dst.with_name(dst.name + ".key.json"))
+        data_key = self.tk.ledger._data_key
+        rows = [json.loads(ledger_at_rest.open_record(data_key, x)) for x in dst.read_text().splitlines()]
         rows[mutate_seq]["body"] = {"rewritten": True}
         prev = rows[mutate_seq - 1]["digest"] if mutate_seq else "0" * 64
         for r in rows[mutate_seq:]:
             r["prev"] = prev
             r["digest"] = _entry_digest(r["seq"], r["ts"], r["kind"], r["body"], r["prev"], r.get("alg", "sha256"))
             prev = r["digest"]
-        dst.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows))
-        return PersonalLedger(dst, None, fsync=False)
+        sealed = [ledger_at_rest.seal(data_key, json.dumps(r, sort_keys=True)) for r in rows]
+        dst.write_text("\n".join(sealed) + "\n")
+        return PersonalLedger(dst, self.tk.ledger.signing_key, fsync=False)
 
     def test_rewrite_outside_view_is_an_extension(self):
         # The view taken at gateway construction covers only entry 0; rewriting later entries is,
@@ -148,9 +152,11 @@ class AncestorCheck(Base):
         self.assertGreater(n, 10)
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, True)
-        lines = self.tk.ledger.path.read_text().splitlines()[: n - 2]
+        src = self.tk.ledger.path
+        lines = src.read_text().splitlines()[: n - 2]
         (tmp / "l.jsonl").write_text("\n".join(lines) + "\n")
-        self.gw.ledger = PersonalLedger(tmp / "l.jsonl", None, fsync=False)
+        shutil.copy(src.with_name(src.name + ".key.json"), tmp / "l.jsonl.key.json")
+        self.gw.ledger = PersonalLedger(tmp / "l.jsonl", self.tk.ledger.signing_key, fsync=False)
         self.assertEqual(self.invoke(self.d.capability).reason, "ledger_fork_detected")
         self.assertEqual(self.gw.view, before)          # the view never moves to a non-extension
 

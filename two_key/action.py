@@ -4,7 +4,7 @@
 the Policy VM sees it. Any validation failure raises ``ActionValidationError``,
 and Two-Key turns that into an explicit, logged DENY.
 
-Missing-field defaults follow disclosure section 5.2 and Claim 5: a missing
+Missing-field defaults follow disclosure section 5.2 and the missing-field rule: a missing
 ``irreversible`` means ``True`` and a missing ``data_class`` means
 ``"classified"``.
 
@@ -21,7 +21,7 @@ from typing import Any, Mapping
 
 DATA_CLASSES = ("public", "personal", "medical", "financial", "classified")
 
-# Conservative defaults for missing high-impact fields (spec 5.2 / Claim 5).
+# Conservative defaults for missing high-impact fields (spec 5.2 / the missing-field rule).
 DEFAULT_IRREVERSIBLE = True
 DEFAULT_DATA_CLASS = "classified"
 MAX_AMOUNT_USD = 1e12  # sanity bound; larger values are rejected as malformed

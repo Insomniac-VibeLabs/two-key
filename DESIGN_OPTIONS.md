@@ -3,21 +3,21 @@
 **Prepared:** 2026-09-30, by the AI engineering assistant, for the author.
 **Status:** options only. **No decision has been made on any item below**,
 except where a section says so. **Update 2026-09-30, ~7:02 AM MT:** The author
-selected the patent-attorney agent's `PRIOR_ART.md` §4 directions (i)
+selected the design reviewer's `PRIOR_ART.md` §4 directions (i)
 ledger-root-bound token, (ii) one signed constitution / two compilations,
 and (iii) quorum protocol specifics, and flagged the normalization problem
 (§1 below, "F") (`CONCEPTION_NOTES.md` Entry 2). (i)–(iii) are now
 implemented as `PRIOR_ART.md` §4 describes them. The details §4 leaves open
 are listed in **§7** with the reference behaviour chosen. **§1 is still
 open:** no normalization option was implemented. (`PRIOR_ART.md` is the
-attorney agent's memo and is kept outside this repository.)
+reviewer agent's memo and is kept outside this repository.)
 
 The prototype needs *some* behavior to run. Where a question is still open,
 the code uses a minimal, clearly configurable reference behavior and marks
 it "current prototype default". That default is an engineering placeholder,
-not a recommendation and not a claimed design. Choosing among these options,
+not a recommendation and not a pointed design. Choosing among these options,
 or coming up with others, is the author's call, and it may matter for
-conception and inventorship. Talk to the patent attorney before treating
+conception and inventorship. Talk to the reviewer before treating
 any option as part of the invention.
 
 ---
@@ -31,7 +31,7 @@ misstate it (for example, label medical data "public").
 
 **Implemented regardless of the choice (engineering):** strict validation and
 canonicalization (`action.py`) and conservative defaults for missing fields
-(spec 5.2 / Claim 5). A literal-args hash binds the token to the exact call
+(spec 5.2 / the missing-field rule). A literal-args hash binds the token to the exact call
 (`capability.args_hash`). The gateway has a per-tool extractor hook
 (`ToolGateway(extractors=...)`).
 
@@ -57,7 +57,7 @@ Sub-questions:
 
 ## 2. Judge independence (Path B)
 
-Spec 5.4 says judges "must be independently reachable". Claim 4 mentions "at
+Spec 5.4 says judges "must be independently reachable". the two-vendor rule mentions "at
 least two distinct model vendors or local weight files". How to *ensure*
 independence is open.
 

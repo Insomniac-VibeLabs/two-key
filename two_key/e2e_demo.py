@@ -296,7 +296,7 @@ def run(work: Path, out=print) -> Checks:
     ent_env = sign_source_file(doc, "did:twokey:acme-principal", principal_key)
     fabric = InMemoryFabric()
     base = dict(ledger_signing_key=principal_key, quorum_policy=QuorumPolicy(required_yes=2),
-                allow_test_doubles=True, deployment_mode="enterprise")
+                allow_test_doubles=True, deployment_mode="enterprise", siem_host="127.0.0.1")
     c.raises("enterprise refuses to start without a permissioned anchor", TwoKeyConfigError,
              lambda: TwoKey(ent_env, principal_key.public(), work / "e0.jsonl", judges(), **base),
              "permissioned-ledger anchor")

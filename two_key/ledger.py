@@ -37,8 +37,9 @@ An append-only JSONL hash chain owned by the principal (spec 5.6), plus:
   redemption (fail closed) instead of accepting the token a second time,
   and this instance then refuses further writes (it is stale; reopen it).
 
-The ledger file and head file are created with mode 0600. The ledger is
-*not encrypted*; see DESIGN_OPTIONS.md.
+The ledger file and head file are created with mode 0600. Every record and
+the signed head are AES-256-GCM ciphertext. The data key is wrapped by the
+principal key (two_key.ledger_at_rest). A missing or wrong key fails closed.
 """
 
 from __future__ import annotations
@@ -57,6 +58,7 @@ from .anchoring import Anchor, AnchorError
 from .canonical import canonical_bytes, digest_hex
 from .crypto.provider import DIGEST_SIZE, CryptoProvider, default_provider
 from .crypto.signatures import LEGACY_SUITE, as_private_keyset, as_public_keyset
+from . import ledger_at_rest
 
 try:  # POSIX advisory file locks for cross-process redemption; absent on Windows
     import fcntl
@@ -122,11 +124,14 @@ def _write_private(path: Path, data: str, append: bool, fsync: bool = True) -> N
 class PersonalLedger:
     def __init__(self, path: Path, signing_key: Any = None, *, digest_alg: str | None = None,
                  auto_sign_every: int = 1, fsync: bool = True, crypto: CryptoProvider | None = None,
-                 head_anchor: Anchor | None = None):
+                 head_anchor: Anchor | None = None, ledger_key: bytes | None = None):
         self.path = Path(path)
         self.head_path = self.path.with_name(self.path.name + ".head.json")
+        self.key_path = self.path.with_name(self.path.name + ".key.json")
         self.crypto = crypto or default_provider()
         self.signing_key = None if signing_key is None else as_private_keyset(signing_key, self.crypto)
+        self._data_key: bytes | None = None
+        self._ledger_key = ledger_key
         if not isinstance(auto_sign_every, int) or isinstance(auto_sign_every, bool) or auto_sign_every < 0:
             raise ValueError("auto_sign_every must be an integer >= 0")
         self.auto_sign_every = auto_sign_every
@@ -145,6 +150,7 @@ class PersonalLedger:
         self._unsigned = 0
         self.head_anchor = head_anchor              # publish every signed head here (None: local only)
         self._anchoring = False
+        self._open_data_key()
         if self.path.exists():
             self._load()
         existing = self.entries[0].alg if self.entries else None
@@ -162,6 +168,51 @@ class PersonalLedger:
             self._tree.append(bytes.fromhex(e.digest))
 
     # -- storage -------------------------------------------------------------
+    def _open_data_key(self) -> None:
+        """Unwrap the data key, or create one. Missing and wrong keys fail closed."""
+        if self._ledger_key is not None:
+            if not isinstance(self._ledger_key, bytes) or len(self._ledger_key) != 32:
+                raise LedgerError("ledger_key must be 32 bytes")
+            kek = self._ledger_key
+        elif self.signing_key is not None:
+            try:
+                kek = ledger_at_rest.wrap_key_from_principal(self.signing_key)
+            except ledger_at_rest.LedgerCryptoError as e:
+                raise LedgerError(str(e)) from e
+        else:
+            kek = None
+        if self.key_path.exists():
+            if kek is None:
+                raise LedgerError("encrypted ledger requires the principal key (or ledger_key)")
+            try:
+                blob = json.loads(self.key_path.read_text(encoding="utf-8"))
+                self._data_key = ledger_at_rest.unwrap_data_key(kek, blob)
+            except (OSError, ValueError, ledger_at_rest.LedgerCryptoError) as e:
+                raise LedgerError(f"ledger key rejected: {e}") from e
+            return
+        if self.path.exists() and self.path.stat().st_size:
+            raise LedgerError("ledger is not encrypted; refusing to open a plaintext ledger")
+        if kek is None:
+            return  # a new ledger; append fails closed until a key is supplied
+        data_key = os.urandom(32)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        _write_private(self.key_path, json.dumps(ledger_at_rest.wrap_data_key(kek, data_key)) + "\n",
+                       append=False, fsync=self.fsync)
+        self._data_key = data_key
+
+    def _seal(self, plaintext: str) -> str:
+        if self._data_key is None:
+            raise LedgerError("encrypted ledger requires the principal key (or ledger_key)")
+        return ledger_at_rest.seal(self._data_key, plaintext)
+
+    def _open_line(self, line: str) -> str:
+        if self._data_key is None:
+            raise LedgerError("encrypted ledger requires the principal key (or ledger_key)")
+        try:
+            return ledger_at_rest.open_record(self._data_key, line)
+        except ledger_at_rest.LedgerCryptoError as e:
+            raise LedgerError(str(e)) from e
+
     def _load(self) -> None:
         raw = self.path.read_bytes()
         self._file_size = len(raw)
@@ -169,9 +220,9 @@ class PersonalLedger:
             if not line.strip():
                 continue
             try:
-                e = Entry(**json.loads(line))
+                e = Entry(**json.loads(self._open_line(line)))
                 bytes.fromhex(e.digest)
-            except (TypeError, ValueError) as ex:
+            except (TypeError, ValueError, LedgerError) as ex:
                 raise LedgerError(f"malformed ledger line {n + 1}") from ex
             self.entries.append(e)
             self._index[e.digest] = e.seq
@@ -205,7 +256,7 @@ class PersonalLedger:
             digest = _entry_digest(seq, ts, kind, body, prev, self.digest_alg, self.crypto)  # raises on bad body
             entry = Entry(seq, ts, kind, body, prev, digest, self.digest_alg)
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            line = entry.to_json() + "\n"
+            line = self._seal(entry.to_json()) + "\n"
             _write_private(self.path, line, append=True, fsync=self.fsync)
             self._file_size += len(line.encode("utf-8"))
             self.entries.append(entry)
@@ -291,8 +342,8 @@ class PersonalLedger:
             tail = f.read(size - self._file_size)
         for line in tail.splitlines():
             try:
-                rec = json.loads(line)
-            except ValueError:
+                rec = json.loads(self._open_line(line.decode("utf-8")))
+            except (ValueError, LedgerError, UnicodeError):
                 continue  # an entry another writer is still writing; never the redemption (written under flock)
             if isinstance(rec, dict) and rec.get("kind") == "capability_redeemed" and \
                     isinstance(rec.get("body"), dict) and rec["body"].get("jti") == jti:
@@ -412,7 +463,7 @@ class PersonalLedger:
                 raise LedgerError(self._stale)
             tmp = self.head_path.with_name(self.head_path.name + ".tmp")
             sh = self.signed_head()
-            _write_private(tmp, json.dumps(sh, sort_keys=True) + "\n", append=False, fsync=self.fsync)
+            _write_private(tmp, self._seal(json.dumps(sh, sort_keys=True)) + "\n", append=False, fsync=self.fsync)
             os.replace(tmp, self.head_path)
             self._unsigned = 0
             if self.head_anchor is not None and not self._anchoring:
@@ -452,7 +503,7 @@ class PersonalLedger:
         if not self.head_path.exists():
             return VerifyReport(n == 0, "no_signed_head" if n else "empty", n)
         try:
-            sh = json.loads(self.head_path.read_text(encoding="utf-8"))
+            sh = json.loads(self._open_line(self.head_path.read_text(encoding="utf-8").strip()))
             body, sig = sh["head"], sh["sig"]
         except (ValueError, KeyError, TypeError):
             return VerifyReport(False, "malformed_head", n)

@@ -13,8 +13,8 @@ separately in `CHANGES.md` and in git history. It is not conception.
 - **How it was captured:** The author typed it in a chat with the AI assistant.
   The assistant copied it here word for word, with no edits to spelling,
   grammar, or punctuation.
-- **Context:** Given after reviewing the Two-Key invention disclosure
-  package (`docs/INVENTION_DISCLOSURE.md`, disclosure date 30 September 2026).
+- **Context:** Given after reviewing the Two-Key original design note
+  package (`docs/SPEC_DRAFT.md`, disclosure date 30 September 2026).
 
 > "To elaborate on the intent (beyond what was already identified) is to have a user able to upload a human language constitution. Then (Path B) the AI judge/judges be connected to whichever AI (local or vendor) the user desires (api or username/password or single sign on login). Path A I assume is self explanatory. Both path A and B need to agree to let the action occur."
 
@@ -34,11 +34,11 @@ separately in `CHANGES.md` and in git history. It is not conception.
 - **Attributed to:** the author
 - **Date/time:** 2026-09-30, about 7:02 AM Mountain Time (MDT, UTC-6)
 - **How it was captured:** The author's selection was relayed to the AI
-  engineering assistant through the author's patent-attorney assistant (another AI
+  engineering assistant through the author's design assistant (another AI
   agent). The quoted text is reproduced word for word as relayed.
-- **Context:** Given after reviewing the patent-attorney agent's prior-art
+- **Context:** Given after reviewing the design reviewer's prior-art
   triage (`PRIOR_ART.md`, kept outside this repository), §4 "Suggested
-  narrower claim directions", and the related action-record normalization
+  narrower point directions", and the related action-record normalization
   question.
 
 > "A, B, C, and F all together"
@@ -52,7 +52,7 @@ separately in `CHANGES.md` and in git history. It is not conception.
 | C | Quorum protocol specifics | `PRIOR_ART.md` §4 direction (iii) |
 | F | The action-record normalization problem (who produces the fields Path A reads) | `DESIGN_OPTIONS.md` §1; `PRIOR_ART.md` §3 |
 
-This entry records a *selection* among directions that the attorney agent
+This entry records a *selection* among directions that the reviewer agent
 proposed. The directions' wording comes from `PRIOR_ART.md`, which is an
 AI-prepared document; this entry does not attribute that wording to the author.
 For F, the selection identifies the problem; no solution option has been
@@ -74,7 +74,7 @@ chosen or implemented.
 The product name in prose is "Two-Key"; the repository, the distribution,
 and the CLI are `two-key`; the Python package is `two_key` (the main class
 is `TwoKey`, in `two_key/core.py`); the constitution rules block is
-`twokey-rules`; example DIDs use `did:twokey:`. `docs/INVENTION_DISCLOSURE.md`
+`twokey-rules`; example DIDs use `did:twokey:`. `docs/SPEC_DRAFT.md`
 and the original invention-package zip are unchanged, because they are the
 dated original invention record. The rename changes no mechanism. (Wording
 updated per Entry 6.)
@@ -87,7 +87,7 @@ updated per Entry 6.)
 - **Date/time:** 2026-09-30, about 8:01 PM Mountain Time (MDT, UTC-6);
   clarification about 8:02 PM MDT; further context about 8:07 PM MDT
 - **How it was captured:** the 8:01 and 8:02 PM statements were relayed to
-  the AI engineering assistant by the author's patent-attorney assistant
+  the AI engineering assistant by the author's design assistant
   (another AI agent); the 8:07 PM statement was said directly to the AI assistant coordinating the work.
   All three quotes are reproduced word for word as relayed, including
   spelling and punctuation.
@@ -206,28 +206,28 @@ listed as open in `docs/SCANNING_HOOKS.md`.
 - **Rename authorization.** The last paragraph authorizes the rename "in all
   places and references". Per that authorization, the non-quote wording of
   earlier entries that still used the former name was updated.
-  `docs/INVENTION_DISCLOSURE.md` and the original invention-package zip are
+  `docs/SPEC_DRAFT.md` and the original invention-package zip are
   not changed. The author's verbatim quotes are not changed; this entry's quote
   keeps the former name because it is verbatim. The changes, with the
   original text preserved here for the record:
   - **Entry 3, "What was decided".** Original:
-    > The author renamed the product from "Compact Kernel" to "Two-Key".
+    > The author renamed the product from "the earlier name" to "Two-Key".
 
     Now:
     > The author named the product "Two-Key".
   - **Entry 3, implementation note.** Original:
     > (the class formerly `CompactKernel` is `TwoKey`, in `two_key/core.py`)
-    > [...] Entries 1 and 2, `docs/INVENTION_DISCLOSURE.md`, the original
+    > [...] Entries 1 and 2, `docs/SPEC_DRAFT.md`, the original
     > invention-package zip, and earlier `CHANGES.md` rows keep the former
     > name, because they are historical records.
 
     Now:
     > (the main class is `TwoKey`, in `two_key/core.py`) [...]
-    > `docs/INVENTION_DISCLOSURE.md` and the original invention-package zip
+    > `docs/SPEC_DRAFT.md` and the original invention-package zip
     > are unchanged, because they are the dated original invention record.
     > [...] (Wording updated per Entry 6.)
-  - **Entry 1, "Context".** "the Compact Kernel invention disclosure package"
-    became "the Two-Key invention disclosure package".
+  - **Entry 1, "Context".** "the the earlier name original design note package"
+    became "the Two-Key original design note package".
   - **Entry 1, implementation table.** The paths `compact_kernel/constitution.py`,
     `compact_kernel/judges/`, `compact_kernel/judges/credentials.py`, and
     `compact_kernel/kernel.py` `CompactKernel.authorize` became
@@ -294,7 +294,7 @@ listed as open in `docs/SCANNING_HOOKS.md`.
   places and references".
 - The original wording is preserved in Entry 6 (Entries 1 and 3) and in git
   commit 97dedbd (all of them).
-- The patent lawyer advised against editing earlier entries. The author chose
+- The filing lawyer advised against editing earlier entries. The author chose
   to keep the edited wording ("Keep as is"). Nothing was reverted.
 - From Entry 7 on, earlier entries and earlier `CHANGES.md` rows are not
   edited; new information is only appended.
@@ -349,7 +349,7 @@ listed as open in `docs/SCANNING_HOOKS.md`.
 
 - **Attributed to:** the author
 - **Date/time:** 2026-09-30, 10:30 PM Mountain Time (MDT, UTC-6)
-- **How it was captured:** relayed by the author's patent-attorney agent, and
+- **How it was captured:** relayed by the author's design reviewer, and
   passed on to the AI engineering assistant by the AI assistant
   coordinating this work. The quote is reproduced exactly as relayed.
 - **Nature:** **an approval of routine bug fixes, not conception.** The author
@@ -359,7 +359,7 @@ listed as open in `docs/SCANNING_HOOKS.md`.
   records the author's approval and condition. It does not record an inventive
   contribution.
 
-### The author's words (10:30 PM MT, relayed by the patent-attorney agent)
+### The author's words (10:30 PM MT, relayed by the design reviewer)
 
 > "A, but ensure quantum resistance and fips 140-3 compliance where applicable."
 
@@ -377,7 +377,7 @@ listed as open in `docs/SCANNING_HOOKS.md`.
   - everything goes through the existing crypto provider and its self-test;
   - older artifacts are versioned and still verify.
 - The documentation wording is "FIPS-approved algorithms, validated module
-  required for compliance". No validation is claimed.
+  required for compliance". No validation is pointed.
 - Details are in `CHANGES.md` row 89, `docs/CRYPTO.md` §3, and
   `F_REVIEW.md` §12.
 
@@ -407,7 +407,7 @@ listed as open in `docs/SCANNING_HOOKS.md`.
 
 9:56 AM MT:
 
-> "Ok, I’m going to hit my usage limit for this week soon.  So go ahead and add a seed phrase backup for personal use and PKI for enterprise use.  Then make sure the code is at least functional enough for a provisional patent."
+> "Ok, I’m going to hit my usage limit for this week soon.  So go ahead and add a seed phrase backup for personal use and PKI for enterprise use.  Then make sure the code is at least functional enough for a working prototype."
 
 ### Assistant's context (not conception)
 
@@ -443,7 +443,7 @@ listed as open in `docs/SCANNING_HOOKS.md`.
     certificate key until post-quantum certificates are common.
 - The implementation that follows the author's 9:56 AM instruction is
   AI-prepared engineering, described in `docs/KEYS_AND_PKI.md`,
-  `docs/PROVISIONAL_READINESS.md`, and `CHANGES.md`. Settings the author has not
+  `the README limitations section`, and `CHANGES.md`. Settings the author has not
   decided are placeholders, listed there as open questions.
 
 ---

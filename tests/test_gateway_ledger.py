@@ -190,34 +190,30 @@ class LedgerIntegrity(unittest.TestCase):
         self.tmp.cleanup()
 
     def reload(self):
-        return PersonalLedger(self.path)
+        return PersonalLedger(self.path, signing_key=self.key)
 
     def test_valid(self):
         self.assertEqual(self.reload().verify(self.key.public_key()).reason, "ok")
         self.assertEqual(oct(self.path.stat().st_mode & 0o777), "0o600")
 
     def test_full_rewrite_detected(self):
-        # The attacker rewrites every entry and recomputes the hash chain (the original prototype accepted this).
+        # Without the principal key the file cannot be replaced. The wrapped data key stays.
         self.path.unlink()
-        forged = PersonalLedger(self.path)  # no key
-        for i in range(7):
-            forged.append("event", {"i": i * 100})
-        L = self.reload()
-        self.assertTrue(L.verify_chain())  # the hash chain alone is fooled...
-        self.assertFalse(L.verify(self.key.public_key()).ok)  # ...the signed head is not
+        with self.assertRaises(LedgerError):
+            PersonalLedger(self.path)
 
     def test_full_rewrite_with_attacker_key_detected(self):
         self.path.unlink()
         self.L.head_path.unlink()
-        forged = PersonalLedger(self.path, signing_key=keys.generate_private_key())
-        forged.append("event", {"i": 0})
-        self.assertEqual(self.reload().verify(self.key.public_key()).reason, "head_signed_by_untrusted_key")
+        with self.assertRaises(LedgerError):
+            PersonalLedger(self.path, signing_key=keys.generate_private_key())
 
     def test_single_edit_detected(self):
         lines = self.path.read_text().splitlines()
-        d = json.loads(lines[3]); d["body"] = {"i": 999}; lines[3] = json.dumps(d)
+        lines[3] = lines[3][:-4] + "ffff"
         self.path.write_text("\n".join(lines) + "\n")
-        self.assertEqual(self.reload().verify(self.key.public_key()).reason, "hash_chain_broken")
+        with self.assertRaises(LedgerError):
+            self.reload().verify(self.key.public_key())
 
     def test_truncation_detected(self):
         lines = self.path.read_text().splitlines()
@@ -225,18 +221,18 @@ class LedgerIntegrity(unittest.TestCase):
         self.assertTrue(self.reload().verify(self.key.public_key()).reason.startswith("size_mismatch"))
 
     def test_unsigned_append_detected(self):
-        PersonalLedger(self.path).append("event", {"sneaky": True})  # appended without the key
-        self.assertTrue(self.reload().verify(self.key.public_key()).reason.startswith("size_mismatch"))
+        with self.assertRaises(LedgerError):
+            PersonalLedger(self.path).append("event", {"sneaky": True})
 
     def test_head_signature_tamper_detected(self):
-        h = json.loads(self.L.head_path.read_text())
-        h["head"]["size"] = 99
-        self.L.head_path.write_text(json.dumps(h))
-        self.assertEqual(self.reload().verify(self.key.public_key()).reason, "head_signature_invalid")
+        raw = self.L.head_path.read_text()
+        self.L.head_path.write_text(raw[:-4] + "ffff")
+        with self.assertRaises(LedgerError):
+            self.reload().verify(self.key.public_key())
 
     def test_merkle_inclusion_proofs(self):
         for n in range(1, 8):
-            L = PersonalLedger(Path(self.tmp.name) / f"m{n}.jsonl")
+            L = PersonalLedger(Path(self.tmp.name) / f"m{n}.jsonl", signing_key=self.key)
             for i in range(n):
                 L.append("e", {"i": i})
             for s in range(n):
@@ -256,7 +252,9 @@ class LedgerIntegrity(unittest.TestCase):
         env, key = signed(RULES)
         p = Path(self.tmp.name) / "k.jsonl"
         TwoKey(env, key.public_key(), p, YES, ledger_signing_key=key, allow_test_doubles=True)
-        p.write_text(p.read_text().replace('"bytecode_len"', '"bytecode_LEN"'))
+        raw = bytearray(p.read_bytes())
+        raw[-8] ^= 0x01
+        p.write_bytes(raw)
         with self.assertRaises(LedgerError):
             TwoKey(env, key.public_key(), p, YES, ledger_signing_key=key, allow_test_doubles=True)
 

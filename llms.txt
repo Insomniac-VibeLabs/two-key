@@ -5,9 +5,9 @@ policy VM and an independent LLM-judge quorum both approve. The gateway then
 accepts a short-lived single-use capability token bound to the exact argument
 bytes, and writes the decision to a signed Merkle ledger.
 
-Prototype. Not production crypto. Not FIPS validated. Python >= 3.10.
+Prototype. Not production crypto. Not FIPS validated. Algorithms are chosen so a later build can run on a validated module. Python >= 3.10.
 Install from this repository: pip install -e ".[yaml,pq]".
-Package version 0.1.0. Apache-2.0.
+Package version 0.1.1. Apache-2.0.
 
 Entry points: README.md, docs/HOWTO.md, docs/SPEC_DRAFT.md, SECURITY.md.
 CLI: python -m two_key. Offline demo: python -m two_key demo.

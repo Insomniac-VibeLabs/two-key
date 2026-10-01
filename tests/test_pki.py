@@ -329,7 +329,7 @@ class Enterprise(unittest.TestCase):
         env, key = signed(RULES)
         with tempfile.TemporaryDirectory() as d:
             base = dict(ledger_signing_key=key, quorum_policy=QP, allow_test_doubles=True,
-                        deployment_mode="enterprise", anchor=fabric())
+                        deployment_mode="enterprise", siem_host="127.0.0.1", anchor=fabric())
             with self.assertRaisesRegex(TwoKeyConfigError, "requires PKI identities.*placeholder"):
                 TwoKey(env, key.public_key(), Path(d) / "l.jsonl", YES, **base)
             extra, _ = enterprise_pki(key)
@@ -362,7 +362,7 @@ class Enterprise(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         tk = TwoKey(env, key.public_key(), Path(self.tmp.name) / "l.jsonl", YES, ledger_signing_key=key,
-                    quorum_policy=QP, allow_test_doubles=True, deployment_mode="enterprise", anchor=fabric(),
+                    quorum_policy=QP, allow_test_doubles=True, deployment_mode="enterprise", siem_host="127.0.0.1", anchor=fabric(),
                     **extra, **kw)
         return tk, t
 
@@ -413,7 +413,7 @@ class Enterprise(unittest.TestCase):
         jcred, _ = t.identity("Judge A", dns="judge.two-key.test.invalid")
         with tempfile.TemporaryDirectory() as d:
             base = dict(ledger_signing_key=key, quorum_policy=QP, allow_test_doubles=True,
-                        deployment_mode="enterprise", anchor=fabric(), **extra)
+                        deployment_mode="enterprise", siem_host="127.0.0.1", anchor=fabric(), **extra)
             tk = TwoKey(env, key.public_key(), Path(d) / "a.jsonl", YES, judge_credentials={"a": jcred}, **base)
             self.assertEqual(tk.ledger.entries[0].body["identity"]["judges"]["a"]["role"], "judge")
             with self.assertRaisesRegex(TwoKeyConfigError, "unknown judges"):
@@ -436,7 +436,7 @@ class Enterprise(unittest.TestCase):
             (Path(d) / "inter.pem").write_bytes(pem(t.intermediate))
             (Path(d) / "inter.crl").write_bytes(t.crl().public_bytes(serialization.Encoding.PEM))
             (Path(d) / "root.crl").write_bytes(t.crl(by_root=True).public_bytes(serialization.Encoding.DER))
-            cfg = {"deployment_mode": "enterprise",
+            cfg = {"deployment_mode": "enterprise", "siem": {"host": "127.0.0.1"},
                    "pki": {"trust_anchors": ["root.pem"], "intermediates": ["inter.pem"],
                            "crls": ["inter.crl", "root.crl"], "role_map": ROLE_MAP}}
             (Path(d) / "two-key.json").write_text(json.dumps(cfg))
@@ -460,7 +460,7 @@ class Enterprise(unittest.TestCase):
         env = sign_document(build_document("did:twokey:acme", "No wires.", RULES), ks)
         with tempfile.TemporaryDirectory() as d:
             tk = TwoKey(env, ks.public(), Path(d) / "l.jsonl", YES, ledger_signing_key=ks, quorum_policy=QP,
-                        allow_test_doubles=True, crypto=p, deployment_mode="enterprise", anchor=fabric(),
+                        allow_test_doubles=True, crypto=p, deployment_mode="enterprise", siem_host="127.0.0.1", anchor=fabric(),
                         pki=t.config(ROLE_MAP), principal_credential=cred)
             agent, akey = t.identity("Agent", uri=AGENT_URI, provider=p)
             d1 = tk.authorize(ACTION, "Send it.", ARGS,

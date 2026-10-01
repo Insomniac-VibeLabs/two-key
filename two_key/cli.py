@@ -215,7 +215,10 @@ def cmd_verify(args) -> int:
 def cmd_verify_ledger(args) -> int:
     from .ledger import LedgerError, PersonalLedger
     try:
-        rep = PersonalLedger(Path(args.ledger)).verify(keys.load_public_any(Path(args.pub)))
+        signing = None
+        if getattr(args, "key", None):
+            signing = keys.load_private_any(Path(args.key), keys.passphrase_from_args(args))
+        rep = PersonalLedger(Path(args.ledger), signing_key=signing).verify(keys.load_public_any(Path(args.pub)))
     except (LedgerError, ValueError, RuntimeError) as e:
         print(f"REJECTED: {e}")
         return 1
@@ -318,6 +321,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--signed", required=True); s.add_argument("--pub", required=True); s.set_defaults(fn=cmd_verify)
     s = sub.add_parser("verify-ledger", help="verify a ledger against the principal's public key")
     s.add_argument("--ledger", required=True); s.add_argument("--pub", required=True)
+    s.add_argument("--key", help="principal private key; required to decrypt the ledger")
+    pw(s)
     s.set_defaults(fn=cmd_verify_ledger)
     s = sub.add_parser("check-judges", help="validate judges.yaml without calling any API")
     s.add_argument("--config", required=True); s.set_defaults(fn=cmd_check_judges)

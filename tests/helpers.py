@@ -52,6 +52,8 @@ class TwoKeyFixture:
     def _extra(self, key, kw):
         kw.setdefault("ledger_signing_key", key)
         mode = kw.get("deployment_mode") or os.environ.get("TWOKEY_DEPLOYMENT_MODE")
+        if str(mode).strip().lower() == "enterprise":
+            kw.setdefault("siem_host", "127.0.0.1")
         if str(mode).strip().lower() == "enterprise" and "pki" not in kw:
             # Enterprise mode needs PKI identities (Entry 11). Tests written before that don't send agent
             # assertions, so the fixture turns that requirement off; tests/test_pki.py covers assertions.

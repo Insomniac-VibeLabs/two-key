@@ -78,6 +78,7 @@ from .anchoring import NullAnchor
 from .gateway import Extractor, ToolGateway
 from .judges.base import Judge
 from .ledger import LedgerError, PersonalLedger
+from . import siem
 from .policy_vm import DEFAULT_MAX_STEPS, PolicyVM
 from .quorum import QuorumConfigError, QuorumPolicy, check_judge_set, convene
 
@@ -131,6 +132,9 @@ class TwoKey:
         pki: Any = None,
         principal_credential: Any = None,
         judge_credentials: Mapping[str, Any] | None = None,
+        siem_host: str | None = None,
+        siem_port: int = 6514,
+        siem_cafile: str | None = None,
     ):
         # Deployment mode first (Entry 9): an early, global setting other settings can depend on later.
         try:
@@ -138,6 +142,19 @@ class TwoKey:
             _deployment.check_anchor(self.deployment, anchor)
         except _deployment.DeploymentConfigError as e:
             raise TwoKeyConfigError(str(e)) from e
+        self.siem_host = siem_host
+        self.siem_port = int(siem_port)
+        self.siem_cafile = siem_cafile
+        if deployment_config and not self.siem_host:
+            data = _deployment.load_config_file(deployment_config)
+            block = data.get("siem") if isinstance(data, dict) else None
+            if isinstance(block, dict) and block.get("host"):
+                self.siem_host = str(block["host"])
+                self.siem_port = int(block.get("port", self.siem_port))
+        if self.deployment.is_enterprise and not self.siem_host:
+            raise TwoKeyConfigError("deployment_mode 'enterprise' requires a SIEM syslog target "
+                                    "(siem_host= or a siem.host in the deployment config); "
+                                    "events are RFC 5424 over TLS, port 6514")
         self.anchor = anchor
         # Crypto first: the known-answer self-test must pass before anything else (raises SelfTestError).
         self.crypto = crypto or default_provider()
@@ -405,7 +422,22 @@ class TwoKey:
             self.ledger.append("decision", body)
         except Exception:
             pass  # already denying; nothing more to do
+        self._emit_siem(False, reason, action_rec)
         return Decision(False, reason, ledger_digest=self.ledger.root(), action=action_rec, **kw)
+
+    def _emit_siem(self, allowed: bool, reason: str, action_rec: dict | None) -> None:
+        """Enterprise only. A down SIEM is recorded and does not change the decision."""
+        if not self.deployment.is_enterprise or not self.siem_host:
+            return
+        tool = None if not isinstance(action_rec, dict) else action_rec.get("tool")
+        digest = self._h(action_rec) if action_rec else None
+        event = {"kind": "decision", "allowed": bool(allowed), "reason": reason,
+                 "tool": tool, "action_digest": digest, "ledger_root": self.ledger.root()}
+        ok = siem.send(self.siem_host, self.siem_port, event, cafile=self.siem_cafile)
+        try:
+            self.ledger.append("siem_delivery", {"ok": ok, "host": self.siem_host, "port": self.siem_port})
+        except Exception:
+            pass
 
     def authorize(self, proposed: Action | Mapping[str, Any], proposal: str,
                   tool_args: Mapping[str, Any] | None = None, agent_assertion: Any = None) -> Decision:
@@ -494,6 +526,7 @@ class TwoKey:
             "bytecode_hash": p["bytecode_hash"], "nl_hash": p["nl_hash"]})
         self.ledger.append("decision", {"allowed": True, "reason": "dual_path_pass", "denied_by_rule": None,
                                         "action_digest": binding["action_hash"]})
+        self._emit_siem(True, "dual_path_pass", rec)
         return Decision(True, "dual_path_pass", True, vm_res.reason, None, True, qsum, cap.token, cap.payload,
                         self.ledger.root(), rec)
 
