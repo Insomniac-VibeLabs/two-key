@@ -76,43 +76,114 @@ class ScanningGateway(unittest.TestCase):
                              for e in self.tk.ledger.entries))
         self.assertTrue(self.tk.ledger.verify(self.fx.key.public_key()).ok)
 
-    # -- (b) data-class override ---------------------------------------------------
-    def test_override_off_records_dlp_class_but_keeps_the_self_label_check(self):
+    # -- Entry 6 (b): most restrictive wins ------------------------------------------
+    def test_dlp_stricter_than_label_blocks(self):
         gw = self.tk.gateway(tools=self.tools, scanners=[PatternScanner("dlp", rules=[DX], kind="dlp")])
         d = self.token("public", MED_ARGS)                # mislabeled: medical content declared public
-        r = gw.invoke(d.capability, "email_send", MED_ARGS, fields("public"))
-        self.assertEqual(r.reason, "executed")            # placeholder default: today's behavior
-        body = self.last("capability_redeemed")
-        self.assertEqual(body["content_scans"][0]["data_classes"], ["medical"])
-        self.assertEqual(body["scan_policy"]["dlp_overrides_data_class"], False)
-
-    def test_override_on_denies_a_mislabeled_call(self):
-        gw = self.tk.gateway(tools=self.tools, scanners=[PatternScanner("dlp", rules=[DX], kind="dlp")],
-                             scan_settings=ScanSettings(dlp_overrides_data_class=True))
-        d = self.token("public", MED_ARGS)
         r = gw.invoke(d.capability, "email_send", MED_ARGS, fields("public"))
         self.assertEqual((r.allowed, r.reason), (False, "scan_data_class_mismatch"))
         self.assertEqual(self.sent, [])
         denied = self.last("gateway_denied")
         self.assertEqual((denied["scan_data_class"], denied["content_scans"][0]["outcome"]), ("medical", "allow"))
+        self.assertFalse(self.tk.ledger.is_redeemed(d.token_payload["jti"]))
 
-    def test_override_on_allows_when_the_dlp_class_matches_the_token(self):
-        args = {"to": "clinic.example", "body": "my SSN is 123-45-6789"}
-        gw = self.tk.gateway(tools=self.tools, scanners=[PatternScanner("dlp", rules=[SSN], kind="dlp")],
-                             scan_settings=ScanSettings(dlp_overrides_data_class=True))
+    def test_label_stricter_than_dlp_keeps_the_label(self):
+        args = {"to": "clinic.example", "body": "plain text"}
+        dlp = Recorder(report=ScanReport("allow", data_classes=("public",)))
+        gw = self.tk.gateway(tools=self.tools, scanners=[dlp])
         d = self.token("personal", args)
-        # The caller's own label no longer matters: the scan establishes the class.
-        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "executed")
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("personal")).reason, "executed")
         self.assertEqual(self.last("capability_redeemed")["scan_data_class"], "personal")
 
-    def test_override_on_with_no_or_several_classes_uses_classified(self):
-        gw = self.tk.gateway(tools=self.tools, scanners=[PatternScanner("dlp", rules=[SSN, DX], kind="dlp")],
-                             scan_settings=ScanSettings(dlp_overrides_data_class=True))
-        args = {"to": "clinic.example", "body": "plain text"}
-        d = self.token("public", args)
-        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason,
+    def test_matching_class_and_no_class_execute(self):
+        args = {"to": "clinic.example", "body": "my SSN is 123-45-6789"}
+        gw = self.tk.gateway(tools=self.tools, scanners=[PatternScanner("dlp", rules=[SSN, DX], kind="dlp")])
+        d = self.token("personal", args)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("personal")).reason, "executed")
+        plain = {"to": "clinic.example", "body": "plain text"}
+        d = self.token("public", plain)
+        self.assertEqual(gw.invoke(d.capability, "email_send", plain, fields("public")).reason, "executed")
+        self.assertEqual(self.last("capability_redeemed")["scan_data_class"], "public")
+
+    def test_unranked_classes_resolve_to_classified_and_block(self):
+        args = {"to": "clinic.example", "body": "x"}
+        dlp = Recorder(report=ScanReport("allow", data_classes=("personal",)))
+        gw = self.tk.gateway(tools=self.tools, scanners=[dlp])
+        # The call's own class is financial; the DLP says personal: neither outranks the other.
+        d = self.tk.authorize({**email("financial")}, "Send.", args)
+        self.assertTrue(d.allowed, d.reason)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("financial")).reason,
                          "scan_data_class_mismatch")
         self.assertEqual(self.last("gateway_denied")["scan_data_class"], "classified")
+
+    def test_two_key_deny_is_never_turned_into_allow(self):
+        rec = Recorder(report=ScanReport("allow", data_classes=("public",)))
+        gw = self.tk.gateway(tools=self.tools, scanners=[rec], scan_settings=ScanSettings(on_error="allow",
+                                                                                          on_timeout="allow"))
+        args = {"to": "clinic.example", "body": "x"}
+        d = self.token("public", args)
+        other = {"to": "clinic.example", "body": "something else"}
+        self.assertEqual(gw.invoke(d.capability, "email_send", other, fields("public")).reason, "args_mismatch")
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("personal")).reason,
+                         "data_class_mismatch")    # the call's own label still has to match the token
+        self.assertFalse(gw.invoke("tk1.bogus.token", "email_send", args, fields("public")).allowed)
+        self.assertEqual(rec.requests, [])        # scanners only run after every Two-Key check passed
+        self.assertEqual(self.sent, [])
+
+    # -- Entry 6 (a): timeout seconds and action ------------------------------------------
+    def test_timeout_default_blocks_and_can_be_set_to_allow(self):
+        class Slow(Recorder):
+            def scan(self, request, timeout):
+                import time
+                time.sleep(0.5)
+                return ScanReport("allow")
+
+        args = {"to": "clinic.example", "body": "x"}
+        gw = self.tk.gateway(tools=self.tools, scanners=[Slow()], scan_settings=ScanSettings(timeout_seconds=0.05))
+        d = self.token("public", args)
+        import time
+        t0 = time.perf_counter()
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_timeout:rec")
+        self.assertLess(time.perf_counter() - t0, 0.4)   # waits the configured seconds, not the scanner's 0.5 s
+        gw = self.tk.gateway(tools=self.tools, scanners=[Slow()],
+                             scan_settings=ScanSettings(timeout_seconds=0.05, on_timeout="allow"))
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "executed")
+        red = self.last("capability_redeemed")
+        self.assertEqual((red["content_scans"][0]["outcome"], red["scan_policy"]["on_timeout"],
+                          red["scan_policy"]["timeout_seconds"]), ("timeout", "allow", 0.05))
+
+    def test_timeout_and_error_settings_are_independent(self):
+        args = {"to": "clinic.example", "body": "x"}
+        gw = self.tk.gateway(tools=self.tools, scanners=[Recorder(report=OSError("down"))],
+                             scan_settings=ScanSettings(on_timeout="allow"))
+        d = self.token("public", args)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_error:rec")
+
+    # -- Entry 6 (c): exact bytes and strings ------------------------------------------------
+    def test_scanners_get_exact_bytes_and_decoded_strings(self):
+        rec = Recorder()
+        gw = self.tk.gateway(tools=self.tools, scanners=[rec])
+        args = {"to": "clinic.example", "body": "caf\u00e9 <script>x()</script>", "cc": ["a@x.example"]}
+        d = self.token("public", args)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "executed")
+        req = rec.requests[0]
+        self.assertEqual(req.parts[0].data, canonical_bytes({"tool": "email_send", "args": args}))
+        self.assertNotIn("\u00e9".encode("utf-8"), req.parts[0].data)            # escaped in the exact bytes
+        texts = {t.name: t.data.decode("utf-8") for t in req.texts}
+        self.assertEqual(texts["text:args.body"], "caf\u00e9 <script>x()</script>")
+        self.assertEqual(texts["text:args.cc[0]"], "a@x.example")
+        self.assertEqual(texts["text:args.body#key"], "body")
+        red = self.last("capability_redeemed")
+        self.assertEqual(red["content_scans"][0]["parts"][0]["digest"], d.token_payload["args_hash"])
+        self.assertEqual({t["name"] for t in red["content_scans"][0]["texts"]}, set(texts))
+
+    def test_script_in_a_string_is_caught_through_the_decoded_text(self):
+        rule = PatternRule("js-eval", "\u00e9val\\(".encode("utf-8"), action="block")   # matches only unescaped
+        gw = self.tk.gateway(tools=self.tools, scanners=[PatternScanner("av", rules=[rule], kind="av")])
+        args = {"to": "clinic.example", "body": "<script>\u00e9val(1)</script>"}
+        d = self.token("public", args)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_blocked:av")
+        self.assertEqual(self.last("gateway_denied")["content_scans"][0]["findings"], ["text:args.body:js-eval"])
 
     # -- digest binding --------------------------------------------------------------
     def test_verdict_is_bound_to_the_exact_hashed_bytes(self):

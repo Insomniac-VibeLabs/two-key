@@ -912,22 +912,37 @@ The gateway can pass what an agent is about to send to third-party DLP and
 antivirus software through five hook types: a vendor API (REST or gRPC),
 ICAP, an in-process plugin, a local sidecar, or asynchronous post-send
 scanning. None is required, and with no scanners the gateway behaves
-exactly as above. Settings Stephan hasn't decided are placeholders. See
+exactly as above.
+
+Stephan decided three things (`CONCEPTION_NOTES.md` Entry 6):
+- **Timeout:** both the seconds to wait (`timeout_seconds`, default 10) and
+  the action (`on_timeout`) are configurable. The action defaults to block
+  and can be set to `"allow"`.
+- **Most restrictive wins:** if Two-Key or any scanner denies, the call is
+  blocked. The data class used is the most restrictive of the call's label
+  and the DLP verdict.
+- **What scanners get:** scanners get the exact bytes being sent and the
+  decoded strings, for malicious-script detection.
+
+Scanner errors other than timeouts have their own setting, `on_error`,
+with the same default. Settings Stephan hasn't decided are placeholders. See
 [SCANNING_HOOKS.md](SCANNING_HOOKS.md) for the options, their pros and
-cons, the placeholder defaults, and the open questions.
+cons, and the open questions.
 
 The example below uses the built-in `PatternScanner` (an example plugin,
 not a DLP product). The email body is medical, but the call labels it
 `public`:
 
 <!-- check: expect=^no scanners\s+executed -->
-<!-- check: expect=^dlp, override off\s+executed \['medical'\] -->
-<!-- check: expect=^dlp, override on\s+scan_data_class_mismatch -->
+<!-- check: expect=^dlp, labelled public\s+scan_data_class_mismatch \['medical'\] -->
 <!-- check: expect=^av, EICAR attachment\s+scan_blocked:example-av -->
+<!-- check: expect=^slow scanner, default\s+scan_timeout:slow-av -->
+<!-- check: expect=^slow scanner, allow\s+executed -->
 ```python
 import base64
 from my_two_key import make_two_key
-from two_key.scanning import EICAR, PatternRule, PatternScanner, ScanSettings
+import time
+from two_key.scanning import EICAR, ContentScanner, PatternRule, PatternScanner, ScanReport, ScanSettings
 
 tk = make_two_key("howto-9c.jsonl")
 dlp = PatternScanner("example-dlp", kind="dlp",
@@ -950,24 +965,40 @@ def last_scan():
 note = {"to": "clinic.example", "body": "Diagnosis: example condition"}
 print(f"{'no scanners':<22}", tk.gateway(tools=tools).invoke(token(note), "email_draft", note, fields).reason)
 gw = tk.gateway(tools=tools, scanners=[dlp])
-print(f"{'dlp, override off':<22}", gw.invoke(token(note), "email_draft", note, fields).reason,
+print(f"{'dlp, labelled public':<22}", gw.invoke(token(note), "email_draft", note, fields).reason,
       last_scan()["data_classes"])
-gw = tk.gateway(tools=tools, scanners=[dlp], scan_settings=ScanSettings(dlp_overrides_data_class=True))
-print(f"{'dlp, override on':<22}", gw.invoke(token(note), "email_draft", note, fields).reason)
 mail = {"to": "clinic.example", "body": "see attached", "attachment_b64": base64.b64encode(EICAR).decode()}
 gw = tk.gateway(tools=tools, scanners=[av],
                 file_extractors={"email_draft": lambda a: [("att", base64.b64decode(a["attachment_b64"]),
                                                             "application/octet-stream")]})
 print(f"{'av, EICAR attachment':<22}", gw.invoke(token(mail), "email_draft", mail, fields).reason)
+
+
+class SlowScanner(ContentScanner):      # stands in for a scanner that doesn't answer in time
+    def scan(self, request, timeout):
+        time.sleep(0.5)
+        return ScanReport("allow")
+
+
+plain = {"to": "clinic.example", "body": "See you Tuesday"}
+for name, action in (("default", "block"), ("allow", "allow")):
+    gw = tk.gateway(tools=tools, scanners=[SlowScanner("slow-av", kind="av")],
+                    scan_settings=ScanSettings(timeout_seconds=0.1, on_timeout=action))
+    print(f"{'slow scanner, ' + name:<22}", gw.invoke(token(plain), "email_draft", plain, fields).reason)
 ```
 
-With the override off (the placeholder default), the DLP verdict is only
-recorded: the call runs, and its `capability_redeemed` entry shows the
-verdict. That entry includes the scanner id and version, the digest of the
-scanned bytes (equal to the token's `args_hash`), and the outcome. With the
-override on, the scan's data class replaces the call's label, so the
-mislabeled call is denied. A scan denial happens before redemption, so the
-token isn't used up.
+The DLP scanner finds `medical` content in a call labelled `public`. The
+most restrictive of the two is `medical`, which doesn't match the token's
+`public` scope, so the call is denied. The `gateway_denied` entry records
+the verdict: the scanner id and version, the digest of the scanned bytes
+(equal to the token's `args_hash`), the outcome, and the effective data
+class (`scan_data_class`). A scan denial happens before redemption, so the
+token isn't used up. A scanner can only add a deny: a call Two-Key denies is
+never sent to the scanners.
+
+The slow scanner doesn't answer within `timeout_seconds`. With the default
+`on_timeout="block"` the call is denied. With `on_timeout="allow"` it runs,
+and the `timeout` verdict is still recorded.
 
 ## 10. Ordering and short-circuit
 

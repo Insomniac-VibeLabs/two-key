@@ -28,21 +28,27 @@ def run(scanner, parts=(("call", "application/json", CALL),), **settings):
 
 
 class EngineAndSettings(unittest.TestCase):
-    def test_placeholder_defaults(self):
-        s = ScanSettings()
-        self.assertEqual(s.to_record(), {"on_error": "block", "dlp_overrides_data_class": False,
-                                         "payload": "exact", "order": "sequential", "timeout_seconds": 10.0})
+    def test_defaults(self):
+        s = ScanSettings()   # Entry 6: timeout configurable, default deny; exact bytes + strings
+        self.assertEqual(s.to_record(), {"timeout_seconds": 10.0, "on_timeout": "block", "on_error": "block",
+                                         "payload": "exact", "order": "sequential"})
+        self.assertFalse(hasattr(s, "dlp_overrides_data_class"))   # replaced by most-restrictive-wins
 
     def test_settings_validation(self):
-        for kw in ({"on_error": "maybe"}, {"payload": "some"}, {"order": "random"}, {"timeout_seconds": 0},
-                   {"dlp_overrides_data_class": 1}):
+        for kw in ({"on_error": "maybe"}, {"on_timeout": "maybe"}, {"payload": "some"}, {"order": "random"},
+                   {"timeout_seconds": 0}, {"timeout_seconds": True}):
             with self.assertRaises(ValueError):
                 ScanSettings(**kw)
+        ScanSettings(timeout_seconds=2.5, on_timeout="allow", on_error="allow")
 
-    def test_override_needs_a_dlp_scanner(self):
-        av = PatternScanner("av", rules=[], kind="av")
-        with self.assertRaises(ValueError):
-            ScanEngine([av], ScanSettings(dlp_overrides_data_class=True))
+    def test_most_restrictive(self):
+        mr = scanning.most_restrictive
+        self.assertEqual(mr(["public", "medical"]), "medical")
+        self.assertEqual(mr(["personal", "public"]), "personal")
+        self.assertEqual(mr(["financial", "classified"]), "classified")
+        self.assertEqual(mr(["medical", "financial"]), "classified")    # unranked tie
+        self.assertEqual(mr(["medical", "medical"]), "medical")
+        self.assertEqual(mr([]), "classified")
 
     def test_ids_unique_and_valid(self):
         with self.assertRaises(ValueError):
@@ -56,7 +62,7 @@ class EngineAndSettings(unittest.TestCase):
         self.assertEqual(v.payload_digest, canonical_hash([p.info() for p in ps], "sha256"))
         self.assertEqual(v.outcome, "allow")
 
-    def test_scanner_exception_and_timeout_are_errors(self):
+    def test_scanner_exception_is_error_and_timeout_is_timeout(self):
         class Boom(PatternScanner):
             def scan(self, request, timeout):
                 raise RuntimeError("down")
@@ -66,13 +72,18 @@ class EngineAndSettings(unittest.TestCase):
                 time.sleep(2)
                 return ScanReport("allow")
 
+        class SocketTimeout(PatternScanner):
+            def scan(self, request, timeout):
+                raise TimeoutError("timed out")
+
         (v,), _ = run(Boom(rules=[]))
         self.assertEqual((v.outcome, v.detail), ("error", "RuntimeError: down"))
-        with mock.patch.object(scanning, "_GRACE_SECONDS", 0.01):
-            t0 = time.perf_counter()
-            (v,), _ = run(Slow(rules=[]), timeout_seconds=0.1)
-        self.assertEqual(v.outcome, "error")
+        t0 = time.perf_counter()
+        (v,), _ = run(Slow(rules=[]), timeout_seconds=0.1)
+        self.assertEqual(v.outcome, "timeout")
         self.assertIn("timeout", v.detail)
+        (v2,), _ = run(SocketTimeout(rules=[]))
+        self.assertEqual(v2.outcome, "timeout")
         self.assertLess(time.perf_counter() - t0, 1.5)
 
     def test_invalid_outcome_and_wrong_echoed_digest_are_errors(self):
@@ -99,15 +110,50 @@ class EngineAndSettings(unittest.TestCase):
             (v,), _ = run(sc)
         self.assertEqual((v.data_classes, v.labels), (("medical",), ("x", "pci")))
 
-    def test_effective_data_class(self):
+    def test_effective_data_class_is_most_restrictive(self):
         def verdict(classes, kind="dlp", outcome="allow"):
-            return scanning.ScanVerdict("s", "a", kind, "1", outcome, "exact", "sha256", "d", (), (),
+            return scanning.ScanVerdict("s", "a", kind, "1", outcome, "exact", "sha256", "d", (), (), (),
                                         tuple(classes))
         e = ScanEngine.effective_data_class
-        self.assertEqual(e([verdict(["medical"])]), "medical")
-        self.assertEqual(e([verdict([])]), "classified")                       # none: placeholder rule
-        self.assertEqual(e([verdict(["medical"]), verdict(["financial"])]), "classified")  # several
-        self.assertEqual(e([verdict(["medical"], kind="av")]), "classified")   # AV verdicts don't count
+        self.assertEqual(e([verdict(["medical"])], "public"), "medical")        # DLP stricter than the label
+        self.assertEqual(e([verdict(["public"])], "personal"), "personal")      # label stricter than DLP
+        self.assertEqual(e([verdict([])], "public"), "public")                  # no DLP class: label stands
+        self.assertEqual(e([verdict(["medical"]), verdict(["financial"])], "public"), "classified")
+        self.assertEqual(e([verdict(["medical"], kind="av")], "public"), "public")   # AV verdicts don't count
+        self.assertEqual(e([verdict(["medical"], outcome="timeout")], "public"), "public")
+
+
+TEXTS = (("args.body", "caf\u00e9 <script>evil()</script>"),)
+
+
+def run_texts(scanner, **settings):
+    eng = ScanEngine([scanner], ScanSettings(**settings))
+    call = b'{"args":{"body":"caf\\u00e9 <script>evil()</script>"},"tool":"email_send"}'
+    ps = eng.build_parts([("call", "application/json", call)], "sha256", None)
+    ts = eng.build_texts(list(TEXTS), "sha256", None)
+    return eng.run("email_send", ps, "sha256", None, {}, texts=ts), ps, ts
+
+
+class BytesAndStrings(unittest.TestCase):
+    """Entry 6 (c): scanners get the exact bytes and the decoded strings; the digest binds the exact bytes."""
+
+    def test_pattern_scanner_sees_unescaped_text(self):
+        rule = PatternRule("script", "<script>evil\\(\\)</script>".encode(), action="block")
+        cafe = PatternRule("cafe", "caf\u00e9".encode("utf-8"), label="cafe")
+        (v,), ps, ts = run_texts(PatternScanner("p", rules=[rule, cafe]))
+        self.assertEqual(v.outcome, "block")
+        # The escaped JSON call part doesn't contain the UTF-8 "é"; the decoded string does.
+        self.assertEqual(sorted(v.findings), ["call:script", "text:args.body:cafe", "text:args.body:script"])
+        self.assertEqual(v.payload_digest, canonical_hash([p.info() for p in ps], "sha256"))   # exact bytes only
+        self.assertEqual(v.texts[0]["digest"], hashlib.sha256(TEXTS[0][1].encode()).hexdigest())
+
+    def test_digest_only_strips_texts_too(self):
+        seen = []
+        sc = VendorApiScanner("v", transport=lambda b, h, t: seen.append(b) or {"outcome": "allow"},
+                              payload_mode="digest_only")
+        run_texts(sc)
+        self.assertNotIn("text", seen[0]["texts"][0])
+        self.assertNotIn("data_b64", seen[0]["parts"][0])
 
 
 class PatternPlugin(unittest.TestCase):
@@ -203,6 +249,21 @@ class VendorApi(unittest.TestCase):
         (v,), _ = run(self.scanner())
         self.assertEqual((v.outcome, v.detail), ("error", "ScanError: http_status_503"))
 
+    def test_rest_sends_exact_bytes_and_strings(self):
+        sc = self.scanner()
+        eng = ScanEngine([sc])
+        eng.run("email_send", eng.build_parts([("call", "application/json", CALL)], "sha256", None), "sha256", None,
+                {}, texts=eng.build_texts([("args.body", "h\u00e9llo")], "sha256", None))
+        _, body = self.fake.requests[0]
+        self.assertEqual(base64.b64decode(body["parts"][0]["data_b64"]), CALL)
+        self.assertEqual((body["texts"][0]["name"], body["texts"][0]["text"]), ("text:args.body", "h\u00e9llo"))
+
+    def test_rest_timeout_is_timeout(self):
+        sc = VendorApiScanner("v", endpoint=self.fake.url)
+        with mock.patch("urllib.request.OpenerDirector.open", side_effect=TimeoutError("timed out")):
+            (v,), _ = run(sc)
+        self.assertEqual(v.outcome, "timeout")
+
     def test_rest_digest_only_sends_no_content(self):
         (v,), _ = run(self.scanner(payload_mode="digest_only"))
         _, body = self.fake.requests[0]
@@ -246,6 +307,16 @@ class Icap(unittest.TestCase):
         self.assertEqual(r["icap_headers"]["allow"], "204")
         self.assertTrue(r["http_headers"].startswith(b"POST /two-key/email_send/call HTTP/1.1\r\n"))
         self.assertEqual((v.outcome, v.scanner_version), ("allow", 'ISTag="fake-sig-42"'))
+
+    def test_strings_are_sent_as_text_parts(self):
+        self.srv = FakeIcapServer("av")
+        sc = IcapScanner("icap", host="127.0.0.1", port=self.srv.port)
+        eng = ScanEngine([sc])
+        (v,) = eng.run("email_send", eng.build_parts([("call", "application/json", CALL)], "sha256", None), "sha256",
+                       None, {}, texts=eng.build_texts([("args.body", "h\u00e9llo")], "sha256", None))
+        self.assertEqual([r["body"] for r in self.srv.requests], [CALL, "h\u00e9llo".encode()])
+        self.assertTrue(self.srv.requests[1]["http_headers"].startswith(b"POST /two-key/email_send/text:args.body"))
+        self.assertEqual(v.outcome, "allow")
 
     def test_reqmod_infected_is_block_with_finding(self):
         self.srv = FakeIcapServer("av")
@@ -345,14 +416,69 @@ class AsyncCallback(unittest.TestCase):
         (v,), _ = run(sc)
         self.assertEqual((v.outcome, v.data_classes), ("allow", ("public",)))
 
-    def test_hold_timeout_is_error_and_late_verdict_is_post_send(self):
+    def test_hold_timeout_is_timeout_and_late_verdict_is_post_send(self):
         submitted, seen = [], []
         sc = AsyncCallbackScanner("async", lambda req, sid: submitted.append(sid), hold_until_verdict=True)
         sc.subscribe(lambda ctx, v: seen.append(v))
         (v,), _ = run(sc, timeout_seconds=0.1)
-        self.assertEqual(v.outcome, "error")
+        self.assertEqual(v.outcome, "timeout")
         self.assertTrue(sc.deliver(submitted[0], {"outcome": "allow"}))
         self.assertEqual(seen[0].outcome, "allow")
+
+    @staticmethod
+    def _request():
+        ps = ScanEngine.build_parts([("call", "application/json", CALL)], "sha256", None)
+        return scanning.ScanRequest("r1", "email_send", "sha256", "exact", "d", ps, (), {"jti": "j1"})
+
+    def test_engine_calls_abandon_when_it_stops_waiting(self):
+        abandoned = []
+
+        class Slow(PatternScanner):
+            def scan(self, request, timeout):
+                time.sleep(0.5)
+                return ScanReport("allow")
+
+            def abandon(self, request):
+                abandoned.append(request.request_id)
+
+        (v,), _ = run(Slow(rules=[]), timeout_seconds=0.05)
+        self.assertEqual((v.outcome, len(abandoned)), ("timeout", 1))
+        self.assertIsNone(PatternScanner(rules=[]).abandon(self._request()))   # default: no-op
+
+    def test_abandoned_hold_records_a_later_verdict_as_post_send(self):
+        submitted, seen, out = [], [], []
+        sc = AsyncCallbackScanner("async", lambda req, sid: submitted.append(sid), hold_until_verdict=True)
+        sc.subscribe(lambda ctx, v: seen.append(v))
+        req = self._request()
+
+        def held():
+            try:
+                out.append(sc.scan(req, 0.3))
+            except Exception as e:  # noqa: BLE001
+                out.append(e)
+
+        t = threading.Thread(target=held)
+        t.start()
+        while not submitted:
+            time.sleep(0.005)
+        sc.abandon(req)                                  # the gateway stopped waiting
+        self.assertTrue(sc.deliver(submitted[0], {"outcome": "block"}))
+        self.assertEqual([v.outcome for v in seen], ["block"])  # recorded at once, as post-send
+        t.join()
+        self.assertIsInstance(out[0], scanning.ScanTimeout)
+        self.assertEqual(sc.pending_ids(), [])
+
+    def test_abandon_after_the_hold_picked_up_the_verdict_records_it_once(self):
+        seen = []
+        sc = AsyncCallbackScanner("async", lambda req, sid: sc.deliver(sid, {"outcome": "allow"}),
+                                  hold_until_verdict=True)
+        sc.subscribe(lambda ctx, v: seen.append(v))
+        req = self._request()
+        self.assertEqual(sc.scan(req, 1.0).outcome, "allow")   # picked up by the hold
+        self.assertEqual(seen, [])
+        sc.abandon(req)                                        # ...but the gateway had discarded it
+        sc.abandon(req)
+        self.assertEqual([v.outcome for v in seen], ["allow"])
 
     def test_submit_failure_is_error(self):
         def submit(req, sid):

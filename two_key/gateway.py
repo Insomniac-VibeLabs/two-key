@@ -46,15 +46,17 @@ any tool runs, it checks everything spec 5.5 lists, plus single-use:
      token, otherwise ``ledger_concurrent_writer``. Neither is written to this
      (now stale) ledger instance, because appending would fork the chain.
 
-Optional content scanning (scanning.py; CONCEPTION_NOTES.md Entry 5): only
-when ``scanners`` are configured, after checks 1-7 (and 8, unless the DLP
-verdict replaces the data class) the gateway takes ONE snapshot of the
-arguments (their canonical encoding), hashes it for check 5, sends it (plus
-any file parts from ``file_extractors``) to the scanners, and executes the
-tool on that same snapshot, so the scanned bytes, the hashed bytes, and the
-executed arguments are the same. Deny reasons: scan_blocked:<id>,
-scan_quarantined:<id>, scan_error:<id> (if ScanSettings.on_error="block"),
-scan_data_class_mismatch (if dlp_overrides_data_class). Each verdict
+Optional content scanning (scanning.py; CONCEPTION_NOTES.md Entries 5 and 6):
+only when ``scanners`` are configured, after checks 1-8 pass the gateway
+takes ONE snapshot of the arguments (their canonical encoding), hashes it for
+check 5, sends it (plus any file parts from ``file_extractors``, and the
+decoded strings) to the scanners, and executes the tool on that same
+snapshot, so the scanned bytes, the hashed bytes, and the executed arguments
+are the same. Most restrictive wins (Entry 6): a scanner can only add a deny.
+Deny reasons: scan_blocked:<id>, scan_quarantined:<id>, scan_error:<id> /
+scan_timeout:<id> (unless ScanSettings.on_error / on_timeout is "allow"),
+scan_data_class_mismatch (the most restrictive of the call's data class and
+the DLP classes differs from the token's scope). Each verdict
 (scanner id/version, digest of the scanned bytes, outcome) is recorded in the
 capability_redeemed or gateway_denied entry; post-send verdicts arrive later
 as content_scan_async entries. With no scanners the gateway does none of
@@ -223,8 +225,17 @@ class ToolGateway:
                 raw.append((f"file:{name}", ctype, data))
         eng = self.scan_engine
         parts = eng.build_parts(raw, self.digest_alg, self.ledger.crypto)
+        # Decoded strings (Entry 6, c): every string in the arguments, unescaped (the call part is
+        # ASCII-escaped JSON). File parts are already exact bytes. payload_digest covers the exact bytes.
+        texts = list(_strings_in(args, "args"))
+        seen: dict = {}
+        for i, (name, text) in enumerate(texts):  # keys containing dots can repeat a path: keep names unique
+            seen[name] = seen.get(name, 0) + 1
+            if seen[name] > 1:
+                texts[i] = (f"{name}#{seen[name]}", text)
         return eng.run(tool, parts, self.digest_alg, self.ledger.crypto,
-                       {"gateway": id(self), "jti": jti, "tool": tool})
+                       {"gateway": id(self), "jti": jti, "tool": tool},
+                       texts=eng.build_texts(texts, self.digest_alg, self.ledger.crypto))
 
     def _on_async_verdict(self, context: Mapping[str, Any], verdict: ScanVerdict) -> None:
         """Record a post-send verdict (adapter 5) for a call this gateway scanned."""
@@ -305,8 +316,7 @@ class ToolGateway:
             return self._deny("amount_exceeds_scope", token, tool)
         if fields["counterparty"] != scope.get("counterparty", ""):
             return self._deny("counterparty_mismatch", token, tool)
-        override = eng is not None and eng.settings.dlp_overrides_data_class
-        if not override and fields["data_class"] != scope.get("data_class"):
+        if fields["data_class"] != scope.get("data_class"):
             return self._deny("data_class_mismatch", token, tool)
         jti = p.get("jti")
         scan_rec: dict = {}
@@ -315,10 +325,9 @@ class ToolGateway:
                 verdicts = self._scan(call_tool, snapshot, args, jti)
             except Exception as e:  # noqa: BLE001 - a file extractor failed or returned something unusable
                 return self._deny(f"invalid_call:file_extractor:{type(e).__name__}", token, tool)
-            scan_rec = {"content_scans": [v.to_record() for v in verdicts], "scan_policy": eng.settings.to_record()}
-            if override:
-                scan_rec["scan_data_class"] = eng.effective_data_class(verdicts)
-            why = eng.decide(verdicts, scope.get("data_class"))
+            scan_rec = {"content_scans": [v.to_record() for v in verdicts], "scan_policy": eng.settings.to_record(),
+                        "scan_data_class": eng.effective_data_class(verdicts, fields["data_class"])}
+            why = eng.decide(verdicts, scope.get("data_class"), fields["data_class"])
             if why is not None:
                 return self._deny(why, token, tool, **scan_rec)
         with self.ledger.lock:  # checks 9-11 and the redemption are atomic w.r.t. other gateways/threads
@@ -354,6 +363,19 @@ class ToolGateway:
         self.ledger.append("tool_executed", {"jti": jti, "tool": call_tool, **link,
                                              "result_hash": _result_hash(result, self.digest_alg, self.ledger)})
         return GatewayResult(True, "executed", result)
+
+
+def _strings_in(obj: Any, path: str):
+    """(path, string) for every string in decoded JSON arguments: values, and keys (path ``<path>.<key>#key``)."""
+    if isinstance(obj, str):
+        yield path, obj
+    elif isinstance(obj, Mapping):
+        for k, v in obj.items():
+            yield f"{path}.{k}#key", str(k)
+            yield from _strings_in(v, f"{path}.{k}")
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            yield from _strings_in(v, f"{path}[{i}]")
 
 
 def _result_hash(result: Any, alg: str, ledger: PersonalLedger) -> str:

@@ -28,11 +28,16 @@ is about to execute, and records each verdict (scanner id and version, digest
 of the scanned bytes, outcome) in the ledger. With no scanners configured the
 gateway behaves exactly as before.
 
-Settings Stephan has NOT decided (docs/SCANNING_HOOKS.md, "Open questions for
-Stephan") are fields of ``ScanSettings`` (plus ``hold_until_verdict`` on the
-async adapter). Their code defaults are PLACEHOLDERS pending his decision,
-chosen to stay closest to Two-Key's current behavior. They are not a policy
-recommendation.
+Stephan's decisions (CONCEPTION_NOTES.md Entry 6, 2026-09-30 9:49 PM MT):
+  (a) a scan timeout is configurable, both the seconds to wait and the action;
+      the action defaults to deny (block), and can be set to allow;
+  (b) most restrictive wins: if Two-Key or any DLP/AV scanner denies or
+      blocks, the action is blocked; the effective data class is the most
+      restrictive of the call's own class and the DLP classes;
+  (c) scanners get the exact bytes sent and the decoded strings (for
+      malicious-script detection); the digest binding covers the exact bytes.
+Settings he has not decided (scanner order, ``hold_until_verdict``) keep
+PLACEHOLDER defaults, listed in docs/SCANNING_HOOKS.md.
 
 Scanner output (labels, findings, details) is untrusted text: it is
 recorded in the ledger, truncated, and never interpreted beyond the
@@ -42,6 +47,7 @@ documented fields.
 from __future__ import annotations
 
 import abc
+import collections
 import base64
 import hashlib
 import hmac
@@ -66,16 +72,16 @@ from .action import DATA_CLASSES, DEFAULT_DATA_CLASS
 from .canonical import canonical_bytes, canonical_hash, digest_hex
 from .crypto.provider import CryptoProvider
 
-OUTCOMES = ("allow", "block", "quarantine", "error", "pending")
+_CLAIMED_KEEP_SECONDS = 5.0  # see AsyncCallbackScanner._prune_claimed
+OUTCOMES = ("allow", "block", "quarantine", "error", "timeout", "pending")
 KINDS = ("dlp", "av", "dlp+av")
 PAYLOAD_MODES = ("exact", "digest_only")
-ON_ERROR = ("block", "allow")
+ON_ERROR = ON_TIMEOUT = ("block", "allow")
 ORDERS = ("sequential", "parallel")
 PROTOCOL = "two-key-scan/1"
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
 _MAX_ITEMS, _MAX_STR, _MAX_DETAIL = 50, 200, 300
-_GRACE_SECONDS = 1.0  # extra wait for an adapter that overruns its own timeout before it counts as hung
 
 
 class ScannerUnavailable(RuntimeError):
@@ -86,47 +92,68 @@ class ScanError(RuntimeError):
     """A scan could not be completed. The verdict outcome is ``error``; ``ScanSettings.on_error`` decides."""
 
 
+class ScanTimeout(ScanError):
+    """A scan didn't finish in time. The verdict outcome is ``timeout``; ``ScanSettings.on_timeout`` decides."""
+
+
+# Restrictiveness of the data classes, for "most restrictive wins" (Entry 6). ``classified`` is the most
+# restrictive (it is already the default for an unknown class, spec 5.2 / Claim 5) and ``public`` the least.
+# personal, medical, and financial are not ranked against each other: if two of them meet, no single one is
+# the most restrictive, and the result is ``classified``.
+DATA_CLASS_RANK = {"public": 0, "personal": 1, "medical": 1, "financial": 1, "classified": 2}
+
+
+def most_restrictive(classes: Iterable[str]) -> str:
+    """The most restrictive of ``classes`` (DATA_CLASS_RANK); ``classified`` if none, or if a tie is unranked."""
+    cs = {c for c in classes if c in DATA_CLASS_RANK}
+    if not cs:
+        return DEFAULT_DATA_CLASS
+    top = max(DATA_CLASS_RANK[c] for c in cs)
+    tops = [c for c in cs if DATA_CLASS_RANK[c] == top]
+    return tops[0] if len(tops) == 1 else DEFAULT_DATA_CLASS
+
+
 # ---------------------------------------------------------------------------
-# Settings (placeholders pending Stephan's decision)
+# Settings (Stephan's decisions, Entry 6; scanner order is still a placeholder)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ScanSettings:
     """Gateway scanning settings.
 
-    PLACEHOLDER DEFAULTS, pending Stephan's decision (docs/SCANNING_HOOKS.md,
-    "Open questions for Stephan"). Each was chosen as the option closest to
-    Two-Key's current behavior; none is a decided policy.
+    Stephan's decisions (CONCEPTION_NOTES.md Entry 6):
 
-    - ``on_error`` (question a): what a scan error or timeout does. ``"block"``
-      denies the call; ``"allow"`` lets it proceed (the error is still
-      recorded). Placeholder ``"block"``: every other component failure in
-      Two-Key is already a deny (spec 5.7).
-    - ``dlp_overrides_data_class`` (question b): whether the DLP verdict's
-      data class replaces the call's declared or extracted ``data_class`` in
-      the gateway's scope check. Placeholder ``False``: the check uses the
-      call's data class, as it does today; DLP labels are recorded only.
-    - ``payload`` (question c): what the gateway sends to scanners.
-      ``"exact"`` sends the exact bytes it is about to execute (the
-      canonical call encoding, plus any file parts); ``"digest_only"`` sends
-      only names, sizes, and digests. Placeholder ``"exact"``: it is the only
-      mode in which a verdict describes the bytes that run. A scanner can
-      override it with its own ``payload_mode``.
-    - ``order``: ``"sequential"`` (in the order given, stopping at the first
-      verdict that denies) or ``"parallel"``. Placeholder ``"sequential"``.
-    - ``timeout_seconds``: per-scanner time limit; a scanner that exceeds it
-      gives an ``error`` verdict. Placeholder 10 seconds.
+    - ``timeout_seconds`` and ``on_timeout`` (decision a): how long to wait for
+      each scanner, and what a timeout does. ``on_timeout="block"`` (the
+      default, deny) or ``"allow"`` (proceed; the timeout is still recorded).
+      The value 10 seconds is an engineering default; the seconds are
+      configurable as he decided.
+    - ``on_error``: what a scanner error other than a timeout does. Errors and
+      timeouts shared one setting before Entry 6, so the same default (block)
+      and the same allow option apply; it is a separate setting so the two can
+      differ.
+    - ``payload`` (decision c): ``"exact"`` (default) sends the exact bytes
+      the gateway is about to execute plus the decoded strings. A scanner can
+      still be set to ``"digest_only"`` (names, sizes, and digests only) as an
+      explicit choice.
+    - Most restrictive wins (decision b) is not a setting: a scanner can only
+      add a deny, and the effective data class is the most restrictive of the
+      call's class and the DLP classes.
+
+    Not decided by Stephan (PLACEHOLDER default, docs/SCANNING_HOOKS.md):
+    ``order``, ``"sequential"`` (in the order given, stopping at the first
+    verdict that denies) or ``"parallel"``.
     """
-    on_error: str = "block"                  # PLACEHOLDER pending Stephan (question a)
-    dlp_overrides_data_class: bool = False   # PLACEHOLDER pending Stephan (question b)
-    payload: str = "exact"                   # PLACEHOLDER pending Stephan (question c)
+    timeout_seconds: float = 10.0            # configurable (Entry 6, decision a); 10 s is an engineering default
+    on_timeout: str = "block"                # Stephan's decision (Entry 6, a): default deny, optional allow
+    on_error: str = "block"                  # same default as on_timeout (one setting before Entry 6)
+    payload: str = "exact"                   # Stephan's decision (Entry 6, c)
     order: str = "sequential"                # PLACEHOLDER pending Stephan
-    timeout_seconds: float = 10.0            # PLACEHOLDER pending Stephan
 
     def __post_init__(self):
+        if self.on_timeout not in ON_TIMEOUT:
+            raise ValueError(f"on_timeout must be one of {ON_TIMEOUT}")
         if self.on_error not in ON_ERROR:
             raise ValueError(f"on_error must be one of {ON_ERROR}")
-        if not isinstance(self.dlp_overrides_data_class, bool):
-            raise ValueError("dlp_overrides_data_class must be a bool")
         if self.payload not in PAYLOAD_MODES:
             raise ValueError(f"payload must be one of {PAYLOAD_MODES}")
         if self.order not in ORDERS:
@@ -136,8 +163,8 @@ class ScanSettings:
             raise ValueError("timeout_seconds must be a number in (0, 3600]")
 
     def to_record(self) -> dict:
-        return {"on_error": self.on_error, "dlp_overrides_data_class": self.dlp_overrides_data_class,
-                "payload": self.payload, "order": self.order, "timeout_seconds": float(self.timeout_seconds)}
+        return {"timeout_seconds": float(self.timeout_seconds), "on_timeout": self.on_timeout,
+                "on_error": self.on_error, "payload": self.payload, "order": self.order}
 
 
 # ---------------------------------------------------------------------------
@@ -158,17 +185,25 @@ class ScanPart:
 
 @dataclass(frozen=True)
 class ScanRequest:
+    """One scan. ``parts`` are the exact bytes (``payload_digest`` covers them); ``texts`` are the decoded
+    strings (Entry 6, decision c): each string in the arguments, as UTF-8 parts named ``text:<path>``.
+    File parts are scanned as exact bytes only."""
     request_id: str
     tool: str
     digest_alg: str
     payload_mode: str
     payload_digest: str
     parts: tuple[ScanPart, ...]
+    texts: tuple[ScanPart, ...] = ()
     context: Mapping[str, Any] = field(default_factory=dict, repr=False)  # gateway bookkeeping; never sent
 
     def require_content(self) -> None:
-        if self.payload_mode != "exact" or any(p.data is None for p in self.parts):
+        if self.payload_mode != "exact" or any(p.data is None for p in self.parts + self.texts):
             raise ScanError("this scanner needs content, but payload_mode is digest_only")
+
+    def content(self) -> tuple[ScanPart, ...]:
+        """Exact-byte parts, then the decoded strings, for byte-oriented scanners (ICAP, clamd, patterns)."""
+        return self.parts + self.texts
 
 
 @dataclass(frozen=True)
@@ -195,6 +230,7 @@ class ScanVerdict:
     digest_alg: str
     payload_digest: str                  # computed by the gateway over the parts it scanned, never by the scanner
     parts: tuple[dict, ...]
+    texts: tuple[dict, ...] = ()
     labels: tuple[str, ...] = ()
     data_classes: tuple[str, ...] = ()
     findings: tuple[str, ...] = ()
@@ -211,6 +247,7 @@ class ScanVerdict:
                 "scanner_version": self.scanner_version, "outcome": self.outcome,
                 "payload_mode": self.payload_mode, "digest_alg": self.digest_alg,
                 "payload_digest": self.payload_digest, "parts": [dict(p) for p in self.parts],
+                "texts": [dict(t) for t in self.texts],
                 "labels": list(self.labels), "data_classes": list(self.data_classes),
                 "findings": list(self.findings), "elapsed_ms": round(self.elapsed_ms, 3),
                 "detail": self.detail, "scan_id": self.scan_id}
@@ -266,8 +303,10 @@ class ContentScanner(abc.ABC):
 
     Subclasses implement ``scan(request, timeout) -> ScanReport``. They should
     respect ``timeout`` themselves; the engine also stops waiting after
-    ``timeout`` plus a short grace period and records an ``error`` verdict.
-    Raising any exception also gives an ``error`` verdict.
+    ``timeout`` and records a ``timeout`` verdict (``ScanSettings.on_timeout``
+    decides). Raising ``ScanTimeout`` or ``TimeoutError`` also gives a
+    ``timeout`` verdict; any other exception gives an ``error`` verdict
+    (``ScanSettings.on_error`` decides).
     """
     adapter = "plugin"
     supports_pending = False
@@ -291,6 +330,13 @@ class ContentScanner(abc.ABC):
     def scan(self, request: ScanRequest, timeout: float) -> ScanReport:
         ...
 
+    def abandon(self, request: ScanRequest) -> None:
+        """Called when the gateway stops waiting for ``request`` (``timeout_seconds`` passed).
+
+        The default does nothing. An adapter that can still receive a verdict
+        later (``AsyncCallbackScanner``) records it as post-send instead.
+        """
+
     def describe(self) -> dict:
         return {"scanner_id": self.scanner_id, "adapter": self.adapter, "kind": self.kind,
                 "payload_mode": self.payload_mode, "version": self.version()}
@@ -299,7 +345,8 @@ class ContentScanner(abc.ABC):
 # ---------------------------------------------------------------------------
 # Engine: builds requests, runs scanners, makes verdicts, decides
 # ---------------------------------------------------------------------------
-def _call_with_timeout(fn: Callable[[], Any], timeout: float) -> Any:
+def _call_with_timeout(fn: Callable[[], Any], timeout: float,
+                       on_abandon: Callable[[], None] | None = None) -> Any:
     box: dict = {}
 
     def run():
@@ -312,7 +359,12 @@ def _call_with_timeout(fn: Callable[[], Any], timeout: float) -> Any:
     t.start()
     t.join(timeout)
     if t.is_alive():
-        raise ScanError(f"timeout after {timeout:.3g}s")
+        if on_abandon is not None:
+            try:
+                on_abandon()
+            except Exception:  # noqa: BLE001 - the timeout verdict stands either way
+                pass
+        raise ScanTimeout(f"timeout after {timeout:.3g}s")
     if "error" in box:
         raise box["error"]
     return box["value"]
@@ -329,8 +381,6 @@ class ScanEngine:
         ids = [s.scanner_id for s in self.scanners]
         if len(set(ids)) != len(ids):
             raise ValueError("scanner_id values must be unique")
-        if self.settings.dlp_overrides_data_class and not any(s.kind in ("dlp", "dlp+av") for s in self.scanners):
-            raise ValueError("dlp_overrides_data_class=True needs at least one scanner of kind 'dlp' or 'dlp+av'")
 
     def describe(self) -> dict:
         return {"settings": self.settings.to_record(), "scanners": [s.describe() for s in self.scanners]}
@@ -351,15 +401,26 @@ class ScanEngine:
                                   digest_hex(data, alg, provider)))
         return tuple(parts)
 
+    @classmethod
+    def build_texts(cls, raw: Sequence[tuple[str, str]], alg: str,
+                    provider: CryptoProvider | None) -> tuple[ScanPart, ...]:
+        """Decoded strings as UTF-8 parts named ``text:<path>`` (Entry 6, decision c)."""
+        return cls.build_parts([(f"text:{name}", "text/plain; charset=utf-8", text.encode("utf-8", "surrogatepass"))
+                                for name, text in raw], alg, provider)
+
     def run(self, tool: str, parts: tuple[ScanPart, ...], alg: str, provider: CryptoProvider | None,
-            context: Mapping[str, Any] | None = None) -> list[ScanVerdict]:
-        payload_digest = canonical_hash([p.info() for p in parts], alg, provider)
+            context: Mapping[str, Any] | None = None, texts: tuple[ScanPart, ...] = ()) -> list[ScanVerdict]:
+        payload_digest = canonical_hash([p.info() for p in parts], alg, provider)  # binds the exact bytes only
         requests = []
+
+        def strip(ps):
+            return tuple(ScanPart(p.name, p.content_type, None, p.size, p.digest) for p in ps)
+
         for s in self.scanners:
             mode = s.payload_mode or self.settings.payload
-            ps = parts if mode == "exact" else tuple(ScanPart(p.name, p.content_type, None, p.size, p.digest)
-                                                     for p in parts)
-            requests.append(ScanRequest(uuid.uuid4().hex, tool, alg, mode, payload_digest, ps, dict(context or {})))
+            ps, ts = (parts, texts) if mode == "exact" else (strip(parts), strip(texts))
+            requests.append(ScanRequest(uuid.uuid4().hex, tool, alg, mode, payload_digest, ps, ts,
+                                        dict(context or {})))
         if self.settings.order == "parallel":
             out: list = [None] * len(self.scanners)
 
@@ -384,10 +445,13 @@ class ScanEngine:
         timeout = float(self.settings.timeout_seconds)
         t0 = time.perf_counter()
         try:
-            rep = _call_with_timeout(lambda: s.scan(req, timeout), timeout + _GRACE_SECONDS)
+            rep = _call_with_timeout(lambda: s.scan(req, timeout), timeout,  # waits exactly timeout_seconds (Entry 6 a)
+                                     on_abandon=lambda: s.abandon(req))
             if not isinstance(rep, ScanReport):
                 raise ScanError("scanner returned no ScanReport")
-        except Exception as e:  # noqa: BLE001 - any failure is an error verdict
+        except (ScanTimeout, TimeoutError) as e:
+            rep = ScanReport("timeout", detail=f"{type(e).__name__}: {e}")
+        except Exception as e:  # noqa: BLE001 - any other failure is an error verdict
             rep = ScanReport("error", detail=f"{type(e).__name__}: {e}")
         return self.make_verdict(s, req, rep, (time.perf_counter() - t0) * 1000.0)
 
@@ -403,27 +467,28 @@ class ScanEngine:
             scanner_id=s.scanner_id, adapter=s.adapter, kind=s.kind,
             scanner_version=_clip(rep.scanner_version or s.version(), 120), outcome=outcome,
             payload_mode=req.payload_mode, digest_alg=req.digest_alg, payload_digest=req.payload_digest,
-            parts=tuple(p.info() for p in req.parts), labels=labels, data_classes=classes,
+            parts=tuple(p.info() for p in req.parts), texts=tuple(t.info() for t in req.texts), labels=labels, data_classes=classes,
             findings=_strings(rep.findings), elapsed_ms=elapsed_ms, detail=_clip(detail, _MAX_DETAIL),
             scan_id=rep.scan_id)
 
     def denies(self, v: ScanVerdict) -> bool:
-        return v.outcome in ("block", "quarantine") or (v.outcome == "error" and self.settings.on_error == "block")
+        return (v.outcome in ("block", "quarantine")
+                or (v.outcome == "error" and self.settings.on_error == "block")
+                or (v.outcome == "timeout" and self.settings.on_timeout == "block"))
 
     @staticmethod
-    def effective_data_class(verdicts: Sequence[ScanVerdict]) -> str:
-        """The data class the DLP verdicts establish (used only with dlp_overrides_data_class=True).
+    def effective_data_class(verdicts: Sequence[ScanVerdict], call_data_class: str) -> str:
+        """Most restrictive of the call's own data class and every allowing DLP verdict's classes (Entry 6, b).
 
-        Exactly one class across the allowing DLP verdicts: that class. None, or
-        more than one: ``classified``, the existing default for a data class
-        that can't be determined (action.py, spec 5.2 / Claim 5). PLACEHOLDER
-        pending Stephan: how several classes should combine is an open question.
+        With no DLP classes, the call's class stands. See DATA_CLASS_RANK for the order.
         """
-        classes = {c for v in verdicts if v.is_dlp and v.outcome == "allow" for c in v.data_classes}
-        return next(iter(classes)) if len(classes) == 1 else DEFAULT_DATA_CLASS
+        dlp = [c for v in verdicts if v.is_dlp and v.outcome == "allow" for c in v.data_classes]
+        return most_restrictive([call_data_class, *dlp]) if dlp else call_data_class
 
-    def decide(self, verdicts: Sequence[ScanVerdict], scope_data_class: Any) -> str | None:
-        """Deny reason, or None. Blocks and quarantines always deny; errors deny if on_error='block'."""
+    def decide(self, verdicts: Sequence[ScanVerdict], scope_data_class: Any, call_data_class: str) -> str | None:
+        """Deny reason, or None. Called only after every Two-Key check has passed, so a scanner can only add
+        a deny, never remove one (Entry 6, b). Blocks and quarantines deny; errors and timeouts deny unless
+        on_error / on_timeout is "allow"; a DLP class more restrictive than the token's scope denies."""
         for v in verdicts:
             if v.outcome == "block":
                 return f"scan_blocked:{v.scanner_id}"
@@ -431,7 +496,9 @@ class ScanEngine:
                 return f"scan_quarantined:{v.scanner_id}"
             if v.outcome == "error" and self.settings.on_error == "block":
                 return f"scan_error:{v.scanner_id}"
-        if self.settings.dlp_overrides_data_class and self.effective_data_class(verdicts) != scope_data_class:
+            if v.outcome == "timeout" and self.settings.on_timeout == "block":
+                return f"scan_timeout:{v.scanner_id}"
+        if self.effective_data_class(verdicts, call_data_class) != scope_data_class:
             return "scan_data_class_mismatch"
         return None
 
@@ -495,15 +562,24 @@ class ResponseMapping:
 
 
 def default_request_body(req: ScanRequest) -> dict:
-    """The JSON body sent by the API and sidecar adapters unless a ``body_builder`` is given."""
-    parts = []
+    """The JSON body sent by the API and sidecar adapters unless a ``body_builder`` is given.
+
+    ``parts`` carry the exact bytes (base64); ``texts`` carry the decoded strings as JSON strings.
+    """
+    parts, texts = [], []
     for p in req.parts:
         d = p.info()
         if p.data is not None:
             d["data_b64"] = base64.b64encode(p.data).decode("ascii")
         parts.append(d)
+    for t in req.texts:
+        d = t.info()
+        if t.data is not None:
+            d["text"] = t.data.decode("utf-8", "surrogatepass")
+        texts.append(d)
     return {"protocol": PROTOCOL, "request_id": req.request_id, "tool": req.tool, "digest_alg": req.digest_alg,
-            "payload_mode": req.payload_mode, "payload_digest": req.payload_digest, "parts": parts}
+            "payload_mode": req.payload_mode, "payload_digest": req.payload_digest, "parts": parts,
+            "texts": texts}
 
 
 def _is_loopback(host: str | None) -> bool:
@@ -550,7 +626,11 @@ def http_json_transport(url: str, *, allow_insecure_http: bool = False, ssl_cont
                 raw = r.read(max_response_bytes + 1)
         except urllib.error.HTTPError as e:
             raise ScanError(f"http_status_{e.code}") from None
+        except TimeoutError:
+            raise ScanTimeout("http timeout") from None
         except (urllib.error.URLError, OSError) as e:
+            if isinstance(getattr(e, "reason", None), TimeoutError):
+                raise ScanTimeout("http timeout") from None
             raise ScanError(f"transport: {type(e).__name__}") from None
         if len(raw) > max_response_bytes:
             raise ScanError("response too large")
@@ -589,7 +669,10 @@ def grpc_transport(target: str, method: str, *, channel_credentials: Any = None,
         try:
             return call(body, timeout=timeout, metadata=[(k.lower(), v) for k, v in headers.items()])
         except grpc.RpcError as e:
-            raise ScanError(f"grpc: {e.code() if hasattr(e, 'code') else type(e).__name__}") from None
+            code = e.code() if hasattr(e, "code") else None
+            if code == grpc.StatusCode.DEADLINE_EXCEEDED:
+                raise ScanTimeout("grpc deadline exceeded") from None
+            raise ScanError(f"grpc: {code or type(e).__name__}") from None
     return invoke
 
 
@@ -803,7 +886,7 @@ class IcapScanner(ContentScanner):
     def scan(self, request: ScanRequest, timeout: float) -> ScanReport:
         request.require_content()
         findings, details, flagged = [], [], False
-        for part in request.parts:
+        for part in request.content():
             code, hdrs, sections, body = self._exchange(self.build_request(request.tool, part), timeout)
             self._learn_version(hdrs)
             for h in ("x-infection-found", "x-violations-found", "x-virus-id"):
@@ -916,7 +999,7 @@ class PatternScanner(ContentScanner):
     def scan(self, request: ScanRequest, timeout: float) -> ScanReport:
         request.require_content()
         labels, classes, findings, actions = [], [], [], set()
-        for part in request.parts:
+        for part in request.content():
             for rule, rx in self.rules:
                 if rx.search(part.data or b""):
                     findings.append(f"{part.name}:{rule.name}")
@@ -964,7 +1047,7 @@ class ClamdScanner(ContentScanner):
         except Exception:  # noqa: BLE001 - version is best effort
             pass
         findings = []
-        for part in request.parts:
+        for part in request.content():
             res = cd.instream(io.BytesIO(part.data or b""))
             status, name = (res or {}).get("stream", ("ERROR", "no result"))
             if status == "FOUND":
@@ -1084,7 +1167,7 @@ class SidecarScanner(ContentScanner):
         except OSError:
             pass
         findings = []
-        for part in request.parts:
+        for part in request.content():
             data = part.data or b""
             chunks = [data[i:i + self.chunk_size] for i in range(0, len(data), self.chunk_size)]
             reply = self._clamd_cmd(timeout, b"zINSTREAM\0", chunks)
@@ -1123,6 +1206,7 @@ class AsyncCallbackScanner(ContentScanner):
       execute).
     - ``hold_until_verdict=True``: ``scan`` waits for the verdict, up to the
       engine's timeout, and the gateway decides on it like any other verdict.
+      No verdict in time is a ``timeout`` (``ScanSettings.on_timeout``).
       A verdict that arrives after the wait is recorded as post-send.
     """
     adapter = "async_callback"
@@ -1140,6 +1224,9 @@ class AsyncCallbackScanner(ContentScanner):
         self.mapping = mapping or ResponseMapping()
         self.on_flag, self.max_pending = on_flag, max_pending
         self._pending: dict[str, dict] = {}
+        # Held verdicts the wait has just picked up, kept briefly so abandon() can
+        # still record one whose result the gateway discarded at its deadline.
+        self._claimed: collections.deque = collections.deque(maxlen=256)
         self._listeners: list[Listener] = []
         self._lock = threading.Lock()
         self.callback_errors: list[str] = []
@@ -1171,12 +1258,17 @@ class AsyncCallbackScanner(ContentScanner):
             return ScanReport("pending", scan_id=scan_id, detail="post-send: the verdict is recorded on arrival")
         got = rec["event"].wait(timeout)
         with self._lock:
-            if got:
+            if not rec["held"]:                # the gateway already stopped waiting (abandon)
+                got = False
+            elif got or rec["report"] is not None:
+                got = True                     # picked up here; abandon() can still find it
                 self._pending.pop(scan_id, None)
+                self._prune_claimed()
+                self._claimed.append((scan_id, rec, time.monotonic()))
             else:
                 rec["held"] = False            # a late verdict is then recorded as post-send
         if not got:
-            raise ScanError(f"hold_until_verdict: no verdict within {timeout:.3g}s (scan_id {scan_id})")
+            raise ScanTimeout(f"hold_until_verdict: no verdict within {timeout:.3g}s (scan_id {scan_id})")
         rep = rec["report"]
         return ScanReport(rep.outcome, rep.labels, rep.data_classes, rep.findings, rep.scanner_version,
                           rep.echoed_digest, rep.detail, scan_id)
@@ -1201,6 +1293,40 @@ class AsyncCallbackScanner(ContentScanner):
         if held:
             rec["event"].set()
             return True
+        self._post_send(scan_id, rec, rep, listeners)
+        return True
+
+    def abandon(self, request: ScanRequest) -> None:
+        """The gateway stopped waiting: a verdict for ``request`` is now post-send.
+
+        A verdict that already arrived but was not yet picked up by the held
+        wait is recorded as post-send now, so it is not lost.
+        """
+        late = []
+        with self._lock:
+            for scan_id, rec in list(self._pending.items()):
+                if rec["request"] is request and rec["held"]:
+                    rec["held"] = False
+                    if rec["report"] is not None:
+                        self._pending.pop(scan_id, None)
+                        late.append((scan_id, rec))
+            for item in list(self._claimed):   # picked up by the wait, but the gateway discarded it
+                if item[1]["request"] is request:
+                    self._claimed.remove(item)
+                    late.append(item[:2])
+            self._prune_claimed()
+            listeners = list(self._listeners)
+        for scan_id, rec in late:
+            self._post_send(scan_id, rec, rec["report"], listeners)
+
+    def _prune_claimed(self) -> None:
+        """Drop picked-up entries after a few seconds (call with the lock held).
+        abandon() runs right after the gateway's deadline, so that is ample."""
+        now = time.monotonic()
+        while self._claimed and now - self._claimed[0][2] > _CLAIMED_KEEP_SECONDS:
+            self._claimed.popleft()
+
+    def _post_send(self, scan_id: str, rec: dict, rep: ScanReport, listeners: list) -> None:
         req: ScanRequest = rec["request"]
         rep = ScanReport(rep.outcome, rep.labels, rep.data_classes, rep.findings, rep.scanner_version,
                          rep.echoed_digest, rep.detail, scan_id)
@@ -1215,7 +1341,6 @@ class AsyncCallbackScanner(ContentScanner):
                 self.on_flag({"context": dict(req.context), "verdict": verdict.to_record()})
             except Exception as e:  # noqa: BLE001
                 self.callback_errors.append(f"on_flag: {type(e).__name__}")
-        return True
 
 
 class WebhookReceiver:

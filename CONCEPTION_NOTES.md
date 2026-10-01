@@ -13,7 +13,7 @@ separately in `CHANGES.md` and in git history. It is not conception.
 - **How it was captured:** Stephan typed it in a chat with his AI assistant.
   The assistant copied it here word for word, with no edits to spelling,
   grammar, or punctuation.
-- **Context:** Given after reviewing the Compact Kernel invention disclosure
+- **Context:** Given after reviewing the Two-Key invention disclosure
   package (`docs/INVENTION_DISCLOSURE.md`, disclosure date 30 September 2026).
 
 > "To elaborate on the intent (beyond what was already identified) is to have a user able to upload a human language constitution. Then (Path B) the AI judge/judges be connected to whichever AI (local or vendor) the user desires (api or username/password or single sign on login). Path A I assume is self explanatory. Both path A and B need to agree to let the action occur."
@@ -22,10 +22,10 @@ separately in `CHANGES.md` and in git history. It is not conception.
 
 | Concept in the entry | Where implemented |
 |---|---|
-| User uploads a human-language constitution | `compact_kernel/constitution.py`, CLI `sign-constitution` / `verify-constitution` |
-| Path B judges connected to any AI the user picks (local or vendor) | `compact_kernel/judges/` (OpenAI-compatible, Anthropic, Gemini, Ollama), `examples/judges.yaml` |
-| Auth by API key, username/password, or single sign-on | `compact_kernel/judges/credentials.py` (API key works now; username/password and SSO/OAuth are interfaces with documented stubs) |
-| Both Path A and Path B must agree before the action occurs | `compact_kernel/kernel.py` `CompactKernel.authorize` |
+| User uploads a human-language constitution | `two_key/constitution.py`, CLI `sign-constitution` / `verify-constitution` |
+| Path B judges connected to any AI the user picks (local or vendor) | `two_key/judges/` (OpenAI-compatible, Anthropic, Gemini, Ollama), `examples/judges.yaml` |
+| Auth by API key, username/password, or single sign-on | `two_key/judges/credentials.py` (API key works now; username/password and SSO/OAuth are interfaces with documented stubs) |
+| Both Path A and Path B must agree before the action occurs | `two_key/core.py` `TwoKey.authorize` |
 
 ---
 
@@ -67,18 +67,17 @@ chosen or implemented.
 - **How it was captured:** relayed to the AI engineering assistant by the
   agent coordinating the work. The instruction is recorded as relayed, in
   substance; it is not a verbatim quote.
-- **What was decided:** Stephan renamed the product from "Compact Kernel" to
-  "Two-Key".
+- **What was decided:** Stephan named the product "Two-Key".
 
 ### How this entry maps to the implementation (assistant's note, not conception)
 
 The product name in prose is "Two-Key"; the repository, the distribution,
-and the CLI are `two-key`; the Python package is `two_key` (the class
-formerly `CompactKernel` is `TwoKey`, in `two_key/core.py`); the constitution
-rules block is `twokey-rules`; example DIDs use `did:twokey:`. Entries 1 and 2,
-`docs/INVENTION_DISCLOSURE.md`, the original invention-package zip, and
-earlier `CHANGES.md` rows keep the former name, because they are historical
-records. The rename changes no mechanism.
+and the CLI are `two-key`; the Python package is `two_key` (the main class
+is `TwoKey`, in `two_key/core.py`); the constitution rules block is
+`twokey-rules`; example DIDs use `did:twokey:`. `docs/INVENTION_DISCLOSURE.md`
+and the original invention-package zip are unchanged, because they are the
+dated original invention record. The rename changes no mechanism. (Wording
+updated per Entry 6.)
 
 ---
 
@@ -175,6 +174,69 @@ The implementation of these hooks (`two_key/scanning.py`,
 `docs/SCANNING_HOOKS.md`) is AI-prepared engineering. Settings that Stephan
 has not decided ship with placeholder defaults, and those questions are
 listed as open in `docs/SCANNING_HOOKS.md`.
+
+## Entry 6
+
+- **Attributed to:** Stephan Busch
+- **Date/time:** 2026-09-30, about 9:49 PM Mountain Time (MDT, UTC-6)
+- **How it was captured:** relayed word for word to the AI engineering
+  assistant in the task instructions from Programer, the engineering agent
+  coordinating this work. The quote is reproduced exactly as relayed,
+  including spelling, punctuation, quotation marks, and ellipses.
+- **Context:** Stephan's decisions on the open content-scanning questions
+  from Entry 5, and his authorization to finish the rename.
+
+> "The timeout option should be configurable (both time in seconds to wait and action taken…default should be deny but with the optional configuration to be changed to allow.)
+>
+> As far override; fail to the most restrictive (either two-key or DLP/AV…if one denies/blocks…the action is block).
+>
+> Scanners get the exact bytes and strings (for malicious script detection) sent.
+>
+> As far as ‘CompactKernel’; yes modify it so it reflects ‘two-key’ in all places and references; but in a way the code doesn’t break at all."
+
+### What this entry resolves and changes (assistant's note, not conception)
+
+- **Open questions resolved.** This resolves open questions (a), (b), and
+  (c) from Entry 5 and `docs/SCANNING_HOOKS.md`:
+  - (a) a scan timeout: both the wait in seconds and the action taken are
+    configurable, and the action defaults to deny/block;
+  - (b) Two-Key and the DLP/AV verdicts combine by "most restrictive": if
+    either denies or blocks, the action is blocked;
+  - (c) scanners receive the exact bytes sent and the decoded strings.
+- **Rename authorization.** The last paragraph authorizes the rename "in all
+  places and references". Per that authorization, the non-quote wording of
+  earlier entries that still used the former name was updated.
+  `docs/INVENTION_DISCLOSURE.md` and the original invention-package zip are
+  not changed. Stephan's verbatim quotes are not changed; this entry's quote
+  keeps the former name because it is verbatim. The changes, with the
+  original text preserved here for the record:
+  - **Entry 3, "What was decided".** Original:
+    > Stephan renamed the product from "Compact Kernel" to "Two-Key".
+
+    Now:
+    > Stephan named the product "Two-Key".
+  - **Entry 3, implementation note.** Original:
+    > (the class formerly `CompactKernel` is `TwoKey`, in `two_key/core.py`)
+    > [...] Entries 1 and 2, `docs/INVENTION_DISCLOSURE.md`, the original
+    > invention-package zip, and earlier `CHANGES.md` rows keep the former
+    > name, because they are historical records.
+
+    Now:
+    > (the main class is `TwoKey`, in `two_key/core.py`) [...]
+    > `docs/INVENTION_DISCLOSURE.md` and the original invention-package zip
+    > are unchanged, because they are the dated original invention record.
+    > [...] (Wording updated per Entry 6.)
+  - **Entry 1, "Context".** "the Compact Kernel invention disclosure package"
+    became "the Two-Key invention disclosure package".
+  - **Entry 1, implementation table.** The paths `compact_kernel/constitution.py`,
+    `compact_kernel/judges/`, `compact_kernel/judges/credentials.py`, and
+    `compact_kernel/kernel.py` `CompactKernel.authorize` became
+    `two_key/constitution.py`, `two_key/judges/`,
+    `two_key/judges/credentials.py`, and `two_key/core.py` `TwoKey.authorize`
+    (the current, working paths).
+- **CHANGES.md.** Rows 3, 59, 78, 79, and 81 were updated the same way
+  (`CHANGES.md` row 85). The earlier wording is in git history at commit
+  97dedbd.
 
 ---
 
