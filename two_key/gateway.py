@@ -46,6 +46,21 @@ any tool runs, it checks everything spec 5.5 lists, plus single-use:
      token, otherwise ``ledger_concurrent_writer``. Neither is written to this
      (now stale) ledger instance, because appending would fork the chain.
 
+Optional content scanning (scanning.py; CONCEPTION_NOTES.md Entry 5): only
+when ``scanners`` are configured, after checks 1-7 (and 8, unless the DLP
+verdict replaces the data class) the gateway takes ONE snapshot of the
+arguments (their canonical encoding), hashes it for check 5, sends it (plus
+any file parts from ``file_extractors``) to the scanners, and executes the
+tool on that same snapshot, so the scanned bytes, the hashed bytes, and the
+executed arguments are the same. Deny reasons: scan_blocked:<id>,
+scan_quarantined:<id>, scan_error:<id> (if ScanSettings.on_error="block"),
+scan_data_class_mismatch (if dlp_overrides_data_class). Each verdict
+(scanner id/version, digest of the scanned bytes, outcome) is recorded in the
+capability_redeemed or gateway_denied entry; post-send verdicts arrive later
+as content_scan_async entries. With no scanners the gateway does none of
+this: the original path, including its separate hash and execute reads of
+``args`` (F_REVIEW.md §8 finding 1), is unchanged.
+
 On success, capability_redeemed and tool_executed/tool_error entries link to
 the token's capability_issued entry (seq and digest). tool_executed also
 records H(result); the result itself is not stored (DESIGN_OPTIONS.md §7).
@@ -70,16 +85,20 @@ Entries not yet covered by a signed head show up as ``size_mismatch`` in
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import merkle
 from .action import ActionValidationError, normalize_action
-from .canonical import canonical_hash
+from .canonical import canonical_bytes, canonical_hash, digest_hex
 from .capability import CapabilityIssuer, TokenError, args_hash, token_sha256
 from .ledger import PersonalLedger
+from .scanning import AsyncCallbackScanner, ContentScanner, ScanEngine, ScanSettings, ScanVerdict
 
 Extractor = Callable[[Mapping[str, Any]], Mapping[str, Any]]
+# File parts for content scanning: fn(args) -> iterable of (name, bytes, content_type).
+FileExtractor = Callable[[Mapping[str, Any]], Iterable[tuple[str, bytes, str]]]
 CALL_FIELDS = ("amount_usd", "counterparty", "data_class")
 
 
@@ -94,7 +113,9 @@ class ToolGateway:
     def __init__(self, issuer: CapabilityIssuer, ledger: PersonalLedger, principal: str,
                  tools: Mapping[str, Callable[..., Any]] | None = None,
                  extractors: Mapping[str, Extractor] | None = None, *, digest_alg: str = "sha256",
-                 checkpoint_every: int = 1, view_refresh: str = "token"):
+                 checkpoint_every: int = 1, view_refresh: str = "token",
+                 scanners: Sequence[ContentScanner] | None = None, scan_settings: ScanSettings | None = None,
+                 file_extractors: Mapping[str, FileExtractor] | None = None):
         self.issuer, self.ledger, self.principal = issuer, ledger, principal
         self.digest_alg = digest_alg
         if not isinstance(checkpoint_every, int) or isinstance(checkpoint_every, bool) or checkpoint_every < 0:
@@ -114,6 +135,14 @@ class ToolGateway:
         self.view_refresh = view_refresh
         self._view_size = ledger.size
         self._view_root = ledger.root_bytes(self._view_size)
+        # Optional content scanning (scanning.py). None: no scanning, and _invoke takes the original path.
+        self.scan_engine = ScanEngine(scanners, scan_settings) if scanners else None
+        self.file_extractors = dict(file_extractors or {})
+        self.async_scan_errors: list[str] = []
+        if self.scan_engine is not None:
+            for sc in self.scan_engine.scanners:
+                if isinstance(sc, AsyncCallbackScanner):
+                    sc.subscribe(self._on_async_verdict)
 
     @property
     def view(self) -> tuple[int, str]:
@@ -180,10 +209,34 @@ class ToolGateway:
             return "capability_not_recorded", None
         return None, cap
 
-    def _deny(self, reason: str, token: Any, tool: Any) -> GatewayResult:
+    def _deny(self, reason: str, token: Any, tool: Any, **extra: Any) -> GatewayResult:
         th = token_sha256(token) if isinstance(token, str) else None
-        self.ledger.append("gateway_denied", {"reason": reason, "token_sha256": th, "tool": str(tool)})
+        self.ledger.append("gateway_denied", {"reason": reason, "token_sha256": th, "tool": str(tool), **extra})
         return GatewayResult(False, reason)
+
+    # -- content scanning (scanning.py) -----------------------------------------
+    def _scan(self, tool: str, snapshot: bytes, args: Mapping, jti: Any) -> list[ScanVerdict]:
+        raw = [("call", "application/json", snapshot)]  # exactly the bytes args_hash covers
+        fx = self.file_extractors.get(tool)
+        if fx is not None:
+            for name, data, ctype in fx(args):
+                raw.append((f"file:{name}", ctype, data))
+        eng = self.scan_engine
+        parts = eng.build_parts(raw, self.digest_alg, self.ledger.crypto)
+        return eng.run(tool, parts, self.digest_alg, self.ledger.crypto,
+                       {"gateway": id(self), "jti": jti, "tool": tool})
+
+    def _on_async_verdict(self, context: Mapping[str, Any], verdict: ScanVerdict) -> None:
+        """Record a post-send verdict (adapter 5) for a call this gateway scanned."""
+        if context.get("gateway") != id(self):
+            return
+        try:
+            self.ledger.append("content_scan_async", {"jti": context.get("jti"), "tool": context.get("tool"),
+                                                      "scan": verdict.to_record()})
+            if self.checkpoint_every == 1:
+                self.ledger.checkpoint()
+        except Exception as e:  # kept on the gateway: the ledger may be stale or closed
+            self.async_scan_errors.append(f"{type(e).__name__}: {e}"[:300])
 
     def _call_fields(self, tool: str, args: Mapping, call_fields: Mapping | None) -> dict:
         extracted = None
@@ -224,10 +277,20 @@ class ToolGateway:
             p = self.issuer.verify(token)
         except TokenError as e:
             return self._deny(e.reason, token, tool)
+        eng = self.scan_engine
         try:
             call_tool = normalize_action({"tool": tool}).tool
-            fields = self._call_fields(call_tool, args, call_fields)
-            call_args_hash = args_hash(call_tool, args, self.digest_alg, self.ledger.crypto)
+            if eng is None:
+                fields = self._call_fields(call_tool, args, call_fields)
+                call_args_hash = args_hash(call_tool, args, self.digest_alg, self.ledger.crypto)
+            else:
+                # One snapshot: hashed (check 5), scanned, and executed, so all three are the same bytes.
+                if not isinstance(args, Mapping):
+                    raise TypeError("tool args must be a mapping")
+                snapshot = canonical_bytes({"tool": call_tool, "args": dict(args)})
+                args = json.loads(snapshot.decode("ascii"))["args"]
+                fields = self._call_fields(call_tool, args, call_fields)
+                call_args_hash = digest_hex(snapshot, self.digest_alg, self.ledger.crypto)
         except (ActionValidationError, TypeError, ValueError) as e:
             return self._deny(f"invalid_call:{e}", token, tool)
 
@@ -242,9 +305,22 @@ class ToolGateway:
             return self._deny("amount_exceeds_scope", token, tool)
         if fields["counterparty"] != scope.get("counterparty", ""):
             return self._deny("counterparty_mismatch", token, tool)
-        if fields["data_class"] != scope.get("data_class"):
+        override = eng is not None and eng.settings.dlp_overrides_data_class
+        if not override and fields["data_class"] != scope.get("data_class"):
             return self._deny("data_class_mismatch", token, tool)
         jti = p.get("jti")
+        scan_rec: dict = {}
+        if eng is not None:
+            try:
+                verdicts = self._scan(call_tool, snapshot, args, jti)
+            except Exception as e:  # noqa: BLE001 - a file extractor failed or returned something unusable
+                return self._deny(f"invalid_call:file_extractor:{type(e).__name__}", token, tool)
+            scan_rec = {"content_scans": [v.to_record() for v in verdicts], "scan_policy": eng.settings.to_record()}
+            if override:
+                scan_rec["scan_data_class"] = eng.effective_data_class(verdicts)
+            why = eng.decide(verdicts, scope.get("data_class"))
+            if why is not None:
+                return self._deny(why, token, tool, **scan_rec)
         with self.ledger.lock:  # checks 9-11 and the redemption are atomic w.r.t. other gateways/threads
             # §4 (i): the ledger must still contain the gateway's last-known view.
             intact = self.refresh_view() if self.view_refresh == "every_call" else self._view_intact()
@@ -263,7 +339,7 @@ class ToolGateway:
 
             link = {"capability_entry_seq": cap.seq, "capability_entry_digest": cap.digest}
             redeemed, why = self.ledger.redeem(jti, {"token_sha256": tok_hash, "tool": call_tool,
-                                                     "args_hash": call_args_hash, **link})
+                                                     "args_hash": call_args_hash, **link, **scan_rec})
             if redeemed is None:
                 # Another writer changed the ledger file: this instance is stale, so nothing is appended.
                 return GatewayResult(False, why)

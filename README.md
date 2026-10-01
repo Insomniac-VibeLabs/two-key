@@ -371,6 +371,9 @@ extractors=None, checkpoint_every=1, view_refresh="token")`,
 | `gateway(extractors=)` | `{}` | `{name: fn(args) -> fields}` | Derive `amount_usd`/`counterparty`/`data_class` from the literal args |
 | `gateway(checkpoint_every=)` | `1` | int ≥ 0 | Sign the ledger head every N calls; `0` = you call `tk.ledger.checkpoint()` |
 | `gateway(view_refresh=)` | `token` | `token`, `every_call` | Advance the gateway's ledger view from verified tokens, or also on every call |
+| `gateway(scanners=)` | none | list of `ContentScanner` | Optional third-party DLP/antivirus hooks (API, ICAP, plugin, sidecar, async); none required. See [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) |
+| `gateway(scan_settings=)` | `ScanSettings()` | `on_error`, `dlp_overrides_data_class`, `payload`, `order`, `timeout_seconds` | Defaults are placeholders pending Stephan's decision |
+| `gateway(file_extractors=)` | `{}` | `{name: fn(args) -> [(name, bytes, content_type)]}` | File parts to scan, e.g. decoded attachments |
 | `PersonalLedger(auto_sign_every=)` | `1` | int ≥ 0 | Direct ledger use: sign after every N appends; `0` = only on `checkpoint()` |
 | `PersonalLedger(digest_alg=, fsync=)` | from key / `True` | as above | Same meaning as the `TwoKey` options |
 | `CryptoProvider(fips_mode=)` | `False` | bool | Refuse non-approved algorithms (`CryptoPolicyError`) and liboqs |
@@ -556,6 +559,9 @@ algorithms and can sign with hybrid ML-DSA-65, but it isn't validated. See
   as the fields it's given. See `DESIGN_OPTIONS.md` §1.
 - **Real model connectors are tested only against mocked HTTP.** No live API
   call has been made.
+- **Content-scanning hooks are tested only against local fakes.** No real DLP
+  or antivirus product has been connected. Their undecided settings are
+  placeholders (`docs/SCANNING_HOOKS.md`).
 - **The username/password and OAuth device-code auth modes are stubs.**
   They work only with a hook you supply.
 - **Public anchoring is a stub.** `LocalFileAnchor` writes a local file;
@@ -577,6 +583,7 @@ algorithms and can sign with hybrid ML-DSA-65, but it isn't validated. See
 | `two_key/policy_vm.py`, `compiler.py` | Path A compiler and VM; one signed source compiled to bytecode and prose, with hashes |
 | `two_key/quorum.py`, `judges/` | Path B quorum; judge adapters, credentials, config loader |
 | `two_key/capability.py`, `gateway.py` | Tokens and the tool gateway |
+| `two_key/scanning.py` | Optional DLP/antivirus scanning hooks for the gateway |
 | `two_key/ledger.py`, `merkle.py`, `anchoring.py` | Signed ledger, Merkle proofs, anchoring stub |
 | `two_key/crypto/`, `keys.py`, `constitution.py` | Crypto provider and suites, key files, constitution signing |
 | `two_key/testing.py` | Offline test-double judges (not for deployment) |
@@ -584,6 +591,7 @@ algorithms and can sign with hybrid ML-DSA-65, but it isn't validated. See
 | `tools/doccheck.py` | Runs every snippet in this README and `docs/HOWTO.md` |
 | [docs/HOWTO.md](docs/HOWTO.md) | Step-by-step guide |
 | [docs/CRYPTO.md](docs/CRYPTO.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | FIPS posture and algorithms; measured performance |
+| [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types, pros and cons, placeholder defaults, open questions |
 | [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md), `docs/INVENTION_DISCLOSURE.md` (unchanged) | Working specification draft; original disclosure |
 | `CONCEPTION_NOTES.md`, `DESIGN_OPTIONS.md`, `CHANGES.md` | Inventor's dated notes; open design questions; every change and who decided it |
 

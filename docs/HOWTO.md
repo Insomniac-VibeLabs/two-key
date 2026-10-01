@@ -906,6 +906,69 @@ print("redemptions recorded:", sum(1 for e in tk.ledger.entries
                                    if e.kind == "capability_redeemed" and e.body["jti"] == jti))
 ```
 
+### Content scanning: DLP and antivirus (optional)
+
+The gateway can pass what an agent is about to send to third-party DLP and
+antivirus software through five hook types: a vendor API (REST or gRPC),
+ICAP, an in-process plugin, a local sidecar, or asynchronous post-send
+scanning. None is required, and with no scanners the gateway behaves
+exactly as above. Settings Stephan hasn't decided are placeholders. See
+[SCANNING_HOOKS.md](SCANNING_HOOKS.md) for the options, their pros and
+cons, the placeholder defaults, and the open questions.
+
+The example below uses the built-in `PatternScanner` (an example plugin,
+not a DLP product). The email body is medical, but the call labels it
+`public`:
+
+<!-- check: expect=^no scanners\s+executed -->
+<!-- check: expect=^dlp, override off\s+executed \['medical'\] -->
+<!-- check: expect=^dlp, override on\s+scan_data_class_mismatch -->
+<!-- check: expect=^av, EICAR attachment\s+scan_blocked:example-av -->
+```python
+import base64
+from my_two_key import make_two_key
+from two_key.scanning import EICAR, PatternRule, PatternScanner, ScanSettings
+
+tk = make_two_key("howto-9c.jsonl")
+dlp = PatternScanner("example-dlp", kind="dlp",
+                     rules=[PatternRule("dx", rb"(?i)diagnosis", label="health", data_class="medical")])
+av = PatternScanner("example-av", kind="av", rules=PatternScanner.example_rules())
+tools = {"email_draft": lambda to, body, attachment_b64="": "drafted"}
+fields = {"counterparty": "clinic.example", "data_class": "public"}
+
+
+def token(args):
+    return tk.authorize({"tool": "email_draft", "counterparty": "clinic.example", "data_class": "public",
+                         "irreversible": False}, "Draft the note.", args).capability
+
+
+def last_scan():
+    e = [e for e in tk.ledger.entries if e.kind in ("capability_redeemed", "gateway_denied")][-1]
+    return e.body["content_scans"][0]
+
+
+note = {"to": "clinic.example", "body": "Diagnosis: example condition"}
+print(f"{'no scanners':<22}", tk.gateway(tools=tools).invoke(token(note), "email_draft", note, fields).reason)
+gw = tk.gateway(tools=tools, scanners=[dlp])
+print(f"{'dlp, override off':<22}", gw.invoke(token(note), "email_draft", note, fields).reason,
+      last_scan()["data_classes"])
+gw = tk.gateway(tools=tools, scanners=[dlp], scan_settings=ScanSettings(dlp_overrides_data_class=True))
+print(f"{'dlp, override on':<22}", gw.invoke(token(note), "email_draft", note, fields).reason)
+mail = {"to": "clinic.example", "body": "see attached", "attachment_b64": base64.b64encode(EICAR).decode()}
+gw = tk.gateway(tools=tools, scanners=[av],
+                file_extractors={"email_draft": lambda a: [("att", base64.b64decode(a["attachment_b64"]),
+                                                            "application/octet-stream")]})
+print(f"{'av, EICAR attachment':<22}", gw.invoke(token(mail), "email_draft", mail, fields).reason)
+```
+
+With the override off (the placeholder default), the DLP verdict is only
+recorded: the call runs, and its `capability_redeemed` entry shows the
+verdict. That entry includes the scanner id and version, the digest of the
+scanned bytes (equal to the token's `args_hash`), and the outcome. With the
+override on, the scan's data class replaces the call's label, so the
+mislabeled call is denied. A scan denial happens before redemption, so the
+token isn't used up.
+
 ## 10. Ordering and short-circuit
 
 By default (`short_circuit_path_b=True`) Two-Key doesn't convene

@@ -119,6 +119,63 @@ A security review of exactly this idea is in `F_REVIEW.md`. That review is
 an AI-prepared analysis, not part of the conception. No option for F has
 been implemented.
 
+## Entry 5
+
+- **Attributed to:** Stephan Busch
+- **Date/time:** 2026-09-30, about 8:13 PM Mountain Time (MDT, UTC-6);
+  further statements at 8:17 PM, 8:19 PM, and 8:22 PM MDT
+- **How it was captured:** relayed word for word to the AI engineering
+  assistant in the task instructions from Programer, the engineering agent
+  coordinating this work. The quotes are reproduced exactly as relayed,
+  including spelling and punctuation.
+- **Context:** content scanning (data-loss prevention and antivirus) of what
+  agents send through Two-Key, for example file uploads.
+
+About 8:13 PM MDT:
+
+> "Well, if we're talking about file uploads, that's more the function of some sort of DLP software. Do you think Two-key should have some form of integrated DLP solution that scans, parses, OCRs, and/or filters files through an agent (serious performance overhead) or let a third party software take care of it as Two-Key is more of a agent custodial standard? Or…if you concur it's a better idea…find a way a third party DLP solution can hook into Two-key to scan files agents are sending."
+
+8:17 PM MDT:
+
+> "What are the pros and cons of each DLP handling option (allowing them to inject)?  I'm thinking API is the best, but want to compare."
+
+8:19 PM MDT:
+
+> "Yeah, offer all three; so it's vendor and version agnostic."
+
+8:22 PM MDT:
+
+> "All 5 should be options; but none required (as there may not be a DLP software in place)."
+
+> "Also, make the same type of availability for antivirus scanning; insure malicious scripts can't be injected either (not sure if AMSI is the right answer here, as the agent isn't running the script)."
+
+### What the AI assistant said in between (assistant's statements, not conception)
+
+These are the AI assistant's contributions to the exchange, recorded as
+context. They are not Stephan's conception.
+
+- The assistant presented five hook types for third-party scanners:
+  1. a vendor API (REST or gRPC);
+  2. ICAP;
+  3. an in-process or local plugin;
+  4. a sidecar or local daemon reached over a local socket;
+  5. asynchronous post-send scanning by webhook or storage-event callback.
+     This only flags a problem after the fact, unless the payload is held
+     until the verdict arrives.
+- The assistant agreed with Stephan's direction that third-party DLP should
+  hook into Two-Key rather than be built in.
+- The assistant noted that the gateway passing the actual intercepted
+  content lets the scan verdict replace the agent's self-label.
+- The assistant noted that AMSI is a Windows interface that script engines
+  call before running a script. It doesn't fit, because Two-Key doesn't run
+  scripts. Content scanning at the gateway fits instead, with AMSI possibly
+  one optional Windows local plugin.
+
+The implementation of these hooks (`two_key/scanning.py`,
+`docs/SCANNING_HOOKS.md`) is AI-prepared engineering. Settings that Stephan
+has not decided ship with placeholder defaults, and those questions are
+listed as open in `docs/SCANNING_HOOKS.md`.
+
 ---
 
 *Future entries: add a new dated section. Don't edit earlier entries. If
