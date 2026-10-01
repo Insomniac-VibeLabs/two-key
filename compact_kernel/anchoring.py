@@ -36,5 +36,8 @@ class LocalFileAnchor(Anchor):
         rec = {"anchored_at": time.time(), "signed_head": signed_head}
         with self.path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, sort_keys=True) + "\n")
+        # PersonalLedger.signed_head() is {"head": {"size": ..., ...}, "sig": ...}: the size is one level down.
+        head = signed_head.get("head")
+        size = head.get("size") if isinstance(head, dict) else signed_head.get("size")
         return {"anchor": "local-file", "published": False, "path": str(self.path),
-                "size": signed_head.get("size"), "note": "local stub, not public"}
+                "size": size, "note": "local stub, not public"}

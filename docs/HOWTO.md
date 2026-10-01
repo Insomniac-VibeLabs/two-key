@@ -820,7 +820,7 @@ amount must not exceed it.
 | the token's constitution hashes match the latest `constitution_loaded` entry | `constitution_hash_mismatch` |
 | no reload or revocation since issuance | `constitution_changed_since_issue`, `revoked` |
 | the token's own `capability_issued` entry exists and matches | `capability_not_recorded` |
-| single use | `replayed` |
+| single use, shared by every gateway on the ledger | `replayed`; across processes also `ledger_concurrent_writer` |
 
 On success the gateway logs `capability_redeemed` before the tool runs, so
 a crashing tool can't be retried with the same token. It then logs
@@ -862,14 +862,50 @@ print("after checkpoint:", k.ledger.verify(pub).reason)
   `kernel.gateway()`. The ledger is owned by one process, and a second
   process opening the same file won't see new entries, so its checks fail
   closed.
-- Create **one** gateway per kernel and reuse it. Each gateway instance
-  keeps its own set of used tokens (rebuilt from the ledger only when it's
-  created), so two live instances would each accept the same token once.
+- You can create **several** gateways on one kernel (for example one per
+  tool family or per worker thread). The used-token record lives in the
+  kernel's ledger, not in the gateway, so every gateway consults the same
+  record and a token is accepted **exactly once** however many gateways or
+  threads present it. The checks and the redemption run under the ledger's
+  lock. See the example below.
+- A gateway in a **second process** (or a second `PersonalLedger` opened on
+  the same file) still can't redeem a token twice: on POSIX the redemption
+  holds an `flock` on the ledger file and first checks that nobody else has
+  appended since this instance last wrote. If someone has, it refuses with
+  `replayed` (the other writer already redeemed this token) or
+  `ledger_concurrent_writer` (the file changed in some other way). The
+  refusal isn't logged, because that instance's view is stale and
+  appending would fork the chain. That instance then refuses all further
+  writes until it's reopened. This is a fail-closed guard, not
+  multi-process support: the ledger still has one owning process.
 - Tokens are bearer secrets. Pass them straight from `authorize` to
   `invoke`; don't log or store them.
 - A restarted kernel gets a new random HMAC key (`capability_secret`), so
   tokens from before the restart stop working. Replay protection survives
-  restarts: the gateway rebuilds its set of used tokens from the ledger.
+  restarts: the ledger rebuilds its used-token record from its
+  `capability_redeemed` entries when it's opened.
+
+Two gateways on one kernel, same token:
+
+<!-- check: expect=^first gateway: executed -->
+<!-- check: expect=^second gateway: replayed -->
+<!-- check: expect=^redemptions recorded: 1 -->
+```python
+from my_kernel import make_kernel
+
+k = make_kernel("howto-9b.jsonl")
+args = {"payee": "power-co.example", "amount": 42.5}
+fields = {"amount_usd": 42.5, "counterparty": "power-co.example", "data_class": "financial"}
+gw1 = k.gateway(tools={"pay_bill": lambda payee, amount: "paid"})
+gw2 = k.gateway(tools={"pay_bill": lambda payee, amount: "paid"})
+d = k.authorize({"tool": "pay_bill", "amount_usd": 42.5, "counterparty": "power-co.example",
+                 "data_class": "financial", "irreversible": False}, "Pay the electric bill.", args)
+print("first gateway:", gw1.invoke(d.capability, "pay_bill", args, fields).reason)
+print("second gateway:", gw2.invoke(d.capability, "pay_bill", args, fields).reason)
+jti = d.token_payload["jti"]
+print("redemptions recorded:", sum(1 for e in k.ledger.entries
+                                   if e.kind == "capability_redeemed" and e.body["jti"] == jti))
+```
 
 ## 10. Ordering and short-circuit
 
@@ -1016,9 +1052,11 @@ print(f"append: {k.ledger.verify(load_key().public_key()).reason} (unsigned entr
 Publishing the signed head to a public log on a schedule isn't implemented.
 The hook exists: `ledger.anchor(anchor)` publishes the signed head through
 an `Anchor` and logs an `anchored` entry. `LocalFileAnchor` only appends
-to a local file.
+to a local file. Its receipt's `size` is the number of entries the
+anchored signed head covers.
 
 <!-- check: expect=^\{'anchor': 'local-file', 'published': False -->
+<!-- check: expect='size': \d+ -->
 ```python
 from pathlib import Path
 from compact_kernel.anchoring import LocalFileAnchor

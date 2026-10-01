@@ -37,6 +37,14 @@ any tool runs, it checks everything spec 5.5 lists, plus single-use:
      e. the token's own capability_issued entry exists and matches
                                -> capability_not_recorded
  11. single use (jti)          -> replayed
+     The used-token record lives in the ledger (``PersonalLedger.redeem``),
+     not in the gateway, so every gateway on one kernel/ledger shares it:
+     a token is accepted once no matter how many gateways or threads try.
+     Checks 9-11 and the redemption run under the ledger's lock. Across
+     processes on POSIX, a redemption that finds another writer has changed
+     the ledger file is refused: ``replayed`` if that writer redeemed this
+     token, otherwise ``ledger_concurrent_writer``. Neither is written to this
+     (now stale) ledger instance, because appending would fork the chain.
 
 On success, capability_redeemed and tool_executed/tool_error entries link to
 the token's capability_issued entry (seq and digest). tool_executed also
@@ -96,8 +104,8 @@ class ToolGateway:
         self.checkpoint_error: str | None = None
         self.tools = dict(tools or {})
         self.extractors = dict(extractors or {})
-        # Rebuild the single-use set from the ledger so replay protection survives restarts.
-        self._redeemed = {e.body.get("jti") for e in ledger.entries if e.kind == "capability_redeemed"}
+        # Single use is tracked by the ledger (ledger.redeem), shared by every gateway on it and rebuilt
+        # from the ledger's capability_redeemed entries on load, so replay protection survives restarts.
         # Last-known ledger view (§4 (i)): (size, Merkle root). Taken from the ledger at construction;
         # the kernel has verified the ledger against the principal's signed head by then. The view
         # only ever moves forward along a verified consistency proof.
@@ -236,26 +244,29 @@ class ToolGateway:
             return self._deny("counterparty_mismatch", token, tool)
         if fields["data_class"] != scope.get("data_class"):
             return self._deny("data_class_mismatch", token, tool)
-        # §4 (i): the ledger must still contain the gateway's last-known view.
-        intact = self.refresh_view() if self.view_refresh == "every_call" else self._view_intact()
-        if not intact:
-            return self._deny("ledger_fork_detected", token, tool)
-        if self.ledger.index_of(p.get("ledger_root", "")) is None:
-            return self._deny("unknown_ledger_root", token, tool)
-        reason, cap = self._check_ledger_binding(p)
-        if reason is not None:
-            return self._deny(reason, token, tool)
-        tok_hash = token_sha256(token)
-        if cap.body.get("token_sha256") != tok_hash:
-            return self._deny("capability_not_recorded", token, tool)
         jti = p.get("jti")
-        if not jti or jti in self._redeemed:
-            return self._deny("replayed", token, tool)
+        with self.ledger.lock:  # checks 9-11 and the redemption are atomic w.r.t. other gateways/threads
+            # §4 (i): the ledger must still contain the gateway's last-known view.
+            intact = self.refresh_view() if self.view_refresh == "every_call" else self._view_intact()
+            if not intact:
+                return self._deny("ledger_fork_detected", token, tool)
+            if self.ledger.index_of(p.get("ledger_root", "")) is None:
+                return self._deny("unknown_ledger_root", token, tool)
+            reason, cap = self._check_ledger_binding(p)
+            if reason is not None:
+                return self._deny(reason, token, tool)
+            tok_hash = token_sha256(token)
+            if cap.body.get("token_sha256") != tok_hash:
+                return self._deny("capability_not_recorded", token, tool)
+            if not jti or self.ledger.is_redeemed(jti):
+                return self._deny("replayed", token, tool)
 
-        link = {"capability_entry_seq": cap.seq, "capability_entry_digest": cap.digest}
-        self._redeemed.add(jti)
-        self.ledger.append("capability_redeemed", {"jti": jti, "token_sha256": tok_hash,
-                                                   "tool": call_tool, "args_hash": call_args_hash, **link})
+            link = {"capability_entry_seq": cap.seq, "capability_entry_digest": cap.digest}
+            redeemed, why = self.ledger.redeem(jti, {"token_sha256": tok_hash, "tool": call_tool,
+                                                     "args_hash": call_args_hash, **link})
+            if redeemed is None:
+                # Another writer changed the ledger file: this instance is stale, so nothing is appended.
+                return GatewayResult(False, why)
         fn = self.tools.get(call_tool)
         if fn is None:
             return GatewayResult(True, "authorized_no_executor")

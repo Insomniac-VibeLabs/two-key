@@ -73,6 +73,54 @@ constitution load, revocations, and the token's own entry. The previous
 gateway scanned the entries after the token's root (`kinds_after`), which
 was O(n).
 
+## Shared single-use record (2026-09-30 evening): what changed
+
+Measured 2026-09-30 about 18:20–18:45 MDT on the same VM. Single use is now
+tracked by the ledger (`PersonalLedger.redeem`) and shared by every gateway
+on the kernel, instead of a per-gateway set. On each invoke the gateway holds
+the ledger's lock across its ledger checks and the redemption. The redemption
+also takes an `flock` on the ledger file and `stat`s it to detect another
+writer, and every `append` takes the lock and counts the bytes it wrote.
+
+**Interleaved A/B (the reliable figure).** Previous code (5b43f41) and the new
+code ran in alternating processes, 6 rounds each, 1,450 timed invokes per
+round, Ed25519, fsync off, 2 local judges:
+
+| Gateway `invoke` | Previous (median of 6 rounds) | New | Change |
+|---|---:|---:|---:|
+| head signing deferred (`checkpoint_every=0`) | 159.3 µs | 168.8 µs | **+9 µs (+6%)** |
+| full, one signed head per call | 330.5 µs | 348.2 µs | **+18 µs (+5%)**, of which about 9 µs is above the deferred figure and within this VM's noise |
+
+**Hot-path regression, flagged:** about +9 µs per `invoke`. Measured
+directly: a `redeem` costs 6.5 µs more than a plain `append` (stat about
+1.1 µs, flock/unlock 0.5 µs, the rest locking and bookkeeping), and each
+`append` costs about 1.8 µs more (lock, byte count, the redeemed index). A
+redundant `mkdir` on the redemption path (3.7 µs) was removed before these
+figures were taken. Nothing changes asymptotically, and no network or key
+parsing is added to the path.
+
+**`bench.py` gateway rows, re-run** (one full run before the change, one
+after; the full-run medians move ±10–15% between runs on this shared VM,
+which is larger than the effect, so read these with the A/B above):
+
+| Row | Before (5b43f41) | After | Change |
+|---|---:|---:|---:|
+| invoke (all checks + redeem + tool + signed head), ed25519, fsync=off | 320.4 µs | 326.4 µs | +2% |
+| invoke, head signing deferred (checkpoint_every=0), fsync=off | 159.5 µs | 153.6 µs | -4% |
+| checks only: token verify + args hash + field normalize + root lookup | 23.9 µs | 22.5 µs | -6% |
+| §4 (i) binding checks only: token verify + view check + 1 consistency proof + hash/revocation lookups | 31.3 µs | 34.3 µs | +10% |
+| invoke on a ledger with >10,000 entries (18201), ed25519, fsync=off | 336.2 µs | 337.3 µs | +0% |
+| invoke (all checks + redeem + tool + signed head), ed25519, fsync=on | 829.4 µs | 749.5 µs | -10% |
+| invoke (all checks + redeem + tool + signed head), ecdsa-p384, fsync=off | 547.5 µs | 498.5 µs | -9% |
+| invoke (all checks + redeem + tool + signed head), ecdsa-p384, fsync=on | 935.3 µs | 957.3 µs | +2% |
+| invoke (all checks + redeem + tool + signed head), hybrid-mldsa65-ed25519, fsync=off | 1.07 ms | 1.24 ms | +15% |
+| invoke (all checks + redeem + tool + signed head), hybrid-mldsa65-ed25519, fsync=on | 1.90 ms | 2.04 ms | +8% |
+| invoke (all checks + redeem + tool + signed head), hybrid-mldsa65-p384, fsync=off | 1.31 ms | 1.36 ms | +3% |
+| invoke (all checks + redeem + tool + signed head), hybrid-mldsa65-p384, fsync=on | 2.26 ms | 2.02 ms | -11% |
+
+The "Full results" table below is from the earlier §4 (i)–(iii) run and was
+not replaced.
+
 ## Hot-path properties (and how they are enforced)
 
 * **Path A is in microseconds**: 7–12 µs per evaluation on this machine.

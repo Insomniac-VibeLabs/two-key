@@ -415,9 +415,9 @@ Environment variables: the package reads only the variables you name
   with `echo_binding: true` on every LLM judge.
 - Kernel: `short_circuit_path_b=True` (the default), `head_signing="decision"`,
   `ledger_fsync=True`, and `ttl_seconds` as short as your tools allow.
-- Gateway: one instance from `kernel.gateway()`, in the same process as the
-  kernel, with extractors for every money-moving tool and
-  `checkpoint_every=1`.
+- Gateway: from `kernel.gateway()` (any number; they share single use), in
+  the same process as the kernel, with extractors for every money-moving tool
+  and `checkpoint_every=1`.
 - Verify: run `verify-ledger` on a schedule, and keep a copy of the signed
   head somewhere the agent can't write.
 
@@ -482,8 +482,10 @@ Environment variables: the package reads only the variables you name
   produces that record is an open design question (problem F); until it's
   settled, derive fields from the literal arguments wherever you can.
 - Don't run the gateway in a separate process that opens the same ledger
-  file, and don't create two gateways for one kernel. One process owns the
-  ledger, and each gateway instance tracks used tokens on its own.
+  file; one process owns the ledger. Several gateways on one kernel are fine:
+  the used-token record lives in the ledger, so a token is accepted once.
+  A second process can't redeem twice either (its redemption fails closed
+  with `replayed` or `ledger_concurrent_writer`), but it isn't supported.
 - Don't reuse a token, extend its TTL to minutes, or log it; it's a bearer
   secret until it expires.
 - Don't treat `weights_sha256` or `local_weights` as verified.
@@ -505,7 +507,8 @@ Environment variables: the package reads only the variables you name
 | Ballot error `http 404` / `http 400` | Wrong model name or endpoint | Check `model` and `base_url` |
 | Deny `invalid_action:…` | The action record failed validation (unknown field, bad type, unknown data class) | Fix the record; see the field table |
 | Gateway `args_mismatch` | The arguments at invoke differ from those authorized | Pass exactly the same `args` mapping |
-| Gateway `replayed` | Tokens are single-use | Authorize again |
+| Gateway `replayed` | Tokens are single-use, across every gateway on the ledger | Authorize again |
+| Gateway `ledger_concurrent_writer` | Another process or ledger instance wrote to this ledger file | Keep one owning process; reopen the ledger |
 | Gateway `expired` | TTL passed | Authorize closer to execution |
 | Gateway `constitution_hash_mismatch` / `constitution_changed_since_issue` / `revoked` | The constitution was reloaded, or the token revoked, after issuance | Authorize again under the current constitution |
 | Gateway `ledger_root_not_ancestor` / `ledger_fork_detected` | The ledger was rewritten or truncated, or the token comes from another ledger | Run `verify-ledger`; investigate before continuing |

@@ -222,5 +222,33 @@ class KernelGuards(unittest.TestCase):
                 pass
 
 
+
+class AnchorReceiptSize(unittest.TestCase):
+    """LocalFileAnchor read 'size' from the top of the signed head, which is {"head": {...}, "sig": ...},
+    so every receipt said 'size': None. It now reads head['size'] (engineering fix, Stephan's instruction)."""
+
+    def test_receipt_reports_signed_head_size(self):
+        import json
+        from compact_kernel import keys
+        from compact_kernel.anchoring import LocalFileAnchor
+        from compact_kernel.ledger import PersonalLedger
+        with tempfile.TemporaryDirectory() as tmp:
+            led = PersonalLedger(Path(tmp) / "l.jsonl", keys.generate_private_key())
+            for i in range(3):
+                led.append("note", {"i": i})
+            r = led.anchor(LocalFileAnchor(Path(tmp) / "anchor.jsonl"))
+            self.assertEqual(r["size"], 3)  # the head that was anchored covered 3 entries
+            self.assertEqual(led.entries[-1].body["receipt"]["size"], 3)
+            rec = json.loads((Path(tmp) / "anchor.jsonl").read_text().splitlines()[-1])
+            self.assertEqual(rec["signed_head"]["head"]["size"], r["size"])
+            led.append("note", {"i": 3})
+            self.assertEqual(led.anchor(LocalFileAnchor(Path(tmp) / "anchor.jsonl"))["size"], 5)
+
+    def test_flat_head_dict_still_accepted(self):
+        from compact_kernel.anchoring import LocalFileAnchor
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(LocalFileAnchor(Path(tmp) / "a.jsonl").publish({"size": 7})["size"], 7)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -151,7 +151,7 @@ Payload [D §5.5]: principal, tool, scope, issued_at, expires_at, ledger_root. D
 [IMPL]
 - The token also carries a single-use `jti`, `args_hash`, and the constitution digest.
 - Its tag is HMAC-SHA-256 (`ck1`) or HMAC-SHA-384 (`ck1-hs384`, the default for non-legacy key suites). A signed mode (`ck1-sig`, e.g. hybrid ML-DSA-65 + Ed25519) is optional. Production would use a hardware-backed key [D §5.1 item 6].
-- The gateway additionally checks the principal, data class, `args_hash` (the canonical hash of the literal tool-call arguments), that no constitution has been loaded since the token's root, and single use. The set of used jtis is rebuilt from the ledger on restart.
+- The gateway additionally checks the principal, data class, `args_hash` (the canonical hash of the literal tool-call arguments), that no constitution has been loaded since the token's root, and single use. The used-jti record is kept by the ledger itself, so every gateway on one kernel/ledger shares it and a token is accepted exactly once however many gateways or threads present it (checks and redemption run under the ledger's lock; on POSIX the redemption also holds an `flock` on the ledger file and refuses, fail closed, if another writer has changed the file: `replayed` / `ledger_concurrent_writer`). The record is rebuilt from the ledger's `capability_redeemed` entries on restart [IMPL; engineering fix on Stephan's instruction, 2026-09-30].
 - The full token goes back to the caller; only its SHA-256 is logged.
 
 *Open question (DESIGN_OPTIONS.md §3):* the token binding details. `args_hash` is the reference option specified in Stephan's 2026-09-30 instructions, and alternatives are listed in the memo.
@@ -224,9 +224,10 @@ Compared with the code before the §4 phase, measured in the same session, the �
 
 ## 6. Reduction to practice (as of 2026-09-30)
 
-[IMPL] The Python 3 prototype is in `compact_kernel/`. The test suite (`python -m unittest discover -s tests`, 234 tests) covers:
+[IMPL] The Python 3 prototype is in `compact_kernel/`. The test suite (`python -m unittest discover -s tests`, 249 tests) covers:
 - the defects found in the 2026-09-30 review: the negative-amount wire, permissive missing-field defaults, silently ignored typo rules, case variants such as "Medical", 2-of-3 quorums, and zero judges;
 - every gateway check, including replay across tools, expiry, scope, and ledger-root ancestry;
+- single use across several gateways on one kernel, concurrent threads, forked processes, a second ledger instance, and restart (`tests/test_shared_redemption.py`);
 - detection of full ledger rewrites;
 - constitution and token signature tampering;
 - malformed judge output;

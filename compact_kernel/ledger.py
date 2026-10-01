@@ -21,7 +21,18 @@ An append-only JSONL hash chain owned by the principal (spec 5.6), plus:
   boundaries, so one signature covers all entries of a decision;
 - configurable digest algorithm: SHA-256 (legacy default) or SHA-384 (the
   default when the signing key is a post-quantum hybrid suite);
-- an anchoring hook (anchoring.py). It is a stub; nothing is published.
+- an anchoring hook (anchoring.py). It is a stub; nothing is published;
+- the single-use record for capability tokens (``redeem``). Every gateway
+  on this ledger (every ``kernel.gateway()`` of one kernel) consults the
+  same record, so a token is accepted once however many gateways exist.
+  It is rebuilt from the capability_redeemed entries on load, so it
+  survives restarts. ``append``, ``checkpoint``, and ``redeem`` share one
+  re-entrant lock (thread safety). On POSIX, ``redeem`` also holds an
+  advisory ``flock`` on the ledger file and first checks that no other
+  writer (another process, or another PersonalLedger on the same file) has
+  appended since this instance last wrote; if one has, it refuses the
+  redemption (fail closed) instead of accepting the token a second time,
+  and this instance then refuses further writes (it is stale; reopen it).
 
 The ledger file and head file are created with mode 0600. The ledger is
 *not encrypted*; see DESIGN_OPTIONS.md.
@@ -31,7 +42,9 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
+import weakref
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -41,6 +54,11 @@ from .anchoring import Anchor
 from .canonical import canonical_bytes, digest_hex
 from .crypto.provider import DIGEST_SIZE, CryptoProvider, default_provider
 from .crypto.signatures import LEGACY_SUITE, as_private_keyset, as_public_keyset
+
+try:  # POSIX advisory file locks for cross-process redemption; absent on Windows
+    import fcntl
+except ImportError:  # pragma: no cover
+    fcntl = None
 
 GENESIS = "0" * 64
 HEAD_FORMAT = "compact-kernel-ledger-head/1"
@@ -115,6 +133,11 @@ class PersonalLedger:
         self._latest_constitution: int | None = None
         self._revoke_all_seq = -1                   # seq of the latest "revoke all" entry
         self._revoked_jti: dict[str, int] = {}
+        self._redeemed: dict[str, int] = {}         # jti -> seq of its capability_redeemed entry
+        self._lock = threading.RLock()              # append / checkpoint / redeem (shared by all gateways)
+        self._file_size = 0                         # bytes of the ledger file this instance has read or written
+        self._lock_fd: int | None = None            # fd for the cross-process redemption flock (lazy)
+        self._stale: str | None = None              # set once redeem() finds another writer on the file
         self._unsigned = 0
         if self.path.exists():
             self._load()
@@ -133,7 +156,9 @@ class PersonalLedger:
 
     # -- storage -------------------------------------------------------------
     def _load(self) -> None:
-        for n, line in enumerate(self.path.read_text(encoding="utf-8").splitlines()):
+        raw = self.path.read_bytes()
+        self._file_size = len(raw)
+        for n, line in enumerate(raw.decode("utf-8").splitlines()):
             if not line.strip():
                 continue
             try:
@@ -158,30 +183,114 @@ class PersonalLedger:
                 self._revoke_all_seq = e.seq
             elif isinstance(jti, str):
                 self._revoked_jti.setdefault(jti, e.seq)
+        elif e.kind == "capability_redeemed":
+            jti = e.body.get("jti")
+            if isinstance(jti, str):
+                self._redeemed.setdefault(jti, e.seq)
 
     def append(self, kind: str, body: dict) -> Entry:
-        prev = self.tip()
-        seq = len(self.entries)
-        ts = time.time()
-        digest = _entry_digest(seq, ts, kind, body, prev, self.digest_alg, self.crypto)  # raises on bad body
-        entry = Entry(seq, ts, kind, body, prev, digest, self.digest_alg)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        _write_private(self.path, entry.to_json() + "\n", append=True, fsync=self.fsync)
-        self.entries.append(entry)
-        self._index[digest] = seq
-        self._track(entry)
-        self._tree.append(bytes.fromhex(digest))
-        self._unsigned += 1
-        if self.signing_key is not None and self.auto_sign_every and self._unsigned >= self.auto_sign_every:
-            self._write_head()
-        return entry
+        with self._lock:
+            if self._stale:
+                raise LedgerError(self._stale)
+            prev = self.tip()
+            seq = len(self.entries)
+            ts = time.time()
+            digest = _entry_digest(seq, ts, kind, body, prev, self.digest_alg, self.crypto)  # raises on bad body
+            entry = Entry(seq, ts, kind, body, prev, digest, self.digest_alg)
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            line = entry.to_json() + "\n"
+            _write_private(self.path, line, append=True, fsync=self.fsync)
+            self._file_size += len(line.encode("utf-8"))
+            self.entries.append(entry)
+            self._index[digest] = seq
+            self._track(entry)
+            self._tree.append(bytes.fromhex(digest))
+            self._unsigned += 1
+            if self.signing_key is not None and self.auto_sign_every and self._unsigned >= self.auto_sign_every:
+                self._write_head()
+            return entry
 
     def checkpoint(self) -> bool:
         """Sign the current head if any entries are not yet covered. Returns True if a head was written."""
-        if self.signing_key is None or (self._unsigned == 0 and self.head_path.exists()):
-            return False
-        self._write_head()
-        return True
+        with self._lock:
+            if self.signing_key is None or (self._unsigned == 0 and self.head_path.exists()):
+                return False
+            self._write_head()
+            return True
+
+    # -- single use (shared by every gateway on this ledger) -----------------------
+    @property
+    def lock(self) -> threading.RLock:
+        """The ledger's re-entrant lock. Gateways hold it across their ledger checks and the redemption."""
+        return self._lock
+
+    def is_redeemed(self, jti: str) -> bool:
+        return jti in self._redeemed
+
+    def redemption_for(self, jti: str) -> Entry | None:
+        seq = self._redeemed.get(jti)
+        return None if seq is None or seq < 0 else self.entries[seq]
+
+    def redeem(self, jti: str, body: dict) -> tuple[Entry | None, str]:
+        """Record the single use of ``jti`` atomically. Returns (capability_redeemed entry, "ok") exactly
+        once per jti; afterwards (None, "replayed"). Across processes (POSIX flock), returns
+        (None, "replayed") if another writer already redeemed it, or (None, "ledger_concurrent_writer")
+        if another writer changed the file at all; this instance is then stale and refuses
+        further writes (append and checkpoint raise LedgerError) until it is reopened."""
+        if not isinstance(jti, str) or not jti:
+            return None, "replayed"
+        with self._lock:
+            if jti in self._redeemed:
+                return None, "replayed"
+            fd = self._redeem_lock_fd()
+            if fd is not None:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                other = self._other_writer_state(jti)
+                if other is not None:
+                    self._stale = "ledger file changed by another writer; reopen the ledger"
+                    return None, other
+                try:
+                    return self.append("capability_redeemed", {"jti": jti, **body}), "ok"
+                except BaseException:
+                    self._redeemed.setdefault(jti, -1)  # burned in memory even if the write failed (as before)
+                    raise
+            finally:
+                if fd is not None:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+
+    def _redeem_lock_fd(self) -> int | None:
+        if fcntl is None:
+            return None
+        if self._lock_fd is None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(self.path, os.O_RDONLY | os.O_CREAT, 0o600)
+            self._lock_fd = fd
+            weakref.finalize(self, os.close, fd)
+        return self._lock_fd
+
+    def _other_writer_state(self, jti: str) -> str | None:
+        """None if the file is exactly what this instance wrote; otherwise the reason to refuse."""
+        try:
+            size = os.stat(self.path).st_size
+        except OSError:
+            return "ledger_concurrent_writer"
+        if size == self._file_size:
+            return None
+        if size < self._file_size:
+            return "ledger_concurrent_writer"
+        with open(self.path, "rb") as f:
+            f.seek(self._file_size)
+            tail = f.read(size - self._file_size)
+        for line in tail.splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue  # an entry another writer is still writing; never the redemption (written under flock)
+            if isinstance(rec, dict) and rec.get("kind") == "capability_redeemed" and \
+                    isinstance(rec.get("body"), dict) and rec["body"].get("jti") == jti:
+                return "replayed"
+        return "ledger_concurrent_writer"
 
     @property
     def unsigned_entries(self) -> int:
@@ -291,10 +400,14 @@ class PersonalLedger:
         return {"head": body, "sig": self.signing_key.sign(canonical_bytes(body))}
 
     def _write_head(self) -> None:
-        tmp = self.head_path.with_name(self.head_path.name + ".tmp")
-        _write_private(tmp, json.dumps(self.signed_head(), sort_keys=True) + "\n", append=False, fsync=self.fsync)
-        os.replace(tmp, self.head_path)
-        self._unsigned = 0
+        with self._lock:
+            if self._stale:
+                raise LedgerError(self._stale)
+            tmp = self.head_path.with_name(self.head_path.name + ".tmp")
+            _write_private(tmp, json.dumps(self.signed_head(), sort_keys=True) + "\n", append=False,
+                           fsync=self.fsync)
+            os.replace(tmp, self.head_path)
+            self._unsigned = 0
 
     def verify(self, trusted_key: Any) -> VerifyReport:
         """Full verification: chain, signed head under the trusted key, size, and Merkle root.
