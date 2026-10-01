@@ -149,8 +149,9 @@ class PersonalLedger:
             self._load()
         existing = self.entries[0].alg if self.entries else None
         if digest_alg is None:
-            digest_alg = existing or ("sha384" if self.signing_key is not None and self.signing_key.is_pq
-                                      else "sha256")
+            # An existing ledger keeps its algorithm (legacy SHA-256 ledgers still load and verify);
+            # a new one is SHA-384 (F_REVIEW; CONCEPTION_NOTES Entry 10).
+            digest_alg = existing or "sha384"
         elif existing is not None and existing != digest_alg:
             raise LedgerError(f"ledger uses {existing}, not {digest_alg}")
         self.crypto.check("hash", digest_alg)

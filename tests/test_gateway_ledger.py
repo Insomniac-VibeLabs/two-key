@@ -50,7 +50,7 @@ class GatewayChecks(unittest.TestCase):
         self.fx.__exit__(None, None, None)
 
     def test_full_token_returned_and_redeemable_once(self):
-        self.assertTrue(self.d.capability.startswith("tk1.") and self.d.capability.count(".") == 2)
+        self.assertTrue(self.d.capability.startswith("tk1-hs384.") and self.d.capability.count(".") == 2)
         r = self.gw.invoke(self.d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
         self.assertEqual((r.allowed, r.reason, r.result), (True, "executed", "paid"))
         self.assertEqual(self.calls, [PAY_ARGS])
@@ -164,7 +164,7 @@ class GatewayChecks(unittest.TestCase):
         self.assertEqual(set(norm), {"tool", "amount_usd", "currency", "counterparty", "data_class", "destination",
                                      "duration_hours", "irreversible", "tags", "raw"})
         issued = next(e for e in self.tk.ledger.entries if e.kind == "capability_issued").body
-        self.assertEqual(len(issued["token_sha256"]), 64)
+        self.assertEqual(len(issued["token_digest"]), 96)  # SHA-384 (F_REVIEW)
         self.assertNotIn(self.d.capability, self.tk.ledger.path.read_text())
         self.assertNotIn(self.d.capability.split(".")[2], self.tk.ledger.path.read_text())
         denied = [e for e in self.tk.ledger.entries if e.kind == "gateway_denied"][-1].body

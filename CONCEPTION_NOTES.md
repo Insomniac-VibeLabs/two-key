@@ -345,6 +345,42 @@ listed as open in `docs/SCANNING_HOOKS.md`.
   `CHANGES.md` row 88. Settings he has not decided are listed there as
   open questions.
 
+## Entry 10
+
+- **Attributed to:** Stephan Busch
+- **Date/time:** 2026-09-30, 10:30 PM Mountain Time (MDT, UTC-6)
+- **How it was captured:** relayed by Stephan's patent-attorney agent, and
+  passed on to the AI engineering assistant by Programer, the engineering
+  agent coordinating this work. The quote is reproduced exactly as relayed.
+- **Nature:** **an approval of routine bug fixes, not conception.** Stephan
+  approved fixing defects found in the existing code (F_REVIEW.md §8,
+  findings 1–3: the gateway's hash-then-execute gap, the non-injective
+  canonical encoding, and unescaped judge-prompt delimiters). This entry
+  records his approval and his condition. It does not record an inventive
+  contribution.
+
+### Stephan's words (10:30 PM MT, relayed by the patent-attorney agent)
+
+> "A, but ensure quantum resistance and fips 140-3 compliance where applicable."
+
+### Assistant's note (not conception)
+
+- According to the relaying instruction, "A" means approving the three
+  F_REVIEW bug fixes. The text of the options he was choosing between was
+  not relayed to the engineering assistant.
+- The fixes, and how his condition was applied, are AI-prepared
+  engineering:
+  - hashes and MACs use FIPS-approved algorithms with a quantum margin
+    (SHA-384, HMAC-SHA-384, keys of at least 256 bits) by default in every
+    profile;
+  - the hybrid ML-DSA-65 signatures are kept;
+  - everything goes through the existing crypto provider and its self-test;
+  - older artifacts are versioned and still verify.
+- The documentation wording is "FIPS-approved algorithms, validated module
+  required for compliance". No validation is claimed.
+- Details are in `CHANGES.md` row 89, `docs/CRYPTO.md` §3, and
+  `F_REVIEW.md` §12.
+
 ---
 
 *Future entries: add a new dated section. Don't edit earlier entries. If

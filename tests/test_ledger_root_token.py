@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 
 from two_key import merkle
-from two_key.canonical import canonical_hash
+from two_key.canonical import DOMAIN_TOOL_RESULT, typed_hash
 from two_key.constitution import sign_document
 from two_key.crypto.signatures import PrivateKeySet
 from two_key.core import TwoKey
@@ -112,7 +112,7 @@ class AncestorCheck(Base):
         prev = rows[mutate_seq - 1]["digest"] if mutate_seq else "0" * 64
         for r in rows[mutate_seq:]:
             r["prev"] = prev
-            r["digest"] = _entry_digest(r["seq"], r["ts"], r["kind"], r["body"], r["prev"])
+            r["digest"] = _entry_digest(r["seq"], r["ts"], r["kind"], r["body"], r["prev"], r.get("alg", "sha256"))
             prev = r["digest"]
         dst.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows))
         return PersonalLedger(dst, None, fsync=False)
@@ -252,7 +252,7 @@ class ExecutionLinkedToTokenEntry(Base):
         ex = [e for e in led.entries if e.kind == "tool_executed"][-1].body
         for b in (red, ex):
             self.assertEqual((b["capability_entry_seq"], b["capability_entry_digest"]), (cap.seq, cap.digest))
-        self.assertEqual(ex["result_hash"], canonical_hash({"paid": 42.5}, led.digest_alg))
+        self.assertEqual(ex["result_hash"], typed_hash({"paid": 42.5}, DOMAIN_TOOL_RESULT, led.digest_alg))
         self.assertNotIn("paid", json.dumps(ex))  # only the hash of the result is stored
         self.assertEqual(self.invoke(self.d.capability).reason, "replayed")
         self.assertTrue(led.verify(self.fx.key.public_key()).ok)
@@ -267,7 +267,7 @@ class ExecutionLinkedToTokenEntry(Base):
         gw = self.tk.gateway({"pay_bill": lambda **a: object()})
         self.assertEqual(gw.invoke(self.d.capability, "pay_bill", ARGS, FIELDS).reason, "executed")
         self.assertEqual(len([e for e in self.tk.ledger.entries if e.kind == "tool_executed"][-1].body["result_hash"]),
-                         64)
+                         96)
 
 
 class NonLegacyProfile(unittest.TestCase):

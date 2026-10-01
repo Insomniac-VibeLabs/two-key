@@ -150,7 +150,7 @@ class SelfTest(unittest.TestCase):
                               allow_test_doubles=True)
             prof = tk.ledger.entries[0].body["crypto"]
             self.assertEqual((prof["signature_suite"], prof["digest_alg"], prof["token_mode"]),
-                             ("ed25519", "sha256", "tk1"))
+                             ("ed25519", "sha384", "tk1-hs384"))  # every suite since F_REVIEW
             self.assertTrue(prof["selftest"]["ok"])
 
     def test_cli_selftest(self):

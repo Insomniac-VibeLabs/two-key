@@ -31,7 +31,7 @@ APPROVED: dict[str, frozenset[str]] = {
     "hash": frozenset({"sha256", "sha384", "sha512", "sha3-256", "sha3-384", "sha3-512"}),
     "mac": frozenset({"hmac-sha256", "hmac-sha384", "hmac-sha512"}),
     "sig": frozenset({"ed25519", "ecdsa-p384", "ml-dsa-65"}),
-    "kdf": frozenset({"pbkdf2-hmac-sha256"}),
+    "kdf": frozenset({"pbkdf2-hmac-sha256", "pbkdf2-hmac-sha384"}),
     "cipher": frozenset({"aes-256-gcm"}),
     "rng": frozenset({"os.urandom"}),
 }

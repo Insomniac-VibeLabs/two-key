@@ -1,10 +1,21 @@
 # Cryptography: FIPS 140-3 posture and quantum resistance
 
 Status as of 2026-09-30. Written by the AI engineering assistant at Stephan
-Busch's direction. **This software is not "FIPS certified" or "FIPS
-validated", and nothing in this repository makes it so.** It uses only
-FIPS-approved algorithms, routed through one pluggable crypto provider, so
-that it *can* be deployed on a FIPS 140-3 validated cryptographic module.
+Busch's direction.
+
+**Posture: FIPS-approved algorithms, validated module required for compliance.**
+
+This software is not "FIPS certified" or "FIPS validated", and nothing in
+this repository makes it so. Every algorithm goes through one pluggable
+crypto provider, so the software *can* be deployed on a FIPS 140-3
+validated cryptographic module.
+
+Since the F_REVIEW fixes (approved by Stephan, CONCEPTION_NOTES Entry 10:
+"A, but ensure quantum resistance and fips 140-3 compliance where
+applicable"), every profile uses SHA-384 hashes and HMAC-SHA-384 MACs with
+keys of 256 bits or more by default. Tool arguments and action records are
+hashed in the typed, injective `two-key-enc/2` encoding. Older artifacts
+still verify through legacy readers (section 3.1).
 
 ## 1. What FIPS 140-3 compliance requires
 
@@ -37,7 +48,7 @@ OpenSSL 3.5.7; the pyca `cryptography` 50.0.1 wheel bundles its own OpenSSL
 | `require_fips_module=True` | provider | Refuses to start unless **both** OpenSSL instances report FIPS mode (`_hashlib.get_fips_mode()` and pyca `backend._fips_enabled`). This is the switch to turn on in a real FIPS deployment. |
 | RNG | provider `random_bytes` → `os.urandom`; token ids use `secrets` | No other randomness source is used. |
 | Startup self-test | `two_key/crypto/selftest.py` | Runs once per provider before Two-Key accepts a constitution. Any failure raises `SelfTestError` and Two-Key refuses to start. See section 5. |
-| Key sizes | provider, `capability.py` | HMAC keys shorter than 256 bits are refused. Default token keys are 256 bits (tk1) or 384 bits (tk1-hs384). |
+| Key sizes | provider, `capability.py`, `scanning.py` | HMAC keys shorter than 256 bits are refused (tokens and the scan-verdict webhook). Default token keys are 384 bits (`tk1-hs384`). |
 
 The application-level self-test is extra. It does not replace the module's
 own mandatory FIPS 140-3 self-tests.
@@ -59,29 +70,34 @@ be found on 2026-09-30.
 
 ## 3. Every cryptographic use, its algorithm, and its standard
 
-"Legacy" is the default profile, unchanged from the previous version
-(Ed25519 key). "PQ" is the profile chosen automatically when the principal
-key is a hybrid ML-DSA suite (it also applies to the `ecdsa-p384` suite).
+"Default" applies to every principal-key suite since the F_REVIEW fixes.
+"Before" is what the Ed25519 ("legacy") profile used until then. Records
+written that way are still read (section 3.1). The hybrid and P-384
+profiles already used SHA-384 and HMAC-SHA-384.
 
-| Use | Legacy profile | PQ / non-legacy profile | Standard(s) |
+| Use | Default (every suite) | Before (Ed25519 profile) | Standard(s) |
 |---|---|---|---|
-| Constitution signature | Ed25519 | ML-DSA-65 **and** Ed25519, or ML-DSA-65 **and** ECDSA P-384 (both must verify). Classical-only alternative: ECDSA P-384 | FIPS 186-5 (EdDSA, ECDSA), FIPS 204 (ML-DSA) |
-| Constitution digest (bound into tokens and ledger) | SHA-256 | SHA-384 | FIPS 180-4 |
-| Constitution text hash inside the signed document | SHA-256 | SHA-256 (the text itself is covered by the signature) | FIPS 180-4 |
-| Ledger hash chain (entry digests) | SHA-256 | SHA-384 (the algorithm is bound into each digest) | FIPS 180-4 |
-| Ledger Merkle tree (RFC 6962 structure) | SHA-256 | SHA-384 | FIPS 180-4 |
-| Ledger chain-head signature | Ed25519 | same suite as the principal key (hybrid) | FIPS 186-5, FIPS 204 |
-| Capability token tag | HMAC-SHA-256 (`tk1`), key ≥ 256 bits | HMAC-SHA-384 (`tk1-hs384`), 384-bit key; optional `tk1-sig` signed tokens (hybrid ML-DSA-65) | FIPS 198-1 + FIPS 180-4; FIPS 204 |
-| Tool-call argument binding (`args_hash`) | SHA-256 | SHA-384 | FIPS 180-4 |
-| Ledger consistency and inclusion proofs (RFC 9162), the gateway's ancestor check for the token's root R (PRIOR_ART.md §4 (i)) | SHA-256 | SHA-384 | FIPS 180-4 |
-| `bytecode_hash` = H(canonical Path A bytecode), `nl_hash` = H(Path B prose) (§4 (ii)); bound into ballots and tokens | SHA-256 | SHA-384 | FIPS 180-4 |
-| Ballot binding H(action record) (§4 (iii)); `result_hash` of executed tools (§4 (i)) | SHA-256 | SHA-384 | FIPS 180-4 |
-| Source hash inside a single-source (`/2`) constitution document | SHA-256 | SHA-256 (the source is covered by the signature) | FIPS 180-4 |
-| Token identifier in ledger (`token_sha256`) | SHA-256 | SHA-256 (an identifier; the binding is the tag) | FIPS 180-4 |
-| Token `jti`, HMAC keys, salts, nonces | `os.urandom` / `secrets` | same | OS CSPRNG. In a FIPS deployment the entropy source and DRBG must be the ones covered by the platform's validation (e.g. a validated kernel crypto module and an SP 800-90B entropy source); check the module's Security Policy. |
-| Key bundle encryption (non-legacy suites) | n/a (legacy keys: PEM PKCS#8 via `BestAvailableEncryption`, whose algorithm is chosen by the `cryptography` library) | PBKDF2-HMAC-SHA-256, 600,000 iterations, 128-bit salt → AES-256-GCM, 96-bit nonce, header as AAD | SP 800-132, SP 800-38D, FIPS 197 |
-| Startup self-test | KATs and PCTs listed in section 5 | same | FIPS 140-3 self-test concept (application level) |
-| Judge HTTPS (Path B) | Python `ssl` (system OpenSSL) | same | Outside Two-Key; TLS configuration is the deployment's responsibility |
+| Constitution signature | Same suite as the principal key: Ed25519, ECDSA P-384, or hybrid ML-DSA-65 **and** Ed25519 / P-384 (both must verify) | unchanged | FIPS 186-5 (EdDSA, ECDSA), FIPS 204 (ML-DSA) |
+| Constitution digest (bound into tokens and ledger) | SHA-384 | SHA-256 | FIPS 180-4 |
+| Constitution text / source hash inside the signed document | SHA-384 (`constitution_text_sha384`, `source_sha384`) | SHA-256 (`..._sha256`; still accepted) | FIPS 180-4 |
+| Ledger hash chain (entry digests; the algorithm is bound into each digest) | SHA-384 | SHA-256 | FIPS 180-4 |
+| Ledger Merkle tree (RFC 6962 structure), consistency and inclusion proofs (RFC 9162), the gateway's ancestor check (PRIOR_ART.md §4 (i)) | SHA-384 | SHA-256 | FIPS 180-4 |
+| Ledger chain-head signature | same suite as the principal key | unchanged | FIPS 186-5, FIPS 204 |
+| Capability token tag | HMAC-SHA-384 (`tk1-hs384`), 384-bit key by default, ≥ 256 bits required; optional `tk1-sig` (hybrid ML-DSA-65) | HMAC-SHA-256 (`tk1`); still selectable explicitly | FIPS 198-1 + FIPS 180-4; FIPS 204 |
+| Tool-call argument binding (`args_hash`): H(two-key-enc/2 of {tool, args}), also what the gateway scans and executes | SHA-384 over the typed encoding | SHA-256 over canonical JSON (not injective) | FIPS 180-4 |
+| `bytecode_hash`, `nl_hash` (§4 (ii)); bound into ballots and tokens | SHA-384 | SHA-256 | FIPS 180-4 |
+| Ballot binding H(action record) (§4 (iii)), decision `action_digest` | SHA-384 over two-key-enc/2 (`two-key/action-record` label) | SHA-256 over canonical JSON | FIPS 180-4 |
+| `result_hash` of executed tools | SHA-384 over two-key-enc/2 (`two-key/tool-result`) | SHA-256 over canonical JSON | FIPS 180-4 |
+| Proposal text digest in the ledger | `proposal_digest` with the ledger's algorithm (SHA-384) | `proposal_sha256` | FIPS 180-4 |
+| Token identifier in the ledger | `token_digest` (SHA-384) | `token_sha256` | FIPS 180-4 |
+| Permissioned-chain anchor record (`docs/DEPLOYMENT_MODES.md`) | SHA-384 | (new) | FIPS 180-4 |
+| Scan-verdict webhook (`WebhookReceiver`) | HMAC-SHA-384 (`sha384=`; `hmac-sha512` optional), key ≥ 256 bits | HMAC-SHA-256, 128-bit minimum key | FIPS 198-1 |
+| Token `jti`, HMAC keys, salts, nonces | `os.urandom` / `secrets` | unchanged | OS CSPRNG. In a FIPS deployment the entropy source and DRBG must be the ones covered by the platform's validation (e.g. a validated kernel crypto module and an SP 800-90B entropy source); check the module's Security Policy. |
+| Key bundle encryption (JSON bundles, non-Ed25519 suites) | PBKDF2-HMAC-SHA-384, 600,000 iterations, 128-bit salt → AES-256-GCM, 96-bit nonce, header as AAD | PBKDF2-HMAC-SHA-256 (still loaded) | SP 800-132, SP 800-38D, FIPS 197 |
+| Ed25519 PEM keys | PKCS#8 via pyca `BestAvailableEncryption` (scheme chosen by the library) | unchanged | see notes |
+| Key fingerprint shown for Ed25519 keys | `ed25519:` + first 128 bits of SHA-256 of the public key (a display identifier; verification compares the full key) | unchanged | FIPS 180-4 |
+| Startup self-test | KATs and PCTs listed in section 5 | fewer KATs | FIPS 140-3 self-test concept (application level) |
+| Judge HTTPS (Path B) | Python `ssl` (system OpenSSL) | unchanged | Outside Two-Key; TLS configuration is the deployment's responsibility |
 
 Notes:
 
@@ -91,15 +107,69 @@ Notes:
 * Legacy PEM keys: `BestAvailableEncryption` in pyca may choose a
   non-approved PBE scheme. For FIPS, use the JSON key bundle (non-legacy
   suites) or an HSM.
+* `merkle.py`'s module-level default hash is SHA-256, for its RFC 6962/9162
+  test vectors. The ledger and gateway always pass the provider's hash.
+
+### 3.1 Versioning and legacy readers
+
+Changing the default hash and the encoding would break verification of
+existing artifacts. The safer option was chosen: every artifact says which
+algorithm or encoding it uses, and older ones still verify. Nothing written
+before is reinterpreted.
+
+| Artifact | How it is versioned | Old artifacts |
+|---|---|---|
+| Ledger entries | Each entry carries `alg` (entries without it are SHA-256) | Verify as before (`PersonalLedger(path).verify(key)`, `python -m two_key verify-ledger`). `TwoKey` refuses to *append* to a SHA-256 ledger unless `digest_alg="sha256"` is passed explicitly. The error says so. |
+| Signed constitutions | Field name says the hash: `constitution_text_sha384` / `source_sha384` (new) or `..._sha256` (old) | Verify as before; every digest field present must match |
+| Key bundles | `encryption.kdf` names the KDF | `pbkdf2-hmac-sha256` bundles still load |
+| Capability tokens | Payload `args_enc: "two-key-enc/2"` | Refused (`unsupported_args_encoding`). Tokens live `ttl_seconds` (30 s by default) and are single-use, so only tokens in flight during an upgrade are affected |
+| `args_hash` values in old ledgers | `capability_issued` / `capability_redeemed` record `args_enc` from now on | `capability.args_hash_legacy` recomputes the old value for audits. It is never used to authorize a call |
+| Signatures | unchanged | unchanged |
+
+### 3.2 The `two-key-enc/2` encoding
+
+`two_key/canonical.py` (`typed_bytes`, `typed_loads`, `freeze_call`). It
+fixes F_REVIEW findings 1 and 2:
+
+* The output is canonical JSON: `{"domain": <label>, "enc": "two-key-enc/2",
+  "value": <tagged>}`. The version and the domain-separation label
+  (`two-key/tool-call`, `two-key/action-record`, `two-key/tool-result`)
+  are inside the hashed bytes.
+* Every value is type-tagged: `["z"]` None, `["b", bool]`, `["i", "<decimal>"]`,
+  `["f", "<repr>"]`, `["s", str]`, `["l", [...]]` list, `["t", [...]]`
+  tuple, `["m", [[key, value], ...]]` mapping, sorted by key. Tuple vs list,
+  `1` vs `"1"`, `1` vs `1.0`, `True` vs `1`, and `0.0` vs `-0.0` all encode
+  differently.
+* Non-string mapping keys, duplicate keys, sets, bytes, other objects,
+  NaN/infinity, and nesting deeper than 64 are refused (`EncodingError`, a
+  `TypeError`), so the call is denied (`invalid_action:` / `invalid_call:`).
+* No Unicode normalization: differently normalized strings stay different
+  (a false mismatch, never a false match). Whether to normalize (NFC) is
+  an open question.
+* `canonical_bytes` (canonical JSON, for JSON-native records) now refuses
+  non-string keys instead of coercing them. No record that already verifies
+  changes bytes.
+
+The gateway serializes the call once with `freeze_call`, hashes those
+bytes for the `args_hash` check, sends the same bytes to content scanners,
+and gives the extractor and the tool their own copies decoded from them.
+The caller's object is read exactly once, so changing it later (or a
+mapping that answers differently on a second read) can't change what runs.
+`authorize` logs the arguments decoded from the bytes it hashed.
 
 ## 4. Quantum resistance
 
 | Primitive | Quantum threat | What this project does |
 |---|---|---|
 | Ed25519, ECDSA P-384 | Broken by Shor's algorithm on a large fault-tolerant quantum computer | Hybrid suites add **ML-DSA-65** (FIPS 204, NIST security category 3) to constitution signing and the ledger chain head, and optionally to capability tokens (`tk1-sig`). |
-| SHA-256 / SHA-384 | Grover roughly halves preimage security; quantum collision search gives a smaller speed-up | PQ profile uses **SHA-384** for all security-relevant digests (ledger chain, Merkle tree, constitution digest, args binding). |
-| HMAC-SHA-256/384 tokens | Grover at most halves the effective key strength | **Symmetric HMAC tokens with keys of 256 bits or more are already considered quantum-resistant.** Keys below 256 bits are refused. `tk1-hs384` uses 384-bit keys. |
-| AES-256-GCM (key bundles) | Grover halves the effective key strength (to about 128 bits) | Adequate. |
+| SHA-256 / SHA-384 | Grover roughly halves preimage security; quantum collision search gives a smaller speed-up | **SHA-384** by default for all security-relevant digests in every profile (ledger chain, Merkle tree, constitution digest, args binding, ballots, anchors). SHA-512 and SHA3-384/512 are approved and self-tested alternatives (`digest_alg=`). |
+| HMAC tokens and the webhook MAC | Grover at most halves the effective key strength | **HMAC-SHA-384** by default; keys below 256 bits are refused; `tk1-hs384` uses 384-bit keys. |
+| AES-256-GCM (key bundles) | Grover halves the effective key strength (to about 128 bits) | Adequate. The key comes from PBKDF2-HMAC-SHA-384; its strength is bounded by the passphrase. |
+
+**Signatures are quantum-resistant only with a hybrid suite.** The default
+`keygen` suite is still Ed25519 (`--suite` chooses). Ed25519 and ECDSA P-384
+alone are not quantum-resistant. Use `hybrid-mldsa65-ed25519` or
+`hybrid-mldsa65-p384`, and `require_pq=True` to refuse anything else.
 
 ### Hybrid rule and wire format
 
@@ -164,9 +234,11 @@ before claiming validated PQ signatures.
 
 | Test | Vector source |
 |---|---|
-| SHA-256("abc"), SHA-384("abc") | FIPS 180-4 examples (NIST CSRC) |
-| SHA3-256("abc") | FIPS 202 examples (NIST CSRC) |
-| HMAC-SHA-256 and HMAC-SHA-384 | RFC 4231 test case 2 |
+| SHA-256, SHA-384, SHA-512 ("abc") | FIPS 180-4 examples (NIST CSRC) |
+| SHA3-256, SHA3-384, SHA3-512 ("abc") | FIPS 202 examples (NIST CSRC) |
+| HMAC-SHA-256, -384, -512 | RFC 4231 test case 2 |
+| PBKDF2-HMAC-SHA-256 | RFC 7914 §11 ("passwd", "salt", c = 1) |
+| PBKDF2-HMAC-SHA-384 | Project regression value ("password", "salt", c = 4096, 48 bytes), cross-checked against Python's `hashlib`. **Not an official NIST ACVP vector.** |
 | Ed25519 key derivation, signature, verify, negative verify | RFC 8032 §7.1 TEST 1 |
 | ECDSA P-384 | Pairwise consistency test (signatures are randomised) |
 | ML-DSA-65 | Pairwise consistency test (sign, verify, negative verify). With the pyca backend, also a seed→public-key regression value produced by this project with pyca 50.0.1. **This is not an official NIST ACVP vector.** |
@@ -178,8 +250,9 @@ stops Two-Key before it writes anything.
 
 ## 6. What is not done / limits
 
-* No module was validated, and none can be validated by this repository. A
-  FIPS claim needs a deployment on a validated module (section 2).
+* FIPS-approved algorithms, validated module required for compliance. No
+  module was validated, and none can be validated by this repository
+  (section 2).
 * The development box has no FIPS provider, so `require_fips_module=True`
   was only tested for its refusal path.
 * liboqs-python was not installed; its adapter has been tested only against

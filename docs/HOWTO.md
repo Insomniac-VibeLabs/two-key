@@ -93,7 +93,8 @@ python -m two_key keygen --out ~/.two-key --passphrase-env TWOKEY_KEY_PASSPHRASE
 
 Private key files are created with mode 0600. Legacy PEM keys are
 encrypted by `cryptography`'s best available PKCS#8 scheme; key bundles use
-PBKDF2-HMAC-SHA-256 (600,000 iterations) and AES-256-GCM. Load either kind
+PBKDF2-HMAC-SHA-384 (600,000 iterations) and AES-256-GCM (bundles written
+earlier with PBKDF2-HMAC-SHA-256 still load). Load either kind
 in Python with `keys.load_private_any` / `keys.load_public_any`.
 
 ## 3. Writing a constitution
@@ -744,7 +745,16 @@ adds `wire_transfer` to the allow-list.
 
 The gateway is the only component that should hold real tool credentials
 and run tools. Create it with `tk.gateway()` so it shares the TwoKey
-instance's token key and ledger:
+instance's token key and ledger.
+
+The gateway reads the caller's arguments once, into immutable bytes (the
+typed `two-key-enc/2` encoding). It hashes those bytes for the token check
+and runs the tool with a fresh copy decoded from them. A caller can't
+change what runs after the check, by mutating its object or by handing
+over a mapping that answers differently the second time. Arguments may be
+`dict` (string keys only), `list`, `tuple`, `str`, `int`, `float`, `bool`,
+and `None`. Anything else is denied as `invalid_call:`. A tuple and a list
+are different values: a token for one doesn't match a call with the other.
 
 <!-- check: expect=^1 wrong args\s+args_mismatch -->
 <!-- check: expect=^2 other tool\s+tool_mismatch -->
@@ -1240,9 +1250,12 @@ print("mode:", tk.deployment.mode)
 
 ## 13. Crypto: FIPS mode, classic and hybrid keys, token modes
 
-**This code is not FIPS certified or validated.** It uses only
-FIPS-approved algorithms, routed through one `CryptoProvider`, so it can
-run on a validated module. Details are in [CRYPTO.md](CRYPTO.md).
+**FIPS-approved algorithms, validated module required for compliance.**
+This code is not FIPS certified or validated. Every algorithm goes through
+one `CryptoProvider`, so it can run on a validated module. Hashes and MACs
+default to SHA-384 and HMAC-SHA-384 for every key suite. Ledgers written
+with the earlier SHA-256 default still verify (to keep appending to one,
+pass `digest_alg="sha256"`). Details are in [CRYPTO.md](CRYPTO.md).
 
 ### Self-test
 
@@ -1291,8 +1304,8 @@ or set it process-wide with
 
 ### Hybrid post-quantum key and `require_pq`
 
-With a hybrid key, Two-Key defaults to SHA-384 digests and HMAC-SHA-384
-tokens (`tk1-hs384`). Both signature halves must verify, and nothing falls
+Two-Key uses SHA-384 digests and HMAC-SHA-384 tokens (`tk1-hs384`) by
+default with every key suite, including a hybrid key. Both signature halves must verify, and nothing falls
 back to classical-only. `require_pq=True` refuses to start without a
 hybrid key and a working ML-DSA backend.
 
@@ -1360,8 +1373,8 @@ python -m two_key --fips verify-constitution --signed p384.signed.json --pub ~/.
 
 | `token_mode` | Tag | Notes |
 |---|---|---|
-| `tk1` | HMAC-SHA-256, key ≥ 256 bits | Default for Ed25519 keys |
-| `tk1-hs384` | HMAC-SHA-384 | Default for other suites |
+| `tk1-hs384` | HMAC-SHA-384, 384-bit key by default (≥ 256 bits) | Default for every suite |
+| `tk1` | HMAC-SHA-256, key ≥ 256 bits | Legacy (the Ed25519 default before the F_REVIEW fixes); only if chosen |
 | `tk1-sig` | Signature by a separate token key (`token_signing_key`, e.g. a hybrid `PrivateKeySet`) | The verifier needs no secret that could also mint tokens. About 7 KB per hybrid token, and slower |
 
 HMAC with a key of 256 bits or more is considered quantum-resistant, so the

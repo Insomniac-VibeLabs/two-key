@@ -74,7 +74,7 @@ Components [D §5.1]: principal device, constitution store, proposal interface, 
 
 The principal provides (a) a plain-English constitution file (`.txt`/`.md`) and (b) a hard-rules file (`.json`/`.yaml`).
 
-[IMPL] The two are bundled into a canonical document {format, principal, created_at, constitution_text, its SHA-256, hard_rules} and signed with the principal's key: Ed25519 (legacy default), ECDSA P-384, or a hybrid ML-DSA-65 suite in which both component signatures must verify (§5.12). Before use, Two-Key verifies the signature against a public key the principal trusts. It rejects unsigned envelopes, modified text or rules, envelopes signed by a different key, envelopes whose embedded key was swapped, and suite downgrades. CLI: `keygen [--suite]`, `sign-constitution`, `verify-constitution`.
+[IMPL] The two are bundled into a canonical document {format, principal, created_at, constitution_text, its SHA-384 (SHA-256 in documents signed before the F_REVIEW fixes, still accepted), hard_rules} and signed with the principal's key: Ed25519 (legacy default), ECDSA P-384, or a hybrid ML-DSA-65 suite in which both component signatures must verify (§5.12). Before use, Two-Key verifies the signature against a public key the principal trusts. It rejects unsigned envelopes, modified text or rules, envelopes signed by a different key, envelopes whose embedded key was swapped, and suite downgrades. CLI: `keygen [--suite]`, `sign-constitution`, `verify-constitution`.
 
 [SB-2 (ii); IMPL for the format] The principal may instead sign **one** Markdown source (format `two-key-constitution/2`, `sign-constitution --document`). The rules sit in a single fenced ```` ```twokey-rules ```` block of JSON inside the prose; §5.5 describes the split.
 
@@ -150,9 +150,9 @@ Payload [D §5.5]: principal, tool, scope, issued_at, expires_at, ledger_root. D
 
 [IMPL]
 - The token also carries a single-use `jti`, `args_hash`, and the constitution digest.
-- Its tag is HMAC-SHA-256 (`tk1`) or HMAC-SHA-384 (`tk1-hs384`, the default for non-legacy key suites). A signed mode (`tk1-sig`, e.g. hybrid ML-DSA-65 + Ed25519) is optional. Production would use a hardware-backed key [D §5.1 item 6].
+- Its tag is HMAC-SHA-384 (`tk1-hs384`, the default for every key suite since the F_REVIEW fixes) or, if chosen explicitly, HMAC-SHA-256 (`tk1`, legacy). The payload carries `args_enc` (`two-key-enc/2`); tokens without it are refused. A signed mode (`tk1-sig`, e.g. hybrid ML-DSA-65 + Ed25519) is optional. Production would use a hardware-backed key [D §5.1 item 6].
 - The gateway additionally checks the principal, data class, `args_hash` (the canonical hash of the literal tool-call arguments), that no constitution has been loaded since the token's root, and single use. The used-jti record is kept by the ledger itself, so every gateway on one TwoKey instance and its ledger shares it and a token is accepted exactly once however many gateways or threads present it (checks and redemption run under the ledger's lock; on POSIX the redemption also holds an `flock` on the ledger file and refuses, fail closed, if another writer has changed the file: `replayed` / `ledger_concurrent_writer`). The record is rebuilt from the ledger's `capability_redeemed` entries on restart [IMPL; engineering fix on Stephan's instruction, 2026-09-30].
-- The full token goes back to the caller; only its SHA-256 is logged.
+- The full token goes back to the caller; only its digest (`token_digest`, SHA-384 by default) is logged.
 
 *Open question (DESIGN_OPTIONS.md §3):* the token binding details. `args_hash` is the reference option specified in Stephan's 2026-09-30 instructions, and alternatives are listed in the memo.
 
@@ -199,9 +199,9 @@ Added at Stephan's 2026-09-30 instruction (CHANGES.md rows 43–59). It is engin
 - **Not FIPS certified or validated.** FIPS 140-3 validates cryptographic modules, not applications. The prototype uses only FIPS-approved algorithms, routed through one `CryptoProvider`, so it can be deployed on a validated module. `fips_mode=True` refuses non-approved algorithms (and the liboqs backend). `require_fips_module=True` refuses to start unless both OpenSSL instances report FIPS mode. No FIPS provider was active on the development machine. Candidate modules and their certificate status are listed in `docs/CRYPTO.md` §2 (for example, the OpenSSL 3.1.2 FIPS provider, #4985, has no ML-DSA, and Ed25519 is not approved there, so ECDSA P-384 suites are needed on it).
 - **Algorithms.**
   - Signatures: Ed25519, ECDSA P-384, and ML-DSA-65 (FIPS 186-5, FIPS 204). Hybrid suites `hybrid-mldsa65-ed25519` and `hybrid-mldsa65-p384`: both components must verify, the suite name is bound into each component, and downgrades and silent fallback are refused.
-  - Digests: SHA-256 (legacy profile) or SHA-384 (non-legacy profile) for the ledger chain, the Merkle tree and its proofs, the constitution digest, `args_hash`, `bytecode_hash`, `nl_hash`, the ballot binding, and `result_hash`.
-  - Tokens: HMAC-SHA-256/384 with keys of at least 256 bits, considered quantum-resistant. Optional `tk1-sig` signed tokens.
-  - Key bundles: PBKDF2-HMAC-SHA-256 with 600,000 iterations, then AES-256-GCM.
+  - Digests: SHA-384 for every profile since the F_REVIEW fixes (SHA-256 ledgers from before still verify) for the ledger chain, the Merkle tree and its proofs, the constitution digest, `args_hash`, `bytecode_hash`, `nl_hash`, the ballot binding, and `result_hash`.
+  - Tokens: HMAC-SHA-384 by default (HMAC-SHA-256 only if chosen) with keys of at least 256 bits. Optional `tk1-sig` signed tokens.
+  - Key bundles: PBKDF2-HMAC-SHA-384 with 600,000 iterations, then AES-256-GCM (SHA-256 bundles from before still load).
   - RNG: the OS CSPRNG.
 - **Self-test** before Two-Key starts: known-answer tests for SHA-2/3 (FIPS 180-4, FIPS 202), HMAC (RFC 4231), and Ed25519 (RFC 8032); pairwise consistency tests for ECDSA and ML-DSA; and an RNG length check. Any failure stops Two-Key.
 - **PQ backend:** pyca `cryptography` 50.0.1 with OpenSSL 4.0.2 was used, and is not a validated module. The liboqs adapter was tested only with a fake module.

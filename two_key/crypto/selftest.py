@@ -7,9 +7,13 @@ before Two-Key accepts any constitution or issues any token.
 
 Vectors
 -------
-* SHA-256("abc"), SHA-384("abc")          FIPS 180-4 examples (NIST CSRC)
-* SHA3-256("abc")                         FIPS 202 examples (NIST CSRC)
-* HMAC-SHA-256 / HMAC-SHA-384             RFC 4231 test case 2 (key "Jefe")
+* SHA-256/384/512("abc")                  FIPS 180-4 examples (NIST CSRC)
+* SHA3-256/384/512("abc")                 FIPS 202 examples (NIST CSRC)
+* HMAC-SHA-256 / -384 / -512              RFC 4231 test case 2 (key "Jefe")
+* PBKDF2-HMAC-SHA-256                     RFC 7914 section 11 ("passwd", "salt", c=1)
+* PBKDF2-HMAC-SHA-384                     project regression value ("password", "salt",
+                                          c=4096, 48 bytes), cross-checked against Python's
+                                          hashlib; NOT an official NIST ACVP vector
 * Ed25519                                 RFC 8032 section 7.1, TEST 1 (empty message)
 * ECDSA P-384                             pairwise consistency test (randomised signatures)
 * ML-DSA-65                               pairwise consistency test, plus (pyca backend) a
@@ -30,7 +34,13 @@ KATS = {
     "sha256": (b"abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"),
     "sha384": (b"abc", "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed"
                        "8086072ba1e7cc2358baeca134c825a7"),
+    "sha512": (b"abc", "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a"
+                       "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"),
     "sha3-256": (b"abc", "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"),
+    "sha3-384": (b"abc", "ec01498288516fc926459f58e2c6ad8df9b473cb0fc08c2596da7cf0e49be4b2"
+                         "98d88cea927ac7f539f1edf228376d25"),
+    "sha3-512": (b"abc", "b751850b1a57168a5693cd924b6b096e08f621827444f70d884f5d0240d2712e"
+                         "10e116e9192af3c91a7ec57647e3934057340b4cf408d5a56592f8274eec53f0"),
 }
 HMAC_KATS = {
     "hmac-sha256": (b"Jefe", b"what do ya want for nothing?",
@@ -38,6 +48,17 @@ HMAC_KATS = {
     "hmac-sha384": (b"Jefe", b"what do ya want for nothing?",
                     "af45d2e376484031617f78d2b58a6b1b9c7ef464f5a01b47e42ec3736322445e"
                     "8e2240ca5e69e2c78b3239ecfab21649"),
+    "hmac-sha512": (b"Jefe", b"what do ya want for nothing?",
+                    "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea250554"
+                    "9758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737"),
+}
+KDF_KATS = {  # (password, salt, iterations, length, expected)
+    "pbkdf2-hmac-sha256": (b"passwd", b"salt", 1, 64,
+                           "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc"
+                           "49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783"),
+    "pbkdf2-hmac-sha384": (b"password", b"salt", 4096, 48,
+                           "559726be38db125bc85ed7895f6e3cf574c7a01c080c3447db1e8a76764deb3c"
+                           "307b94853fbe424f6488c5f4f1289626"),
 }
 ED25519_KAT = {
     "sk": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
@@ -72,6 +93,13 @@ def run_selftest(p: CryptoProvider) -> dict:
             import hmac as _h
             _check(_h.new(key, msg, alg.split("-", 1)[1]).hexdigest() == want, f"KAT {alg}")
             passed.append(f"KAT {alg} (RFC 4231 TC2)")
+        from cryptography.hazmat.primitives import hashes as _hashes
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        for alg, (pw, salt, n, length, want) in KDF_KATS.items():
+            p.check("kdf", alg)
+            h = _hashes.SHA384() if alg.endswith("sha384") else _hashes.SHA256()
+            _check(PBKDF2HMAC(h, length, salt, n).derive(pw).hex() == want, f"KAT {alg}")
+            passed.append(f"KAT {alg} ({'RFC 7914' if alg.endswith('sha256') else 'project regression value'})")
 
         p.check("sig", "ed25519")
         sk = _Ed25519.private_from_raw(bytes.fromhex(ED25519_KAT["sk"]))

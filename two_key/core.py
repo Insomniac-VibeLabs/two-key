@@ -43,8 +43,12 @@ Crypto (two_key.crypto): a CryptoProvider runs its known-answer
 self-test before Two-Key starts; ``fips_mode`` refuses non-approved
 algorithms. The principal key may be legacy Ed25519, ECDSA P-384, or a hybrid
 ML-DSA-65 suite; ``require_pq=True`` refuses to start without a hybrid key and
-a working ML-DSA backend. Non-legacy suites default to SHA-384 digests and
-HMAC-SHA-384 tokens.
+a working ML-DSA backend. Every suite defaults to SHA-384 digests and
+HMAC-SHA-384 tokens (since F_REVIEW, CONCEPTION_NOTES Entry 10; earlier,
+Ed25519 defaulted to SHA-256 and HMAC-SHA-256). A ledger written with SHA-256
+still verifies; appending to one needs an explicit ``digest_alg="sha256"``.
+Tool arguments and action records are hashed in the typed, injective
+two-key-enc/2 encoding (canonical.py).
 """
 
 from __future__ import annotations
@@ -54,12 +58,12 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from .action import Action, ActionValidationError, normalize_action
-from .canonical import canonical_hash, sha256_hex
+from .canonical import DOMAIN_ACTION_RECORD, ENCODING, digest_hex, freeze_call, typed_hash
 from .capability import CapabilityIssuer, args_hash
 from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, verify_signed
 from .crypto.provider import CryptoProvider, default_provider
-from .crypto.signatures import LEGACY_SUITE, as_public_keyset
+from .crypto.signatures import as_public_keyset
 from . import deployment as _deployment
 from .anchoring import NullAnchor
 from .gateway import Extractor, ToolGateway
@@ -143,10 +147,10 @@ class TwoKey:
         if ledger_signing_key is not None and \
                 as_public_keyset(ledger_signing_key, self.crypto).encoded != trusted.encoded:
             raise TwoKeyConfigError("ledger_signing_key must be the principal's key")
-        legacy = trusted.suite == LEGACY_SUITE
-        self.digest_alg = digest_alg or ("sha256" if legacy else "sha384")
+        # SHA-384 / HMAC-SHA-384 for every suite (F_REVIEW; Entry 10). SHA-256 and tk1 only when chosen.
+        self.digest_alg = digest_alg or "sha384"
         self.crypto.check("hash", self.digest_alg)
-        self.token_mode = token_mode or ("tk1" if legacy else "tk1-hs384")
+        self.token_mode = token_mode or "tk1-hs384"
 
         # Refuse unsigned, modified, or foreign-signed constitutions (spec 5.1 item 2).
         self.trusted_public_key = trusted_public_key
@@ -156,10 +160,20 @@ class TwoKey:
         self.principal = self.constitution.principal
 
         self.head_signing = head_signing
-        self.ledger = PersonalLedger(Path(ledger_path), signing_key=ledger_signing_key, digest_alg=self.digest_alg,
-                                     auto_sign_every=1 if head_signing == "append" else 0,
-                                     fsync=ledger_fsync, crypto=self.crypto,
-                                     head_anchor=None if isinstance(anchor, NullAnchor) else anchor)
+        try:
+            self.ledger = PersonalLedger(Path(ledger_path), signing_key=ledger_signing_key,
+                                         digest_alg=self.digest_alg,
+                                         auto_sign_every=1 if head_signing == "append" else 0,
+                                         fsync=ledger_fsync, crypto=self.crypto,
+                                         head_anchor=None if isinstance(anchor, NullAnchor) else anchor)
+        except LedgerError as e:
+            if digest_alg is None and str(e).startswith("ledger uses "):
+                raise TwoKeyConfigError(
+                    f"{e}: this ledger was written with an earlier default. It still verifies "
+                    "(PersonalLedger(path).verify(key), or python -m two_key verify-ledger). To keep appending "
+                    f"to it, pass digest_alg={str(e).split()[2].rstrip(',')!r} explicitly (legacy); or start a new ledger "
+                    "(SHA-384 by default)") from e
+            raise
         recorded = _deployment.recorded_mode(self.ledger)
         if recorded is not None and recorded != self.deployment.mode:
             raise TwoKeyConfigError(f"this ledger was set up in deployment_mode {recorded!r}; it is set once and "
@@ -264,7 +278,7 @@ class TwoKey:
     def crypto_profile(self) -> dict:
         be = self.crypto.pq_backend()
         return {"signature_suite": self.trusted_keyset.suite, "digest_alg": self.digest_alg,
-                "token_mode": self.token_mode, "fips_mode": self.crypto.fips_mode,
+                "token_mode": self.token_mode, "encoding": ENCODING, "fips_mode": self.crypto.fips_mode,
                 "pq_backend": None if be is None else be.describe(), "head_signing": self.head_signing,
                 "selftest": {"ok": self.selftest["ok"], "tests": len(self.selftest["passed"])}}
 
@@ -305,18 +319,29 @@ class TwoKey:
                                 ledger_digest=self.ledger.root())
         return d
 
-    def _h(self, obj: Any) -> str:
-        return canonical_hash(obj, self.digest_alg, self.crypto)
+    def _h(self, action_record: Any) -> str:
+        """H(action record) for ballots and decisions: two-key-enc/2 under the action-record label."""
+        return typed_hash(action_record, DOMAIN_ACTION_RECORD, self.digest_alg, self.crypto)
 
     def _authorize(self, proposed, proposal: str, tool_args: Mapping[str, Any]) -> Decision:
         if not isinstance(proposal, str):
             proposal = str(proposal)
+        # Read the tool args once (F_REVIEW finding 1): the logged args and args_hash come from the same bytes.
+        try:
+            frozen, frozen_error = freeze_call("", tool_args), None
+            logged_args = _safe_record(frozen.args())
+        except (TypeError, ValueError) as e:
+            frozen, frozen_error, logged_args = None, e, _safe_record(tool_args)
         self.ledger.append("proposal", {"action_input": _safe_record(proposed), "proposal": proposal,
-                                        "proposal_sha256": sha256_hex(proposal.encode("utf-8")),
-                                        "tool_args": _safe_record(tool_args)})
+                                        "proposal_digest": digest_hex(proposal.encode("utf-8", "surrogatepass"),
+                                                                      self.digest_alg, self.crypto),
+                                        "proposal_digest_alg": self.digest_alg,
+                                        "tool_args": logged_args})
         try:
             action = normalize_action(proposed)
-            a_hash = args_hash(action.tool, tool_args, self.digest_alg, self.crypto)
+            if frozen_error is not None:
+                raise frozen_error
+            a_hash = args_hash(action.tool, frozen.args(), self.digest_alg, self.crypto)
         except (ActionValidationError, TypeError, ValueError) as e:
             return self._deny(f"invalid_action:{e}")
         rec = action.to_record()
@@ -357,8 +382,8 @@ class TwoKey:
         # If this append fails, the exception propagates and authorize() returns a deny without the token.
         p = cap.payload
         self.ledger.append("capability_issued", {
-            "jti": p["jti"], "token_sha256": cap.token_hash, "tool": p["tool"], "scope": p["scope"],
-            "args_hash": p["args_hash"], "expires_at": p["expires_at"], "ledger_root": p["ledger_root"],
+            "jti": p["jti"], "token_digest": cap.token_digest(self.digest_alg, self.crypto), "tool": p["tool"],
+            "scope": p["scope"], "args_hash": p["args_hash"], "args_enc": p["args_enc"], "expires_at": p["expires_at"], "ledger_root": p["ledger_root"],
             "ledger_size": p["ledger_size"], "ledger_merkle_root": p["ledger_merkle_root"],
             "bytecode_hash": p["bytecode_hash"], "nl_hash": p["nl_hash"]})
         self.ledger.append("decision", {"allowed": True, "reason": "dual_path_pass", "denied_by_rule": None,

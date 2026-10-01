@@ -9,6 +9,11 @@ any tool runs, it checks everything spec 5.5 lists, plus single-use:
   3. principal matches         -> wrong_principal
   4. tool matches the call     -> tool_mismatch
   5. literal args match        -> args_mismatch     (reference binding: args_hash)
+     The call is serialized once (two-key-enc/2, canonical.freeze_call) into
+     immutable bytes. Those bytes are hashed for this check, scanned, and
+     decoded for execution, so the tool runs exactly what was checked
+     (F_REVIEW finding 1). A token without ``args_enc`` is refused
+     (unsupported_args_encoding).
   6. amount within scope       -> amount_exceeds_scope
   7. counterparty matches      -> counterparty_mismatch
   8. data class matches        -> data_class_mismatch
@@ -97,14 +102,14 @@ Entries not yet covered by a signed head show up as ``size_mismatch`` in
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import merkle
 from .action import ActionValidationError, normalize_action
-from .canonical import canonical_bytes, canonical_hash, digest_hex
-from .capability import CapabilityIssuer, TokenError, args_hash, token_sha256
+from .canonical import (DOMAIN_TOOL_RESULT, ENCODING, canonical_hash, freeze_call, typed_bytes, typed_hash,
+                        typed_loads)
+from .capability import CapabilityIssuer, TokenError, token_digest
 from .ledger import PersonalLedger
 from .scanning import AsyncCallbackScanner, ContentScanner, ScanEngine, ScanSettings, ScanVerdict
 
@@ -134,13 +139,13 @@ class InboundScanResult:
 class ToolGateway:
     def __init__(self, issuer: CapabilityIssuer, ledger: PersonalLedger, principal: str,
                  tools: Mapping[str, Callable[..., Any]] | None = None,
-                 extractors: Mapping[str, Extractor] | None = None, *, digest_alg: str = "sha256",
+                 extractors: Mapping[str, Extractor] | None = None, *, digest_alg: str | None = None,
                  checkpoint_every: int = 1, view_refresh: str = "token",
                  scanners: Sequence[ContentScanner] | None = None, scan_settings: ScanSettings | None = None,
                  file_extractors: Mapping[str, FileExtractor] | None = None,
                  result_file_extractors: Mapping[str, ResultFileExtractor] | None = None):
         self.issuer, self.ledger, self.principal = issuer, ledger, principal
-        self.digest_alg = digest_alg
+        self.digest_alg = digest_alg or ledger.digest_alg  # follow the ledger (SHA-384 by default)
         if not isinstance(checkpoint_every, int) or isinstance(checkpoint_every, bool) or checkpoint_every < 0:
             raise ValueError("checkpoint_every must be an integer >= 0")
         self.checkpoint_every = checkpoint_every
@@ -234,20 +239,20 @@ class ToolGateway:
         return None, cap
 
     def _deny(self, reason: str, token: Any, tool: Any, **extra: Any) -> GatewayResult:
-        th = token_sha256(token) if isinstance(token, str) else None
-        self.ledger.append("gateway_denied", {"reason": reason, "token_sha256": th, "tool": str(tool), **extra})
+        th = token_digest(token, self.digest_alg, self.ledger.crypto) if isinstance(token, str) else None
+        self.ledger.append("gateway_denied", {"reason": reason, "token_digest": th, "tool": str(tool), **extra})
         return GatewayResult(False, reason)
 
     # -- content scanning (scanning.py) -----------------------------------------
     def _scan(self, tool: str, snapshot: bytes, args: Mapping, jti: Any,
               scope_data_class: Any = None) -> list[ScanVerdict]:
-        raw = [("call", "application/json", snapshot)]  # exactly the bytes args_hash covers
+        raw = [("call", "application/json", snapshot)]  # exactly the bytes args_hash covers (two-key-enc/2)
         fx = self.file_extractors.get(tool)
         if fx is not None:
             for name, data, ctype in fx(args):
                 raw.append((f"file:{name}", ctype, data))
         # Decoded strings (Entry 6, c): every string in the arguments, unescaped (the call part is
-        # ASCII-escaped JSON). File parts are already exact bytes. payload_digest covers the exact bytes.
+        # ASCII-escaped, type-tagged JSON). File parts are already exact bytes. payload_digest covers the exact bytes.
         return self._run_scan("outbound", tool, raw, list(_strings_in(args, "args")), jti, scope_data_class)
 
     def _run_scan(self, direction: str, tool: str, raw: list, texts: list, jti: Any,
@@ -280,9 +285,9 @@ class ToolGateway:
             raw, texts = [("result", "application/octet-stream", bytes(content))], []   # a file: exact bytes
         else:
             try:
-                enc = canonical_bytes(content)   # the bytes H(result) in tool_executed covers
+                enc = typed_bytes(content, DOMAIN_TOOL_RESULT)   # the bytes H(result) in tool_executed covers
                 raw = [("result", "application/json", enc)]
-                texts = list(_strings_in(json.loads(enc.decode("ascii")), "result"))
+                texts = list(_strings_in(typed_loads(enc, DOMAIN_TOOL_RESULT), "result"))
             except (TypeError, ValueError):
                 r = repr(content)
                 raw, texts = [("result", "text/plain; charset=utf-8", r.encode("utf-8", "surrogatepass"))], [("result", r)]
@@ -373,19 +378,16 @@ class ToolGateway:
         eng = self.scan_engine
         try:
             call_tool = normalize_action({"tool": tool}).tool
-            if eng is None:
-                fields = self._call_fields(call_tool, args, call_fields)
-                call_args_hash = args_hash(call_tool, args, self.digest_alg, self.ledger.crypto)
-            else:
-                # One snapshot: hashed (check 5), scanned, and executed, so all three are the same bytes.
-                if not isinstance(args, Mapping):
-                    raise TypeError("tool args must be a mapping")
-                snapshot = canonical_bytes({"tool": call_tool, "args": dict(args)})
-                args = json.loads(snapshot.decode("ascii"))["args"]
-                fields = self._call_fields(call_tool, args, call_fields)
-                call_args_hash = digest_hex(snapshot, self.digest_alg, self.ledger.crypto)
+            # One snapshot on every path (F_REVIEW finding 1): the caller's args are read exactly once,
+            # into immutable bytes. Those bytes are hashed (check 5), scanned, and decoded for the
+            # extractor and the tool; each gets its own decoded copy, so nothing can change in between.
+            frozen = freeze_call(call_tool, args)
+            fields = self._call_fields(call_tool, frozen.args(), call_fields)
+            call_args_hash = frozen.digest(self.digest_alg, self.ledger.crypto)
         except (ActionValidationError, TypeError, ValueError) as e:
             return self._deny(f"invalid_call:{e}", token, tool)
+        if p.get("args_enc") != ENCODING:
+            return self._deny("unsupported_args_encoding", token, tool)
 
         scope = p.get("scope") or {}
         if p.get("principal") != self.principal:
@@ -404,7 +406,7 @@ class ToolGateway:
         scan_rec: dict = {}
         if eng is not None:
             try:
-                verdicts = self._scan(call_tool, snapshot, args, jti, scope.get("data_class"))
+                verdicts = self._scan(call_tool, frozen.data, frozen.args(), jti, scope.get("data_class"))
             except Exception as e:  # noqa: BLE001 - a file extractor failed or returned something unusable
                 return self._deny(f"invalid_call:file_extractor:{type(e).__name__}", token, tool)
             scan_rec = self._scan_record("", verdicts, fields["data_class"])
@@ -421,15 +423,16 @@ class ToolGateway:
             reason, cap = self._check_ledger_binding(p)
             if reason is not None:
                 return self._deny(reason, token, tool)
-            tok_hash = token_sha256(token)
-            if cap.body.get("token_sha256") != tok_hash:
+            tok_hash = token_digest(token, self.digest_alg, self.ledger.crypto)
+            if cap.body.get("token_digest") != tok_hash:
                 return self._deny("capability_not_recorded", token, tool)
             if not jti or self.ledger.is_redeemed(jti):
                 return self._deny("replayed", token, tool)
 
             link = {"capability_entry_seq": cap.seq, "capability_entry_digest": cap.digest}
-            redeemed, why = self.ledger.redeem(jti, {"token_sha256": tok_hash, "tool": call_tool,
-                                                     "args_hash": call_args_hash, **link, **scan_rec})
+            redeemed, why = self.ledger.redeem(jti, {"token_digest": tok_hash, "tool": call_tool,
+                                                     "args_hash": call_args_hash, "args_enc": ENCODING,
+                                                     **link, **scan_rec})
             if redeemed is None:
                 # Another writer changed the ledger file: this instance is stale, so nothing is appended.
                 return GatewayResult(False, why)
@@ -437,7 +440,7 @@ class ToolGateway:
         if fn is None:
             return GatewayResult(True, "authorized_no_executor")
         try:
-            result = fn(**dict(args))
+            result = fn(**frozen.args())  # decoded from the same bytes that were hashed and scanned
         except Exception as e:
             self.ledger.append("tool_error", {"jti": jti, "error": type(e).__name__, **link})
             return GatewayResult(True, f"tool_error:{type(e).__name__}")
@@ -470,14 +473,14 @@ def _strings_in(obj: Any, path: str):
         for k, v in obj.items():
             yield f"{path}.{k}#key", str(k)
             yield from _strings_in(v, f"{path}.{k}")
-    elif isinstance(obj, list):
+    elif isinstance(obj, (list, tuple)):
         for i, v in enumerate(obj):
             yield from _strings_in(v, f"{path}[{i}]")
 
 
 def _result_hash(result: Any, alg: str, ledger: PersonalLedger) -> str:
-    """H(canonical JSON of the result), or H(repr) for results that are not JSON-serializable."""
+    """H(two-key-enc/2 of the result), or H(canonical JSON of its repr) for results it can't encode."""
     try:
-        return canonical_hash(result, alg, ledger.crypto)
+        return typed_hash(result, DOMAIN_TOOL_RESULT, alg, ledger.crypto)
     except (TypeError, ValueError):
         return canonical_hash({"repr": repr(result)}, alg, ledger.crypto)

@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from . import keys
-from .canonical import canonical_bytes, digest_hex, sha256_hex
+from .canonical import canonical_bytes, digest_hex
 from .crypto.provider import CryptoProvider
 from .crypto.signatures import LEGACY_SUITE, SUITES, as_private_keyset, as_public_keyset
 from .policy_vm import ConstitutionError, validate_rules
@@ -51,7 +51,7 @@ class Constitution:
     document: dict   # the exact signed document
     signer_fingerprint: str | None = None
     signer_suite: str = LEGACY_SUITE
-    digest_alg: str = "sha256"   # "sha384" when signed with a non-legacy (e.g. hybrid PQ) suite
+    digest_alg: str = "sha384"   # every suite since F_REVIEW (Entry 10); the document hash is what this covers
 
     @property
     def digest(self) -> str:
@@ -100,7 +100,7 @@ def build_document(principal: str, text: str, hard_rules: list, created_at: str 
         "principal": principal,
         "created_at": created_at or _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
         "constitution_text": text,
-        "constitution_text_sha256": sha256_hex(text.encode("utf-8")),
+        "constitution_text_sha384": digest_hex(text.encode("utf-8"), "sha384"),
         "hard_rules": hard_rules,
     }
 
@@ -117,7 +117,7 @@ def build_source_document(principal: str, source: str, created_at: str | None = 
         "principal": principal,
         "created_at": created_at or _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
         "source": source,
-        "source_sha256": sha256_hex(source.encode("utf-8")),
+        "source_sha384": digest_hex(source.encode("utf-8"), "sha384"),
     }
 
 
@@ -177,12 +177,12 @@ def verify_signed(envelope: Any, trusted_key: Any, provider: CryptoProvider | No
         raise ConstitutionSignatureError("signature does not match: constitution was modified or forged")
     if doc.get("format") == FORMAT:
         text, rules = doc.get("constitution_text"), doc.get("hard_rules")
-        if not isinstance(text, str) or sha256_hex(text.encode("utf-8")) != doc.get("constitution_text_sha256"):
+        if not isinstance(text, str) or not _embedded_digest_ok(doc, "constitution_text", text, provider):
             raise ConstitutionError("constitution text hash mismatch")
     elif doc.get("format") == FORMAT_V2:
         from .compiler import split_source
         src = doc.get("source")
-        if not isinstance(src, str) or sha256_hex(src.encode("utf-8")) != doc.get("source_sha256"):
+        if not isinstance(src, str) or not _embedded_digest_ok(doc, "source", src, provider):
             raise ConstitutionError("constitution source hash mismatch")
         text, rules = split_source(src)
     else:
@@ -191,8 +191,15 @@ def verify_signed(envelope: Any, trusted_key: Any, provider: CryptoProvider | No
     if not isinstance(doc.get("principal"), str) or not isinstance(doc.get("created_at"), str):
         raise ConstitutionError("principal and created_at are required")
     return Constitution(doc["principal"], text, rules, doc["created_at"], doc,
-                        trusted.fingerprint, trusted.suite,
-                        "sha256" if trusted.suite == LEGACY_SUITE else "sha384")
+                        trusted.fingerprint, trusted.suite, "sha384")
+
+
+def _embedded_digest_ok(doc: dict, field: str, value: str, provider: CryptoProvider | None) -> bool:
+    """New documents carry ``<field>_sha384``; documents signed before F_REVIEW carry ``<field>_sha256``
+    (legacy reader). Every digest field present must match, and at least one must be present."""
+    present = [(alg, doc[f"{field}_{alg}"]) for alg in ("sha384", "sha256") if f"{field}_{alg}" in doc]
+    data = value.encode("utf-8")
+    return bool(present) and all(digest_hex(data, alg, provider) == want for alg, want in present)
 
 
 def save_envelope(path: Path, envelope: dict) -> None:

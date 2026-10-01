@@ -87,6 +87,8 @@ def load_public_key(path: Path) -> Ed25519PublicKey:
 KEYSET_FORMAT = "two-key-keyset/1"
 PUBLIC_KEYSET_FORMAT = "two-key-public-keyset/1"
 PBKDF2_ITERATIONS = 600_000
+KEYSET_KDF = "pbkdf2-hmac-sha384"          # new bundles (F_REVIEW; CONCEPTION_NOTES Entry 10)
+KEYSET_KDFS = ("pbkdf2-hmac-sha384", "pbkdf2-hmac-sha256")   # sha256: bundles written before; still loaded
 
 
 def generate_keyset(suite: str, provider=None):
@@ -96,11 +98,15 @@ def generate_keyset(suite: str, provider=None):
     return PrivateKeySet.generate(suite, provider)
 
 
-def _kdf(passphrase: bytes, salt: bytes, iterations: int, provider) -> bytes:
+def _kdf(passphrase: bytes, salt: bytes, iterations: int, provider, kdf: str) -> bytes:
+    """A 256-bit AES key from the passphrase (PBKDF2, SP 800-132), through the provider's policy check."""
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-    provider.check("kdf", "pbkdf2-hmac-sha256")
-    return PBKDF2HMAC(hashes.SHA256(), 32, salt, iterations).derive(passphrase)
+    if kdf not in KEYSET_KDFS:
+        raise ValueError(f"unsupported key derivation {kdf!r}")
+    provider.check("kdf", kdf)
+    h = hashes.SHA384() if kdf == "pbkdf2-hmac-sha384" else hashes.SHA256()
+    return PBKDF2HMAC(h, 32, salt, iterations).derive(passphrase)
 
 
 def save_keyset(path: Path, ks, passphrase: bytes | None = None, provider=None) -> None:
@@ -114,10 +120,12 @@ def save_keyset(path: Path, ks, passphrase: bytes | None = None, provider=None) 
     if passphrase:
         provider.check("cipher", "aes-256-gcm")
         salt, nonce = provider.random_bytes(16), provider.random_bytes(12)
-        enc = {"kdf": "pbkdf2-hmac-sha256", "iterations": PBKDF2_ITERATIONS, "salt": b64e(salt),
+        kdf = KEYSET_KDF
+        enc = {"kdf": kdf, "iterations": PBKDF2_ITERATIONS, "salt": b64e(salt),
                "cipher": "aes-256-gcm", "nonce": b64e(nonce)}
         header["encryption"] = enc
-        ct = AESGCM(_kdf(passphrase, salt, PBKDF2_ITERATIONS, provider)).encrypt(nonce, plain, canonical_bytes(header))
+        ct = AESGCM(_kdf(passphrase, salt, PBKDF2_ITERATIONS, provider, kdf)).encrypt(nonce, plain,
+                                                                                    canonical_bytes(header))
         header["private"] = b64e(ct)
     else:
         header["encryption"] = None
@@ -144,12 +152,13 @@ def load_keyset(path: Path, passphrase: bytes | None = None, provider=None):
     if enc:
         if not passphrase:
             raise ValueError("key bundle is encrypted; passphrase required")
-        if enc.get("kdf") != "pbkdf2-hmac-sha256" or enc.get("cipher") != "aes-256-gcm" or \
+        if enc.get("kdf") not in KEYSET_KDFS or enc.get("cipher") != "aes-256-gcm" or \
                 int(enc.get("iterations", 0)) < 100_000:
             raise ValueError("unsupported key bundle encryption parameters")
         header = {k: d[k] for k in ("format", "suite", "public_key", "encryption")}
         try:
-            plain = AESGCM(_kdf(passphrase, b64d(enc["salt"]), int(enc["iterations"]), provider)).decrypt(
+            plain = AESGCM(_kdf(passphrase, b64d(enc["salt"]), int(enc["iterations"]), provider,
+                                enc["kdf"])).decrypt(
                 b64d(enc["nonce"]), b64d(d["private"]), canonical_bytes(header))
         except InvalidTag:
             raise ValueError("wrong passphrase or corrupted key bundle") from None

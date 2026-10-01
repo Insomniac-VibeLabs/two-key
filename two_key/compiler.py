@@ -119,13 +119,13 @@ def split_source(source: str) -> tuple[str, list]:
     return text, rules
 
 
-def bytecode_digest(bytecode: list, alg: str = "sha256", provider: CryptoProvider | None = None) -> str:
+def bytecode_digest(bytecode: list, alg: str = "sha384", provider: CryptoProvider | None = None) -> str:
     """H(canonical serialization of the bytecode): [[opcode name, operands...], ...]."""
     ser = [[Op(ins[0]).name, *ins[1:]] for ins in bytecode]
     return digest_hex(canonical_bytes(ser), alg, provider)
 
 
-def nl_digest(text: str, alg: str = "sha256", provider: CryptoProvider | None = None) -> str:
+def nl_digest(text: str, alg: str = "sha384", provider: CryptoProvider | None = None) -> str:
     return digest_hex(text.encode("utf-8"), alg, provider)
 
 
@@ -150,7 +150,7 @@ def verify_structured_only(bytecode: list) -> None:
         raise ConstitutionError("bytecode must end in PASS")
 
 
-def compile_both(constitution: Any, *, max_steps: int = DEFAULT_MAX_STEPS, digest_alg: str = "sha256",
+def compile_both(constitution: Any, *, max_steps: int = DEFAULT_MAX_STEPS, digest_alg: str = "sha384",
                  provider: CryptoProvider | None = None) -> CompiledConstitution:
     """Compile one verified Constitution into (bytecode, judge prompt text) plus both hashes."""
     bytecode = compile_constitution(constitution.hard_rules, max_steps=max_steps)

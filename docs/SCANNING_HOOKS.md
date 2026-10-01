@@ -280,7 +280,7 @@ def submit(request, scan_id):       # e.g. upload to the vendor's scanning bucke
 
 
 scanner = AsyncCallbackScanner("async-dlp", submit)    # holds until the verdict or the timeout (default)
-receiver = WebhookReceiver(scanner, secret=b"a shared secret of 16+ bytes").start()   # or call scanner.deliver()
+receiver = WebhookReceiver(scanner, secret=b"a shared secret of at least 32 bytes").start()   # or call scanner.deliver()
 ```
 
 - **Hold** (`hold_until_verdict=True`, **the default**, Entry 7: "Always
@@ -301,7 +301,8 @@ receiver = WebhookReceiver(scanner, secret=b"a shared secret of 16+ bytes").star
   **This only flags after the fact; the content has already been sent (or,
   inbound, already handed to the agent).**
 - **`WebhookReceiver`:** binds to 127.0.0.1 by default. It requires
-  `X-Two-Key-Signature: sha256=<HMAC-SHA256 of the body>` and refuses
+  `X-Two-Key-Signature: sha384=<HMAC-SHA-384 of the body>` (`alg="hmac-sha512"`
+  for `sha512=`), with a shared secret of at least 256 bits, and refuses
   unsigned callbacks, because an unauthenticated callback could post an
   "allow".
 

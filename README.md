@@ -1,7 +1,7 @@
 # Two-Key (two-key)
 
 Dual-path constitutional enforcement for personal AI agents.
-**Prototype. Not production cryptography. Not FIPS validated.**
+**Prototype. Not production cryptography. FIPS-approved algorithms, validated module required for compliance.**
 
 A language model may *propose* an action. Two-Key decides whether
 the action may touch the real world, and it allows the action only when two
@@ -346,10 +346,10 @@ the file is loaded.
 | `quorum_policy` | `QuorumPolicy(required_yes=min(2, n))` | `QuorumPolicy` | Path B rules (table above) |
 | `ttl_seconds` | `30` | positive int | Token lifetime |
 | `max_steps` | `4096` | int ≥ 1 | Path A step limit, checked at compile time |
-| `capability_secret` | random per process | bytes, ≥ 32 | HMAC key for tokens |
-| `token_mode` | `tk1` (ed25519) / `tk1-hs384` (other suites) | `tk1`, `tk1-hs384`, `tk1-sig` | HMAC-SHA-256, HMAC-SHA-384, or signed tokens |
+| `capability_secret` | random per process (48 bytes) | bytes, ≥ 32 | HMAC key for tokens |
+| `token_mode` | `tk1-hs384` (every suite) | `tk1-hs384`, `tk1-sig`; `tk1` (HMAC-SHA-256, legacy, only if chosen) | HMAC-SHA-384, signed tokens, or HMAC-SHA-256 |
 | `token_signing_key` | none | a `PrivateKeySet` | Required for `tk1-sig` |
-| `digest_alg` | `sha256` (ed25519) / `sha384` (other suites) | `sha256`, `sha384` (tested); other approved SHA-2/SHA-3 names pass the policy check but are untested | Ledger, Merkle, args, and constitution hashes |
+| `digest_alg` | `sha384` (every suite) | `sha384`; `sha256` only to keep appending to a ledger written with the earlier default; `sha512`, `sha3-384`, `sha3-512` are approved and self-tested but untested end to end | Ledger, Merkle, args, ballots, and constitution hashes. Old SHA-256 ledgers still verify (`docs/CRYPTO.md` §3.1) |
 | `head_signing` | `decision` | `decision`, `append` | Sign the ledger head once per decision, or after every append |
 | `ledger_fsync` | `True` | bool | fsync every ledger write |
 | `short_circuit_path_b` | `True` | bool | Skip Path B when Path A denies |
@@ -460,8 +460,9 @@ Environment variables: the package reads only the variables you name
   nothing verifies them.
 
 **FIPS deployment**
-- This code is **not** FIPS certified or validated. Compliance comes only
-  from running it on a CMVP-validated module in approved mode.
+- FIPS-approved algorithms, validated module required for compliance. This
+  code is **not** FIPS certified or validated. Compliance comes only from
+  running it on a CMVP-validated module in approved mode.
 - The OpenSSL 3.1.2 FIPS provider (cert #4985) has no ML-DSA, and Ed25519
   isn't approved there, so use the `ecdsa-p384` suite (hybrid ML-DSA would
   then run outside the module).
@@ -548,14 +549,17 @@ README.md docs/HOWTO.md` runs every command and code block in a copy of the
 repository with a fresh virtualenv and HOME. Judge HTTP calls go to a local
 fake that answers in each provider's format, so no real model was contacted.
 
-**Is it FIPS compliant or quantum-safe?** It uses only FIPS-approved
-algorithms and can sign with hybrid ML-DSA-65, but it isn't validated. See
-[docs/CRYPTO.md](docs/CRYPTO.md).
+**Is it FIPS compliant or quantum-safe?** FIPS-approved algorithms,
+validated module required for compliance. It isn't validated itself.
+Hashes and MACs are SHA-384 / HMAC-SHA-384 with keys of 256 bits or more by
+default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
+(`require_pq=True` enforces one). See [docs/CRYPTO.md](docs/CRYPTO.md).
 
 ## Limitations
 
 - **Prototype.** It has not been security-reviewed or deployed.
-- **Not FIPS validated.** The development machine had no FIPS provider, and
+- **FIPS-approved algorithms, validated module required for compliance.**
+  Not validated: the development machine had no FIPS provider, and
   ML-DSA came from pyca `cryptography` 50.0.1 with its bundled OpenSSL 4.0.2,
   which is not a validated module.
 - **Action-record normalization (problem F) is open.** The caller supplies

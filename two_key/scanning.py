@@ -59,7 +59,6 @@ from __future__ import annotations
 import abc
 import collections
 import base64
-import hashlib
 import hmac
 import io
 import ipaddress
@@ -81,7 +80,7 @@ from urllib.parse import urlparse
 
 from .action import DATA_CLASSES
 from .canonical import canonical_bytes, canonical_hash, digest_hex
-from .crypto.provider import CryptoProvider
+from .crypto.provider import CryptoProvider, default_provider
 
 _CLAIMED_KEEP_SECONDS = 5.0  # see AsyncCallbackScanner._prune_claimed
 OUTCOMES = ("allow", "block", "quarantine", "error", "timeout", "pending")  # what a scanner can report
@@ -1102,8 +1101,8 @@ class PatternScanner(ContentScanner):
                  payload_mode: str | None = None, version: str | None = None):
         super().__init__(scanner_id, kind=kind, payload_mode=payload_mode, version=version)
         self.rules = [(r, re.compile(r.pattern)) for r in rules]
-        digest = hashlib.sha256(canonical_bytes([[r.name, r.pattern.decode("latin-1"), r.label, r.data_class,
-                                                  r.action] for r in rules])).hexdigest()[:16]
+        digest = digest_hex(canonical_bytes([[r.name, r.pattern.decode("latin-1"), r.label, r.data_class,
+                                              r.action] for r in rules]), "sha384")[:16]
         self._version = version or f"pattern-rules:{digest}"
 
     @staticmethod
@@ -1460,12 +1459,18 @@ class AsyncCallbackScanner(ContentScanner):
                 self.callback_errors.append(f"on_flag: {type(e).__name__}")
 
 
+WEBHOOK_MACS = ("hmac-sha384", "hmac-sha512")
+
+
 class WebhookReceiver:
     """A minimal HTTP receiver for asynchronous verdicts (adapter 5).
 
     ``POST {path}`` with a JSON body containing ``scan_id`` and the verdict
-    fields, and the header ``X-Two-Key-Signature: sha256=<hex HMAC-SHA256 of
-    the raw body under the shared secret>``. Unsigned or wrongly signed
+    fields, and the header ``X-Two-Key-Signature: sha384=<hex HMAC-SHA-384 of
+    the raw body under the shared secret>`` (``sha512=`` with ``alg="hmac-sha512"``).
+    The secret must be at least 32 bytes (256 bits). The MAC goes through the
+    crypto provider (F_REVIEW; CONCEPTION_NOTES Entry 10; HMAC-SHA-256 with a
+    16-byte secret before). Unsigned or wrongly signed
     callbacks are refused (401): an unauthenticated channel would let anyone
     post an "allow". Binds to 127.0.0.1 by default; put a TLS-terminating
     proxy in front if the vendor calls in from outside.
@@ -1473,10 +1478,15 @@ class WebhookReceiver:
     """
 
     def __init__(self, scanner: AsyncCallbackScanner, secret: bytes, *, host: str = "127.0.0.1", port: int = 0,
-                 path: str = "/two-key/scan-verdict", max_body: int = 1 << 20):
-        if not isinstance(secret, (bytes, bytearray)) or len(secret) < 16:
-            raise ValueError("secret must be at least 16 bytes")
+                 path: str = "/two-key/scan-verdict", max_body: int = 1 << 20, alg: str = "hmac-sha384",
+                 crypto: CryptoProvider | None = None):
+        if not isinstance(secret, (bytes, bytearray)) or len(secret) < 32:
+            raise ValueError("secret must be at least 32 bytes (256 bits)")
+        if alg not in WEBHOOK_MACS:
+            raise ValueError(f"alg must be one of {WEBHOOK_MACS}")
         self.scanner, self._secret, self.path, self.max_body = scanner, bytes(secret), path, max_body
+        self.alg, self.crypto = alg, crypto
+        self.sign(self._secret, b"", alg, crypto)  # policy and key-length check now, not on the first callback
         recv = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -1494,8 +1504,10 @@ class WebhookReceiver:
         self._thread: threading.Thread | None = None
 
     @staticmethod
-    def sign(secret: bytes, body: bytes) -> str:
-        return "sha256=" + hmac.new(secret, body, hashlib.sha256).hexdigest()
+    def sign(secret: bytes, body: bytes, alg: str = "hmac-sha384", crypto: CryptoProvider | None = None) -> str:
+        """The ``X-Two-Key-Signature`` value for ``body``: ``sha384=<hex>`` (or ``sha512=``)."""
+        mac = (crypto or default_provider()).hmac_factory(alg, bytes(secret))
+        return alg.split("-", 1)[1] + "=" + mac(body).hex()
 
     def _handle(self, path: str, headers: Any, rfile: Any) -> int:
         if path != self.path:
@@ -1507,7 +1519,8 @@ class WebhookReceiver:
         if not 0 <= n <= self.max_body:
             return 400
         body = rfile.read(n)
-        if not hmac.compare_digest(self.sign(self._secret, body), headers.get("X-Two-Key-Signature", "")):
+        if not hmac.compare_digest(self.sign(self._secret, body, self.alg, self.crypto),
+                                   headers.get("X-Two-Key-Signature", "")):
             return 401
         try:
             obj = json.loads(body.decode("utf-8"))

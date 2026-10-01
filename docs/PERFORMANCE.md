@@ -6,6 +6,12 @@ root, after the PRIOR_ART.md §4 (i)–(iii) changes. The previous code
 immediately before; see "§4 (i)–(iii) phase: what changed". The numbers below come from one run on one machine; rerun the script on
 your own hardware before relying on them.
 
+**Defaults changed after these measurements** (F_REVIEW fixes,
+CONCEPTION_NOTES Entry 10): every profile now uses SHA-384 and `tk1-hs384`,
+and `args_hash` is computed over the typed two-key-enc/2 encoding. The
+`tk1` and SHA-256 rows below measure options that still exist but are no
+longer the default. The numbers were not re-measured for this change.
+
 ```bash
 python bench.py            # full run (about 40 s); prints the tables below
 python bench.py --quick    # fewer iterations

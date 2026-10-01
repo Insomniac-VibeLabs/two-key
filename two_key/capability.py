@@ -8,8 +8,9 @@ Token = mode + "." + b64url(canonical payload) + "." + b64url(tag over mode + ".
 Token modes (the issuer and the gateway must agree; a token of any other mode
 is refused as ``unsupported_token_version``, so there is no downgrade):
 
-  tk1        HMAC-SHA-256, >= 256-bit key (legacy default)
-  tk1-hs384  HMAC-SHA-384, 384-bit key by default (default for PQ profiles)
+  tk1        HMAC-SHA-256, >= 256-bit key (legacy; only when chosen explicitly)
+  tk1-hs384  HMAC-SHA-384, 384-bit key by default (the default for every
+             profile since F_REVIEW / CONCEPTION_NOTES Entry 10)
   tk1-sig    signed with a separate token key set (PrivateKeySet), e.g. hybrid
              ML-DSA-65 + Ed25519. Optional: about 4.6 KB per token, and slower.
 
@@ -19,7 +20,7 @@ the recommended default; tk1-sig exists for deployments where the verifier
 must not hold a secret that can also mint tokens.
 
 Payload fields: v, jti (unique id for single-use), principal, tool,
-scope{amount_usd, counterparty, data_class}, args_hash, issued_at,
+scope{amount_usd, counterparty, data_class}, args_hash, args_enc, issued_at,
 expires_at, ledger_root, constitution_digest.
 
 Ledger-root binding (PRIOR_ART.md §4 (i) and (ii), selected by Stephan Busch
@@ -32,9 +33,12 @@ on 2026-09-30): Two-Key also binds
 The gateway refuses tokens that lack these fields.
 
 Reference option (per Stephan's instructions, 2026-09-30): the token is bound
-to ``args_hash``, the SHA-256 of the canonical JSON of {tool, args} for the
-literal tool-call arguments. Alternatives are listed in DESIGN_OPTIONS.md
-section 3. The prototype uses HMAC with a secret shared between issuer and
+to ``args_hash``, the hash (SHA-384 by default) of the two-key-enc/2 encoding
+(``args_enc``) of {tool, args} for the literal tool-call arguments: typed,
+injective, and domain-separated (canonical.py; F_REVIEW finding 2). A token
+without ``args_enc`` (issued before that change) is refused; tokens live
+``ttl_seconds`` (30 s by default), so only tokens in flight at an upgrade are
+affected. Alternatives are listed in DESIGN_OPTIONS.md section 3. The prototype uses HMAC with a secret shared between issuer and
 gateway. Production is expected to use a hardware-backed key (spec 5.1 item 6).
 """
 
@@ -47,7 +51,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
-from .canonical import canonical_bytes, canonical_hash
+from .canonical import ENCODING, canonical_bytes, canonical_hash, freeze_call
 from .crypto.provider import CryptoProvider, PQUnavailableError, default_provider
 from .crypto.signatures import as_private_keyset, as_public_keyset
 
@@ -71,19 +75,31 @@ def _b64u_dec(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
 
-def args_hash(tool: str, args: Mapping[str, Any], alg: str = "sha256",
+def args_hash(tool: str, args: Mapping[str, Any], alg: str = "sha384",
               provider: CryptoProvider | None = None) -> str:
-    """Canonical hash of the literal tool-call arguments (reference binding option).
+    """Hash of the two-key-enc/2 encoding of {tool, args} (reference binding option).
 
-    SHA-256 by default; SHA-384 in the post-quantum profiles."""
+    The same bytes ``freeze_call`` produces, so the gateway's hash of what it executes equals this."""
+    return freeze_call(tool, args).digest(alg, provider)
+
+
+def args_hash_legacy(tool: str, args: Mapping[str, Any], alg: str = "sha256",
+                     provider: CryptoProvider | None = None) -> str:
+    """The pre-F_REVIEW args_hash (canonical JSON, not injective), for auditing ``args_hash`` values in
+    ledgers written before two-key-enc/2. Never used to authorize a call."""
     if not isinstance(args, Mapping):
         raise TypeError("tool args must be a mapping")
     return canonical_hash({"tool": tool, "args": dict(args)}, alg, provider)
 
 
 def token_sha256(token: str) -> str:
-    """Identifier of a token for ledger records (SHA-256; an identifier, not a security binding)."""
+    """Legacy token identifier (SHA-256), as recorded in ledgers before F_REVIEW. Kept for reading them."""
     return default_provider().hash_hex("sha256", token.encode("ascii", "replace"))
+
+
+def token_digest(token: str, alg: str = "sha384", provider: CryptoProvider | None = None) -> str:
+    """Identifier of a token for ledger records (``token_digest``; SHA-384 by default)."""
+    return (provider or default_provider()).hash_hex(alg, token.encode("ascii", "replace"))
 
 
 @dataclass(frozen=True)
@@ -95,10 +111,13 @@ class IssuedCapability:
     def token_hash(self) -> str:
         return token_sha256(self.token)
 
+    def token_digest(self, alg: str = "sha384", provider: CryptoProvider | None = None) -> str:
+        return token_digest(self.token, alg, provider)
+
 
 class CapabilityIssuer:
     def __init__(self, secret: bytes | None = None, clock: Callable[[], float] = time.time, *,
-                 mode: str = "tk1", signing_key: Any = None, verify_key: Any = None,
+                 mode: str = "tk1-hs384", signing_key: Any = None, verify_key: Any = None,
                  crypto: CryptoProvider | None = None):
         if mode not in TOKEN_MODES:
             raise ValueError(f"token mode must be one of {TOKEN_MODES}")
@@ -149,7 +168,7 @@ class CapabilityIssuer:
         now = self.clock()
         payload = {
             "v": 1, "jti": secrets.token_hex(16), "principal": principal, "tool": tool, "scope": dict(scope),
-            "args_hash": args_digest, "issued_at": now, "expires_at": now + ttl_seconds,
+            "args_hash": args_digest, "args_enc": ENCODING, "issued_at": now, "expires_at": now + ttl_seconds,
             "ledger_root": ledger_root, "constitution_digest": constitution_digest,
         }
         extra = {"ledger_size": ledger_size, "ledger_merkle_root": ledger_merkle_root,

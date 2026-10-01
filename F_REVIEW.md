@@ -605,3 +605,37 @@ Published work on separating an agent's planning from untrusted data (for
 example "plan-then-execute" or "dual-LLM" designs, and the CaMeL system,
 Debenedetti et al., 2025) is related to Q9–Q10. The attorney may want to
 review it; this document draws no conclusion about it.
+
+## 12. Status update (appended 2026-09-30, about 11:04 PM MDT)
+
+*Appended; nothing above this section was changed. The review above
+describes the code at commit `cc05425`.*
+
+Stephan approved fixing findings 1–3 at 10:30 PM MT on 2026-09-30, relayed
+by his patent-attorney agent: "A, but ensure quantum resistance and fips
+140-3 compliance where applicable." (`CONCEPTION_NOTES.md` Entry 10, an
+approval of routine bug fixes, not conception.) The fixes, prepared by the
+AI engineering assistant:
+
+1. **Finding 1 (TOCTOU), fixed.** On every gateway path, with or without
+   content scanners, the call is serialized once (`canonical.freeze_call`)
+   into immutable bytes. Those bytes are hashed for the `args_hash` check,
+   scanned, and decoded for the extractor and the tool. `authorize` logs the
+   arguments decoded from the bytes it hashed. Regression tests reproduce
+   the §6 A5 demonstration: an approved $42.50 payment to
+   `power-co.example` can't execute as $4,800 to `offshore-mule.example`
+   (`tests/test_f_review.py`).
+2. **Finding 2 (encoding), fixed.** `two-key-enc/2` is typed (tuple ≠ list,
+   int ≠ str ≠ float ≠ bool), refuses non-string keys, and carries a version
+   and a domain-separation label. Tokens carry `args_enc`. No Unicode
+   normalization was added; that remains a choice for Stephan (§7.2).
+3. **Finding 3 (judge-prompt delimiters), fixed.** The action record and
+   the proposal are sent as JSON with `<`, `>` and `&` escaped, so they
+   can't contain a section tag. The system prompt says so. The broader
+   questions Q4–Q5 (what the judges should see) are still open.
+4. **Finding 4 (`proposal_sha256`), fixed** as part of the crypto
+   requirement: SHA-384 (`proposal_digest`). Every profile now defaults to
+   SHA-384 and HMAC-SHA-384. Older ledgers, constitutions, and key bundles
+   verify through legacy readers (`docs/CRYPTO.md` §3.1).
+
+FIPS-approved algorithms, validated module required for compliance.

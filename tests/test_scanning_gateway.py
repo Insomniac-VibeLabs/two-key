@@ -5,7 +5,7 @@ import time
 import unittest
 from collections.abc import Mapping
 
-from two_key.canonical import canonical_bytes, digest_hex
+from two_key.canonical import DOMAIN_TOOL_RESULT, digest_hex, freeze_call, typed_bytes
 from two_key.quorum import QuorumPolicy
 from two_key.scanning import (EICAR, AsyncCallbackScanner, PatternRule, PatternScanner, ScanReport, ScanSettings)
 from two_key.testing import FixedJudge
@@ -19,7 +19,7 @@ YES = [FixedJudge("a", "yes", "p1"), FixedJudge("b", "yes", "p2")]
 DX = PatternRule("dx", rb"(?i)diagnosis", label="health", data_class="medical")
 SSN = PatternRule("ssn", rb"\d{3}-\d{2}-\d{4}", label="us_ssn", data_class="personal")
 MED_ARGS = {"to": "clinic.example", "body": "Diagnosis: example condition"}
-REDEEM_KEYS = {"jti", "token_sha256", "tool", "args_hash", "capability_entry_seq", "capability_entry_digest"}
+REDEEM_KEYS = {"jti", "token_digest", "tool", "args_hash", "args_enc", "capability_entry_seq", "capability_entry_digest"}
 
 
 def email(data_class):
@@ -185,7 +185,7 @@ class ScanningGateway(unittest.TestCase):
         d = self.token("public", args)
         self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "executed")
         req = rec.requests[0]
-        self.assertEqual(req.parts[0].data, canonical_bytes({"tool": "email_send", "args": args}))
+        self.assertEqual(req.parts[0].data, freeze_call("email_send", args).data)
         self.assertNotIn("\u00e9".encode("utf-8"), req.parts[0].data)            # escaped in the exact bytes
         texts = {t.name: t.data.decode("utf-8") for t in req.texts}
         self.assertEqual(texts["text:args.body"], "caf\u00e9 <script>x()</script>")
@@ -211,7 +211,7 @@ class ScanningGateway(unittest.TestCase):
         d = self.token("public", args)
         self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "executed")
         part = rec.requests[0].parts[0]
-        self.assertEqual(part.data, canonical_bytes({"tool": "email_send", "args": args}))
+        self.assertEqual(part.data, freeze_call("email_send", args).data)
         h = digest_hex(part.data, self.tk.digest_alg)
         cap, red = self.last("capability_issued"), self.last("capability_redeemed")
         self.assertEqual({h}, {d.token_payload["args_hash"], cap["args_hash"], red["args_hash"],
@@ -244,7 +244,7 @@ class ScanningGateway(unittest.TestCase):
         d = self.token("public", honest)
         self.assertEqual(gw.invoke(d.capability, "email_send", Shifty(), fields("public")).reason, "executed")
         self.assertEqual(self.sent, [honest])
-        self.assertEqual(rec.requests[0].parts[0].data, canonical_bytes({"tool": "email_send", "args": honest}))
+        self.assertEqual(rec.requests[0].parts[0].data, freeze_call("email_send", honest).data)
 
     # -- outcomes, errors, order -------------------------------------------------------
     def test_block_and_quarantine_deny_before_redemption(self):
@@ -381,7 +381,7 @@ class ScanningGateway(unittest.TestCase):
         self.assertEqual((r.reason, r.result), ("executed", {"reply": "caf\u00e9 ok"}))
         out, inn = rec.requests
         self.assertEqual((out.direction, inn.direction), ("outbound", "inbound"))
-        self.assertEqual(inn.parts[0].data, canonical_bytes({"reply": "caf\u00e9 ok"}))
+        self.assertEqual(inn.parts[0].data, typed_bytes({"reply": "caf\u00e9 ok"}, DOMAIN_TOOL_RESULT))
         self.assertEqual({t.name: t.data.decode() for t in inn.texts}["text:result.reply"], "caf\u00e9 ok")
         ex = self.last("tool_executed")
         self.assertEqual(ex["result_scans"][0]["parts"][0]["digest"], ex["result_hash"])   # bound to H(result)
