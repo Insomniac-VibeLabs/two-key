@@ -238,6 +238,67 @@ listed as open in `docs/SCANNING_HOOKS.md`.
   (`CHANGES.md` row 85). The earlier wording is in git history at commit
   97dedbd.
 
+## Entry 7
+
+- **Attributed to:** Stephan Busch
+- **Date/time:** 2026-09-30, about 10:16 PM Mountain Time (MDT, UTC-6)
+- **How it was captured:** relayed word for word to the AI engineering
+  assistant in the task instructions from Programer, the engineering agent
+  coordinating this work. The quote is reproduced exactly as relayed,
+  including spelling, punctuation, spacing, and the apostrophe.
+- **Context:** Stephan's answers to the content-scanning questions left open
+  after Entry 6 (scanner errors, run order, holding for the verdict,
+  data-class disagreement), plus a new statement about inbound content.
+
+> "Scanner error should be logged in the ledger and treated like a timeout.
+>
+> Which is faster, running multiple scanners at once or one after the other?  Whichever is more optimized, choose that.
+>
+> Always hold a file until verdict is returned (then based on verdict take appropriate action) or the timeout limit is reached.
+>
+> Don’t worry about disagreement; if one (two-key or DLP or AV) convicts (would deny) then default to deny.
+>
+> Scans should be done before files are sent.  Likewise, they should be done before files are received or processed."
+
+### Assistant's note (not conception)
+
+- **Run order.** Stephan asked which is faster and delegated the choice
+  ("Whichever is more optimized, choose that."). The assistant answered that
+  running the scanners at the same time (parallel) is faster: the wait is
+  about as long as the slowest scanner, not the sum of all of them. Because
+  any deny decides the call (most restrictive wins, Entry 6), the order
+  doesn't change the outcome. So parallel was selected, per his delegation.
+  Running one after the other (sequential) remains available as an option.
+- **How the statements are implemented** is AI-prepared engineering,
+  described in `docs/SCANNING_HOOKS.md` and `CHANGES.md` row 86.
+
+## Entry 8
+
+- **Attributed to:** Stephan Busch
+- **Date/time:** 2026-09-30, about 10:17 PM Mountain Time (MDT, UTC-6)
+- **How it was captured:** relayed word for word to the AI engineering
+  assistant in the task instructions from Programer, the engineering agent
+  coordinating this work. The quote is reproduced exactly as relayed.
+- **Context:** Stephan's answer to whether the original wording should be
+  restored in Entries 1 and 3 and in `CHANGES.md` rows 3, 59, 78, 79, and 81,
+  which were edited for the rename.
+
+> "Keep as is, but document that I told you to change those things due to better naming conventions."
+
+### Assistant's note (not conception)
+
+- Stephan directed the edits to the non-quote wording of Entries 1 and 3
+  and of `CHANGES.md` rows 3, 59, 78, 79, and 81, for better naming
+  conventions. His instruction is recorded verbatim in Entry 6 (2026-09-30,
+  about 9:49 PM MT): "yes modify it so it reflects ‘two-key’ in all
+  places and references".
+- The original wording is preserved in Entry 6 (Entries 1 and 3) and in git
+  commit 97dedbd (all of them).
+- The patent lawyer advised against editing earlier entries. Stephan chose
+  to keep the edited wording ("Keep as is"). Nothing was reverted.
+- From Entry 7 on, earlier entries and earlier `CHANGES.md` rows are not
+  edited; new information is only appended.
+
 ---
 
 *Future entries: add a new dated section. Don't edit earlier entries. If

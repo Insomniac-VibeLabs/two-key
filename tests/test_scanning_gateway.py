@@ -1,6 +1,7 @@
 """Content scanning wired into the tool gateway: verdicts gate the call and are bound into the ledger."""
 import base64
 import threading
+import time
 import unittest
 from collections.abc import Mapping
 
@@ -65,35 +66,41 @@ class ScanningGateway(unittest.TestCase):
     def test_no_scanners_means_the_original_path(self):
         args = {"to": "clinic.example", "body": "hi", "cc": ("a@x.example", "b@x.example")}
         for gw in (self.tk.gateway(tools=self.tools), self.tk.gateway(tools=self.tools, scanners=[]),
-                   self.tk.gateway(tools=self.tools, scanners=None, scan_settings=ScanSettings(on_error="allow"))):
+                   self.tk.gateway(tools=self.tools, scanners=None, scan_settings=ScanSettings(on_timeout="allow"))):
             self.assertIsNone(gw.scan_engine)
             d = self.token("public", args)
             r = gw.invoke(d.capability, "email_send", args, fields("public"))
             self.assertEqual(r.reason, "executed")
             self.assertIsInstance(self.sent[-1]["cc"], tuple)           # args passed through, no snapshot copy
             self.assertEqual(set(self.last("capability_redeemed")), REDEEM_KEYS)
-        self.assertFalse(any(e.kind == "content_scan_async" or "content_scans" in e.body
+            self.assertEqual(r.result, "sent")
+            self.assertNotIn("result_scans", self.last("tool_executed"))   # no inbound scanning either
+            self.assertEqual(gw.scan_inbound(b"anything", source="x").reason, "not_scanned")
+        self.assertFalse(any(e.kind in ("content_scan_async", "content_scan_inbound") or "content_scans" in e.body
                              for e in self.tk.ledger.entries))
         self.assertTrue(self.tk.ledger.verify(self.fx.key.public_key()).ok)
 
-    # -- Entry 6 (b): most restrictive wins ------------------------------------------
-    def test_dlp_stricter_than_label_blocks(self):
+    # -- Entries 6 (b) and 7: any conviction denies ------------------------------------
+    def test_dlp_class_other_than_the_token_denies(self):
         gw = self.tk.gateway(tools=self.tools, scanners=[PatternScanner("dlp", rules=[DX], kind="dlp")])
         d = self.token("public", MED_ARGS)                # mislabeled: medical content declared public
         r = gw.invoke(d.capability, "email_send", MED_ARGS, fields("public"))
         self.assertEqual((r.allowed, r.reason), (False, "scan_data_class_mismatch"))
         self.assertEqual(self.sent, [])
         denied = self.last("gateway_denied")
-        self.assertEqual((denied["scan_data_class"], denied["content_scans"][0]["outcome"]), ("medical", "allow"))
+        self.assertEqual((denied["scan_data_classes"], denied["content_scans"][0]["outcome"]),
+                         (["public", "medical"], "allow"))
         self.assertFalse(self.tk.ledger.is_redeemed(d.token_payload["jti"]))
 
-    def test_label_stricter_than_dlp_keeps_the_label(self):
+    def test_dlp_class_the_token_does_not_permit_denies_even_if_less_sensitive(self):
+        # Entry 7: no ranking. A personal token doesn't permit content the DLP labels public.
         args = {"to": "clinic.example", "body": "plain text"}
         dlp = Recorder(report=ScanReport("allow", data_classes=("public",)))
         gw = self.tk.gateway(tools=self.tools, scanners=[dlp])
         d = self.token("personal", args)
-        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("personal")).reason, "executed")
-        self.assertEqual(self.last("capability_redeemed")["scan_data_class"], "personal")
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("personal")).reason,
+                         "scan_data_class_mismatch")
+        self.assertEqual(self.last("gateway_denied")["scan_data_classes"], ["personal", "public"])
 
     def test_matching_class_and_no_class_execute(self):
         args = {"to": "clinic.example", "body": "my SSN is 123-45-6789"}
@@ -103,18 +110,18 @@ class ScanningGateway(unittest.TestCase):
         plain = {"to": "clinic.example", "body": "plain text"}
         d = self.token("public", plain)
         self.assertEqual(gw.invoke(d.capability, "email_send", plain, fields("public")).reason, "executed")
-        self.assertEqual(self.last("capability_redeemed")["scan_data_class"], "public")
+        self.assertEqual(self.last("capability_redeemed")["scan_data_classes"], ["public"])
 
-    def test_unranked_classes_resolve_to_classified_and_block(self):
+    def test_disagreeing_classes_deny(self):
         args = {"to": "clinic.example", "body": "x"}
         dlp = Recorder(report=ScanReport("allow", data_classes=("personal",)))
         gw = self.tk.gateway(tools=self.tools, scanners=[dlp])
-        # The call's own class is financial; the DLP says personal: neither outranks the other.
+        # The call's own class is financial; the DLP says personal: the DLP convicts, so deny (Entry 7).
         d = self.tk.authorize({**email("financial")}, "Send.", args)
         self.assertTrue(d.allowed, d.reason)
         self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("financial")).reason,
                          "scan_data_class_mismatch")
-        self.assertEqual(self.last("gateway_denied")["scan_data_class"], "classified")
+        self.assertEqual(self.last("gateway_denied")["scan_data_classes"], ["financial", "personal"])
 
     def test_two_key_deny_is_never_turned_into_allow(self):
         rec = Recorder(report=ScanReport("allow", data_classes=("public",)))
@@ -152,12 +159,23 @@ class ScanningGateway(unittest.TestCase):
         self.assertEqual((red["content_scans"][0]["outcome"], red["scan_policy"]["on_timeout"],
                           red["scan_policy"]["timeout_seconds"]), ("timeout", "allow", 0.05))
 
-    def test_timeout_and_error_settings_are_independent(self):
+    # -- Entry 7: a scanner error is logged and treated like a timeout -------------------
+    def test_scanner_error_follows_the_timeout_action_and_is_logged(self):
         args = {"to": "clinic.example", "body": "x"}
+        d = self.token("public", args)
+        gw = self.tk.gateway(tools=self.tools, scanners=[Recorder(report=OSError("down"))])
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_error:rec")
+        err = self.last("gateway_denied")["scan_errors"]
+        self.assertEqual([(e["scanner_id"], e["outcome"], e["error_type"], e["action"]) for e in err],
+                         [("rec", "error", "OSError", "block")])
+        self.assertEqual(err[0]["payload_digest"], self.last("gateway_denied")["content_scans"][0]["payload_digest"])
+        self.assertEqual(err[0]["scanner_version"], Recorder().version())
         gw = self.tk.gateway(tools=self.tools, scanners=[Recorder(report=OSError("down"))],
                              scan_settings=ScanSettings(on_timeout="allow"))
-        d = self.token("public", args)
-        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_error:rec")
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "executed")
+        red = self.last("capability_redeemed")
+        self.assertEqual([(e["error_type"], e["action"]) for e in red["scan_errors"]], [("OSError", "allow")])
+        self.assertEqual(red["scan_policy"]["on_error"], "allow")
 
     # -- Entry 6 (c): exact bytes and strings ------------------------------------------------
     def test_scanners_get_exact_bytes_and_decoded_strings(self):
@@ -228,7 +246,7 @@ class ScanningGateway(unittest.TestCase):
         self.assertEqual(self.sent, [honest])
         self.assertEqual(rec.requests[0].parts[0].data, canonical_bytes({"tool": "email_send", "args": honest}))
 
-    # -- outcomes, (a) on_error, order -------------------------------------------------
+    # -- outcomes, errors, order -------------------------------------------------------
     def test_block_and_quarantine_deny_before_redemption(self):
         for rep, reason in ((ScanReport("block", findings=("x",)), "scan_blocked:rec"),
                             (ScanReport("quarantine"), "scan_quarantined:rec")):
@@ -245,7 +263,7 @@ class ScanningGateway(unittest.TestCase):
         d = self.token("public", args)
         self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_error:rec")
         gw = self.tk.gateway(tools=self.tools, scanners=[Recorder(report=OSError("scanner down"))],
-                             scan_settings=ScanSettings(on_error="allow"))
+                             scan_settings=ScanSettings(on_timeout="allow"))
         self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "executed")
         scan = self.last("capability_redeemed")["content_scans"][0]
         self.assertEqual((scan["outcome"], scan["detail"]), ("error", "OSError: scanner down"))
@@ -257,15 +275,35 @@ class ScanningGateway(unittest.TestCase):
         d = self.token("public", args)
         self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_error:pattern")
 
-    def test_sequential_stops_at_first_deny_parallel_runs_all(self):
+    def test_sequential_stops_at_first_deny_parallel_records_every_scanner(self):
         args = {"to": "clinic.example", "body": "x"}
-        for order, second_calls in (("sequential", 0), ("parallel", 1)):
-            first, second = Recorder("first", ScanReport("block")), Recorder("second", kind="av")
-            gw = self.tk.gateway(tools=self.tools, scanners=[first, second], scan_settings=ScanSettings(order=order))
-            d = self.token("public", args)
-            self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason,
-                             "scan_blocked:first")
-            self.assertEqual(len(second.requests), second_calls, order)
+        first, second = Recorder("first", ScanReport("block")), Recorder("second", kind="av")
+        gw = self.tk.gateway(tools=self.tools, scanners=[first, second],
+                             scan_settings=ScanSettings(order="sequential"))
+        d = self.token("public", args)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_blocked:first")
+        self.assertEqual(len(second.requests), 0)
+        gw = self.tk.gateway(tools=self.tools, scanners=[Recorder("first", ScanReport("block")),
+                                                         Recorder("second", kind="av")])      # parallel default
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_blocked:first")
+        scans = self.last("gateway_denied")["content_scans"]
+        self.assertEqual([s["scanner_id"] for s in scans], ["first", "second"])
+        self.assertIn(scans[1]["outcome"], ("allow", "cancelled"))
+        self.assertEqual(self.last("gateway_denied")["scan_policy"]["order"], "parallel")
+
+    def test_parallel_deny_does_not_wait_for_a_slow_scanner(self):
+        class Slow(Recorder):
+            def scan(self, request, timeout):
+                time.sleep(1.5)
+                return ScanReport("allow")
+
+        args = {"to": "clinic.example", "body": "x"}
+        gw = self.tk.gateway(tools=self.tools, scanners=[Slow("slow"), Recorder("av", ScanReport("block"), kind="av")])
+        d = self.token("public", args)
+        t0 = time.perf_counter()
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_blocked:av")
+        self.assertLess(time.perf_counter() - t0, 1.0)
+        self.assertEqual([s["outcome"] for s in self.last("gateway_denied")["content_scans"]], ["cancelled", "block"])
 
     # -- file parts ------------------------------------------------------------------------
     def test_file_extractor_parts_are_scanned(self):
@@ -293,7 +331,8 @@ class ScanningGateway(unittest.TestCase):
     # -- adapter 5 through the gateway ---------------------------------------------------
     def test_async_post_send_records_late_verdict_and_flags(self):
         submitted, flags = [], []
-        sc = AsyncCallbackScanner("async", lambda req, sid: submitted.append(sid), on_flag=flags.append)
+        sc = AsyncCallbackScanner("async", lambda req, sid: submitted.append(sid), on_flag=flags.append,
+                                  hold_until_verdict=False)       # the weaker, non-default post-send mode
         gw = self.tk.gateway(tools=self.tools, scanners=[sc])
         args = {"to": "clinic.example", "body": "x"}
         d = self.token("public", args)
@@ -302,8 +341,8 @@ class ScanningGateway(unittest.TestCase):
         self.assertEqual((pending["outcome"], pending["scan_id"]), ("pending", submitted[0]))
         self.assertTrue(sc.deliver(submitted[0], {"outcome": "block", "findings": ["late"]}))
         late = self.last("content_scan_async")
-        self.assertEqual((late["jti"], late["scan"]["outcome"], late["scan"]["payload_digest"]),
-                         (d.token_payload["jti"], "block", pending["payload_digest"]))
+        self.assertEqual((late["jti"], late["direction"], late["scan"]["outcome"], late["scan"]["payload_digest"]),
+                         (d.token_payload["jti"], "outbound", "block", pending["payload_digest"]))
         self.assertEqual(flags[0]["context"]["jti"], d.token_payload["jti"])
         self.assertEqual(gw.async_scan_errors, [])
         self.assertTrue(self.tk.ledger.verify(self.fx.key.public_key()).ok)
@@ -312,12 +351,119 @@ class ScanningGateway(unittest.TestCase):
         def submit(req, sid):
             threading.Timer(0.05, lambda: sc.deliver(sid, {"outcome": "block"})).start()
 
-        sc = AsyncCallbackScanner("async", submit, hold_until_verdict=True)
+        sc = AsyncCallbackScanner("async", submit)               # holds by default (Entry 7)
         gw = self.tk.gateway(tools=self.tools, scanners=[sc])
         args = {"to": "clinic.example", "body": "x"}
         d = self.token("public", args)
         self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_blocked:async")
         self.assertEqual(self.sent, [])
+
+    def test_async_hold_with_no_verdict_times_out_and_blocks_by_default(self):
+        sc = AsyncCallbackScanner("async", lambda req, sid: None)
+        gw = self.tk.gateway(tools=self.tools, scanners=[sc], scan_settings=ScanSettings(timeout_seconds=0.1))
+        args = {"to": "clinic.example", "body": "x"}
+        d = self.token("public", args)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, "scan_timeout:async")
+        self.assertEqual(self.sent, [])
+        self.assertEqual(self.last("gateway_denied")["scan_errors"][0]["outcome"], "timeout")
+
+    # -- Entry 7: inbound, before the agent receives or processes it ---------------------
+    def inbound_gateway(self, result, scanners, **kw):
+        tools = {"email_send": lambda **a: self.sent.append(a) or result}
+        return self.tk.gateway(tools=tools, scanners=scanners, **kw)
+
+    def test_tool_result_is_scanned_before_it_is_returned(self):
+        rec = Recorder()
+        gw = self.inbound_gateway({"reply": "caf\u00e9 ok"}, [rec])
+        args = {"to": "clinic.example", "body": "x"}
+        d = self.token("public", args)
+        r = gw.invoke(d.capability, "email_send", args, fields("public"))
+        self.assertEqual((r.reason, r.result), ("executed", {"reply": "caf\u00e9 ok"}))
+        out, inn = rec.requests
+        self.assertEqual((out.direction, inn.direction), ("outbound", "inbound"))
+        self.assertEqual(inn.parts[0].data, canonical_bytes({"reply": "caf\u00e9 ok"}))
+        self.assertEqual({t.name: t.data.decode() for t in inn.texts}["text:result.reply"], "caf\u00e9 ok")
+        ex = self.last("tool_executed")
+        self.assertEqual(ex["result_scans"][0]["parts"][0]["digest"], ex["result_hash"])   # bound to H(result)
+        self.assertEqual((ex["result_scans"][0]["direction"], ex["result_withheld"]), ("inbound", None))
+
+    def test_blocked_result_is_withheld_after_the_tool_ran(self):
+        av = PatternScanner("av", rules=PatternScanner.example_rules(), kind="av")
+        gw = self.inbound_gateway({"download": EICAR.decode()}, [av])
+        args = {"to": "clinic.example", "body": "x"}
+        d = self.token("public", args)
+        r = gw.invoke(d.capability, "email_send", args, fields("public"))
+        self.assertEqual((r.allowed, r.reason, r.result), (False, "result_withheld:scan_blocked:av", None))
+        self.assertEqual(len(self.sent), 1)                       # the tool did run
+        ex = self.last("tool_executed")
+        self.assertEqual((ex["result_withheld"], ex["result_scans"][0]["outcome"]), ("scan_blocked:av", "block"))
+        self.assertTrue(self.tk.ledger.verify(self.fx.key.public_key()).ok)
+
+    def test_inbound_files_bytes_and_result_file_extractors(self):
+        av = PatternScanner("av", rules=PatternScanner.example_rules(), kind="av")
+        gw = self.inbound_gateway(EICAR, [av])                    # raw bytes: scanned as a file
+        args = {"to": "clinic.example", "body": "x"}
+        d = self.token("public", args)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason,
+                         "result_withheld:scan_blocked:av")
+        self.assertEqual(self.last("tool_executed")["result_scans"][0]["parts"][0]["content_type"],
+                         "application/octet-stream")
+        res = {"name": "a.txt", "b64": base64.b64encode(EICAR).decode()}
+        gw = self.inbound_gateway(res, [av], result_file_extractors={
+            "email_send": lambda r: [(r["name"], base64.b64decode(r["b64"]), "text/plain")]})
+        d = self.token("public", args)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason,
+                         "result_withheld:scan_blocked:av")
+        self.assertEqual(self.last("tool_executed")["result_scans"][0]["findings"], ["file:a.txt:eicar-test"])
+        gw = self.inbound_gateway(res, [av], result_file_extractors={"email_send": lambda r: [("f", r["nope"], "x")]})
+        d = self.token("public", args)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason,
+                         "result_withheld:invalid_result:file_extractor:KeyError")
+
+    def test_inbound_uses_the_same_class_error_and_timeout_rules(self):
+        args = {"to": "clinic.example", "body": "x"}
+
+        class InboundOnly(Recorder):            # allows the outbound call, answers the result with `report`
+            def scan(self, request, timeout):
+                if request.direction == "outbound":
+                    return ScanReport("allow")
+                return super().scan(request, timeout)
+
+        cases = ((ScanReport("allow", data_classes=("medical",)), {}, "result_withheld:scan_data_class_mismatch"),
+                 (OSError("down"), {}, "result_withheld:scan_error:rec"),
+                 (OSError("down"), {"on_timeout": "allow"}, "executed"))
+        for report, settings, reason in cases:
+            gw = self.inbound_gateway({"ok": 1}, [InboundOnly(report=report)], scan_settings=ScanSettings(**settings))
+            d = self.token("public", args)
+            self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason, reason)
+        self.assertEqual([(e["direction"], e["error_type"], e["action"])
+                          for e in self.last("tool_executed")["result_scan_errors"]], [("inbound", "OSError", "allow")])
+
+        class SlowInbound(Recorder):
+            def scan(self, request, timeout):
+                if request.direction == "inbound":
+                    time.sleep(1.0)
+                return ScanReport("allow")
+
+        gw = self.inbound_gateway({"ok": 1}, [SlowInbound()], scan_settings=ScanSettings(timeout_seconds=0.1))
+        d = self.token("public", args)
+        self.assertEqual(gw.invoke(d.capability, "email_send", args, fields("public")).reason,
+                         "result_withheld:scan_timeout:rec")
+
+    def test_scan_inbound_for_content_outside_a_tool_call(self):
+        av = PatternScanner("av", rules=PatternScanner.example_rules(), kind="av")
+        dlp = PatternScanner("dlp", rules=[DX], kind="dlp")
+        gw = self.tk.gateway(tools=self.tools, scanners=[av, dlp])
+        r = gw.scan_inbound("hello", source="mail:inbox/1", files=[("a.bin", EICAR, "application/octet-stream")])
+        self.assertEqual((r.allowed, r.reason), (False, "scan_blocked:av"))
+        e = self.last("content_scan_inbound")
+        self.assertEqual((e["source"], e["decision"], [p["name"] for p in e["content_scans"][0]["parts"]]),
+                         ("mail:inbox/1", "scan_blocked:av", ["result", "file:a.bin"]))
+        self.assertTrue(gw.scan_inbound("hello", source="mail:inbox/2").allowed)
+        self.assertEqual(gw.scan_inbound("Diagnosis: x", source="s", data_class="public").reason,
+                         "scan_data_class_mismatch")
+        self.assertTrue(gw.scan_inbound("Diagnosis: x", source="s").allowed)       # no class given: not checked
+        self.assertTrue(self.tk.ledger.verify(self.fx.key.public_key()).ok)
 
 
 if __name__ == "__main__":

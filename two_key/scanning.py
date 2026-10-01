@@ -24,9 +24,10 @@ a structured ``ScanVerdict``, and five adapter types:
                                ``hold_until_verdict`` waits for it instead.
 
 The tool gateway (gateway.py) runs the configured scanners on the payload it
-is about to execute, and records each verdict (scanner id and version, digest
-of the scanned bytes, outcome) in the ledger. With no scanners configured the
-gateway behaves exactly as before.
+is about to execute, and on what the tool returns before the agent receives
+it, and records each verdict (scanner id and version, digest of the scanned
+bytes, outcome) in the ledger. With no scanners configured the gateway
+behaves exactly as before.
 
 Stephan's decisions (CONCEPTION_NOTES.md Entry 6, 2026-09-30 9:49 PM MT):
   (a) a scan timeout is configurable, both the seconds to wait and the action;
@@ -36,8 +37,17 @@ Stephan's decisions (CONCEPTION_NOTES.md Entry 6, 2026-09-30 9:49 PM MT):
       restrictive of the call's own class and the DLP classes;
   (c) scanners get the exact bytes sent and the decoded strings (for
       malicious-script detection); the digest binding covers the exact bytes.
-Settings he has not decided (scanner order, ``hold_until_verdict``) keep
-PLACEHOLDER defaults, listed in docs/SCANNING_HOOKS.md.
+Stephan's decisions (CONCEPTION_NOTES.md Entry 7, 2026-09-30 10:16 PM MT):
+  - a scanner error is recorded in the ledger and treated like a timeout
+    (``on_error`` follows ``on_timeout``);
+  - scanners run in parallel by default (he delegated the choice to "whichever
+    is more optimized"); ``order="sequential"`` remains an option;
+  - always hold until the verdict or the timeout (``hold_until_verdict=True``
+    by default; post-send mode is a weaker, non-default option);
+  - if any of Two-Key, DLP, or AV would deny, deny: every DLP data class
+    must be the class the token permits;
+  - scan before content is sent, and before it is received or processed
+    (tool results and inbound files, gateway.py).
 
 Scanner output (labels, findings, details) is untrusted text: it is
 recorded in the ledger, truncated, and never interpreted beyond the
@@ -54,6 +64,7 @@ import hmac
 import io
 import ipaddress
 import json
+import queue
 import re
 import socket
 import ssl
@@ -68,16 +79,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
 
-from .action import DATA_CLASSES, DEFAULT_DATA_CLASS
+from .action import DATA_CLASSES
 from .canonical import canonical_bytes, canonical_hash, digest_hex
 from .crypto.provider import CryptoProvider
 
 _CLAIMED_KEEP_SECONDS = 5.0  # see AsyncCallbackScanner._prune_claimed
-OUTCOMES = ("allow", "block", "quarantine", "error", "timeout", "pending")
+OUTCOMES = ("allow", "block", "quarantine", "error", "timeout", "pending")  # what a scanner can report
+CANCELLED = "cancelled"  # engine-only: not awaited because the call was already denied (parallel order)
 KINDS = ("dlp", "av", "dlp+av")
 PAYLOAD_MODES = ("exact", "digest_only")
 ON_ERROR = ON_TIMEOUT = ("block", "allow")
-ORDERS = ("sequential", "parallel")
+ORDERS = ("parallel", "sequential")
+DIRECTIONS = ("outbound", "inbound")
 PROTOCOL = "two-key-scan/1"
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
@@ -89,32 +102,16 @@ class ScannerUnavailable(RuntimeError):
 
 
 class ScanError(RuntimeError):
-    """A scan could not be completed. The verdict outcome is ``error``; ``ScanSettings.on_error`` decides."""
+    """A scan could not be completed. The verdict outcome is ``error``; it is treated like a timeout
+    (``ScanSettings.on_timeout`` decides, Entry 7)."""
 
 
 class ScanTimeout(ScanError):
     """A scan didn't finish in time. The verdict outcome is ``timeout``; ``ScanSettings.on_timeout`` decides."""
 
 
-# Restrictiveness of the data classes, for "most restrictive wins" (Entry 6). ``classified`` is the most
-# restrictive (it is already the default for an unknown class, spec 5.2 / Claim 5) and ``public`` the least.
-# personal, medical, and financial are not ranked against each other: if two of them meet, no single one is
-# the most restrictive, and the result is ``classified``.
-DATA_CLASS_RANK = {"public": 0, "personal": 1, "medical": 1, "financial": 1, "classified": 2}
-
-
-def most_restrictive(classes: Iterable[str]) -> str:
-    """The most restrictive of ``classes`` (DATA_CLASS_RANK); ``classified`` if none, or if a tie is unranked."""
-    cs = {c for c in classes if c in DATA_CLASS_RANK}
-    if not cs:
-        return DEFAULT_DATA_CLASS
-    top = max(DATA_CLASS_RANK[c] for c in cs)
-    tops = [c for c in cs if DATA_CLASS_RANK[c] == top]
-    return tops[0] if len(tops) == 1 else DEFAULT_DATA_CLASS
-
-
 # ---------------------------------------------------------------------------
-# Settings (Stephan's decisions, Entry 6; scanner order is still a placeholder)
+# Settings (Stephan's decisions, Entries 6 and 7)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ScanSettings:
@@ -127,33 +124,39 @@ class ScanSettings:
       default, deny) or ``"allow"`` (proceed; the timeout is still recorded).
       The value 10 seconds is an engineering default; the seconds are
       configurable as he decided.
-    - ``on_error``: what a scanner error other than a timeout does. Errors and
-      timeouts shared one setting before Entry 6, so the same default (block)
-      and the same allow option apply; it is a separate setting so the two can
-      differ.
+    - ``on_error`` (Entry 7): a scanner error is treated like a timeout, so it
+      follows ``on_timeout``. Leave it unset (``None``); a value different
+      from ``on_timeout`` is refused.
     - ``payload`` (decision c): ``"exact"`` (default) sends the exact bytes
       the gateway is about to execute plus the decoded strings. A scanner can
       still be set to ``"digest_only"`` (names, sizes, and digests only) as an
       explicit choice.
-    - Most restrictive wins (decision b) is not a setting: a scanner can only
-      add a deny, and the effective data class is the most restrictive of the
-      call's class and the DLP classes.
-
-    Not decided by Stephan (PLACEHOLDER default, docs/SCANNING_HOOKS.md):
-    ``order``, ``"sequential"`` (in the order given, stopping at the first
-    verdict that denies) or ``"parallel"``.
+    - ``order`` (Entry 7; Stephan delegated the choice to the faster one):
+      ``"parallel"`` (default) runs every scanner at once, so the wait is
+      about the slowest scanner rather than the sum. As soon as a verdict
+      denies, the call is denied (nothing can turn that into an allow), and
+      scanners that haven't answered are recorded as ``cancelled``. Otherwise
+      the gateway waits for every scanner, up to ``timeout_seconds``.
+      ``"sequential"`` runs them one after the other in the order given and
+      stops at the first deny.
+    - Most restrictive wins (Entry 6, b; Entry 7) is not a setting: a scanner
+      can only add a deny, and every DLP data class must be the class the
+      token permits.
     """
     timeout_seconds: float = 10.0            # configurable (Entry 6, decision a); 10 s is an engineering default
     on_timeout: str = "block"                # Stephan's decision (Entry 6, a): default deny, optional allow
-    on_error: str = "block"                  # same default as on_timeout (one setting before Entry 6)
+    on_error: str | None = None              # Entry 7: errors are treated like timeouts (follows on_timeout)
     payload: str = "exact"                   # Stephan's decision (Entry 6, c)
-    order: str = "sequential"                # PLACEHOLDER pending Stephan
+    order: str = "parallel"                  # Entry 7: the faster order, chosen per Stephan's delegation
 
     def __post_init__(self):
         if self.on_timeout not in ON_TIMEOUT:
             raise ValueError(f"on_timeout must be one of {ON_TIMEOUT}")
-        if self.on_error not in ON_ERROR:
-            raise ValueError(f"on_error must be one of {ON_ERROR}")
+        if self.on_error is not None and self.on_error not in ON_ERROR:
+            raise ValueError(f"on_error must be one of {ON_ERROR} or None")
+        if self.on_error is not None and self.on_error != self.on_timeout:
+            raise ValueError("on_error follows on_timeout (Entry 7: a scanner error is treated like a timeout); "
+                             "set on_timeout instead")
         if self.payload not in PAYLOAD_MODES:
             raise ValueError(f"payload must be one of {PAYLOAD_MODES}")
         if self.order not in ORDERS:
@@ -162,9 +165,14 @@ class ScanSettings:
         if isinstance(t, bool) or not isinstance(t, (int, float)) or not 0 < t <= 3600:
             raise ValueError("timeout_seconds must be a number in (0, 3600]")
 
+    @property
+    def error_action(self) -> str:
+        """What a scanner error does: the same as a timeout (Entry 7)."""
+        return self.on_timeout
+
     def to_record(self) -> dict:
         return {"timeout_seconds": float(self.timeout_seconds), "on_timeout": self.on_timeout,
-                "on_error": self.on_error, "payload": self.payload, "order": self.order}
+                "on_error": self.error_action, "payload": self.payload, "order": self.order}
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +204,7 @@ class ScanRequest:
     parts: tuple[ScanPart, ...]
     texts: tuple[ScanPart, ...] = ()
     context: Mapping[str, Any] = field(default_factory=dict, repr=False)  # gateway bookkeeping; never sent
+    direction: str = "outbound"  # "outbound": about to be sent; "inbound": returned to the agent (Entry 7)
 
     def require_content(self) -> None:
         if self.payload_mode != "exact" or any(p.data is None for p in self.parts + self.texts):
@@ -217,6 +226,7 @@ class ScanReport:
     echoed_digest: str | None = None     # the payload digest the scanner says it scanned, if it reports one
     detail: str = ""
     scan_id: str | None = None
+    error_type: str | None = None        # for error/timeout: the exception or failure type
 
 
 @dataclass(frozen=True)
@@ -237,6 +247,8 @@ class ScanVerdict:
     elapsed_ms: float = 0.0
     detail: str = ""
     scan_id: str | None = None
+    error_type: str | None = None
+    direction: str = "outbound"
 
     @property
     def is_dlp(self) -> bool:
@@ -250,7 +262,8 @@ class ScanVerdict:
                 "texts": [dict(t) for t in self.texts],
                 "labels": list(self.labels), "data_classes": list(self.data_classes),
                 "findings": list(self.findings), "elapsed_ms": round(self.elapsed_ms, 3),
-                "detail": self.detail, "scan_id": self.scan_id}
+                "detail": self.detail, "scan_id": self.scan_id, "error_type": self.error_type,
+                "direction": self.direction}
 
 
 def _clip(s: Any, n: int = _MAX_STR) -> str:
@@ -305,8 +318,9 @@ class ContentScanner(abc.ABC):
     respect ``timeout`` themselves; the engine also stops waiting after
     ``timeout`` and records a ``timeout`` verdict (``ScanSettings.on_timeout``
     decides). Raising ``ScanTimeout`` or ``TimeoutError`` also gives a
-    ``timeout`` verdict; any other exception gives an ``error`` verdict
-    (``ScanSettings.on_error`` decides).
+    ``timeout`` verdict; any other exception gives an ``error`` verdict,
+    which is treated like a timeout (Entry 7). Both are recorded with their
+    error type.
     """
     adapter = "plugin"
     supports_pending = False
@@ -409,7 +423,15 @@ class ScanEngine:
                                 for name, text in raw], alg, provider)
 
     def run(self, tool: str, parts: tuple[ScanPart, ...], alg: str, provider: CryptoProvider | None,
-            context: Mapping[str, Any] | None = None, texts: tuple[ScanPart, ...] = ()) -> list[ScanVerdict]:
+            context: Mapping[str, Any] | None = None, texts: tuple[ScanPart, ...] = (), *,
+            scope_data_class: str | None = None, direction: str = "outbound") -> list[ScanVerdict]:
+        """Run every scanner on one payload and return the verdicts, in scanner order.
+
+        ``scope_data_class`` is the data class the token permits (None: not checked); a DLP verdict naming
+        another class is a deny, which in parallel order makes the result final early.
+        """
+        if direction not in DIRECTIONS:
+            raise ValueError(f"direction must be one of {DIRECTIONS}")
         payload_digest = canonical_hash([p.info() for p in parts], alg, provider)  # binds the exact bytes only
         requests = []
 
@@ -420,48 +442,102 @@ class ScanEngine:
             mode = s.payload_mode or self.settings.payload
             ps, ts = (parts, texts) if mode == "exact" else (strip(parts), strip(texts))
             requests.append(ScanRequest(uuid.uuid4().hex, tool, alg, mode, payload_digest, ps, ts,
-                                        dict(context or {})))
+                                        dict(context or {}), direction))
         if self.settings.order == "parallel":
-            out: list = [None] * len(self.scanners)
-
-            def one(i: int) -> None:
-                out[i] = self._one(self.scanners[i], requests[i])
-
-            threads = [threading.Thread(target=one, args=(i,), daemon=True) for i in range(len(self.scanners))]
-            for t in threads:
-                t.start()
-            for t in threads:
-                t.join()
-            return out
+            return self._run_parallel(requests, scope_data_class)
         verdicts = []
         for s, r in zip(self.scanners, requests):
             v = self._one(s, r)
             verdicts.append(v)
-            if self.denies(v):
+            if self.verdict_denies(v, scope_data_class):
                 break  # sequential: later scanners don't receive content for a call that is already denied
         return verdicts
+
+    def _run_parallel(self, requests: list[ScanRequest], scope_data_class: str | None) -> list[ScanVerdict]:
+        """Every scanner at once (Entry 7). Waits for all of them, up to timeout_seconds in total, unless a
+        verdict denies first: the call is then denied whatever the others say (a scanner can only add a
+        deny), so the gateway stops waiting, records the verdicts that have arrived, and records the rest as
+        ``cancelled``. A scanner that isn't awaited is told so through ``abandon()``."""
+        timeout = float(self.settings.timeout_seconds)
+        n = len(self.scanners)
+        results: queue.Queue = queue.Queue()
+        t0 = time.perf_counter()
+        deadline = t0 + timeout
+
+        def work(i: int) -> None:
+            try:
+                results.put((i, self.scanners[i].scan(requests[i], timeout), None, time.perf_counter()))
+            except BaseException as e:  # noqa: BLE001 - becomes this scanner's error/timeout verdict
+                results.put((i, None, e, time.perf_counter()))
+
+        for i in range(n):
+            threading.Thread(target=work, args=(i,), name="two-key-scan", daemon=True).start()
+        out: list = [None] * n
+        final = None
+
+        def take(item) -> ScanVerdict:
+            i, rep, exc, t1 = item
+            out[i] = self.make_verdict(self.scanners[i], requests[i], _to_report(rep, exc), (t1 - t0) * 1000.0)
+            return out[i]
+
+        waiting = n
+        while waiting and final is None:
+            left = deadline - time.perf_counter()
+            if left <= 0:
+                break
+            try:
+                v = take(results.get(timeout=left))
+            except queue.Empty:
+                break
+            waiting -= 1
+            if self.verdict_denies(v, scope_data_class):
+                final = v
+        while True:  # record every verdict that has already arrived
+            try:
+                take(results.get_nowait())
+            except queue.Empty:
+                break
+        for i in range(n):
+            if out[i] is not None:
+                continue
+            s, r = self.scanners[i], requests[i]
+            try:
+                s.abandon(r)
+            except Exception:  # noqa: BLE001 - the verdict below stands either way
+                pass
+            if final is not None:
+                rep = ScanReport(CANCELLED, detail=f"not awaited: the call was already denied ({final.scanner_id})")
+            else:
+                rep = ScanReport("timeout", detail=f"ScanTimeout: timeout after {timeout:.3g}s",
+                                 error_type="ScanTimeout")
+            out[i] = self.make_verdict(s, r, rep, (time.perf_counter() - t0) * 1000.0, engine=True)
+        return out
 
     def _one(self, s: ContentScanner, req: ScanRequest) -> ScanVerdict:
         timeout = float(self.settings.timeout_seconds)
         t0 = time.perf_counter()
+        rep, exc = None, None
         try:
             rep = _call_with_timeout(lambda: s.scan(req, timeout), timeout,  # waits exactly timeout_seconds (Entry 6 a)
                                      on_abandon=lambda: s.abandon(req))
-            if not isinstance(rep, ScanReport):
-                raise ScanError("scanner returned no ScanReport")
-        except (ScanTimeout, TimeoutError) as e:
-            rep = ScanReport("timeout", detail=f"{type(e).__name__}: {e}")
-        except Exception as e:  # noqa: BLE001 - any other failure is an error verdict
-            rep = ScanReport("error", detail=f"{type(e).__name__}: {e}")
-        return self.make_verdict(s, req, rep, (time.perf_counter() - t0) * 1000.0)
+        except Exception as e:  # noqa: BLE001 - becomes an error/timeout verdict
+            exc = e
+        return self.make_verdict(s, req, _to_report(rep, exc), (time.perf_counter() - t0) * 1000.0)
 
     @staticmethod
-    def make_verdict(s: ContentScanner, req: ScanRequest, rep: ScanReport, elapsed_ms: float) -> ScanVerdict:
-        outcome, detail = rep.outcome, rep.detail
-        if outcome not in OUTCOMES or (outcome == "pending" and not s.supports_pending):
-            outcome, detail = "error", f"invalid outcome {_clip(rep.outcome, 40)!r}"
+    def make_verdict(s: ContentScanner, req: ScanRequest, rep: ScanReport, elapsed_ms: float,
+                     engine: bool = False) -> ScanVerdict:
+        outcome, detail, etype = rep.outcome, rep.detail, rep.error_type
+        if not (engine and outcome == CANCELLED) and \
+                (outcome not in OUTCOMES or (outcome == "pending" and not s.supports_pending)):
+            outcome, detail, etype = "error", f"invalid outcome {_clip(rep.outcome, 40)!r}", "InvalidOutcome"
         if rep.echoed_digest is not None and rep.echoed_digest != req.payload_digest:
-            outcome, detail = "error", "digest_mismatch: the scanner reports a different payload digest"
+            outcome, detail, etype = "error", "digest_mismatch: the scanner reports a different payload digest", \
+                "DigestMismatch"
+        if outcome in ("error", "timeout") and not etype:
+            etype = "ScanTimeout" if outcome == "timeout" else "ScanError"
+        if outcome not in ("error", "timeout"):
+            etype = None
         labels, classes = split_classes(_strings(rep.labels), _strings(rep.data_classes))
         return ScanVerdict(
             scanner_id=s.scanner_id, adapter=s.adapter, kind=s.kind,
@@ -469,38 +545,72 @@ class ScanEngine:
             payload_mode=req.payload_mode, digest_alg=req.digest_alg, payload_digest=req.payload_digest,
             parts=tuple(p.info() for p in req.parts), texts=tuple(t.info() for t in req.texts), labels=labels, data_classes=classes,
             findings=_strings(rep.findings), elapsed_ms=elapsed_ms, detail=_clip(detail, _MAX_DETAIL),
-            scan_id=rep.scan_id)
+            scan_id=rep.scan_id, error_type=_clip(etype, 80) if etype else None, direction=req.direction)
 
     def denies(self, v: ScanVerdict) -> bool:
+        """The verdict alone denies: block, quarantine, or an error/timeout with on_timeout="block"."""
         return (v.outcome in ("block", "quarantine")
-                or (v.outcome == "error" and self.settings.on_error == "block")
-                or (v.outcome == "timeout" and self.settings.on_timeout == "block"))
+                or (v.outcome in ("error", "timeout") and self.settings.on_timeout == "block"))
+
+    def verdict_denies(self, v: ScanVerdict, scope_data_class: str | None) -> bool:
+        """``denies(v)``, or a DLP verdict naming a data class the token doesn't permit (Entry 7)."""
+        return self.denies(v) or bool(self.data_class_conflicts([v], scope_data_class))
 
     @staticmethod
-    def effective_data_class(verdicts: Sequence[ScanVerdict], call_data_class: str) -> str:
-        """Most restrictive of the call's own data class and every allowing DLP verdict's classes (Entry 6, b).
+    def data_class_conflicts(verdicts: Sequence[ScanVerdict], scope_data_class: str | None) -> list[dict]:
+        """Every DLP data class that is not the class the token permits (Entry 7: any conviction denies).
 
-        With no DLP classes, the call's class stands. See DATA_CLASS_RANK for the order.
+        Two-Key's own check 8 already requires the call's label to be that class, so the label and the
+        scanners all have to agree. ``scope_data_class=None``: not checked.
         """
-        dlp = [c for v in verdicts if v.is_dlp and v.outcome == "allow" for c in v.data_classes]
-        return most_restrictive([call_data_class, *dlp]) if dlp else call_data_class
+        if scope_data_class is None:
+            return []
+        return [{"scanner_id": v.scanner_id, "data_class": c} for v in verdicts if v.is_dlp
+                for c in v.data_classes if c != scope_data_class]
 
-    def decide(self, verdicts: Sequence[ScanVerdict], scope_data_class: Any, call_data_class: str) -> str | None:
+    @staticmethod
+    def data_classes_seen(verdicts: Sequence[ScanVerdict], call_data_class: str | None) -> list[str]:
+        """The call's own data class, then every DLP data class found (for the ledger record)."""
+        seen = [call_data_class] if call_data_class else []
+        seen += [c for v in verdicts if v.is_dlp for c in v.data_classes]
+        return list(dict.fromkeys(seen))
+
+    def error_records(self, verdicts: Sequence[ScanVerdict]) -> list[dict]:
+        """One ledger record per scanner error or timeout (Entry 7): scanner id and version, the error type,
+        the payload digest, and the action taken (on_timeout, which errors follow)."""
+        return [{"scanner_id": v.scanner_id, "scanner_version": v.scanner_version, "outcome": v.outcome,
+                 "error_type": v.error_type, "detail": v.detail, "digest_alg": v.digest_alg,
+                 "payload_digest": v.payload_digest, "direction": v.direction,
+                 "action": self.settings.on_timeout}
+                for v in verdicts if v.outcome in ("error", "timeout")]
+
+    def decide(self, verdicts: Sequence[ScanVerdict], scope_data_class: Any,
+               call_data_class: str | None = None) -> str | None:
         """Deny reason, or None. Called only after every Two-Key check has passed, so a scanner can only add
-        a deny, never remove one (Entry 6, b). Blocks and quarantines deny; errors and timeouts deny unless
-        on_error / on_timeout is "allow"; a DLP class more restrictive than the token's scope denies."""
+        a deny, never remove one (Entry 6, b). Any conviction denies (Entry 7): a block or quarantine; an
+        error or timeout unless on_timeout is "allow"; a DLP data class other than the token's."""
         for v in verdicts:
             if v.outcome == "block":
                 return f"scan_blocked:{v.scanner_id}"
             if v.outcome == "quarantine":
                 return f"scan_quarantined:{v.scanner_id}"
-            if v.outcome == "error" and self.settings.on_error == "block":
+            if v.outcome == "error" and self.settings.on_timeout == "block":
                 return f"scan_error:{v.scanner_id}"
             if v.outcome == "timeout" and self.settings.on_timeout == "block":
                 return f"scan_timeout:{v.scanner_id}"
-        if self.effective_data_class(verdicts, call_data_class) != scope_data_class:
+        if self.data_class_conflicts(verdicts, scope_data_class):
             return "scan_data_class_mismatch"
         return None
+
+
+def _to_report(rep: Any, exc: BaseException | None) -> ScanReport:
+    """An adapter's return value or exception as a ScanReport (timeouts and errors keep their type)."""
+    if exc is not None:
+        kind = "timeout" if isinstance(exc, (ScanTimeout, TimeoutError)) else "error"
+        return ScanReport(kind, detail=f"{type(exc).__name__}: {exc}", error_type=type(exc).__name__)
+    if not isinstance(rep, ScanReport):
+        return ScanReport("error", detail="ScanError: scanner returned no ScanReport", error_type="ScanError")
+    return rep
 
 
 # ---------------------------------------------------------------------------
@@ -579,7 +689,7 @@ def default_request_body(req: ScanRequest) -> dict:
         texts.append(d)
     return {"protocol": PROTOCOL, "request_id": req.request_id, "tool": req.tool, "digest_alg": req.digest_alg,
             "payload_mode": req.payload_mode, "payload_digest": req.payload_digest, "parts": parts,
-            "texts": texts}
+            "texts": texts, "direction": req.direction}
 
 
 def _is_loopback(host: str | None) -> bool:
@@ -786,7 +896,8 @@ class IcapScanner(ContentScanner):
 
     Each payload part is sent as the body of an encapsulated HTTP message:
     ``REQMOD`` wraps it in a POST request (the agent sending it), ``RESPMOD``
-    in a 200 response. ``204 No Content`` means unmodified (allow), and so
+    in a 200 response. ``method`` is used for outbound content;
+    ``inbound_method`` (default ``RESPMOD``) for content returned to the agent. ``204 No Content`` means unmodified (allow), and so
     does a ``200`` that returns the same body. A 200 that returns a
     different body, or replaces the request with a response (a block page),
     means the server changed or refused the content; so do
@@ -803,10 +914,12 @@ class IcapScanner(ContentScanner):
     def __init__(self, scanner_id: str, *, host: str, port: int = 1344, service: str = "avscan",
                  method: str = "REQMOD", tls: ssl.SSLContext | None = None, allow_plaintext_remote: bool = False,
                  modified_outcome: str = "block", kind: str = "av", payload_mode: str | None = None,
-                 version: str | None = None, max_response_bytes: int = 16 << 20):
+                 version: str | None = None, max_response_bytes: int = 16 << 20,
+                 inbound_method: str = "RESPMOD"):
         super().__init__(scanner_id, kind=kind, payload_mode=payload_mode, version=version)
-        if method not in ("REQMOD", "RESPMOD"):
-            raise ValueError("method must be REQMOD or RESPMOD")
+        if method not in ("REQMOD", "RESPMOD") or inbound_method not in ("REQMOD", "RESPMOD"):
+            raise ValueError("method and inbound_method must be REQMOD or RESPMOD")
+        self.inbound_method = inbound_method
         if modified_outcome not in ("block", "quarantine", "allow"):
             raise ValueError("modified_outcome must be block, quarantine, or allow")
         if tls is None and not _is_loopback(host) and not allow_plaintext_remote:
@@ -822,11 +935,12 @@ class IcapScanner(ContentScanner):
         s = socket.create_connection((self.host, self.port), timeout=timeout)
         return self.tls.wrap_socket(s, server_hostname=self.host) if self.tls else s
 
-    def build_request(self, tool: str, part: ScanPart) -> bytes:
+    def build_request(self, tool: str, part: ScanPart, method: str | None = None) -> bytes:
+        method = method or self.method
         data = part.data or b""
         target = f"/two-key/{tool}/{part.name}".replace(" ", "%20")
         body = (f"{len(data):x}\r\n".encode() + data + b"\r\n0\r\n\r\n") if data else b"0\r\n\r\n"
-        if self.method == "REQMOD":
+        if method == "REQMOD":
             req_hdr = (f"POST {target} HTTP/1.1\r\nHost: two-key.local\r\nContent-Type: {part.content_type}\r\n"
                        f"Content-Length: {len(data)}\r\n\r\n").encode()
             enc, encapsulated = f"req-hdr=0, req-body={len(req_hdr)}", req_hdr
@@ -836,7 +950,7 @@ class IcapScanner(ContentScanner):
                        f"Content-Length: {len(data)}\r\n\r\n").encode()
             enc = f"req-hdr=0, res-hdr={len(req_hdr)}, res-body={len(req_hdr) + len(res_hdr)}"
             encapsulated = req_hdr + res_hdr
-        head = (f"{self.method} {self.uri} ICAP/1.0\r\nHost: {self.host}\r\nAllow: 204\r\n"
+        head = (f"{method} {self.uri} ICAP/1.0\r\nHost: {self.host}\r\nAllow: 204\r\n"
                 f"Encapsulated: {enc}\r\n\r\n").encode()
         return head + encapsulated + body
 
@@ -886,8 +1000,9 @@ class IcapScanner(ContentScanner):
     def scan(self, request: ScanRequest, timeout: float) -> ScanReport:
         request.require_content()
         findings, details, flagged = [], [], False
+        method = self.inbound_method if request.direction == "inbound" else self.method
         for part in request.content():
-            code, hdrs, sections, body = self._exchange(self.build_request(request.tool, part), timeout)
+            code, hdrs, sections, body = self._exchange(self.build_request(request.tool, part, method), timeout)
             self._learn_version(hdrs)
             for h in ("x-infection-found", "x-violations-found", "x-virus-id"):
                 if hdrs.get(h):
@@ -897,7 +1012,7 @@ class IcapScanner(ContentScanner):
                 continue
             if code != 200:
                 return ScanReport("error", findings=tuple(findings), detail=f"ICAP status {code} on {part.name}")
-            replaced = self.method == "REQMOD" and "res-hdr" in sections
+            replaced = method == "REQMOD" and "res-hdr" in sections
             if replaced or (body or b"") != (part.data or b""):
                 details.append(f"{part.name}: modified by ICAP server")
                 flagged = True
@@ -1198,22 +1313,24 @@ class AsyncCallbackScanner(ContentScanner):
     storage-event handler, or run ``WebhookReceiver``. ``response`` is mapped
     with ``mapping``.
 
-    - ``hold_until_verdict=False`` (post-send): ``scan`` returns ``pending``
-      at once, the call proceeds, and the later verdict is recorded in the
-      ledger (``content_scan_async``). A block or quarantine verdict can then
-      only flag after the fact: ``on_flag(record)`` is called if given.
-      PLACEHOLDER default ``False`` pending Stephan (no change to when calls
-      execute).
-    - ``hold_until_verdict=True``: ``scan`` waits for the verdict, up to the
-      engine's timeout, and the gateway decides on it like any other verdict.
-      No verdict in time is a ``timeout`` (``ScanSettings.on_timeout``).
-      A verdict that arrives after the wait is recorded as post-send.
+    - ``hold_until_verdict=True`` (the default, Stephan's decision, Entry 7:
+      "Always hold a file until verdict is returned [...] or the timeout limit
+      is reached"): ``scan`` waits for the verdict, up to the engine's
+      timeout, and the gateway decides on it like any other verdict. No
+      verdict in time is a ``timeout`` (``ScanSettings.on_timeout``). A
+      verdict that arrives after the wait is recorded as post-send.
+    - ``hold_until_verdict=False`` (post-send; WEAKER, never the default):
+      ``scan`` returns ``pending`` at once, the content is sent or handed
+      over without a verdict, and the later verdict is recorded in the ledger
+      (``content_scan_async``). A block or quarantine can then only flag after
+      the fact (``on_flag(record)`` is called if given); it cannot stop
+      anything. Kept only for a deployment that explicitly chooses it.
     """
     adapter = "async_callback"
     supports_pending = True
 
     def __init__(self, scanner_id: str, submit: Callable[[ScanRequest, str], Any], *,
-                 hold_until_verdict: bool = False,      # PLACEHOLDER pending Stephan
+                 hold_until_verdict: bool = True,       # Entry 7: always hold until verdict or timeout
                  mapping: ResponseMapping | None = None, on_flag: Callable[[dict], None] | None = None,
                  kind: str = "dlp", payload_mode: str | None = None, version: str | None = None,
                  max_pending: int = 10000):

@@ -372,8 +372,9 @@ extractors=None, checkpoint_every=1, view_refresh="token")`,
 | `gateway(checkpoint_every=)` | `1` | int ≥ 0 | Sign the ledger head every N calls; `0` = you call `tk.ledger.checkpoint()` |
 | `gateway(view_refresh=)` | `token` | `token`, `every_call` | Advance the gateway's ledger view from verified tokens, or also on every call |
 | `gateway(scanners=)` | none | list of `ContentScanner` | Optional third-party DLP/antivirus hooks (API, ICAP, plugin, sidecar, async); none required. See [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) |
-| `gateway(scan_settings=)` | `ScanSettings()` | `timeout_seconds` (10), `on_timeout` (`block`/`allow`), `on_error` (`block`/`allow`), `payload` (`exact`/`digest_only`), `order` | Timeout is configurable, defaulting to block; scanners get the exact bytes and decoded strings; most restrictive wins (Stephan, Entry 6). `on_error` follows the timeout default; `order` is a placeholder |
+| `gateway(scan_settings=)` | `ScanSettings()` | `timeout_seconds` (10), `on_timeout` (`block`/`allow`), `payload` (`exact`/`digest_only`), `order` (`parallel`/`sequential`) | Stephan's decisions (Entries 6 and 7): timeout configurable, defaulting to block; scanner errors logged and treated like timeouts; parallel; any conviction denies; scanners get the exact bytes and decoded strings |
 | `gateway(file_extractors=)` | `{}` | `{name: fn(args) -> [(name, bytes, content_type)]}` | File parts to scan, e.g. decoded attachments |
+| `gateway(result_file_extractors=)` | `{}` | `{name: fn(result) -> [(name, bytes, content_type)]}` | Inbound file parts: tool results are scanned before the agent gets them (Entry 7) |
 | `PersonalLedger(auto_sign_every=)` | `1` | int ≥ 0 | Direct ledger use: sign after every N appends; `0` = only on `checkpoint()` |
 | `PersonalLedger(digest_alg=, fsync=)` | from key / `True` | as above | Same meaning as the `TwoKey` options |
 | `CryptoProvider(fips_mode=)` | `False` | bool | Refuse non-approved algorithms (`CryptoPolicyError`) and liboqs |
@@ -560,9 +561,8 @@ algorithms and can sign with hybrid ML-DSA-65, but it isn't validated. See
 - **Real model connectors are tested only against mocked HTTP.** No live API
   call has been made.
 - **Content-scanning hooks are tested only against local fakes.** No real DLP
-  or antivirus product has been connected. The settings Stephan hasn't
-  decided yet (scanner order, the post-send hold) are placeholders
-  (`docs/SCANNING_HOOKS.md`).
+  or antivirus product has been connected. The remaining open questions are
+  in `docs/SCANNING_HOOKS.md`.
 - **The username/password and OAuth device-code auth modes are stubs.**
   They work only with a hook you supply.
 - **Public anchoring is a stub.** `LocalFileAnchor` writes a local file;
@@ -592,7 +592,7 @@ algorithms and can sign with hybrid ML-DSA-65, but it isn't validated. See
 | `tools/doccheck.py` | Runs every snippet in this README and `docs/HOWTO.md` |
 | [docs/HOWTO.md](docs/HOWTO.md) | Step-by-step guide |
 | [docs/CRYPTO.md](docs/CRYPTO.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | FIPS posture and algorithms; measured performance |
-| [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types, pros and cons, Stephan's decisions (Entry 6), remaining placeholders, open questions |
+| [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types (outbound and inbound), pros and cons, Stephan's decisions (Entries 6 and 7), open questions |
 | [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md), `docs/INVENTION_DISCLOSURE.md` (unchanged) | Working specification draft; original disclosure |
 | `CONCEPTION_NOTES.md`, `DESIGN_OPTIONS.md`, `CHANGES.md` | Inventor's dated notes; open design questions; every change and who decided it |
 

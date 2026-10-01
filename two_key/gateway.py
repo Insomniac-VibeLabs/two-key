@@ -46,22 +46,32 @@ any tool runs, it checks everything spec 5.5 lists, plus single-use:
      token, otherwise ``ledger_concurrent_writer``. Neither is written to this
      (now stale) ledger instance, because appending would fork the chain.
 
-Optional content scanning (scanning.py; CONCEPTION_NOTES.md Entries 5 and 6):
+Optional content scanning (scanning.py; CONCEPTION_NOTES.md Entries 5-7):
 only when ``scanners`` are configured, after checks 1-8 pass the gateway
 takes ONE snapshot of the arguments (their canonical encoding), hashes it for
 check 5, sends it (plus any file parts from ``file_extractors``, and the
 decoded strings) to the scanners, and executes the tool on that same
 snapshot, so the scanned bytes, the hashed bytes, and the executed arguments
-are the same. Most restrictive wins (Entry 6): a scanner can only add a deny.
-Deny reasons: scan_blocked:<id>, scan_quarantined:<id>, scan_error:<id> /
-scan_timeout:<id> (unless ScanSettings.on_error / on_timeout is "allow"),
-scan_data_class_mismatch (the most restrictive of the call's data class and
-the DLP classes differs from the token's scope). Each verdict
-(scanner id/version, digest of the scanned bytes, outcome) is recorded in the
-capability_redeemed or gateway_denied entry; post-send verdicts arrive later
-as content_scan_async entries. With no scanners the gateway does none of
-this: the original path, including its separate hash and execute reads of
-``args`` (F_REVIEW.md §8 finding 1), is unchanged.
+are the same. Any conviction denies (Entries 6 and 7): a scanner can only add
+a deny. Deny reasons: scan_blocked:<id>, scan_quarantined:<id>,
+scan_error:<id> / scan_timeout:<id> (errors are treated like timeouts;
+both deny unless ScanSettings.on_timeout is "allow"), scan_data_class_mismatch
+(a DLP data class other than the token's). Each verdict (scanner id/version,
+digest of the scanned bytes, outcome) is recorded in the capability_redeemed
+or gateway_denied entry, and each scanner error or timeout also in
+``scan_errors`` with its type and the action taken.
+
+Inbound (Entry 7: "before files are received or processed"): what the tool
+returns is scanned with the same scanners and rules before the agent gets it
+(part ``result``, any ``result_file_extractors`` files, and the decoded
+strings). If the scan denies, the result is withheld: GatewayResult(False,
+"result_withheld:<reason>"). The tool has already run; its tool_executed
+entry records the result scans. ``scan_inbound()`` scans content that
+arrives outside a tool call (content_scan_inbound entries). Post-send
+verdicts (a non-default async mode) arrive later as content_scan_async
+entries. With no scanners the gateway does none of this: the original path,
+including its separate hash and execute reads of ``args`` (F_REVIEW.md §8
+finding 1), is unchanged.
 
 On success, capability_redeemed and tool_executed/tool_error entries link to
 the token's capability_issued entry (seq and digest). tool_executed also
@@ -101,6 +111,8 @@ from .scanning import AsyncCallbackScanner, ContentScanner, ScanEngine, ScanSett
 Extractor = Callable[[Mapping[str, Any]], Mapping[str, Any]]
 # File parts for content scanning: fn(args) -> iterable of (name, bytes, content_type).
 FileExtractor = Callable[[Mapping[str, Any]], Iterable[tuple[str, bytes, str]]]
+# Inbound file parts: fn(tool result) -> iterable of (name, bytes, content_type).
+ResultFileExtractor = Callable[[Any], Iterable[tuple[str, bytes, str]]]
 CALL_FIELDS = ("amount_usd", "counterparty", "data_class")
 
 
@@ -111,13 +123,22 @@ class GatewayResult:
     result: Any = None
 
 
+@dataclass(frozen=True)
+class InboundScanResult:
+    """``scan_inbound``: may the agent receive or process this content?"""
+    allowed: bool
+    reason: str
+    verdicts: tuple = ()
+
+
 class ToolGateway:
     def __init__(self, issuer: CapabilityIssuer, ledger: PersonalLedger, principal: str,
                  tools: Mapping[str, Callable[..., Any]] | None = None,
                  extractors: Mapping[str, Extractor] | None = None, *, digest_alg: str = "sha256",
                  checkpoint_every: int = 1, view_refresh: str = "token",
                  scanners: Sequence[ContentScanner] | None = None, scan_settings: ScanSettings | None = None,
-                 file_extractors: Mapping[str, FileExtractor] | None = None):
+                 file_extractors: Mapping[str, FileExtractor] | None = None,
+                 result_file_extractors: Mapping[str, ResultFileExtractor] | None = None):
         self.issuer, self.ledger, self.principal = issuer, ledger, principal
         self.digest_alg = digest_alg
         if not isinstance(checkpoint_every, int) or isinstance(checkpoint_every, bool) or checkpoint_every < 0:
@@ -140,6 +161,7 @@ class ToolGateway:
         # Optional content scanning (scanning.py). None: no scanning, and _invoke takes the original path.
         self.scan_engine = ScanEngine(scanners, scan_settings) if scanners else None
         self.file_extractors = dict(file_extractors or {})
+        self.result_file_extractors = dict(result_file_extractors or {})
         self.async_scan_errors: list[str] = []
         if self.scan_engine is not None:
             for sc in self.scan_engine.scanners:
@@ -217,25 +239,84 @@ class ToolGateway:
         return GatewayResult(False, reason)
 
     # -- content scanning (scanning.py) -----------------------------------------
-    def _scan(self, tool: str, snapshot: bytes, args: Mapping, jti: Any) -> list[ScanVerdict]:
+    def _scan(self, tool: str, snapshot: bytes, args: Mapping, jti: Any,
+              scope_data_class: Any = None) -> list[ScanVerdict]:
         raw = [("call", "application/json", snapshot)]  # exactly the bytes args_hash covers
         fx = self.file_extractors.get(tool)
         if fx is not None:
             for name, data, ctype in fx(args):
                 raw.append((f"file:{name}", ctype, data))
-        eng = self.scan_engine
-        parts = eng.build_parts(raw, self.digest_alg, self.ledger.crypto)
         # Decoded strings (Entry 6, c): every string in the arguments, unescaped (the call part is
         # ASCII-escaped JSON). File parts are already exact bytes. payload_digest covers the exact bytes.
-        texts = list(_strings_in(args, "args"))
+        return self._run_scan("outbound", tool, raw, list(_strings_in(args, "args")), jti, scope_data_class)
+
+    def _run_scan(self, direction: str, tool: str, raw: list, texts: list, jti: Any,
+                  scope_data_class: Any) -> list[ScanVerdict]:
+        eng = self.scan_engine
+        parts = eng.build_parts(raw, self.digest_alg, self.ledger.crypto)
         seen: dict = {}
         for i, (name, text) in enumerate(texts):  # keys containing dots can repeat a path: keep names unique
             seen[name] = seen.get(name, 0) + 1
             if seen[name] > 1:
                 texts[i] = (f"{name}#{seen[name]}", text)
         return eng.run(tool, parts, self.digest_alg, self.ledger.crypto,
-                       {"gateway": id(self), "jti": jti, "tool": tool},
-                       texts=eng.build_texts(texts, self.digest_alg, self.ledger.crypto))
+                       {"gateway": id(self), "jti": jti, "tool": tool, "direction": direction},
+                       texts=eng.build_texts(texts, self.digest_alg, self.ledger.crypto),
+                       scope_data_class=scope_data_class if isinstance(scope_data_class, str) else None,
+                       direction=direction)
+
+    def _scan_record(self, prefix: str, verdicts: list[ScanVerdict], call_data_class: Any) -> dict:
+        """Ledger fields: outbound/inbound-file prefix "" (content_scans, scan_policy, scan_data_classes,
+        scan_errors); tool results prefix "result_" (result_scans, result_scan_errors, ...)."""
+        eng = self.scan_engine
+        return {f"{prefix or 'content_'}scans": [v.to_record() for v in verdicts],
+                f"{prefix}scan_policy": eng.settings.to_record(),
+                f"{prefix}scan_data_classes": eng.data_classes_seen(verdicts, call_data_class),
+                f"{prefix}scan_errors": eng.error_records(verdicts)}
+
+    def _inbound_parts(self, tool: str, content: Any, extractor: Any, files: Iterable = ()) -> tuple[list, list]:
+        """Exact-byte parts and decoded strings for content coming back to the agent (Entry 7)."""
+        if isinstance(content, (bytes, bytearray, memoryview)):
+            raw, texts = [("result", "application/octet-stream", bytes(content))], []   # a file: exact bytes
+        else:
+            try:
+                enc = canonical_bytes(content)   # the bytes H(result) in tool_executed covers
+                raw = [("result", "application/json", enc)]
+                texts = list(_strings_in(json.loads(enc.decode("ascii")), "result"))
+            except (TypeError, ValueError):
+                r = repr(content)
+                raw, texts = [("result", "text/plain; charset=utf-8", r.encode("utf-8", "surrogatepass"))], [("result", r)]
+        extra = list(files)
+        if extractor is not None:
+            extra += list(extractor(content))
+        for name, data, ctype in extra:
+            raw.append((f"file:{name}", ctype, data))
+        return raw, texts
+
+    def scan_inbound(self, content: Any, *, source: str, files: Iterable[tuple[str, bytes, str]] = (),
+                     data_class: str | None = None) -> InboundScanResult:
+        """Scan content before the agent receives or processes it (Entry 7), for content that does not come
+        back through ``invoke`` (for example a file arriving by email). ``files`` are (name, bytes,
+        content_type). With ``data_class``, every DLP class must be that class. Recorded as a
+        content_scan_inbound entry. With no scanners configured: allowed, ``not_scanned``, nothing recorded.
+        """
+        eng = self.scan_engine
+        if eng is None:
+            return InboundScanResult(True, "not_scanned")
+        src = str(source)[:200]
+        try:
+            raw, texts = self._inbound_parts("inbound", content, None, files)
+            verdicts = self._run_scan("inbound", "inbound", raw, texts, None, data_class)
+        except Exception as e:  # noqa: BLE001 - unusable input: refuse it
+            why = f"invalid_inbound:{type(e).__name__}"
+            self.ledger.append("content_scan_inbound", {"source": src, "decision": why})
+            return InboundScanResult(False, why)
+        why = eng.decide(verdicts, data_class)
+        self.ledger.append("content_scan_inbound", {"source": src, "decision": why or "allowed",
+                                                    **self._scan_record("", verdicts, data_class)})
+        if self.checkpoint_every == 1:
+            self.ledger.checkpoint()
+        return InboundScanResult(why is None, why or "allowed", tuple(verdicts))
 
     def _on_async_verdict(self, context: Mapping[str, Any], verdict: ScanVerdict) -> None:
         """Record a post-send verdict (adapter 5) for a call this gateway scanned."""
@@ -243,6 +324,7 @@ class ToolGateway:
             return
         try:
             self.ledger.append("content_scan_async", {"jti": context.get("jti"), "tool": context.get("tool"),
+                                                      "direction": context.get("direction", "outbound"),
                                                       "scan": verdict.to_record()})
             if self.checkpoint_every == 1:
                 self.ledger.checkpoint()
@@ -322,11 +404,10 @@ class ToolGateway:
         scan_rec: dict = {}
         if eng is not None:
             try:
-                verdicts = self._scan(call_tool, snapshot, args, jti)
+                verdicts = self._scan(call_tool, snapshot, args, jti, scope.get("data_class"))
             except Exception as e:  # noqa: BLE001 - a file extractor failed or returned something unusable
                 return self._deny(f"invalid_call:file_extractor:{type(e).__name__}", token, tool)
-            scan_rec = {"content_scans": [v.to_record() for v in verdicts], "scan_policy": eng.settings.to_record(),
-                        "scan_data_class": eng.effective_data_class(verdicts, fields["data_class"])}
+            scan_rec = self._scan_record("", verdicts, fields["data_class"])
             why = eng.decide(verdicts, scope.get("data_class"), fields["data_class"])
             if why is not None:
                 return self._deny(why, token, tool, **scan_rec)
@@ -360,8 +441,24 @@ class ToolGateway:
         except Exception as e:
             self.ledger.append("tool_error", {"jti": jti, "error": type(e).__name__, **link})
             return GatewayResult(True, f"tool_error:{type(e).__name__}")
-        self.ledger.append("tool_executed", {"jti": jti, "tool": call_tool, **link,
-                                             "result_hash": _result_hash(result, self.digest_alg, self.ledger)})
+        executed = {"jti": jti, "tool": call_tool, **link,
+                    "result_hash": _result_hash(result, self.digest_alg, self.ledger)}
+        if eng is None:
+            self.ledger.append("tool_executed", executed)
+            return GatewayResult(True, "executed", result)
+        # Inbound (Entry 7): scan what the tool returned before the agent receives it.
+        try:
+            raw, texts = self._inbound_parts(call_tool, result, self.result_file_extractors.get(call_tool))
+            rverdicts = self._run_scan("inbound", call_tool, raw, texts, jti, scope.get("data_class"))
+        except Exception as e:  # noqa: BLE001 - a result file extractor failed: withhold the result
+            why = f"invalid_result:file_extractor:{type(e).__name__}"
+            self.ledger.append("tool_executed", {**executed, "result_withheld": why})
+            return GatewayResult(False, f"result_withheld:{why}")
+        why = eng.decide(rverdicts, scope.get("data_class"))
+        self.ledger.append("tool_executed", {**executed, **self._scan_record("result_", rverdicts, None),
+                                             "result_withheld": why})
+        if why is not None:
+            return GatewayResult(False, f"result_withheld:{why}")
         return GatewayResult(True, "executed", result)
 
 

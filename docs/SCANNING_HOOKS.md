@@ -12,19 +12,23 @@ The code is in `two_key/scanning.py` and the gateway wiring is in
 `two_key/gateway.py`. The implementation is AI-prepared engineering.
 Stephan decided the timeout, the combination rule, and what scanners receive
 on 2026-09-30 (`CONCEPTION_NOTES.md` Entry 6; see
-[Stephan's decisions](#stephans-decisions-entry-6)). Where he has not decided
-something, the code has a **placeholder default**, listed under
-[Open questions for Stephan](#open-questions-for-stephan).
+[Stephan's decisions (Entry 6)](#stephans-decisions-entry-6)), and then
+scanner errors, run order, holding for the verdict, data-class disagreement,
+and inbound scanning (Entry 7; see
+[Stephan's decisions (Entry 7)](#stephans-decisions-entry-7)). What is still
+open is listed under [Open questions for Stephan](#open-questions-for-stephan).
 
 ## Contents
 
 - [Where scanning happens](#where-scanning-happens)
+- [Inbound: before the agent receives or processes content](#inbound-before-the-agent-receives-or-processes-content)
 - [The verdict and how it binds to the token and ledger](#the-verdict-and-how-it-binds-to-the-token-and-ledger)
 - [The five hook types](#the-five-hook-types)
 - [Comparison](#comparison)
 - [Antivirus, malicious scripts, and AMSI](#antivirus-malicious-scripts-and-amsi)
 - [Stephan's decisions (Entry 6)](#stephans-decisions-entry-6)
-- [Remaining placeholder defaults](#remaining-placeholder-defaults)
+- [Stephan's decisions (Entry 7)](#stephans-decisions-entry-7)
+- [Engineering defaults and interpretations](#engineering-defaults-and-interpretations)
 - [Open questions for Stephan](#open-questions-for-stephan)
 - [Limits](#limits)
 
@@ -49,23 +53,72 @@ call that is about to execute. With `scanners` configured, `gateway.invoke`:
    non-ASCII characters is only visible in the decoded strings. These texts
    are scanned too, but the digest binding (`payload_digest`) covers the
    exact-byte parts.
-5. runs the scanners and decides. **Most restrictive wins** (Entry 6,
-   decision b): a scanner can only add a deny, never remove one.
+5. runs the scanners **in parallel** (the default, Entry 7) and decides.
+   **Any conviction denies** (Entries 6 and 7): a scanner can only add a
+   deny, never remove one.
    - `block` gives the deny `scan_blocked:<id>`;
    - `quarantine` gives `scan_quarantined:<id>`;
-   - `timeout` gives `scan_timeout:<id>` unless `on_timeout="allow"`;
-   - `error` gives `scan_error:<id>` unless `on_error="allow"`;
-   - the **effective data class**, the most restrictive of the call's own
-     data class and every DLP class found, must equal the token's scope;
-     otherwise the deny is `scan_data_class_mismatch`.
+   - `timeout` gives `scan_timeout:<id>`, and a scanner `error` gives
+     `scan_error:<id>`, unless `on_timeout="allow"` (errors are treated like
+     timeouts, Entry 7);
+   - a DLP data class other than the one the token permits gives
+     `scan_data_class_mismatch`. The call's own label already has to match
+     the token (check 8), so the label and every DLP verdict must agree.
 
    These denials happen before redemption, so the token isn't used up.
 6. continues with the ledger checks 9-11, redemption, and execution as before.
+7. scans what the tool returned **before the agent receives it** (see
+   [Inbound](#inbound-before-the-agent-receives-or-processes-content)).
+
+**Parallel order.** All scanners start at once. If any verdict denies, the
+call is denied: nothing another scanner says can turn that into an allow.
+So the gateway stops waiting, records every verdict that has arrived, and
+records the scanners still running as `cancelled` (their late results are
+ignored; `abandon()` is called on them). Without a deny, the gateway waits
+for every scanner, up to `timeout_seconds` in total; a scanner that hasn't
+answered by then is a `timeout`. `order="sequential"` is still available: it
+runs the scanners one after the other and stops at the first deny.
 
 **With no scanners configured, none of this runs.** `scanners=None` and
 `scanners=[]` both leave `gateway.scan_engine` as `None`, and `invoke`
 takes the original code path unchanged. The regression test is
 `tests/test_scanning_gateway.py::test_no_scanners_means_the_original_path`.
+
+## Inbound: before the agent receives or processes content
+
+Stephan: "Scans should be done before files are sent.  Likewise, they should
+be done before files are received or processed." (Entry 7)
+
+- **Tool results.** After the tool runs, the gateway scans its return value
+  with the same scanners, settings (timeout, errors, parallel order), and
+  rules before returning it. The parts are:
+  - `result`, the canonical JSON of the result (its digest equals the
+    `result_hash` in `tool_executed`);
+  - raw bytes for a `bytes` result, which is treated as a file;
+  - `repr()` for a result that isn't JSON;
+  - `file:<name>` parts from an optional per-tool
+    `result_file_extractors[tool](result) -> [(name, bytes, content_type)]`;
+  - the decoded strings, as `text:result...`.
+- **Withheld, not undone.** If the inbound scan denies, the agent doesn't get
+  the result: `GatewayResult(False, "result_withheld:<reason>")`, for example
+  `result_withheld:scan_blocked:av`. The tool has already run, so its side
+  effects stand. The `tool_executed` entry records `result_scans`,
+  `result_scan_errors`, `result_scan_policy`, `result_scan_data_classes`, and
+  `result_withheld` (the reason, or null).
+- **Data class.** The same rule applies: a DLP class other than the token's
+  withholds the result (an interpretation; see the open questions).
+- **Content outside a tool call.** `gateway.scan_inbound(content,
+  source=..., files=[(name, bytes, content_type)], data_class=None)` scans
+  content that reaches the agent some other way, for example an email
+  attachment. It returns `InboundScanResult(allowed, reason, verdicts)` and
+  writes a `content_scan_inbound` ledger entry. With `data_class`, every DLP
+  class must be that class.
+- **Scanners see the direction.** `ScanRequest.direction` is `"outbound"` or
+  `"inbound"`, and the default request body includes `"direction"`. ICAP
+  uses `method` (default `REQMOD`) outbound and `inbound_method` (default
+  `RESPMOD`) inbound.
+- **No scanners, no change.** Results are returned exactly as before, and
+  `scan_inbound` returns `not_scanned` without writing anything.
 
 **F_REVIEW note.** F_REVIEW.md §8 finding 1 describes a hash-then-execute gap.
 The gateway reads `args` once to hash it and again to run the tool, so a
@@ -84,7 +137,7 @@ Every scanner returns one `ScanVerdict`:
 
 | Field | Meaning |
 |---|---|
-| `outcome` | `allow`, `block`, `quarantine`, `error`, `timeout`, or `pending` (async post-send only) |
+| `outcome` | `allow`, `block`, `quarantine`, `error`, `timeout`, `pending` (async post-send only), or `cancelled` (set by the gateway only: not awaited because the call was already denied) |
 | `scanner_id`, `adapter`, `kind` | Which scanner, which hook type, `dlp` / `av` / `dlp+av` |
 | `scanner_version` | Configured, or learned from the scanner (API field, ICAP `ISTag`/`Service`, clamd `VERSION`) |
 | `parts` | Each exact-byte part's name, content type, size, and digest |
@@ -93,6 +146,8 @@ Every scanner returns one `ScanVerdict`:
 | `labels`, `data_classes` | Vendor labels; Two-Key data classes (from the response or a label map) |
 | `findings` | Malware names or rule names (never the matched text) |
 | `elapsed_ms`, `detail`, `scan_id` | Timing; short untrusted detail text; async scan id |
+| `error_type` | For `error` and `timeout`: the exception or failure type (for example `OSError`, `ScanTimeout`, `DigestMismatch`) |
+| `direction` | `outbound` or `inbound` |
 
 The binding chain in the ledger:
 
@@ -103,10 +158,17 @@ The binding chain in the ledger:
     equals `args_hash`, so the scan provably covered the same bytes the token
     authorized.
   - `scan_policy`, the settings in force.
-  - `scan_data_class`, the effective (most restrictive) data class.
+  - `scan_data_classes`, the call's own data class and every DLP class found.
+  - `scan_errors` (Entry 7: "Scanner error should be logged in the ledger"):
+    one record per scanner error or timeout, with the scanner id and version,
+    the outcome, the error type, the detail, the payload digest, the
+    direction, and the action taken (`block` or `allow`, from `on_timeout`).
 - `gateway_denied` carries the same fields when a scan denies the call.
+- `tool_executed` carries the inbound fields (`result_scans`,
+  `result_scan_errors`, ...) and `result_withheld`.
+- `content_scan_inbound` records a `scan_inbound` call.
 - `content_scan_async` (adapter 5, post-send) records a late verdict with the
-  token's `jti` and the same `payload_digest`.
+  token's `jti`, the direction, and the same `payload_digest`.
 
 If a scanner reports which payload digest it scanned and that differs, the
 verdict is an `error` (`digest_mismatch`).
@@ -134,7 +196,8 @@ dlp = VendorApiScanner(
 
 - **Request:** the default body is `{"protocol": "two-key-scan/1",
   "request_id", "tool", "digest_alg", "payload_mode", "payload_digest",
-  "parts": [{name, content_type, size, digest, data_b64}]}`. Pass
+  "parts": [{name, content_type, size, digest, data_b64}], "texts": [{name,
+  content_type, size, digest, text}], "direction"}`. Pass
   `body_builder=` to fit a vendor's schema.
 - **Response:** `ResponseMapping` maps the vendor's JSON fields by dotted
   path. Two-Key ships no vendor-specific mappings.
@@ -156,7 +219,8 @@ av = IcapScanner("icap-av", host="127.0.0.1", port=1344, service="avscan", metho
 
 - **Request:** each part is sent as the body of an encapsulated HTTP message.
   `REQMOD` wraps it in a POST (the agent uploading it); `RESPMOD` wraps it
-  in a 200 response.
+  in a 200 response. `method` is used outbound and `inbound_method`
+  (default `RESPMOD`) inbound.
 - **Verdicts:** `204 No Content` is an allow, and so is a 200 that returns
   the same body. A changed body, a replacement response (a block page),
   `X-Infection-Found`, or `X-Violations-Found` gives `modified_outcome`
@@ -205,7 +269,7 @@ clam = SidecarScanner("clamd", unix_socket="/run/clamav/clamd.ctl", protocol="cl
 - **`clamd-instream`:** speaks clamd's `zINSTREAM`/`zVERSION` directly, with
   no extra package.
 
-### 5. Asynchronous post-send (webhook or storage event): `AsyncCallbackScanner`
+### 5. Asynchronous (webhook or storage event): `AsyncCallbackScanner`
 
 ```python
 from two_key.scanning import AsyncCallbackScanner, WebhookReceiver
@@ -215,23 +279,27 @@ def submit(request, scan_id):       # e.g. upload to the vendor's scanning bucke
     ...
 
 
-scanner = AsyncCallbackScanner("async-dlp", submit, hold_until_verdict=False, on_flag=print)
+scanner = AsyncCallbackScanner("async-dlp", submit)    # holds until the verdict or the timeout (default)
 receiver = WebhookReceiver(scanner, secret=b"a shared secret of 16+ bytes").start()   # or call scanner.deliver()
 ```
 
-- **Post-send** (`hold_until_verdict=False`, the placeholder default): the
-  call proceeds with a `pending` verdict. The real verdict arrives later
-  through `deliver(scan_id, response)`, either from a storage-event handler
-  or from `WebhookReceiver`. It is recorded as `content_scan_async`, and
-  `on_flag` is called for a block or quarantine. **This only flags after
-  the fact; the content has already been sent.**
-- **Hold** (`hold_until_verdict=True`): the gateway waits for the verdict,
-  up to `timeout_seconds`, and decides on it like any other verdict. No
-  verdict in time is a `timeout` (`on_timeout` decides). A verdict that
-  arrives after the wait is recorded as post-send. That includes one that
+- **Hold** (`hold_until_verdict=True`, **the default**, Entry 7: "Always
+  hold a file until verdict is returned [...] or the timeout limit is
+  reached"): the gateway waits for the verdict, up to `timeout_seconds`, and
+  decides on it like any other verdict. The verdict arrives through
+  `deliver(scan_id, response)`, from a storage-event handler or from
+  `WebhookReceiver`. No verdict in time is a `timeout` (`on_timeout`
+  decides; blocked by default). A verdict that arrives after the wait is
+  recorded as post-send (`content_scan_async`). That includes one that
   arrives at the deadline itself: when the gateway stops waiting, it calls
   the scanner's `abandon(request)` hook, which `AsyncCallbackScanner` uses
   to record such a verdict instead of dropping it.
+- **Post-send** (`hold_until_verdict=False`): **weaker, never the default.**
+  Kept only for a deployment that explicitly chooses it. The call proceeds
+  with a `pending` verdict, the later verdict is recorded as
+  `content_scan_async`, and `on_flag` is called for a block or quarantine.
+  **This only flags after the fact; the content has already been sent (or,
+  inbound, already handed to the agent).**
 - **`WebhookReceiver`:** binds to 127.0.0.1 by default. It requires
   `X-Two-Key-Signature: sha256=<HMAC-SHA256 of the body>` and refuses
   unsigned callbacks, because an unauthenticated callback could post an
@@ -245,11 +313,11 @@ available whatever he picks.
 
 | | 1. Vendor API (REST/gRPC) | 2. ICAP | 3. In-process plugin | 4. Sidecar (local socket) | 5. Async post-send |
 |---|---|---|---|---|---|
-| **Latency** | Network round trip per call (LAN or internet); vendor processing | Network round trip per part; usually LAN | Lowest: no I/O except what the plugin does | Local IPC; low | None on the call path (post-send); full scan time if held |
+| **Latency** | Network round trip per call (LAN or internet); vendor processing | Network round trip per part; usually LAN | Lowest: no I/O except what the plugin does | Local IPC; low | Full scan time (held, the default); none on the call path in post-send mode |
 | **Isolation / security** | Content leaves the host (TLS); vendor sees it; API credential to protect | Content leaves the host; plain text unless ICAP over TLS; ICAP has no standard auth | Plugin runs inside Two-Key's process with its privileges; a plugin crash or compromise affects Two-Key | Separate process; content stays on the host; socket permissions control access | Content goes to vendor storage; the callback channel must be authenticated (HMAC); verdict is decoupled from the call |
 | **Vendor support** | Most cloud DLP/AV services have an API, each with its own schema (handled by mapping/body builder) | A long-standing standard; many network DLP and AV gateways, and open-source c-icap, speak it | Needs a Python SDK or a wrapper; per-vendor code | Needs a local daemon (clamd works directly) or a small shim | Fits vendors that scan uploads to storage or offer async APIs |
-| **Failure behavior** | Timeout is `timeout` (`on_timeout`); HTTP error or unmapped answer is `error` (`on_error`) | Socket timeout is `timeout`; non-204/200 status is `error` | Timeout is `timeout`; exception is `error` | Socket timeout is `timeout`; other socket errors are `error` | Submit failure is `error`; post-send: a late block only flags; held: no verdict in time is `timeout` |
-| **Binding to token/ledger** | Verdict in `capability_redeemed`/`gateway_denied`; part digests match `args_hash`; optional echoed-digest check | Same; version from ISTag | Same | Same; optional echoed-digest check | Pending verdict at redemption, then `content_scan_async` with the same `jti` and payload digest |
+| **Failure behavior** | Timeout is `timeout`; HTTP error or unmapped answer is `error`; both follow `on_timeout` | Socket timeout is `timeout`; non-204/200 status is `error` | Timeout is `timeout`; exception is `error` | Socket timeout is `timeout`; other socket errors are `error` | Submit failure is `error`; post-send: a late block only flags; held: no verdict in time is `timeout` |
+| **Binding to token/ledger** | Verdict in `capability_redeemed`/`gateway_denied`; part digests match `args_hash`; optional echoed-digest check | Same; version from ISTag | Same | Same; optional echoed-digest check | Held: like the others. Post-send: pending verdict at redemption, then `content_scan_async` with the same `jti` and payload digest |
 
 ## Antivirus, malicious scripts, and AMSI
 
@@ -260,7 +328,8 @@ available whatever he picks.
   agent is sending (the call encoding, plus any file parts a file extractor
   provides) and the decoded strings in the call (Entry 6, decision c, for
   malicious-script detection). Known malicious content is blocked before the
-  tool runs; the tests use the harmless EICAR test string and a script
+  tool runs. What the tool returns is scanned the same way before the agent
+  receives it (Entry 7); the tests use the harmless EICAR test string and a script
   pattern found only in a decoded string.
 - **What it can't guarantee.** Signature scanning can't prove that content
   holds no malicious script. Unknown or obfuscated scripts can pass a
@@ -291,56 +360,58 @@ Entry 6). They resolve open questions (a), (b), and (c) from Entry 5.
 | **(b)** "fail to the most restrictive (either two-key or DLP/AV…if one denies/blocks…the action is block)" | Scanners run only after every Two-Key check has passed, and a verdict can only add a deny. The effective data class is the most restrictive of the call's own class and the DLP classes; it must equal the token's scope. The earlier `dlp_overrides_data_class` setting is removed. |
 | **(c)** "Scanners get the exact bytes and strings (for malicious script detection) sent." | `ScanSettings.payload="exact"`: every scanner gets the exact-byte parts plus the decoded strings (`texts`). The digest binding stays on the exact bytes. |
 
-**Scanner errors other than timeouts.** Before Entry 6, one setting
-(`on_error`) covered both errors and timeouts. They are now two settings,
-`on_timeout` and `on_error`, and both have Stephan's timeout default
-(`"block"`) with the optional `"allow"`. Applying the timeout decision to
-other errors follows from that shared structure. Stephan can confirm or set
-`on_error` differently.
-
-**Ranking the data classes.** "Most restrictive" needs an order:
-- `classified` is the most restrictive, as it already is the default for an
-  unknown class (spec 5.2, Claim 5).
-- `public` is the least restrictive.
-- `personal`, `medical`, and `financial` are not ranked against each other.
-  If two of them meet (for example, the call says `financial` and the DLP
-  finds `personal`), neither is "more restrictive", so the result is
-  `classified`, and the call is blocked unless its token was authorized as
-  `classified`.
-
-The order is `DATA_CLASS_RANK` in `two_key/scanning.py`. A finer ranking
-would be a one-line change if Stephan wants one.
+After Entry 6 the code briefly had a separate `on_error` setting and a
+data-class ranking (`classified` above `personal`/`medical`/`financial`
+above `public`). Entry 7 replaced both; see the next section.
 
 **Digest-only stays available.** A scanner can still be set to
 `payload_mode="digest_only"` (names, sizes, digests only) as an explicit
 per-scanner choice, for example for a hash-reputation service. It is not the
 default, and content scanners return `error` in that mode.
 
-## Remaining placeholder defaults
+## Stephan's decisions (Entry 7)
 
-These are still **placeholders pending Stephan's decision**:
+Stephan decided these on 2026-09-30, about 10:16 PM MT (`CONCEPTION_NOTES.md`
+Entry 7). They resolve the open questions left after Entry 6.
 
-| Setting | Placeholder | Why this placeholder |
+| Decision | What the code does |
+|---|---|
+| "Scanner error should be logged in the ledger and treated like a timeout." | `on_error` follows `on_timeout` (`ScanSettings.error_action`); setting `on_error` to anything else is refused. Every error and timeout is recorded in `scan_errors` / `result_scan_errors` with the scanner id and version, the error type, the payload digest, and the action taken. |
+| "Which is faster [...]?  Whichever is more optimized, choose that." | The assistant answered that parallel is faster (the wait is about as long as the slowest scanner, not the sum), and since any deny decides, the order doesn't change the outcome. Parallel was selected per his delegation: `ScanSettings.order="parallel"` is the default. `"sequential"` stays available. |
+| "Always hold a file until verdict is returned [...] or the timeout limit is reached." | `AsyncCallbackScanner(hold_until_verdict=True)` is the default; no verdict in time is a timeout (`on_timeout`). The other adapters already wait for their verdict. Post-send mode is kept as a weaker, non-default option. |
+| "Don’t worry about disagreement; if one (two-key or DLP or AV) convicts (would deny) then default to deny." | No ranking: any DLP data class other than the one the token permits denies (`scan_data_class_mismatch`). The ranking question is removed. |
+| "Scans should be done before files are sent.  Likewise, they should be done before files are received or processed." | Outbound as before. Inbound: tool results and their files are scanned before the agent gets them (withheld on a deny), and `scan_inbound()` covers content arriving outside a tool call. |
+
+## Engineering defaults and interpretations
+
+These are AI-prepared engineering, not Stephan's decisions:
+
+| Item | Choice | Note |
 |---|---|---|
-| `ScanSettings.order` | `"sequential"` (stop at the first deny) | No content goes to later scanners for a call that is already denied |
-| `AsyncCallbackScanner(hold_until_verdict=)` | `False` | Doesn't change when calls execute |
+| `timeout_seconds` | 10 | The setting is his decision (Entry 6); the number isn't. In parallel order it is the total wait. |
+| Parallel early stop | Stop waiting at the first deny; the scanners still running are recorded as `cancelled` | Waiting longer can't change a deny. Without a deny, every scanner is awaited up to the timeout. |
+| Inbound data class | The token's data class also applies to what comes back | "If one convicts, deny" read as covering inbound content too. |
+| Withheld results | The tool has already run; only the result is withheld | A tool's side effects can't be undone by a later scan. |
+| ICAP inbound | `RESPMOD` | Inbound content is a response. |
+| `digest_only` | Per-scanner opt-in only | Entry 6 (c) is exact bytes and strings. |
 
 ## Open questions for Stephan
 
-Questions (a), (b), and (c) are decided (Entry 6). Still open:
+The questions from Entries 5 and 6 are decided (Entries 6 and 7). Still
+open:
 
-- **Run order:** should DLP and AV run in sequence or in parallel? Setting:
-  `ScanSettings.order`. Nothing else about the order is decided.
-- **Post-send hold:** should post-send scanning hold calls until the verdict
-  arrives? Setting: `hold_until_verdict`.
-- **Non-timeout errors:** is the same default as timeouts (block, optional
-  allow) right for scanner errors? Setting: `ScanSettings.on_error`.
-- **Ranking:** should `personal`, `medical`, and `financial` be ranked
-  against each other? Today a disagreement among them resolves to
-  `classified`.
-- **After-the-fact block:** what should a post-send block or quarantine
-  trigger beyond the `content_scan_async` entry and the `on_flag` hook (for
-  example, revoking the session's tokens or notifying the principal)?
+- **After-the-fact block:** in the non-default post-send mode, what should a
+  late block or quarantine trigger beyond the `content_scan_async` entry and
+  the `on_flag` hook (for example, revoking the session's tokens or
+  notifying the principal)?
+- **Post-send mode:** should the weaker post-send mode be kept at all, or
+  removed?
+- **Inbound data class:** should the token's data class also limit what the
+  agent may receive (the current interpretation), or should inbound
+  checking apply only to blocks, quarantines, errors, and timeouts?
+- **Withheld results:** a withheld result has already been produced by the
+  tool. Should anything else happen (for example, notifying the principal)?
+- **Timeout number:** is 10 seconds a good default?
 
 ## Limits
 
@@ -353,10 +424,15 @@ Questions (a), (b), and (c) are decided (Entry 6). Still open:
   sees. If a tool reads a file from disk by path, the scanned bytes may
   differ from what the tool sends, unless the tool sends exactly the bytes
   in its arguments.
-- **JSON escaping.** The `call` part is canonical JSON with ASCII escapes.
+- **JSON escaping.** The `call` and `result` parts are canonical JSON with ASCII escapes.
   Pattern-based scanners see `\uXXXX` for non-ASCII text; file parts are
   raw bytes.
 - **Untrusted scanner output.** Labels, findings, and details are recorded
   truncated and are never interpreted beyond the documented fields.
-- **Post-send can't undo.** Asynchronous post-send scanning can't undo a
+- **Post-send can't undo.** The non-default post-send mode can't undo a
   send.
+- **Inbound can't undo the tool.** Withholding a result doesn't undo what
+  the tool did.
+- **Cancelled scanners keep running.** A scanner that isn't awaited is told
+  through `abandon()` but its thread isn't killed (Python can't stop a
+  thread); its result is ignored.

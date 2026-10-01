@@ -29,10 +29,12 @@ def run(scanner, parts=(("call", "application/json", CALL),), **settings):
 
 class EngineAndSettings(unittest.TestCase):
     def test_defaults(self):
-        s = ScanSettings()   # Entry 6: timeout configurable, default deny; exact bytes + strings
+        s = ScanSettings()   # Entry 6: timeout configurable, default deny; exact bytes + strings. Entry 7: parallel
         self.assertEqual(s.to_record(), {"timeout_seconds": 10.0, "on_timeout": "block", "on_error": "block",
-                                         "payload": "exact", "order": "sequential"})
+                                         "payload": "exact", "order": "parallel"})
         self.assertFalse(hasattr(s, "dlp_overrides_data_class"))   # replaced by most-restrictive-wins
+        self.assertFalse(hasattr(scanning, "most_restrictive"))     # Entry 7: no ranking, any conviction denies
+        self.assertTrue(AsyncCallbackScanner("a", lambda r, i: None).hold_until_verdict)   # Entry 7: always hold
 
     def test_settings_validation(self):
         for kw in ({"on_error": "maybe"}, {"on_timeout": "maybe"}, {"payload": "some"}, {"order": "random"},
@@ -41,14 +43,13 @@ class EngineAndSettings(unittest.TestCase):
                 ScanSettings(**kw)
         ScanSettings(timeout_seconds=2.5, on_timeout="allow", on_error="allow")
 
-    def test_most_restrictive(self):
-        mr = scanning.most_restrictive
-        self.assertEqual(mr(["public", "medical"]), "medical")
-        self.assertEqual(mr(["personal", "public"]), "personal")
-        self.assertEqual(mr(["financial", "classified"]), "classified")
-        self.assertEqual(mr(["medical", "financial"]), "classified")    # unranked tie
-        self.assertEqual(mr(["medical", "medical"]), "medical")
-        self.assertEqual(mr([]), "classified")
+    def test_on_error_follows_on_timeout(self):
+        # Entry 7: a scanner error is treated like a timeout.
+        self.assertEqual(ScanSettings(on_timeout="allow").to_record()["on_error"], "allow")
+        self.assertEqual(ScanSettings().error_action, "block")
+        for kw in ({"on_error": "allow"}, {"on_error": "block", "on_timeout": "allow"}):
+            with self.assertRaises(ValueError):
+                ScanSettings(**kw)
 
     def test_ids_unique_and_valid(self):
         with self.assertRaises(ValueError):
@@ -99,6 +100,8 @@ class EngineAndSettings(unittest.TestCase):
         self.assertEqual(v.outcome, "error")
         (v,), _ = run(Odd(ScanReport("pending")))  # only async scanners may answer pending
         self.assertEqual(v.outcome, "error")
+        (v,), _ = run(Odd(ScanReport("cancelled")))  # engine-only outcome: a scanner can't use it to avoid a deny
+        self.assertEqual((v.outcome, v.error_type), ("error", "InvalidOutcome"))
         (v,), _ = run(Odd(ScanReport("allow", echoed_digest="00" * 32)))
         self.assertEqual(v.outcome, "error")
         self.assertIn("digest_mismatch", v.detail)
@@ -110,17 +113,40 @@ class EngineAndSettings(unittest.TestCase):
             (v,), _ = run(sc)
         self.assertEqual((v.data_classes, v.labels), (("medical",), ("x", "pci")))
 
-    def test_effective_data_class_is_most_restrictive(self):
-        def verdict(classes, kind="dlp", outcome="allow"):
-            return scanning.ScanVerdict("s", "a", kind, "1", outcome, "exact", "sha256", "d", (), (), (),
+    def test_any_dlp_class_other_than_the_tokens_denies(self):
+        # Entry 7: no ranking; if the DLP names a class the token doesn't permit, deny.
+        def verdict(classes, kind="dlp", outcome="allow", sid="s"):
+            return scanning.ScanVerdict(sid, "a", kind, "1", outcome, "exact", "sha256", "d", (), (), (),
                                         tuple(classes))
-        e = ScanEngine.effective_data_class
-        self.assertEqual(e([verdict(["medical"])], "public"), "medical")        # DLP stricter than the label
-        self.assertEqual(e([verdict(["public"])], "personal"), "personal")      # label stricter than DLP
-        self.assertEqual(e([verdict([])], "public"), "public")                  # no DLP class: label stands
-        self.assertEqual(e([verdict(["medical"]), verdict(["financial"])], "public"), "classified")
-        self.assertEqual(e([verdict(["medical"], kind="av")], "public"), "public")   # AV verdicts don't count
-        self.assertEqual(e([verdict(["medical"], outcome="timeout")], "public"), "public")
+        eng = ScanEngine([PatternScanner(rules=[])])
+        self.assertEqual(eng.decide([verdict(["medical"])], "public"), "scan_data_class_mismatch")
+        self.assertEqual(eng.decide([verdict(["public"])], "personal"), "scan_data_class_mismatch")
+        self.assertEqual(eng.decide([verdict(["financial"]), verdict(["personal"], sid="t")], "financial"),
+                         "scan_data_class_mismatch")
+        self.assertIsNone(eng.decide([verdict(["personal", "personal"])], "personal"))
+        self.assertIsNone(eng.decide([verdict([])], "public"))                      # no DLP class: nothing to convict
+        self.assertIsNone(eng.decide([verdict(["medical"], kind="av")], "public"))  # AV verdicts carry no class
+        self.assertIsNone(eng.decide([verdict(["medical"])], None))                 # not checked
+        self.assertEqual(eng.data_class_conflicts([verdict(["medical"], sid="d1")], "public"),
+                         [{"scanner_id": "d1", "data_class": "medical"}])
+        self.assertEqual(eng.data_classes_seen([verdict(["medical"]), verdict(["medical"])], "public"),
+                         ["public", "medical"])
+
+    def test_error_records_carry_type_digest_and_action(self):
+        class Boom(PatternScanner):
+            def scan(self, request, timeout):
+                raise OSError("down")
+
+        for on_timeout in ("block", "allow"):
+            eng = ScanEngine([Boom("boom", rules=[], version="9.1")], ScanSettings(on_timeout=on_timeout))
+            ps = eng.build_parts([("call", "application/json", CALL)], "sha256", None)
+            (v,) = eng.run("email_send", ps, "sha256", None, {})
+            self.assertEqual((v.outcome, v.error_type), ("error", "OSError"))
+            self.assertEqual(eng.error_records([v]), [{
+                "scanner_id": "boom", "scanner_version": "9.1", "outcome": "error", "error_type": "OSError",
+                "detail": "OSError: down", "digest_alg": "sha256", "payload_digest": v.payload_digest,
+                "direction": "outbound", "action": on_timeout}])
+            self.assertEqual(eng.decide([v], "public"), "scan_error:boom" if on_timeout == "block" else None)
 
 
 TEXTS = (("args.body", "caf\u00e9 <script>evil()</script>"),)
@@ -154,6 +180,73 @@ class BytesAndStrings(unittest.TestCase):
         run_texts(sc)
         self.assertNotIn("text", seen[0]["texts"][0])
         self.assertNotIn("data_b64", seen[0]["parts"][0])
+
+
+class ParallelOrder(unittest.TestCase):
+    """Entry 7: scanners run at once by default; any deny is final; otherwise wait up to the timeout."""
+
+    class Sleepy(PatternScanner):
+        def __init__(self, sid, seconds, report=None, kind="dlp"):
+            super().__init__(sid, rules=[], kind=kind)
+            self.seconds, self.report, self.abandoned = seconds, report or ScanReport("allow"), []
+
+        def scan(self, request, timeout):
+            time.sleep(self.seconds)
+            return self.report
+
+        def abandon(self, request):
+            self.abandoned.append(request.request_id)
+
+    def engine(self, *scanners, **settings):
+        eng = ScanEngine(list(scanners), ScanSettings(**settings))
+        return eng, eng.build_parts([("call", "application/json", CALL)], "sha256", None)
+
+    def test_wall_time_is_the_slowest_not_the_sum(self):
+        eng, ps = self.engine(self.Sleepy("a", 0.3), self.Sleepy("b", 0.3), self.Sleepy("c", 0.3, kind="av"))
+        t0 = time.perf_counter()
+        vs = eng.run("email_send", ps, "sha256", None, {})
+        self.assertLess(time.perf_counter() - t0, 0.75)          # sequential would take about 0.9 s
+        self.assertEqual([(v.scanner_id, v.outcome) for v in vs], [("a", "allow"), ("b", "allow"), ("c", "allow")])
+
+    def test_a_deny_is_final_and_stragglers_are_cancelled(self):
+        slow = self.Sleepy("slow", 2.0)
+        eng, ps = self.engine(slow, self.Sleepy("av", 0.0, ScanReport("block"), kind="av"), timeout_seconds=5)
+        t0 = time.perf_counter()
+        vs = eng.run("email_send", ps, "sha256", None, {})
+        self.assertLess(time.perf_counter() - t0, 1.0)           # didn't wait for the 2 s scanner
+        self.assertEqual([(v.scanner_id, v.outcome) for v in vs], [("slow", "cancelled"), ("av", "block")])
+        self.assertIn("already denied (av)", vs[0].detail)
+        self.assertEqual(len(slow.abandoned), 1)
+        self.assertEqual(eng.decide(vs, "public"), "scan_blocked:av")
+
+    def test_a_data_class_conviction_is_final_too(self):
+        eng, ps = self.engine(self.Sleepy("slow", 2.0, kind="av"),
+                              self.Sleepy("dlp", 0.0, ScanReport("allow", data_classes=("medical",))),
+                              timeout_seconds=5)
+        t0 = time.perf_counter()
+        vs = eng.run("email_send", ps, "sha256", None, {}, scope_data_class="public")
+        self.assertLess(time.perf_counter() - t0, 1.0)
+        self.assertEqual(vs[0].outcome, "cancelled")
+        self.assertEqual(eng.decide(vs, "public"), "scan_data_class_mismatch")
+
+    def test_without_a_deny_it_waits_for_every_scanner_up_to_the_timeout(self):
+        eng, ps = self.engine(self.Sleepy("fast", 0.0), self.Sleepy("slow", 0.2), timeout_seconds=5)
+        vs = eng.run("email_send", ps, "sha256", None, {})
+        self.assertEqual([v.outcome for v in vs], ["allow", "allow"])
+        late = self.Sleepy("late", 2.0)
+        eng, ps = self.engine(self.Sleepy("fast", 0.0), late, timeout_seconds=0.2)
+        t0 = time.perf_counter()
+        vs = eng.run("email_send", ps, "sha256", None, {})
+        self.assertLess(time.perf_counter() - t0, 1.0)
+        self.assertEqual([(v.outcome, v.error_type) for v in vs], [("allow", None), ("timeout", "ScanTimeout")])
+        self.assertEqual(len(late.abandoned), 1)
+        self.assertEqual(eng.decide(vs, "public"), "scan_timeout:late")
+
+    def test_sequential_is_still_available(self):
+        b = self.Sleepy("b", 0.0)
+        eng, ps = self.engine(self.Sleepy("a", 0.0, ScanReport("block")), b, order="sequential")
+        vs = eng.run("email_send", ps, "sha256", None, {})
+        self.assertEqual([v.scanner_id for v in vs], ["a"])        # stops at the first deny
 
 
 class PatternPlugin(unittest.TestCase):
@@ -324,6 +417,16 @@ class Icap(unittest.TestCase):
         (v,), _ = run(sc, parts=[("call", "application/json", b"x"), ("file:a.txt", "text/plain", EICAR)])
         self.assertEqual((v.outcome, v.findings), ("block", ("file:a.txt:Eicar-Test-Signature",)))
 
+    def test_inbound_content_uses_respmod(self):
+        self.srv = FakeIcapServer("av")
+        sc = IcapScanner("icap", host="127.0.0.1", port=self.srv.port)       # REQMOD outbound by default
+        eng = ScanEngine([sc])
+        ps = eng.build_parts([("result", "application/json", CALL)], "sha256", None)
+        (v,) = eng.run("email_send", ps, "sha256", None, {}, direction="inbound")
+        self.assertEqual((self.srv.requests[0]["method"], v.outcome, v.direction), ("RESPMOD", "allow", "inbound"))
+        with self.assertRaises(ValueError):
+            IcapScanner("icap", host="127.0.0.1", inbound_method="GET")
+
     def test_respmod(self):
         self.srv = FakeIcapServer("av")
         sc = IcapScanner("icap", host="127.0.0.1", port=self.srv.port, method="RESPMOD")
@@ -394,7 +497,8 @@ class Sidecar(unittest.TestCase):
 class AsyncCallback(unittest.TestCase):
     def test_post_send_returns_pending_then_delivers_to_listeners(self):
         submitted, seen, flags = [], [], []
-        sc = AsyncCallbackScanner("async", lambda req, sid: submitted.append((req, sid)), on_flag=flags.append)
+        sc = AsyncCallbackScanner("async", lambda req, sid: submitted.append((req, sid)), on_flag=flags.append,
+                                  hold_until_verdict=False)     # the weaker, non-default post-send mode
         sc.subscribe(lambda ctx, v: seen.append((ctx, v)))
         (v,), _ = run(sc)
         self.assertEqual(v.outcome, "pending")
@@ -488,7 +592,7 @@ class AsyncCallback(unittest.TestCase):
 
     def test_webhook_receiver_requires_hmac(self):
         submitted = []
-        sc = AsyncCallbackScanner("async", lambda req, sid: submitted.append(sid))
+        sc = AsyncCallbackScanner("async", lambda req, sid: submitted.append(sid), hold_until_verdict=False)
         run(sc)
         secret = b"webhook-test-secret-not-real-0001"
         with WebhookReceiver(sc, secret) as wh:

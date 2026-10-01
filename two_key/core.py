@@ -247,12 +247,15 @@ class TwoKey:
     def gateway(self, tools: Mapping[str, Callable[..., Any]] | None = None,
                 extractors: Mapping[str, Extractor] | None = None, *, checkpoint_every: int = 1,
                 view_refresh: str = "token", scanners: Sequence[Any] | None = None,
-                scan_settings: Any = None, file_extractors: Mapping[str, Callable] | None = None) -> ToolGateway:
-        """A tool gateway on this instance's token key and ledger. ``scanners``, ``scan_settings``, and
-        ``file_extractors`` configure optional content scanning (scanning.py); there is none by default."""
+                scan_settings: Any = None, file_extractors: Mapping[str, Callable] | None = None,
+                result_file_extractors: Mapping[str, Callable] | None = None) -> ToolGateway:
+        """A tool gateway on this instance's token key and ledger. ``scanners``, ``scan_settings``,
+        ``file_extractors``, and ``result_file_extractors`` configure optional content scanning
+        (scanning.py); there is none by default."""
         return ToolGateway(self.issuer, self.ledger, self.principal, tools, extractors, digest_alg=self.digest_alg,
                            checkpoint_every=checkpoint_every, view_refresh=view_refresh, scanners=scanners,
-                           scan_settings=scan_settings, file_extractors=file_extractors)
+                           scan_settings=scan_settings, file_extractors=file_extractors,
+                           result_file_extractors=result_file_extractors)
 
     def _deny(self, reason: str, action_rec: dict | None = None, **kw) -> Decision:
         body = {"allowed": False, "reason": reason, "denied_by_rule": kw.get("denied_by_rule"),
