@@ -4,7 +4,7 @@
 
 **Short name:** Two-Key ("two-key")
 
-**Draft prepared:** 2026-09-30. Derived from `docs/INVENTION_DISCLOSURE.md` (disclosure date 30 September 2026, kept unchanged for the record) and updated to match the prototype in this repository. **Updated 2026-09-30, about 7:40 AM MT:** added the cryptographic profile (`docs/CRYPTO.md`), the measured performance (`docs/PERFORMANCE.md`), and the three `PRIOR_ART.md` §4 directions that the author selected at about 7:02 AM MT (§§5.6–5.13, Figures 5–7). **Updated 2026-10-01:** §5.14 (seed-phrase backup and enterprise PKI, Entry 11) and the §6 status table; current per-feature evidence is in `docs/PROVISIONAL_READINESS.md`.
+**Draft prepared:** 2026-09-30. Derived from the original design notes and updated to match the prototype in this repository. **Updated 2026-09-30, about 7:40 AM MT:** added the cryptographic profile (`docs/CRYPTO.md`), the measured performance (`docs/PERFORMANCE.md`), and the three `PRIOR_ART.md` §4 directions that the author selected at about 7:02 AM MT (§§5.6–5.13, Figures 5–7). **Updated 2026-10-01:** §5.14 (seed-phrase backup and enterprise PKI, Entry 11) and the §6 status table; current limitations are in the README section "Security model and limitations".
 
 **Status:** Working draft for review by a registered patent attorney. Not a filed application. Not legal advice.
 
@@ -272,7 +272,7 @@ The author's direction [CN-11]: a seed-phrase backup for personal use and PKI fo
 
 ## 7. Example claims
 
-The seven teaching claims in `docs/INVENTION_DISCLOSURE.md` §7 are **unchanged** and not reproduced here; the attorney should work from that text. This draft adds no claim language.
+Patent claim language was removed from the public tree in v0.1.0. This draft describes the mechanism only.
 
 Themes the attorney may want to consider, by source:
 - User-uploaded human-language constitution, signed by the principal, as the input to Path B, together with compiled hard rules as the input to Path A [CN-1; D §5.1 item 2].

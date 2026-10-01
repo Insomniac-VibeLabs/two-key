@@ -1,0 +1,35 @@
+name: Bug report
+description: Something in the prototype does not match the documented behavior
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what you got.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Version or commit
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Area
+      options:
+        - policy VM
+        - judge quorum
+        - capability token
+        - tool gateway
+        - ledger
+        - scanners
+        - PKI or keys
+        - docs
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction
+      description: A minimal network-free reproduction if you have one. Do not paste keys or ledgers.

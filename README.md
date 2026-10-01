@@ -1,5 +1,7 @@
 # Two-Key
 
+[![tests](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml)
+
 **Two independent keys must turn before an AI agent can act.** Two-Key is
 an authorization layer for AI agents. A language model may *propose* an
 action, but the action reaches a real tool only when a deterministic
@@ -882,8 +884,8 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
 **Other limits**: the ledger isn't encrypted and one process must own it.
 Seed-phrase backup is personal-mode only and off in `fips_mode`.
 
-The full feature-by-feature evidence list, with every stub and open
-question, is in [docs/PROVISIONAL_READINESS.md](docs/PROVISIONAL_READINESS.md).
+Stubs and open questions are listed in this section and in
+[docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md).
 
 ## Testing
 
@@ -907,21 +909,8 @@ python -m unittest discover -s tests 2>&1 | tail -1
 
 ## Contributing
 
-Issues and pull requests are welcome.
-
-1. Create a virtualenv and run `pip install -e ".[yaml,pq]"`.
-2. Make your change with tests. Keep the suite network-free; use the fakes
-   in `two_key/testing.py`, `two_key/pki_testing.py`, and `tests/scan_fakes.py`.
-3. Route all cryptography through `two_key.crypto` (the provider enforces
-   the approved-algorithm list and `fips_mode`).
-4. Run `python -m unittest discover -s tests` and
-   `python tools/doccheck.py README.md docs/HOWTO.md`. If you change
-   behavior that a doc example shows, update the example.
-5. Add a row to `CHANGES.md`. Open design questions belong in
-   `DESIGN_OPTIONS.md` or the open-questions sections of the docs; please
-   don't settle them silently in code.
-6. Never commit keys, ledgers, or credentials (`.gitignore` covers the
-   default file names).
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Report vulnerabilities in private: [SECURITY.md](SECURITY.md).
 
 ## Further documentation
 
@@ -932,11 +921,11 @@ Issues and pull requests are welcome.
 | [docs/DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) | Personal vs enterprise mode, permissioned-ledger anchoring (Fabric, REST) |
 | [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types, outbound and inbound, pros and cons |
 | [docs/CRYPTO.md](docs/CRYPTO.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | FIPS posture and algorithms; measured performance |
-| [docs/PROVISIONAL_READINESS.md](docs/PROVISIONAL_READINESS.md) | Each feature, where it is implemented, its test evidence; stubs and placeholders; open questions |
 | [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md) | Detailed technical description of the mechanisms |
-| `DESIGN_OPTIONS.md`, `F_REVIEW.md` | Open design questions; security review of action-record normalization |
-| `CONCEPTION_NOTES.md`, `CHANGES.md` | Dated design-decision log; every change and who decided it |
-| `docs/INVENTION_DISCLOSURE.md`, `Compact_Kernel_Invention_Package.zip` | The original design write-up and prototype package (historical) |
+| [DESIGN_OPTIONS.md](DESIGN_OPTIONS.md) | Open design questions |
+| [CONCEPTION_NOTES.md](CONCEPTION_NOTES.md), [CHANGES.md](CHANGES.md) | Dated design-decision log; every change and who decided it |
+| [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Vulnerability reports, how to change the code, expected behavior |
+| [llms.txt](llms.txt) | Short plain-text summary for AI tools |
 
 Code layout:
 

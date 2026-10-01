@@ -4,11 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "two-key"
-version = "0.2.0.dev0"
+version = "0.1.0"
 description = "Dual-path constitutional enforcement for AI agents (prototype, not production crypto)"
 requires-python = ">=3.10"
+license = "Apache-2.0"
+keywords = [
+  "ai-agents", "agentic-ai", "ai-safety", "llm-security", "prompt-injection",
+  "guardrails", "policy-engine", "zero-trust", "capability-tokens",
+  "post-quantum-cryptography",
+]
 dependencies = ["cryptography>=41"]
-# No license is declared here on purpose: licensing is the maintainers' decision.
+
+[project.urls]
+Homepage = "https://github.com/Insomniac-VibeLabs/two-key"
+Repository = "https://github.com/Insomniac-VibeLabs/two-key"
+Documentation = "https://github.com/Insomniac-VibeLabs/two-key/blob/main/README.md"
+Changelog = "https://github.com/Insomniac-VibeLabs/two-key/blob/main/CHANGES.md"
+Security = "https://github.com/Insomniac-VibeLabs/two-key/blob/main/SECURITY.md"
 
 [project.optional-dependencies]
 yaml = ["pyyaml>=6"]

@@ -1,0 +1,16 @@
+name: Feature request
+description: A change to the prototype
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    attributes:
+      label: What should change
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Why
+      description: Which fail-closed property this keeps or improves.
+    validations:
+      required: true

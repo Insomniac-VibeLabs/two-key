@@ -124,3 +124,7 @@ Conception is recorded only in `CONCEPTION_NOTES.md`.
 received file). `LICENSE` comes from the original repository's history
 (merged in 0d3a3c9) and has not been changed by this work; licensing is
 The author's decision. Repository visibility was not changed.
+
+## v0.1.0
+
+| 102 | v0.1.0 release prep: removed adopter-facing patent leftovers (`Compact_Kernel_Invention_Package.zip`, `F_REVIEW.md`, `docs/PROVISIONAL_READINESS.md`; invention disclosure replaced with a non-patent pointer). Added `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue templates, `llms.txt`, and a GitHub Actions unittest workflow. Package version set to 0.1.0 with keywords and links. Topic swap `merkle-tree` -> `agentic-ai`. No MCP integration, so `capability-tokens` stays. No authorization behavior changed. Suite: 413 tests, 3 skipped (no SoftHSM) | release files | Maintainer (release checklist) | v0.1.0 |

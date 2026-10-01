@@ -1525,7 +1525,7 @@ dominates all of these.
 The end-to-end demo exercises every capability offline, one check per
 line: seed backup, signing, hybrid signatures, both paths, tokens, the
 gateway, scanning, the ledger, anchoring, and PKI. Exit status 0 means
-every check passed. [PROVISIONAL_READINESS.md](PROVISIONAL_READINESS.md)
+every check passed. the README section "Security model and limitations"
 maps each check to the feature it shows.
 
 <!-- check: expect=^e2e summary: \d+ passed, 0 failed, 0 skipped -->
