@@ -1,7 +1,7 @@
 # Two-Key how-to
 
 A step-by-step guide to every part of the prototype. For the short
-version, see the [README](../README.md#quick-start); for every option in one
+version, see the [README](../README.md#quickstart); for every option in one
 place, see the [configuration reference](../README.md#configuration-reference).
 
 Every command and code block in this file was run, top to bottom, by
@@ -1139,7 +1139,7 @@ include:
 - `capability_redeemed`, `tool_executed`, `tool_error`, `gateway_denied`
 - `revocation`, `anchored`
 
-The ledger isn't encrypted; see [Limitations](../README.md#limitations).
+The ledger isn't encrypted; see [Limitations](../README.md#security-model-and-limitations).
 
 ### Verify
 

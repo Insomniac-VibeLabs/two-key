@@ -1,93 +1,116 @@
-# Two-Key (two-key)
+# Two-Key
 
-Dual-path constitutional enforcement for personal AI agents.
-**Prototype. Not production cryptography. FIPS-approved algorithms, validated module required for compliance.**
+**Two independent keys must turn before an AI agent can act.** Two-Key is
+an authorization layer for AI agents. A language model may *propose* an
+action, but the action reaches a real tool only when a deterministic
+policy check **and** an independent quorum of AI judges both approve it.
+Approved actions get a short-lived, single-use capability token, and every
+decision is written to a tamper-evident ledger signed with your key.
 
-A language model may *propose* an action. Two-Key decides whether
-the action may touch the real world, and it allows the action only when two
-independent paths agree. You write the rules (your "constitution"), you
-choose the AI models that review proposals, and every decision is written
-to a tamper-evident ledger signed with your key.
+> **Status: prototype.** It has not had an independent security review and
+> has not been deployed in production. It uses only FIPS-approved
+> algorithms, but **it is not FIPS validated**; compliance requires running
+> it on a validated module. Read [Security model and
+> limitations](#security-model-and-limitations) before relying on it.
 
 ## Contents
 
-- [How it works](#how-it-works)
-- [Quick start](#quick-start)
-- [The full how-to (docs/HOWTO.md)](#the-full-how-to)
+- [The problem](#the-problem)
+- [Core concepts](#core-concepts)
+- [Architecture](#architecture)
+- [Install](#install)
+- [Quickstart](#quickstart)
+- [End-to-end demo](#end-to-end-demo)
+- [Connecting judges](#connecting-judges)
+- [Content scanners (DLP and antivirus)](#content-scanners-dlp-and-antivirus)
+- [Enterprise setup](#enterprise-setup)
 - [Configuration reference](#configuration-reference)
+- [CLI reference](#cli-reference)
 - [Best practices](#best-practices)
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
-- [Limitations](#limitations)
-- [Repository layout and further docs](#repository-layout-and-further-docs)
-- [Patent posture](#patent-posture)
+- [Security model and limitations](#security-model-and-limitations)
+- [Testing](#testing)
+- [Contributing](#contributing)
+- [Further documentation](#further-documentation)
+- [License](#license)
 
-## How it works
+## The problem
 
-```text
- any LLM ──proposal──▶ Two-Key ──single-use token──▶ Tool gateway ──▶ tool
-                           │                                     │
-                           ├─ Path A: Policy VM over compiled    ├─ checks token, args, scope,
-                           │  hard rules (never reads English)   │  ledger root, constitution hashes,
-                           ├─ Path B: quorum of AI judges you    │  revocation, single use
-                           │  choose, reading your constitution  │
-                           └────────── Personal ledger: hash chain + Merkle tree, head signed by your key
+Agents that can send email, move money, or call APIs are only as safe as
+the model driving them. Prompt injection, a confused model, or a vendor
+change can turn "draft a reply" into "wire $4,800 offshore". Guardrails
+inside the model, or a single LLM checking another LLM, can be talked out
+of their rules.
+
+Two-Key moves the decision outside the model. Neither key alone can open
+the lock:
+
+- **Path A** is a small deterministic virtual machine that runs your hard
+  rules over a structured action record. It never reads English, so there
+  is no prompt to inject.
+- **Path B** is a quorum of AI judges, on providers you choose, that check
+  the action against your plain-language constitution.
+
+Only the tool gateway holds tool credentials, and it runs a tool only with
+a valid token for exactly the arguments that were approved.
+
+## Core concepts
+
+| Concept | What it does | Details |
+|---|---|---|
+| **Constitution** | One document you write: plain-language prose plus a ```` ```twokey-rules ```` JSON block of hard rules. You sign it; anything unsigned, modified, or signed by another key (including a model vendor's) is refused. One signed source is compiled twice: rules to bytecode for Path A, prose to the judge prompt for Path B. Both hashes are recorded and bound into ballots and tokens | [HOWTO §3–4](docs/HOWTO.md) |
+| **Path A: policy VM** | Compiled hard rules (`allow_only_tools`, `deny_if`, spend caps, blocked counterparties, …) run on a stack VM over fields such as `tool`, `amount_usd`, `counterparty`, `data_class`, `irreversible`. Any fault is a deny | [Rules](#constitution-rules-and-action-fields) |
+| **Path B: judge quorum** | N judges (xAI, OpenAI-compatible, Anthropic, Gemini, Ollama, or any local server) return strict JSON ballots. Approval needs **T** yes votes after an availability floor **K**, with optional vendor-diversity and local-model floors. Malformed, late, or failed ballots abstain. They never count as yes | [Connecting judges](#connecting-judges) |
+| **Both must agree** | A token is issued only when Path A **and** Path B pass. By default Path B isn't consulted after a Path A deny, so forbidden proposals never leave the machine | |
+| **Capability token** | Short-lived (30 s default) and single-use. Bound to the tool, the exact argument bytes, the scope (amount, counterparty, data class), the ledger's Merkle root, and the constitution hashes. HMAC-SHA-384 by default, or signed (`tk1-sig`) | |
+| **Tool gateway (frozen bytes)** | The only component that runs tools. The call is serialized once into immutable bytes. Those bytes are hashed, checked against the token, scanned, and passed to the tool, so arguments can't change between check and use. It also checks scope, expiry, revocation, constitution reloads, single use (shared by every gateway on a ledger), and, via a Merkle consistency proof, that the token's ledger root is an ancestor of the current ledger | [HOWTO §9](docs/HOWTO.md) |
+| **Signed Merkle ledger** | Every proposal, VM result, ballot, token, scan, and execution is appended to a JSONL hash chain with an RFC 9162 Merkle tree. The head is signed with your key, so rewriting, truncating, or unsigned appends are detected. Inclusion and consistency proofs are available | [HOWTO §12](docs/HOWTO.md) |
+| **Anchoring and `deployment_mode`** | `personal` (default): the ledger stays local, optionally anchored to a local file. `enterprise`: every signed head is anchored to a permissioned chain (Hyperledger Fabric or a REST adapter), failing closed, and PKI identities are required. The mode is fixed once per ledger | [DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) |
+| **DLP / AV scanning hooks** | Optional third-party scanners see the exact bytes leaving (outbound) and the tool results or files coming back (inbound). There are five hook types: vendor API, ICAP, in-process plugin, local sidecar, and async webhook. Any conviction denies; timeouts and errors block by default | [SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) |
+| **Hybrid post-quantum crypto** | Ed25519, ECDSA P-384, and hybrid **ML-DSA-65** + Ed25519/P-384 (FIPS 204), where both halves must verify and downgrades are refused. Hashes are SHA-384 and HMAC-SHA-384. All crypto goes through one provider with an approved-algorithm list, `fips_mode`, and a known-answer self-test at startup | [CRYPTO.md](docs/CRYPTO.md) |
+| **Seed-phrase backup** | Optional (personal mode): the key can be derived from a 24-word BIP-39 phrase plus an optional passphrase. Per-algorithm keys come from HKDF-SHA-384, and recovery and verification commands are included. Refused in `fips_mode` and in enterprise mode | [KEYS_AND_PKI.md §1](docs/KEYS_AND_PKI.md) |
+| **PKI identities** | Enterprise: the principal, agents, and judges are X.509 identities. Two-Key checks the chain to your trust anchors, validity, key usage, and CRL/OCSP revocation, and maps the subject or SAN to roles. Agents sign a fresh, non-replayable assertion per request. Keys can live on PKCS#11 HSMs or smart cards. An ML-DSA-65 key is bound to the certificate by an extension | [KEYS_AND_PKI.md §2](docs/KEYS_AND_PKI.md) |
+
+## Architecture
+
+<!-- check: skip diagram, rendered by GitHub -->
+```mermaid
+flowchart TB
+  Agent["AI agent (any LLM)"] -- "1. proposal + action record<br/>(+ agent assertion, enterprise)" --> TK
+  C["Signed constitution<br/>prose + twokey-rules block"] --> A
+  C --> B
+  subgraph TK["Two-Key"]
+    A["Path A: policy VM<br/>compiled hard rules, no English"]
+    B["Path B: judge quorum<br/>models you choose read the prose"]
+    I["Token issuer<br/>allow only if A and B pass"]
+    A --> I
+    B --> I
+  end
+  I -- "2. single-use capability token" --> Agent
+  Agent -- "3. token + literal tool args" --> G["Tool gateway<br/>frozen bytes, scope, ledger root, single use"]
+  G <-- "outbound and inbound" --> S["DLP / antivirus scanners<br/>(optional hooks)"]
+  G -- "4. executes" --> T["Real tools"]
+  TK --> L[("Signed ledger<br/>hash chain + Merkle tree")]
+  G --> L
+  L --> X["Anchor<br/>personal: local file<br/>enterprise: permissioned chain"]
+  P["Enterprise PKI<br/>X.509, CRL/OCSP, roles, PKCS#11"] -.-> TK
 ```
 
-1. **Constitution.** You write one document: plain-language prose plus a
-   block of structured hard rules. You sign it with your key. Two-Key
-   refuses anything that is unsigned, modified, or signed by any other key,
-   including a model vendor's.
-2. **Path A (deterministic).** The hard rules are compiled to bytecode for a
-   small stack VM. The VM reads only structured fields of a normalized action
-   record (`tool`, `amount_usd`, `counterparty`, `data_class`,
-   `irreversible`, …), never the prose, so prompt injection has nothing to
-   work on. Any fault is a deny.
-3. **Path B (judgment).** A quorum of judges runs on the AI providers you
-   pick: xAI, OpenAI, Anthropic, Gemini, a local Ollama model, or any
-   OpenAI-compatible server. Each judge checks the action against your prose
-   and returns a strict JSON ballot. Two-Key counts booleans against an
-   approval threshold **T**, after an availability floor **K** and optional
-   vendor-diversity floors. A malformed, late, or failed ballot is an
-   abstention, never a yes.
-4. **Both must agree.** Only if Path A *and* Path B pass does Two-Key
-   issue a capability token. By default Path B isn't consulted when Path A
-   already denies, so forbidden proposals never leave the machine.
-5. **Capability token.** The token is short-lived (30 s by default) and
-   single-use. It is bound to the tool, the exact arguments (hash), the
-   amount/counterparty/data-class scope, the ledger's Merkle root, and the
-   hashes of both compiled forms of your constitution.
-6. **Tool gateway.** The gateway is the only component that runs tools.
-   Before a tool runs it checks the token, the literal arguments, and the
-   scope. It uses a Merkle consistency proof to check that the token's
-   ledger root is an ancestor of the ledger it knows. It also checks that
-   the constitution hasn't been reloaded and the token hasn't been revoked
-   since issuance, and that the token is used only once.
-7. **Personal ledger.** Every proposal, VM result, ballot, token, and tool
-   execution is appended to a JSONL hash chain with a Merkle tree. The chain
-   head is signed with your key, so rewriting, truncating, or appending
-   without your key is detected.
-8. **Keys and identities.** For personal use, the key can optionally be
-   backed up as a 24-word seed phrase. In enterprise mode, the principal,
-   agents, and judges are X.509 certificate identities from your PKI:
-   chain-checked, revocation-checked, mapped to roles, and optionally held
-   on a PKCS#11 HSM or smart card ([docs/KEYS_AND_PKI.md](docs/KEYS_AND_PKI.md)).
-
-Diagrams: [architecture](docs/figures/architecture.svg),
+More diagrams: [architecture](docs/figures/architecture.svg),
 [authorize flow](docs/figures/authorize_flow.svg),
 [token and gateway](docs/figures/token_gateway_sequence.svg),
 [ledger](docs/figures/ledger_structure.svg),
 [ledger-root-bound token](docs/figures/ledger_root_token.svg),
 [one constitution, two compilations](docs/figures/two_compilations.svg),
 [quorum protocol](docs/figures/quorum_protocol.svg)
-(index: [docs/figures/README.md](docs/figures/README.md)).
+([index](docs/figures/README.md)).
 
-## Quick start
+## Install
 
-Requires Python ≥ 3.10. Every command below is run from the repository root
-and has been checked with `tools/doccheck.py` (see [FAQ](#faq)).
-
-**1. Install**
+Requires Python ≥ 3.10. Two-Key is not on PyPI yet; install from a clone.
+Every command in this README is run from the repository root and is
+checked automatically by `tools/doccheck.py` (see [Testing](#testing)).
 
 <!-- check: skip the checker runs in a copy of this repository instead of cloning it -->
 ```bash
@@ -105,10 +128,19 @@ python -m unittest discover -s tests 2>&1 | tail -1
 python -m two_key selftest    # crypto known-answer self-test
 ```
 
-**2. Create your key**
+| Extra | Installs | Needed for |
+|---|---|---|
+| (none) | `cryptography>=41` | Ed25519 / P-384, everything except ML-DSA |
+| `yaml` | `pyyaml` | YAML judge and deployment config files |
+| `pq` | `cryptography>=50` | ML-DSA-65 hybrid suites |
+| `keyring` | `keyring` | API keys from the OS keyring |
+| `liboqs` | `liboqs-python` | Alternative ML-DSA backend (not FIPS; refused in `fips_mode`) |
+| `pip install python-pkcs11` | `python-pkcs11` | Keys on a PKCS#11 HSM or smart card (optional) |
 
-The passphrase is read from an environment variable, so it doesn't end up
-in your shell history or on the command line.
+## Quickstart
+
+**1. Create your key.** The passphrase is read from an environment
+variable, so it doesn't end up in your shell history.
 
 <!-- check: expect=^fingerprint: -->
 ```bash
@@ -118,12 +150,12 @@ python -m two_key keygen --out ~/.two-key --passphrase-env TWOKEY_KEY_PASSPHRASE
 
 This writes `~/.two-key/principal.pem` (private, mode 0600, encrypted)
 and `principal.pub.pem`. For a post-quantum hybrid key add
-`--suite hybrid-mldsa65-ed25519`; see [HOWTO §2](docs/HOWTO.md#2-keys).
+`--suite hybrid-mldsa65-ed25519`. To get a 24-word backup phrase add
+`--seed-phrase` ([HOWTO §2](docs/HOWTO.md#2-keys)).
 
-**3. Write and sign your constitution**
-
-Start from the example. It is Markdown prose with exactly one
-```` ```twokey-rules ```` JSON block holding the hard rules for Path A.
+**2. Write and sign your constitution.** Start from the example: Markdown
+prose with exactly one ```` ```twokey-rules ```` JSON block holding the
+hard rules.
 
 <!-- check: expect=^OK: principal=did:twokey:alice -->
 ```bash
@@ -135,11 +167,9 @@ python -m two_key verify-constitution \
     --signed my-constitution.signed.json --pub ~/.two-key/principal.pub.pem
 ```
 
-**4. Configure your judges**
-
-Write `judges.yaml`. It names the environment variables that hold your API
-keys; the keys themselves never go in the file. Replace each `<…>` model
-name with a model your account can use.
+**3. Configure your judges.** `judges.yaml` names the environment
+variables that hold your API keys; the keys never go in the file. Replace
+each `<…>` with a model your account can use.
 
 <!-- check: file=judges.yaml -->
 ```yaml
@@ -172,38 +202,53 @@ read -rsp "xAI API key: " XAI_API_KEY; echo; export XAI_API_KEY
 read -rsp "Anthropic API key: " ANTHROPIC_API_KEY; echo; export ANTHROPIC_API_KEY
 ```
 
-**5. Run the offline demo** (test-double judges, temporary files, no network)
+**4. Try the small offline demo** (test-double judges, temporary files, no
+network):
 
 <!-- check: expect=verify: ok -->
 ```bash
 python -m two_key demo
 ```
 
-**6. Authorize an action and run it through the gateway**
+**5. Put Two-Key between your agent and a tool.** First a small setup
+module that the later examples reuse:
 
-<!-- check: file=my_agent.py -->
+<!-- check: file=tk_setup.py -->
 ```python
+"""tk_setup.py: build a TwoKey from the files created above."""
 import os
 from pathlib import Path
 
 from two_key import keys
 from two_key.constitution import load_envelope
-from two_key.judges.config import load_config_file
 from two_key.core import TwoKey
+from two_key.judges.config import load_config_file
 
-home = Path.home() / ".two-key"
-key = keys.load_private_any(home / "principal.pem", os.environ["TWOKEY_KEY_PASSPHRASE"].encode())
-judges, quorum = load_config_file(Path("judges.yaml"))
-tk = TwoKey(load_envelope(Path("my-constitution.signed.json")),
-                       keys.load_public_any(home / "principal.pub.pem"),
-                       home / "ledger.jsonl", judges,
-                       ledger_signing_key=key, quorum_policy=quorum)
+HOME = Path.home() / ".two-key"
+
+
+def load_key():
+    return keys.load_private_any(HOME / "principal.pem", os.environ["TWOKEY_KEY_PASSPHRASE"].encode())
+
+
+def make_two_key(ledger="ledger.jsonl", **options):
+    judges, quorum = load_config_file(Path("judges.yaml"))
+    options.setdefault("quorum_policy", quorum)
+    return TwoKey(load_envelope(Path("my-constitution.signed.json")),
+                  keys.load_public_any(HOME / "principal.pub.pem"),
+                  HOME / ledger, judges, ledger_signing_key=load_key(), **options)
+```
+
+<!-- check: file=my_agent.py -->
+```python
+from tk_setup import make_two_key
 
 
 def pay_bill(payee, amount):          # your real tool; only the gateway calls it
     return f"paid {amount} to {payee}"
 
 
+tk = make_two_key()
 gateway = tk.gateway(tools={"pay_bill": pay_bill})
 args = {"payee": "power-co.example", "amount": 42.5}           # the literal tool-call arguments
 action = {"tool": "pay_bill", "amount_usd": 42.5, "counterparty": "power-co.example",
@@ -234,58 +279,232 @@ gateway: executed paid 42.5 to power-co.example
 OK: ok (entries=9)
 ```
 
-If Ollama isn't running, the local judge abstains and the other two still
-meet K = 2 and T = 2. If a judge can't be reached, see
-[Troubleshooting](#troubleshooting).
+If Ollama isn't running, the local judge abstains, and the other two still
+meet K = 2 and T = 2. A wire transfer, a payment over the $200 cap, or a
+blocked counterparty is denied by Path A with the rule's id in
+`decision.reason`, and the judges are never asked.
 
-## The full how-to
+## End-to-end demo
 
-[docs/HOWTO.md](docs/HOWTO.md) walks through every piece with commands and
-code that were run to check them:
+`python -m two_key e2e-demo` exercises every capability offline in eight
+sections (42 checks), with no vendor credentials. It uses test-double
+judges, pattern scanners, a throwaway test CA, a software PKCS#11 token,
+and an in-memory permissioned chain:
 
-1. Install · 2. Keys (Ed25519, ECDSA P-384, hybrid ML-DSA-65) · 3. Writing a
-constitution (prose, the `twokey-rules` block, rule types, action fields) ·
-4. Signing, verifying, loading, and reloading · 5. Judges for each provider
-(OpenAI-compatible/xAI, local servers, Ollama, Anthropic, Gemini) · 6. Auth
-modes (env, keyring, SSO callback, and the username/password and
-device-code stubs) · 7. Quorum settings (T, K, `min_vendors`,
-`min_local_judges`, `section4()`, timeouts, parallelism, ballot binding) ·
-8. Authorizing actions · 9. Gateway integration · 10. Ordering and
-short-circuit · 11. Revocation · 12. The ledger (verify, Merkle proofs,
-head signing, fsync, anchoring, deployment mode) · 13. Crypto (`fips_mode`, classic vs
-hybrid, P-384, `require_pq`, token modes, self-test) · 14. Performance and
-tests
+1. seed-phrase backup and recovery, plus the refusals in `fips_mode` and
+   enterprise mode;
+2. constitution upload and signing, and rejection of tampered or foreign
+   signatures;
+3. hybrid ML-DSA-65 + Ed25519 signatures, with either half missing
+   refused;
+4. Path A + Path B, both required, each able to deny on its own;
+5. capability tokens and the gateway: single use, argument and tool
+   binding, frozen bytes;
+6. outbound and inbound DLP and antivirus scanning;
+7. the ledger: hash chain, signed head, Merkle inclusion and consistency
+   proofs, local anchoring, tamper detection;
+8. enterprise: PKI identities, startup refusals, agent assertions with a
+   PKCS#11 key, OCSP revocation, fail-closed revocation, permissioned-chain
+   anchoring.
+
+<!-- check: expect=^\[PASS\] both paths pass -> capability token issued -->
+<!-- check: expect=^\[PASS\] frozen bytes: a mutation after checking never reaches the tool -->
+<!-- check: expect=^e2e summary: \d+ passed, 0 failed, 0 skipped -->
+```bash
+python -m two_key e2e-demo
+```
+
+It exits non-zero if any check fails. Without an ML-DSA backend, the
+hybrid section is reported as SKIP. `tests/test_e2e_demo.py` runs the demo
+as part of the test suite.
+
+## Connecting judges
+
+Each entry under `judges:` in `judges.yaml` is one judge. Every adapter
+sends your constitution's prose and the normalized action record, marked
+as untrusted data, and accepts only a strict JSON ballot.
+
+| `type` | Provider | Default `base_url` | Default auth header |
+|---|---|---|---|
+| `openai_compatible` | xAI, OpenAI, Together, vLLM, LM Studio, llama.cpp server, … | required | `bearer` |
+| `anthropic` | Anthropic | `https://api.anthropic.com` | `x-api-key` |
+| `gemini` | Google Gemini | `https://generativelanguage.googleapis.com` | `x-goog-api-key` |
+| `ollama` | Local Ollama | `http://localhost:11434` | `none` |
+
+Credentials (`auth:`) come from an environment variable (`env`), the OS
+keyring (`keyring`), or your own SSO/OAuth code (`callback`). A secret
+written in the file is refused. The `username_password` and
+`oauth_device_code` modes are hook points that need your login function;
+no vendor login is built in.
+
+For a sturdier quorum, use at least three judges from at least two
+vendors, one on local weights, and the stricter profile in Python:
+
+<!-- check: expect=^min_vendors=2 min_local_judges=1 record_only True -->
+```python
+from two_key.quorum import QuorumPolicy
+
+p = QuorumPolicy.section4(required_yes=2, min_responding=3)
+print(f"min_vendors={p.min_vendors} min_local_judges={p.min_local_judges}", p.judge_inputs, p.require_path_a_first)
+```
+
+Every key is listed in the [configuration reference](#judgesyaml-quorum-section-quorumpolicy).
+Per-provider walkthroughs are in [HOWTO §5–7](docs/HOWTO.md).
+
+## Content scanners (DLP and antivirus)
+
+Pass `scanners=[...]` to `tk.gateway()` to send outbound content (the
+exact argument bytes, decoded strings, and attachments you extract) and
+inbound content (tool results, returned files) to DLP or antivirus
+software. With no scanners, the gateway behaves as before.
+
+| Hook type | Class | Use for |
+|---|---|---|
+| Vendor API (REST or gRPC) | `VendorApiScanner` | Cloud DLP/AV APIs, mapped by a `ResponseMapping` |
+| ICAP (RFC 3507) | `IcapScanner` | Proxy-style DLP/AV appliances (REQMOD out, RESPMOD in) |
+| In-process plugin | `PatternScanner`, `ClamdScanner`, the plugin registry | Regex rules, ClamAV |
+| Local sidecar | `SidecarScanner` | A daemon on a Unix socket or loopback (e.g. clamd INSTREAM) |
+| Asynchronous | `AsyncCallbackScanner` + `WebhookReceiver` | Scanners that answer later through a webhook; holds until the verdict by default |
+
+The example uses the built-in `PatternScanner` (an example plugin, not a
+DLP product) against the files from the quickstart:
+
+<!-- check: expect=^dlp, labelled public: scan_data_class_mismatch -->
+<!-- check: expect=^av, EICAR attachment: scan_blocked:example-av -->
+<!-- check: expect=^inbound, EICAR result: result_withheld:scan_blocked:example-av -->
+```python
+import base64
+from two_key.scanning import EICAR, PatternRule, PatternScanner
+from tk_setup import make_two_key
+
+tk = make_two_key("scan-demo.jsonl")
+dlp = PatternScanner("example-dlp", kind="dlp",
+                     rules=[PatternRule("dx", rb"(?i)diagnosis", label="health", data_class="medical")])
+av = PatternScanner("example-av", kind="av", rules=PatternScanner.example_rules())
+fields = {"counterparty": "clinic.example", "data_class": "public"}
+
+
+def token(args):
+    return tk.authorize({"tool": "email_draft", "counterparty": "clinic.example", "data_class": "public",
+                         "irreversible": False}, "Draft the note.", args).capability
+
+
+note = {"to": "clinic.example", "body": "Diagnosis: example condition"}
+gw = tk.gateway(tools={"email_draft": lambda to, body: "drafted"}, scanners=[dlp])
+print("dlp, labelled public:", gw.invoke(token(note), "email_draft", note, fields).reason)
+
+mail = {"to": "clinic.example", "body": "see attached", "attachment_b64": base64.b64encode(EICAR).decode()}
+gw = tk.gateway(tools={"email_draft": lambda to, body, attachment_b64: "drafted"}, scanners=[av],
+                file_extractors={"email_draft": lambda a: [("att", base64.b64decode(a["attachment_b64"]),
+                                                            "application/octet-stream")]})
+print("av, EICAR attachment:", gw.invoke(token(mail), "email_draft", mail, fields).reason)
+
+gw = tk.gateway(tools={"email_draft": lambda to, body: EICAR}, scanners=[av])
+plain = {"to": "clinic.example", "body": "hello"}
+print("inbound, EICAR result:", gw.invoke(token(plain), "email_draft", plain, fields).reason)
+```
+
+`ScanSettings(timeout_seconds=10, on_timeout="block")` controls the wait
+and what a timeout does. Scanner errors are logged and treated like
+timeouts, scanners run in parallel, and any conviction denies. Every
+verdict (scanner id and version, payload digest, outcome) is recorded in
+the ledger. Details: [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md).
+
+## Enterprise setup
+
+Enterprise mode is for organizations that want an auditable trail outside
+any one machine and identities from their own PKI. It needs:
+
+1. `deployment_mode="enterprise"` (argument, the `TWOKEY_DEPLOYMENT_MODE`
+   environment variable, or `deployment_mode:` in a config file; all
+   sources that are set must agree);
+2. a **permissioned-chain anchor**: `FabricAnchor` (Hyperledger Fabric,
+   through your gateway client or `FabricAnchor.from_fabric_sdk_py(...)`),
+   `RestPermissionedAnchor` (any chain behind a JSON API), or your own
+   `PermissionedLedgerAnchor` subclass. Every signed head is anchored, and
+   an anchoring failure denies the action;
+3. **PKI**: `pki=PkiConfig(...)` (or a `pki:` section in the config file)
+   with your trust anchors, intermediates, CRLs and/or OCSP, and a
+   `role_map`; plus the principal's certificate as `principal_credential`.
+   Two-Key refuses to start without them;
+4. **agent identities**: each `authorize` call carries an assertion that
+   the agent signs with its certified key (`pki.sign_agent_request`), and
+   that key can be on a PKCS#11 token (`pki.PythonPkcs11Token(module,
+   token_label, pin)`).
+
+A config file looks like this (paths are relative to the file):
+
+<!-- check: skip needs your own CA files; the runnable example below builds the same setup in code -->
+```yaml
+deployment_mode: enterprise
+pki:
+  trust_anchors: [root-ca.pem]
+  intermediates: [issuing-ca.pem]
+  crls: [issuing-ca.crl, root-ca.crl]
+  network_revocation: false      # true: fetch CRL DPs / query OCSP over HTTP
+  revocation: ocsp_then_crl
+  revocation_unreachable: fail_closed
+  role_map:
+    "email:alice@acme.example": [principal]
+    "uri:spiffe://acme.example/agent/ops": [agent]
+    "dns:judge-1.acme.example": [judge]
+```
+
+The runnable example below uses a throwaway test CA (`TestPki`), a fake
+PKCS#11 token, and an in-memory Fabric stand-in, so it runs anywhere.
+Replace them with your CA files, `PythonPkcs11Token`, and your Fabric
+client:
+
+<!-- check: expect=^refused: .*requires PKI identities -->
+<!-- check: expect=^no assertion: agent_identity_required -->
+<!-- check: expect=^certified agent: dual_path_pass -->
+<!-- check: expect=^after revocation: agent_identity_rejected:revoked -->
+<!-- check: expect=^anchored heads: ok -->
+```python
+from two_key import pki
+from two_key.anchoring import FabricAnchor, check_anchored_entries
+from two_key.core import TwoKeyConfigError
+from two_key.e2e_demo import InMemoryFabric
+from two_key.pki_testing import SoftwareToken, TestPki
+from tk_setup import load_key, make_two_key
+
+ca = TestPki()                                            # your CA in production
+roles = {"email:alice@example.com": ["principal"], "uri:spiffe://example.com/agent/ops": ["agent"]}
+cert, _ = ca.issue("Alice", email="alice@example.com", key=load_key())
+anchor = FabricAnchor(InMemoryFabric(), channel="audit", chaincode="twokey-anchor")
+
+try:
+    make_two_key("enterprise.jsonl", deployment_mode="enterprise", anchor=anchor)
+except TwoKeyConfigError as e:
+    print("refused:", e)
+
+tk = make_two_key("enterprise.jsonl", deployment_mode="enterprise", anchor=anchor,
+                  pki=ca.config(roles, ocsp=True), principal_credential=ca.credential(cert))
+token = SoftwareToken()                                   # stands in for an HSM or smart card
+agent, agent_key = ca.identity("Ops Agent", uri="spiffe://example.com/agent/ops", key=token.generate("ops"))
+action = {"tool": "search", "data_class": "public", "irreversible": False}
+
+print("no assertion:", tk.authorize(action, "Search.", {}).reason)
+signed = pki.sign_agent_request(agent, agent_key, action, "Search.", {})
+print("certified agent:", tk.authorize(action, "Search.", {}, agent_assertion=signed).reason)
+ca.revoke(agent.certificate)                              # the OCSP responder now answers "revoked"
+signed = pki.sign_agent_request(agent, agent_key, action, "Search.", {})
+print("after revocation:", tk.authorize(action, "Search.", {}, agent_assertion=signed).reason)
+checks = check_anchored_entries(tk.ledger, load_key().public_key(), anchor)
+print("anchored heads:", ", ".join(sorted({c.reason for c in checks})), f"({len(checks)})")
+```
+
+For real certificates, load them with `pki.Credential.from_pem(cert,
+chain)` and the configuration with `PkiConfig.from_mapping(...)` or the
+`pki:` file section. The checks, the ML-DSA-65 binding extension, and the
+placeholder defaults are in [docs/KEYS_AND_PKI.md](docs/KEYS_AND_PKI.md).
+The Fabric chaincode contract and receipt checks are in
+[docs/DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md).
 
 ## Configuration reference
 
-Every option below is taken from the code (`two_key/`). Defaults are
-the values used when the option is omitted.
-
-### Command line: `python -m two_key [global options] <command>`
-
-The installed console script `two-key` is the same program.
-
-| Option / command | Default | Allowed values | What it does |
-|---|---|---|---|
-| `--fips` (global) | off | flag | `fips_mode`: refuse non-approved algorithms and the liboqs backend |
-| `--pq-backend` (global) | `auto` | `auto`, `pyca`, `liboqs`, `none` | ML-DSA backend. `auto` = pyca if its OpenSSL has ML-DSA, else liboqs (not in FIPS mode), else none |
-| `keygen --out DIR` | required | directory | Writes `principal.pem`/`principal.pub.pem` (ed25519) or `principal.keys.json`/`principal.pub.json` (other suites). Refuses to overwrite |
-| `keygen --suite` | `ed25519` | `ed25519`, `ecdsa-p384`, `hybrid-mldsa65-ed25519`, `hybrid-mldsa65-p384` | Signature suite of the principal key |
-| `keygen --seed-phrase` | off | flag | Derive the key from a new 24-word BIP-39 phrase, printed once. Personal mode only; refused with `--fips`. `--seed-passphrase-env VAR` / `--seed-passphrase-prompt` add the optional BIP-39 passphrase |
-| `recover-key --out DIR [--suite S] [--expect-pub FILE]` | | | Rebuild the key file from the 24 words (stdin or hidden prompt). With `--expect-pub`, writes nothing unless the result matches |
-| `verify-seed-phrase [--pub FILE]` | | | Check the words' checksum and, with `--pub`, that they re-derive that key. Writes nothing |
-| `--passphrase-env VAR` (keygen, sign-constitution) | prompt | env var name | Read the key passphrase from `VAR`. Without it and without `--no-passphrase` you are prompted (empty = none) |
-| `--no-passphrase` (keygen, sign-constitution) | off | flag | Unencrypted private key (testing only) |
-| `sign-constitution --document FILE` | — | `.md`/`.markdown`/`.txt` with one `twokey-rules` block | Sign a single-source constitution (format `/2`) |
-| `sign-constitution --text FILE --rules FILE` | — | text: `.txt`/`.md`/`.markdown` (≤ 1 MB); rules: `.json`/`.yaml`/`.yml` | Sign prose and rules as separate fields (format `/1`). Use either this or `--document` |
-| `sign-constitution --principal ID --key FILE --out FILE` | required | any non-empty id; PEM or `.keys.json` | Principal id, private key, output envelope |
-| `verify-constitution --signed FILE --pub FILE` | required | | Verify signature, hashes, and rules; exit 1 on failure |
-| `verify-ledger --ledger FILE --pub FILE` | required | | Verify hash chain, signed head, size, Merkle root; exit 1 on failure |
-| `check-judges --config FILE` | required | `.yaml`/`.yml` or `.json` | Validate a judge config without network calls |
-| `selftest [--require-pq]` | | flag | Run the crypto self-test and print the provider; `--require-pq` fails without ML-DSA |
-| `demo` | | | Offline demo with test-double judges |
-| `e2e-demo` | | | Every capability end to end, offline (seed backup, signing, both paths, tokens, gateway, scanning, ledger, anchoring, PKI). Exit 0 = every check passed |
-| `python bench.py [--quick] [--json FILE]` | full run | | Latency and memory benchmark (`docs/PERFORMANCE.md`) |
+Every option below is taken from the code (`two_key/`). Defaults are the
+values used when the option is omitted.
 
 ### `judges.yaml`: `quorum:` section (`QuorumPolicy`)
 
@@ -367,7 +586,7 @@ the file is loaded.
 | `allow_test_doubles` | `False` | bool | Permit `two_key.testing` judges (demos and tests only) |
 | `clock` | `time.time` | callable | Clock for token issue and expiry (tests) |
 | `deployment_mode` | `personal` (or `TWOKEY_DEPLOYMENT_MODE`, or the config file) | `personal`, `enterprise` | Set once per ledger. `enterprise` requires a permissioned-chain `anchor` and PKI identities (`pki`, `principal_credential`). All sources that are set must agree. See `docs/DEPLOYMENT_MODES.md` |
-| `deployment_config` | none | path to a JSON/YAML file with `deployment_mode:` | Config-file source for the mode |
+| `deployment_config` | none | path to a JSON/YAML file with `deployment_mode:` (and optionally `pki:`) | Config-file source for the mode and PKI |
 | `anchor` | none | `NullAnchor`, `LocalFileAnchor` (personal); `FabricAnchor`, `RestPermissionedAnchor` (enterprise) | Publish every signed head. In enterprise mode, a failure denies the action (fails closed) |
 | `pki` | none (required in enterprise mode) | `PkiConfig`, `PkiVerifier`, or a mapping; or a `pki:` section in `deployment_config` | Trust anchors, CRL/OCSP revocation (`revocation_unreachable="fail_closed"` by default), `role_map`, `require_agent_identity` (default `True`), `require_judge_identities` (default `False`). See `docs/KEYS_AND_PKI.md` |
 | `principal_credential` | none (required in enterprise mode) | `pki.Credential` | The principal's certificate (and ML-DSA-65 key for hybrid). Must verify for role `principal` and certify `trusted_public_key` |
@@ -388,9 +607,9 @@ extractors=None, checkpoint_every=1, view_refresh="token")`,
 | `gateway(checkpoint_every=)` | `1` | int ≥ 0 | Sign the ledger head every N calls; `0` = you call `tk.ledger.checkpoint()` |
 | `gateway(view_refresh=)` | `token` | `token`, `every_call` | Advance the gateway's ledger view from verified tokens, or also on every call |
 | `gateway(scanners=)` | none | list of `ContentScanner` | Optional third-party DLP/antivirus hooks (API, ICAP, plugin, sidecar, async); none required. See [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) |
-| `gateway(scan_settings=)` | `ScanSettings()` | `timeout_seconds` (10), `on_timeout` (`block`/`allow`), `payload` (`exact`/`digest_only`), `order` (`parallel`/`sequential`) | The author's decisions (Entries 6 and 7): timeout configurable, defaulting to block; scanner errors logged and treated like timeouts; parallel; any conviction denies; scanners get the exact bytes and decoded strings |
+| `gateway(scan_settings=)` | `ScanSettings()` | `timeout_seconds` (10), `on_timeout` (`block`/`allow`), `payload` (`exact`/`digest_only`), `order` (`parallel`/`sequential`) | Timeout configurable, defaulting to block; scanner errors logged and treated like timeouts; parallel; any conviction denies; scanners get the exact bytes and decoded strings |
 | `gateway(file_extractors=)` | `{}` | `{name: fn(args) -> [(name, bytes, content_type)]}` | File parts to scan, e.g. decoded attachments |
-| `gateway(result_file_extractors=)` | `{}` | `{name: fn(result) -> [(name, bytes, content_type)]}` | Inbound file parts: tool results are scanned before the agent gets them (Entry 7) |
+| `gateway(result_file_extractors=)` | `{}` | `{name: fn(result) -> [(name, bytes, content_type)]}` | Inbound file parts: tool results are scanned before the agent gets them |
 | `PersonalLedger(auto_sign_every=)` | `1` | int ≥ 0 | Direct ledger use: sign after every N appends; `0` = only on `checkpoint()` |
 | `PersonalLedger(digest_alg=, fsync=)` | from key / `True` | as above | Same meaning as the `TwoKey` options |
 | `CryptoProvider(fips_mode=)` | `False` | bool | Refuse non-approved algorithms (`CryptoPolicyError`) and liboqs |
@@ -418,12 +637,41 @@ extractors=None, checkpoint_every=1, view_refresh="token")`,
 | `tags`, `raw` | `[]`, `{}` | list of strings; mapping (logged, never read by Path A) |
 
 Environment variables: the package reads only the variables you name
-(`auth.var`, `auth.password_env`, `--passphrase-env`).
+(`auth.var`, `auth.password_env`, `--passphrase-env`, `--seed-passphrase-env`)
+and `TWOKEY_DEPLOYMENT_MODE`.
+
+## CLI reference
+
+`python -m two_key [global options] <command>`. The installed console
+script `two-key` is the same program.
+
+| Option / command | Default | Allowed values | What it does |
+|---|---|---|---|
+| `--fips` (global) | off | flag | `fips_mode`: refuse non-approved algorithms and the liboqs backend |
+| `--pq-backend` (global) | `auto` | `auto`, `pyca`, `liboqs`, `none` | ML-DSA backend. `auto` = pyca if its OpenSSL has ML-DSA, else liboqs (not in FIPS mode), else none |
+| `keygen --out DIR` | required | directory | Writes `principal.pem`/`principal.pub.pem` (ed25519) or `principal.keys.json`/`principal.pub.json` (other suites). Refuses to overwrite |
+| `keygen --suite` | `ed25519` | `ed25519`, `ecdsa-p384`, `hybrid-mldsa65-ed25519`, `hybrid-mldsa65-p384` | Signature suite of the principal key |
+| `keygen --seed-phrase` | off | flag | Derive the key from a new 24-word BIP-39 phrase, printed once. Personal mode only; refused with `--fips`. `--seed-passphrase-env VAR` / `--seed-passphrase-prompt` add the optional BIP-39 passphrase |
+| `recover-key --out DIR [--suite S] [--expect-pub FILE]` | | | Rebuild the key file from the 24 words (stdin or hidden prompt). With `--expect-pub`, writes nothing unless the result matches |
+| `verify-seed-phrase [--pub FILE]` | | | Check the words' checksum and, with `--pub`, that they re-derive that key. Writes nothing |
+| `--passphrase-env VAR` (keygen, sign-constitution) | prompt | env var name | Read the key passphrase from `VAR`. Without it and without `--no-passphrase` you are prompted (empty = none) |
+| `--no-passphrase` (keygen, sign-constitution) | off | flag | Unencrypted private key (testing only) |
+| `sign-constitution --document FILE` | — | `.md`/`.markdown`/`.txt` with one `twokey-rules` block | Sign a single-source constitution (format `/2`) |
+| `sign-constitution --text FILE --rules FILE` | — | text: `.txt`/`.md`/`.markdown` (≤ 1 MB); rules: `.json`/`.yaml`/`.yml` | Sign prose and rules as separate fields (format `/1`). Use either this or `--document` |
+| `sign-constitution --principal ID --key FILE --out FILE` | required | any non-empty id; PEM or `.keys.json` | Principal id, private key, output envelope |
+| `verify-constitution --signed FILE --pub FILE` | required | | Verify signature, hashes, and rules; exit 1 on failure |
+| `verify-ledger --ledger FILE --pub FILE` | required | | Verify hash chain, signed head, size, Merkle root; exit 1 on failure |
+| `check-judges --config FILE` | required | `.yaml`/`.yml` or `.json` | Validate a judge config without network calls |
+| `selftest [--require-pq]` | | flag | Run the crypto self-test and print the provider; `--require-pq` fails without ML-DSA |
+| `deployment-mode [--mode M] [--config FILE]` | | `personal`, `enterprise` | Show the resolved `deployment_mode` and where it came from |
+| `demo` | | | Small offline demo with test-double judges |
+| `e2e-demo` | | | Every capability end to end, offline. Exit 0 = every check passed |
+| `python bench.py [--quick] [--json FILE]` | full run | | Latency and memory benchmark (`docs/PERFORMANCE.md`) |
 
 ## Best practices
 
 **Recommended production profile** (the prototype's limits still apply; see
-[Limitations](#limitations)):
+[Security model and limitations](#security-model-and-limitations)):
 
 - Key: `hybrid-mldsa65-p384`, or `hybrid-mldsa65-ed25519` where Ed25519 is
   approved in your module. Passphrase-encrypted, with `require_pq=True`.
@@ -439,7 +687,7 @@ Environment variables: the package reads only the variables you name
   the same process as Two-Key, with extractors for every money-moving tool
   and `checkpoint_every=1`.
 - Verify: run `verify-ledger` on a schedule, and keep a copy of the signed
-  head somewhere the agent can't write.
+  head somewhere the agent can't write (or use enterprise anchoring).
 
 **Security hardening**
 - Only the gateway may hold real tool credentials. Give the agent Two-Key and the gateway, never the tools.
@@ -456,11 +704,11 @@ Environment variables: the package reads only the variables you name
   writes mode 0600 and refuses to overwrite.
 - Use a passphrase, supplied with `--passphrase-env` from `read -rs` or a
   secret manager, never on the command line.
-- Back up the private key offline. Losing it means you can't sign a new
-  constitution or ledger head, and Two-Key won't start on a ledger whose
-  head it can't verify.
-- Production should hold the principal key in a TEE/HSM. That isn't
-  implemented; keys are files.
+- Back up the private key offline, or write down the 24-word seed phrase
+  (personal mode). Losing the key means you can't sign a new constitution
+  or ledger head, and Two-Key won't start on a ledger whose head it can't
+  verify.
+- In enterprise mode, keep agent keys on a PKCS#11 token where possible.
 - `capability_secret` is random per process by default. Pass your own only
   if something else must verify tokens, and then protect it like a key.
 
@@ -526,10 +774,14 @@ Environment variables: the package reads only the variables you name
 | Ballot error `credential: environment variable X is not set` | API key not exported | `export X=…` in the process that runs Two-Key |
 | Ballot error `http 404` / `http 400` | Wrong model name or endpoint | Check `model` and `base_url` |
 | Deny `invalid_action:…` | The action record failed validation (unknown field, bad type, unknown data class) | Fix the record; see the field table |
+| Deny `agent_identity_required` / `agent_identity_rejected:<reason>` | Enterprise mode without a valid agent assertion (`revoked`, `assertion_replay`, `stale`, …) | Sign each request with `pki.sign_agent_request` using a current agent certificate |
+| `TwoKeyConfigError: … requires PKI identities` / `… requires a permissioned-ledger anchor` | Enterprise mode without `pki`/`principal_credential` or an anchor | See [Enterprise setup](#enterprise-setup) |
+| `CertificateRejected: revocation_unreachable` | No CRL or OCSP answer, and `fail_closed` is set | Provide CRLs or a reachable OCSP responder |
 | Gateway `args_mismatch` | The arguments at invoke differ from those authorized | Pass exactly the same `args` mapping |
 | Gateway `replayed` | Tokens are single-use, across every gateway on the ledger | Authorize again |
 | Gateway `ledger_concurrent_writer` | Another process or ledger instance wrote to this ledger file | Keep one owning process; reopen the ledger |
 | Gateway `expired` | TTL passed | Authorize closer to execution |
+| Gateway `scan_blocked:<id>` / `scan_timeout:<id>` / `scan_data_class_mismatch` | A scanner convicted, timed out, or found a data class the token doesn't permit | Check the ledger's `content_scans`; label the call correctly |
 | Gateway `constitution_hash_mismatch` / `constitution_changed_since_issue` / `revoked` | The constitution was reloaded, or the token revoked, after issuance | Authorize again under the current constitution |
 | Gateway `ledger_root_not_ancestor` / `ledger_fork_detected` | The ledger was rewritten or truncated, or the token comes from another ledger | Run `verify-ledger`; investigate before continuing |
 | `verify-ledger` says `size_mismatch:head=N,file=M` | Entries appended after the last signed head (a crash, or `checkpoint_every=0`) | Run Two-Key (it checkpoints), or investigate if unexpected |
@@ -541,8 +793,9 @@ Environment variables: the package reads only the variables you name
 ## FAQ
 
 **Does Two-Key call any network service by itself?** Only the judge
-connectors you configure call out. Path A, the tokens, the gateway, and the
-ledger are local. The tests and the demo make no network calls.
+connectors, scanners, and anchors you configure call out. Path A, the
+tokens, the gateway, and the ledger are local. The tests and the demos make
+no network calls.
 
 **Can a model vendor change my constitution?** No. Loading and reloading
 require a signature under your trusted key. A refused reload is logged as
@@ -557,87 +810,152 @@ marked as untrusted data. The proposal text is included only with
 `path_a_denied:rule_denied:<id>` names the rule, and `path_b_denied:…` gives
 the quorum reason. The ledger has every ballot's rationale.
 
-**How were the snippets in these docs checked?** `python3 tools/doccheck.py
-README.md docs/HOWTO.md` runs every command and code block in a copy of the
-repository with a fresh virtualenv and HOME. Judge HTTP calls go to a local
-fake that answers in each provider's format, so no real model was contacted.
+**Does it work with MCP or my agent framework?** Two-Key is a library, not
+a framework plugin. Call `authorize()` where your agent decides to use a
+tool, and route the call through `gateway.invoke()`. An MCP server or
+framework tool wrapper is a thin layer on top; none ships yet.
 
-**Is it FIPS compliant or quantum-safe?** FIPS-approved algorithms,
-validated module required for compliance. It isn't validated itself.
-Hashes and MACs are SHA-384 / HMAC-SHA-384 with keys of 256 bits or more by
+**Is it FIPS compliant or quantum-safe?** It uses FIPS-approved algorithms,
+but compliance requires a validated module, and Two-Key itself isn't
+validated. Hashes and MACs are SHA-384 / HMAC-SHA-384, with keys of 256 bits or more by
 default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
 (`require_pq=True` enforces one). See [docs/CRYPTO.md](docs/CRYPTO.md).
 
-## Limitations
+## Security model and limitations
 
-- **Prototype.** It has not been security-reviewed or deployed.
-- **FIPS-approved algorithms, validated module required for compliance.**
-  Not validated: the development machine had no FIPS provider, and
-  ML-DSA came from pyca `cryptography` 50.0.1 with its bundled OpenSSL 4.0.2,
-  which is not a validated module.
-- **Action-record normalization (problem F) is open.** The caller supplies
-  the record, and extractors are an optional hook. Path A is only as good
-  as the fields it's given. See `DESIGN_OPTIONS.md` §1.
-- **Real model connectors are tested only against mocked HTTP.** No live API
-  call has been made.
-- **Content-scanning hooks are tested only against local fakes.** No real DLP
-  or antivirus product has been connected. The remaining open questions are
-  in `docs/SCANNING_HOOKS.md`.
-- **The username/password and OAuth device-code auth modes are stubs.**
-  They work only with a hook you supply.
-- **Anchoring.** In `personal` mode (the default), the ledger is local.
-  `LocalFileAnchor` writes a local file and nothing is published. In
-  `enterprise` mode, `FabricAnchor` / `RestPermissionedAnchor` anchor
-  every signed head to a permissioned chain. These anchors are **tested
-  with fakes only**, not against a live network. The endorsement-policy
-  defaults are placeholders. See `docs/DEPLOYMENT_MODES.md`.
-- **Keys are files unless a PKCS#11 token holds them.** `pki.Pkcs11PrivateKey`
-  signs on a token, but it has been tested only with SoftHSM 2.6 and a fake
-  token, not with a real HSM or smart card. There is no TEE support. Tokens
-  use an HMAC secret shared by issuer and gateway by default.
-- **PKI is tested only with a generated test CA.** CRL and OCSP are
-  checked against in-memory sources. The HTTP transport (`default_transport`)
-  has not been run against a real CA or responder. Fail-closed on
-  unreachable revocation and the enterprise identity requirements are
-  placeholders pending a maintainer decision (`docs/KEYS_AND_PKI.md`).
-- **Seed-phrase backup is personal-mode only and off in `fips_mode`.**
-- **Storage.** The ledger isn't encrypted, and one process must own it.
-- **Defaults are permissive.** The §4 (iii) quorum floors are off by
-  default (`section4()` turns them on); which default to use is open
-  (`DESIGN_OPTIONS.md` §7).
-- **liboqs is untested.** The backend adapter has been tested only against
-  a fake module.
+**What Two-Key is designed to stop**
+- A prompt-injected or confused agent calling a tool the constitution
+  forbids, or calling an allowed tool with different arguments, scope, or
+  counterparty than were approved (Path A, token binding, frozen bytes).
+- A single judge, or a single vendor, approving something the constitution
+  forbids (quorum with K/T floors and optional vendor diversity).
+- A vendor or attacker swapping your constitution (signature under your
+  key; reloads logged and invalidate older tokens).
+- Token replay, expiry abuse, and use after revocation or a constitution
+  change.
+- Silent ledger edits, truncation, or rewrites (hash chain, signed head,
+  Merkle consistency, and optionally anchoring).
+- In enterprise mode: unidentified or revoked agents, principals, and
+  judges (PKI checks fail closed).
 
-## Repository layout and further docs
+**What it assumes**
+- The gateway is the only holder of tool credentials, and the agent can't
+  bypass it.
+- The principal's private key, and the process running Two-Key, are not
+  compromised.
+- The action record Path A reads describes the real call. Extractors
+  derive fields from the literal arguments, but who produces the record in
+  general is **an open design question (problem F)**. Path A is only as good
+  as the fields it's given.
+- LLM judges can be wrong. They are one key of two, not the only key.
+
+**Stubs and placeholders**
+- Public anchoring (to a public transparency log or blockchain) is an
+  interface only. `LocalFileAnchor` writes a local file.
+- The `username_password` and `oauth_device_code` judge auth modes are
+  hook points with no built-in vendor login.
+- The real Hyperledger Fabric client bridge (`fabric-sdk-py`) and the PKI
+  HTTP transport for CRL/OCSP (`network_revocation: true`) have not been
+  run against real networks.
+- There is no TEE support.
+- Several defaults are placeholders for decisions not yet made: revocation
+  fails closed when unreachable, agent identity is required in enterprise
+  mode, judge identities are not, the assertion max age is 300 s, and the
+  enterprise startup refusals and endorsement-policy defaults.
+- The §4 (iii) quorum floors are off by default (`section4()` turns them
+  on).
+
+**Tested only against fakes or local stand-ins**
+- **Vendor LLM judges**: mocked HTTP only; no live API call has been made.
+- **DLP/AV scanners**: in-process fakes and pattern rules; no real product.
+- **Permissioned chains** (`FabricAnchor`, `RestPermissionedAnchor`):
+  in-memory fakes.
+- **PKCS#11**: SoftHSM 2.6.1 and a software token; no real HSM or smart
+  card. The ML-DSA half of a hybrid identity stays in software.
+- **PKI**: a generated test CA. The ML-DSA binding extension uses an
+  unregistered private OID.
+- **liboqs backend**: a fake module only.
+- **Crypto**: ML-DSA came from pyca `cryptography` 50.0.1 with its bundled
+  OpenSSL 4.0.2, which is not a validated module. No FIPS provider was
+  active during development.
+
+**Other limits**: the ledger isn't encrypted and one process must own it.
+Seed-phrase backup is personal-mode only and off in `fips_mode`.
+
+The full feature-by-feature evidence list, with every stub and open
+question, is in [docs/PROVISIONAL_READINESS.md](docs/PROVISIONAL_READINESS.md).
+
+## Testing
+
+<!-- check: expect=^OK -->
+```bash
+python -m unittest discover -s tests 2>&1 | tail -1
+```
+
+- **Unit and integration tests**: 413 tests under `tests/`, no network.
+  Without ML-DSA (`cryptography` < 50) the hybrid tests skip, and the
+  SoftHSM test skips without `python-pkcs11` and SoftHSM.
+- **End-to-end**: `python -m two_key e2e-demo` (run by
+  `tests/test_e2e_demo.py`).
+- **Docs**: `python tools/doccheck.py README.md docs/HOWTO.md` runs every
+  command and code block in this README and the HOWTO in a copy of the
+  repository, with a fresh virtualenv and HOME. Judge HTTP calls go to a
+  local fake that answers in each provider's format, so no real model is
+  contacted.
+- **Performance**: `python bench.py --quick`; results in
+  [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+
+## Contributing
+
+Issues and pull requests are welcome.
+
+1. Create a virtualenv and run `pip install -e ".[yaml,pq]"`.
+2. Make your change with tests. Keep the suite network-free; use the fakes
+   in `two_key/testing.py`, `two_key/pki_testing.py`, and `tests/scan_fakes.py`.
+3. Route all cryptography through `two_key.crypto` (the provider enforces
+   the approved-algorithm list and `fips_mode`).
+4. Run `python -m unittest discover -s tests` and
+   `python tools/doccheck.py README.md docs/HOWTO.md`. If you change
+   behavior that a doc example shows, update the example.
+5. Add a row to `CHANGES.md`. Open design questions belong in
+   `DESIGN_OPTIONS.md` or the open-questions sections of the docs; please
+   don't settle them silently in code.
+6. Never commit keys, ledgers, or credentials (`.gitignore` covers the
+   default file names).
+
+## Further documentation
+
+| Path | What |
+|---|---|
+| [docs/HOWTO.md](docs/HOWTO.md) | Step-by-step guide: keys, constitution, every judge provider, auth, quorum, gateway, scanning, revocation, ledger, anchoring, PKI, crypto, performance |
+| [docs/KEYS_AND_PKI.md](docs/KEYS_AND_PKI.md) | Seed-phrase backup (personal) and PKI identities (enterprise) |
+| [docs/DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) | Personal vs enterprise mode, permissioned-ledger anchoring (Fabric, REST) |
+| [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types, outbound and inbound, pros and cons |
+| [docs/CRYPTO.md](docs/CRYPTO.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | FIPS posture and algorithms; measured performance |
+| [docs/PROVISIONAL_READINESS.md](docs/PROVISIONAL_READINESS.md) | Each feature, where it is implemented, its test evidence; stubs and placeholders; open questions |
+| [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md) | Detailed technical description of the mechanisms |
+| `DESIGN_OPTIONS.md`, `F_REVIEW.md` | Open design questions; security review of action-record normalization |
+| `CONCEPTION_NOTES.md`, `CHANGES.md` | Dated design-decision log; every change and who decided it |
+| `docs/INVENTION_DISCLOSURE.md`, `Compact_Kernel_Invention_Package.zip` | The original design write-up and prototype package (historical) |
+
+Code layout:
 
 | Path | What |
 |---|---|
 | `two_key/core.py` | `TwoKey`: load, authorize, reload, revoke |
 | `two_key/policy_vm.py`, `compiler.py` | Path A compiler and VM; one signed source compiled to bytecode and prose, with hashes |
 | `two_key/quorum.py`, `judges/` | Path B quorum; judge adapters, credentials, config loader |
-| `two_key/capability.py`, `gateway.py` | Tokens and the tool gateway |
+| `two_key/capability.py`, `gateway.py`, `canonical.py` | Tokens, the tool gateway, canonical encoding and frozen calls |
 | `two_key/scanning.py` | Optional DLP/antivirus scanning hooks for the gateway |
 | `two_key/ledger.py`, `merkle.py`, `anchoring.py` | Signed ledger, Merkle proofs, local and permissioned-chain anchors |
-| `two_key/deployment.py` | `deployment_mode` (`personal` / `enterprise`): resolution, set-once check, anchor and PKI checks |
-| `two_key/seedphrase.py`, `data/bip39_english.txt` | Optional 24-word BIP-39 seed-phrase backup of the principal key (personal mode) |
-| `two_key/pki.py`, `pki_testing.py` | Enterprise X.509 identities: chain, revocation, roles, ML-DSA-65 binding, agent assertions, PKCS#11 keys; a throwaway test CA |
-| `two_key/e2e_demo.py` | `python -m two_key e2e-demo`: every capability end to end, offline |
+| `two_key/deployment.py` | `deployment_mode` resolution, set-once check, anchor and PKI checks |
+| `two_key/seedphrase.py`, `data/bip39_english.txt` | Optional 24-word BIP-39 seed-phrase backup |
+| `two_key/pki.py`, `pki_testing.py` | X.509 identities, revocation, roles, ML-DSA-65 binding, agent assertions, PKCS#11; a throwaway test CA |
 | `two_key/crypto/`, `keys.py`, `constitution.py` | Crypto provider and suites, key files, constitution signing |
-| `two_key/testing.py` | Offline test-double judges (not for deployment) |
+| `two_key/e2e_demo.py`, `demo.py`, `testing.py` | Demos and offline test-double judges (not for deployment) |
 | `examples/` | Example constitutions (one-file and two-file), hard rules, `judges.yaml` |
 | `tools/doccheck.py` | Runs every snippet in this README and `docs/HOWTO.md` |
-| [docs/HOWTO.md](docs/HOWTO.md) | Step-by-step guide |
-| [docs/CRYPTO.md](docs/CRYPTO.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | FIPS posture and algorithms; measured performance |
-| [docs/DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) | Personal vs enterprise mode, permissioned-ledger anchoring (Fabric, REST), open questions (Entry 9) |
-| [docs/KEYS_AND_PKI.md](docs/KEYS_AND_PKI.md) | Seed-phrase backup (personal) and PKI identities (enterprise), Entry 11 |
-| [docs/PROVISIONAL_READINESS.md](docs/PROVISIONAL_READINESS.md) | Each claimed feature, where it is implemented, its evidence; stubs and placeholders; open questions |
-| [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types (outbound and inbound), pros and cons, the author's decisions (Entries 6 and 7), open questions |
-| [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md), `docs/INVENTION_DISCLOSURE.md` (unchanged) | Working specification draft; original disclosure |
-| `CONCEPTION_NOTES.md`, `DESIGN_OPTIONS.md`, `CHANGES.md` | Inventor's dated notes; open design questions; every change and who decided it |
 
-## Patent posture
+## License
 
-This repository contains an invention disclosure and a working prototype. AI
-cannot be named as an inventor. Read `CONCEPTION_NOTES.md`,
-`docs/SPEC_DRAFT.md`, and `DESIGN_OPTIONS.md` with a registered patent
-attorney. This is not legal advice.
+Apache License 2.0. See [LICENSE](LICENSE).

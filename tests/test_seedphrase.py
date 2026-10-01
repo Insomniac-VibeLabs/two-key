@@ -174,8 +174,11 @@ class TestCli(unittest.TestCase):
             self.assertEqual(rc, 0, out)
             self.assertIn("OK: the phrase re-derives", out)
             self.assertEqual(before, sorted(p.name for p in Path(d).rglob("*")))  # wrote nothing
+            self.assertNotIn(phrase, out)
+            fixed_message = {"the", "phrase", "re-derives", "nothing", "was", "written"}  # BIP-39 has "phrase", "nothing"
             for w in words:
-                self.assertNotIn(w, out.split())
+                if w not in fixed_message:
+                    self.assertNotIn(w, out.split())
             words2 = list(words); words2[0], words2[1] = words2[1], words2[0]
             rc, out = self.run_cli(["verify-seed-phrase"], " ".join(words2) + "\n")
             self.assertEqual(rc, 1)
