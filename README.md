@@ -1,9 +1,9 @@
-# Compact Kernel (two-key)
+# Two-Key (two-key)
 
 Dual-path constitutional enforcement for personal AI agents.
 **Prototype. Not production cryptography. Not FIPS validated.**
 
-A language model may *propose* an action. Compact Kernel decides whether
+A language model may *propose* an action. Two-Key decides whether
 the action may touch the real world, and it allows the action only when two
 independent paths agree. You write the rules (your "constitution"), you
 choose the AI models that review proposals, and every decision is written
@@ -25,7 +25,7 @@ to a tamper-evident ledger signed with your key.
 ## How it works
 
 ```text
- any LLM ──proposal──▶ Compact Kernel ──single-use token──▶ Tool gateway ──▶ tool
+ any LLM ──proposal──▶ Two-Key ──single-use token──▶ Tool gateway ──▶ tool
                            │                                     │
                            ├─ Path A: Policy VM over compiled    ├─ checks token, args, scope,
                            │  hard rules (never reads English)   │  ledger root, constitution hashes,
@@ -35,7 +35,7 @@ to a tamper-evident ledger signed with your key.
 ```
 
 1. **Constitution.** You write one document: plain-language prose plus a
-   block of structured hard rules. You sign it with your key. The kernel
+   block of structured hard rules. You sign it with your key. Two-Key
    refuses anything that is unsigned, modified, or signed by any other key,
    including a model vendor's.
 2. **Path A (deterministic).** The hard rules are compiled to bytecode for a
@@ -46,11 +46,11 @@ to a tamper-evident ledger signed with your key.
 3. **Path B (judgment).** A quorum of judges runs on the AI providers you
    pick: xAI, OpenAI, Anthropic, Gemini, a local Ollama model, or any
    OpenAI-compatible server. Each judge checks the action against your prose
-   and returns a strict JSON ballot. The kernel counts booleans against an
+   and returns a strict JSON ballot. Two-Key counts booleans against an
    approval threshold **T**, after an availability floor **K** and optional
    vendor-diversity floors. A malformed, late, or failed ballot is an
    abstention, never a yes.
-4. **Both must agree.** Only if Path A *and* Path B pass does the kernel
+4. **Both must agree.** Only if Path A *and* Path B pass does Two-Key
    issue a capability token. By default Path B isn't consulted when Path A
    already denies, so forbidden proposals never leave the machine.
 5. **Capability token.** The token is short-lived (30 s by default) and
@@ -97,7 +97,7 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -q -e ".[yaml,pq]"      # pq = cryptography>=50 for ML-DSA-65 (hybrid post-quantum)
 python -m unittest discover -s tests 2>&1 | tail -1
-python -m compact_kernel selftest    # crypto known-answer self-test
+python -m two_key selftest    # crypto known-answer self-test
 ```
 
 **2. Create your key**
@@ -107,27 +107,27 @@ in your shell history or on the command line.
 
 <!-- check: expect=^fingerprint: -->
 ```bash
-read -rsp "New key passphrase: " CK_KEY_PASSPHRASE; echo; export CK_KEY_PASSPHRASE
-python -m compact_kernel keygen --out ~/.compact-kernel --passphrase-env CK_KEY_PASSPHRASE
+read -rsp "New key passphrase: " TWOKEY_KEY_PASSPHRASE; echo; export TWOKEY_KEY_PASSPHRASE
+python -m two_key keygen --out ~/.two-key --passphrase-env TWOKEY_KEY_PASSPHRASE
 ```
 
-This writes `~/.compact-kernel/principal.pem` (private, mode 0600, encrypted)
+This writes `~/.two-key/principal.pem` (private, mode 0600, encrypted)
 and `principal.pub.pem`. For a post-quantum hybrid key add
 `--suite hybrid-mldsa65-ed25519`; see [HOWTO §2](docs/HOWTO.md#2-keys).
 
 **3. Write and sign your constitution**
 
 Start from the example. It is Markdown prose with exactly one
-```` ```ck-rules ```` JSON block holding the hard rules for Path A.
+```` ```twokey-rules ```` JSON block holding the hard rules for Path A.
 
-<!-- check: expect=^OK: principal=did:ck:alice -->
+<!-- check: expect=^OK: principal=did:twokey:alice -->
 ```bash
 cp examples/constitution_single_source.md my-constitution.md     # then edit it
-python -m compact_kernel sign-constitution --document my-constitution.md \
-    --principal did:ck:alice --key ~/.compact-kernel/principal.pem \
-    --passphrase-env CK_KEY_PASSPHRASE --out my-constitution.signed.json
-python -m compact_kernel verify-constitution \
-    --signed my-constitution.signed.json --pub ~/.compact-kernel/principal.pub.pem
+python -m two_key sign-constitution --document my-constitution.md \
+    --principal did:twokey:alice --key ~/.two-key/principal.pem \
+    --passphrase-env TWOKEY_KEY_PASSPHRASE --out my-constitution.signed.json
+python -m two_key verify-constitution \
+    --signed my-constitution.signed.json --pub ~/.two-key/principal.pub.pem
 ```
 
 **4. Configure your judges**
@@ -162,7 +162,7 @@ judges:
 
 <!-- check: expect=^OK: 3 judges -->
 ```bash
-python -m compact_kernel check-judges --config judges.yaml    # validates only; no API calls
+python -m two_key check-judges --config judges.yaml    # validates only; no API calls
 read -rsp "xAI API key: " XAI_API_KEY; echo; export XAI_API_KEY
 read -rsp "Anthropic API key: " ANTHROPIC_API_KEY; echo; export ANTHROPIC_API_KEY
 ```
@@ -171,7 +171,7 @@ read -rsp "Anthropic API key: " ANTHROPIC_API_KEY; echo; export ANTHROPIC_API_KE
 
 <!-- check: expect=verify: ok -->
 ```bash
-python -m compact_kernel demo
+python -m two_key demo
 ```
 
 **6. Authorize an action and run it through the gateway**
@@ -181,15 +181,15 @@ python -m compact_kernel demo
 import os
 from pathlib import Path
 
-from compact_kernel import keys
-from compact_kernel.constitution import load_envelope
-from compact_kernel.judges.config import load_config_file
-from compact_kernel.kernel import CompactKernel
+from two_key import keys
+from two_key.constitution import load_envelope
+from two_key.judges.config import load_config_file
+from two_key.core import TwoKey
 
-home = Path.home() / ".compact-kernel"
-key = keys.load_private_any(home / "principal.pem", os.environ["CK_KEY_PASSPHRASE"].encode())
+home = Path.home() / ".two-key"
+key = keys.load_private_any(home / "principal.pem", os.environ["TWOKEY_KEY_PASSPHRASE"].encode())
 judges, quorum = load_config_file(Path("judges.yaml"))
-kernel = CompactKernel(load_envelope(Path("my-constitution.signed.json")),
+tk = TwoKey(load_envelope(Path("my-constitution.signed.json")),
                        keys.load_public_any(home / "principal.pub.pem"),
                        home / "ledger.jsonl", judges,
                        ledger_signing_key=key, quorum_policy=quorum)
@@ -199,11 +199,11 @@ def pay_bill(payee, amount):          # your real tool; only the gateway calls i
     return f"paid {amount} to {payee}"
 
 
-gateway = kernel.gateway(tools={"pay_bill": pay_bill})
+gateway = tk.gateway(tools={"pay_bill": pay_bill})
 args = {"payee": "power-co.example", "amount": 42.5}           # the literal tool-call arguments
 action = {"tool": "pay_bill", "amount_usd": 42.5, "counterparty": "power-co.example",
           "data_class": "financial", "irreversible": False}    # the normalized action record
-decision = kernel.authorize(action, "Pay the electric bill.", args)
+decision = tk.authorize(action, "Pay the electric bill.", args)
 print("decision:", decision.allowed, decision.reason, decision.quorum)
 if decision.allowed:
     result = gateway.invoke(decision.capability, "pay_bill", args,
@@ -217,8 +217,8 @@ if decision.allowed:
 <!-- check: expect=^OK: ok \(entries=9\) -->
 ```bash
 python my_agent.py
-python -m compact_kernel verify-ledger --ledger ~/.compact-kernel/ledger.jsonl \
-    --pub ~/.compact-kernel/principal.pub.pem
+python -m two_key verify-ledger --ledger ~/.two-key/ledger.jsonl \
+    --pub ~/.two-key/principal.pub.pem
 ```
 
 Expected output with working judges (the quorum counts will vary):
@@ -239,7 +239,7 @@ meet K = 2 and T = 2. If a judge can't be reached, see
 code that were run to check them:
 
 1. Install · 2. Keys (Ed25519, ECDSA P-384, hybrid ML-DSA-65) · 3. Writing a
-constitution (prose, the `ck-rules` block, rule types, action fields) ·
+constitution (prose, the `twokey-rules` block, rule types, action fields) ·
 4. Signing, verifying, loading, and reloading · 5. Judges for each provider
 (OpenAI-compatible/xAI, local servers, Ollama, Anthropic, Gemini) · 6. Auth
 modes (env, keyring, SSO callback, and the username/password and
@@ -253,12 +253,12 @@ tests
 
 ## Configuration reference
 
-Every option below is taken from the code (`compact_kernel/`). Defaults are
+Every option below is taken from the code (`two_key/`). Defaults are
 the values used when the option is omitted.
 
-### Command line: `python -m compact_kernel [global options] <command>`
+### Command line: `python -m two_key [global options] <command>`
 
-The installed console script `compact-kernel` is the same program.
+The installed console script `two-key` is the same program.
 
 | Option / command | Default | Allowed values | What it does |
 |---|---|---|---|
@@ -268,7 +268,7 @@ The installed console script `compact-kernel` is the same program.
 | `keygen --suite` | `ed25519` | `ed25519`, `ecdsa-p384`, `hybrid-mldsa65-ed25519`, `hybrid-mldsa65-p384` | Signature suite of the principal key |
 | `--passphrase-env VAR` (keygen, sign-constitution) | prompt | env var name | Read the key passphrase from `VAR`. Without it and without `--no-passphrase` you are prompted (empty = none) |
 | `--no-passphrase` (keygen, sign-constitution) | off | flag | Unencrypted private key (testing only) |
-| `sign-constitution --document FILE` | — | `.md`/`.markdown`/`.txt` with one `ck-rules` block | Sign a single-source constitution (format `/2`) |
+| `sign-constitution --document FILE` | — | `.md`/`.markdown`/`.txt` with one `twokey-rules` block | Sign a single-source constitution (format `/2`) |
 | `sign-constitution --text FILE --rules FILE` | — | text: `.txt`/`.md`/`.markdown` (≤ 1 MB); rules: `.json`/`.yaml`/`.yml` | Sign prose and rules as separate fields (format `/1`). Use either this or `--document` |
 | `sign-constitution --principal ID --key FILE --out FILE` | required | any non-empty id; PEM or `.keys.json` | Principal id, private key, output envelope |
 | `verify-constitution --signed FILE --pub FILE` | required | | Verify signature, hashes, and rules; exit 1 on failure |
@@ -288,12 +288,12 @@ with every other key at its default.
 | `required_yes` | `2` | integer ≥ 1, ≤ number of judges | **T**, the approval threshold: yes votes needed |
 | `min_responding` | = `required_yes` | integer ≥ 1 | **K**, the availability floor: with fewer valid ballots the result is deny *without counting* (`counted: false`) |
 | `min_distinct_providers` | `1` (off) | integer ≥ 1 | Distinct `provider` labels needed among valid ballots |
-| `min_vendors` | `1` (off) | integer ≥ 1 | Distinct `vendor`s required in the judge set; the kernel refuses to start below it |
+| `min_vendors` | `1` (off) | integer ≥ 1 | Distinct `vendor`s required in the judge set; Two-Key refuses to start below it |
 | `min_local_judges` | `0` (off) | integer ≥ 0 | Judges with `local_weights: true` required in the judge set |
 | `heterogeneity_scope` | `selection` | `selection`, `responding` | `responding` also applies the two floors above to the judges that returned valid ballots |
 | `judge_inputs` | `record_only` | `record_only`, `record_and_proposal` | What judges see besides the prose: only the normalized action record, or also the proposal text |
 | `ballot_binding` | `stamp` | `stamp`, `echo` | `echo`: every judge must echo H(action record) and H(constitution) (needs `echo_binding: true` on LLM judges) |
-| `require_path_a_first` | `false` | boolean | Kernel refuses `short_circuit_path_b=False` |
+| `require_path_a_first` | `false` | boolean | Two-Key refuses `short_circuit_path_b=False` |
 | `timeout_seconds` | `45` | number > 0, or `null` (no deadline) | Overall deadline for all judges; late judges abstain |
 | `parallel` | `true` | boolean | Run judges in parallel threads (sequential still honors the deadline) |
 
@@ -337,7 +337,7 @@ the file is loaded.
 | `username_password` | `username`, `password_env`, `login` | **Stub** unless you supply `login(username, password) -> token`; no vendor login is built in |
 | `oauth_device_code` | `client_id`, `device_authorization_endpoint`, `token_endpoint`, `scope`, `fetch_token` | **Stub** unless you supply `fetch_token(provider) -> token` (RFC 8628) |
 
-### `CompactKernel(signed_constitution, trusted_public_key, ledger_path, judges, **options)`
+### `TwoKey(signed_constitution, trusted_public_key, ledger_path, judges, **options)`
 
 | Option | Default | Allowed values | What it does |
 |---|---|---|---|
@@ -347,15 +347,15 @@ the file is loaded.
 | `ttl_seconds` | `30` | positive int | Token lifetime |
 | `max_steps` | `4096` | int ≥ 1 | Path A step limit, checked at compile time |
 | `capability_secret` | random per process | bytes, ≥ 32 | HMAC key for tokens |
-| `token_mode` | `ck1` (ed25519) / `ck1-hs384` (other suites) | `ck1`, `ck1-hs384`, `ck1-sig` | HMAC-SHA-256, HMAC-SHA-384, or signed tokens |
-| `token_signing_key` | none | a `PrivateKeySet` | Required for `ck1-sig` |
+| `token_mode` | `tk1` (ed25519) / `tk1-hs384` (other suites) | `tk1`, `tk1-hs384`, `tk1-sig` | HMAC-SHA-256, HMAC-SHA-384, or signed tokens |
+| `token_signing_key` | none | a `PrivateKeySet` | Required for `tk1-sig` |
 | `digest_alg` | `sha256` (ed25519) / `sha384` (other suites) | `sha256`, `sha384` (tested); other approved SHA-2/SHA-3 names pass the policy check but are untested | Ledger, Merkle, args, and constitution hashes |
 | `head_signing` | `decision` | `decision`, `append` | Sign the ledger head once per decision, or after every append |
 | `ledger_fsync` | `True` | bool | fsync every ledger write |
 | `short_circuit_path_b` | `True` | bool | Skip Path B when Path A denies |
 | `crypto` | process default provider | `CryptoProvider` | Algorithm policy, FIPS mode, PQ backend |
 | `require_pq` | `False` | bool | Refuse to start without a hybrid ML-DSA key and a working backend |
-| `allow_test_doubles` | `False` | bool | Permit `compact_kernel.testing` judges (demos and tests only) |
+| `allow_test_doubles` | `False` | bool | Permit `two_key.testing` judges (demos and tests only) |
 | `clock` | `time.time` | callable | Clock for token issue and expiry (tests) |
 
 Methods: `authorize(action, proposal, tool_args)`, `gateway(tools=None,
@@ -369,17 +369,17 @@ extractors=None, checkpoint_every=1, view_refresh="token")`,
 |---|---|---|---|
 | `gateway(tools=)` | `{}` | `{name: callable(**args)}` | Executors. A tool with no executor returns `authorized_no_executor` |
 | `gateway(extractors=)` | `{}` | `{name: fn(args) -> fields}` | Derive `amount_usd`/`counterparty`/`data_class` from the literal args |
-| `gateway(checkpoint_every=)` | `1` | int ≥ 0 | Sign the ledger head every N calls; `0` = you call `kernel.ledger.checkpoint()` |
+| `gateway(checkpoint_every=)` | `1` | int ≥ 0 | Sign the ledger head every N calls; `0` = you call `tk.ledger.checkpoint()` |
 | `gateway(view_refresh=)` | `token` | `token`, `every_call` | Advance the gateway's ledger view from verified tokens, or also on every call |
 | `PersonalLedger(auto_sign_every=)` | `1` | int ≥ 0 | Direct ledger use: sign after every N appends; `0` = only on `checkpoint()` |
-| `PersonalLedger(digest_alg=, fsync=)` | from key / `True` | as above | Same meaning as the kernel options |
+| `PersonalLedger(digest_alg=, fsync=)` | from key / `True` | as above | Same meaning as the `TwoKey` options |
 | `CryptoProvider(fips_mode=)` | `False` | bool | Refuse non-approved algorithms (`CryptoPolicyError`) and liboqs |
 | `CryptoProvider(require_fips_module=)` | `False` | bool | Refuse to start unless both OpenSSL instances report FIPS mode |
 | `CryptoProvider(pq_backend=)` | `auto` | `auto`, `pyca`, `liboqs`, `none` | ML-DSA backend |
 
 ### Constitution rules and action fields
 
-| Rule type (in `ck-rules`) | Value | Denies when |
+| Rule type (in `twokey-rules`) | Value | Denies when |
 |---|---|---|
 | `allow_only_tools` | non-empty list of tool names | the tool is not listed. **At least one such rule is required** |
 | `deny_counterparties` | non-empty list | the counterparty is listed |
@@ -413,17 +413,16 @@ Environment variables: the package reads only the variables you name
   least three judges from at least two vendors, at least one of them on local
   weights, `heterogeneity_scope="responding"`, and `ballot_binding="echo"`
   with `echo_binding: true` on every LLM judge.
-- Kernel: `short_circuit_path_b=True` (the default), `head_signing="decision"`,
+- TwoKey: `short_circuit_path_b=True` (the default), `head_signing="decision"`,
   `ledger_fsync=True`, and `ttl_seconds` as short as your tools allow.
-- Gateway: from `kernel.gateway()` (any number; they share single use), in
-  the same process as the kernel, with extractors for every money-moving tool
+- Gateway: from `tk.gateway()` (any number; they share single use), in
+  the same process as Two-Key, with extractors for every money-moving tool
   and `checkpoint_every=1`.
 - Verify: run `verify-ledger` on a schedule, and keep a copy of the signed
   head somewhere the agent can't write.
 
 **Security hardening**
-- Only the gateway may hold real tool credentials. Give the agent the
-  kernel and the gateway, never the tools.
+- Only the gateway may hold real tool credentials. Give the agent Two-Key and the gateway, never the tools.
 - Always put an `allow_only_tools` rule first, so unknown tools fail closed.
 - Keep the constitution's rules strict and its prose specific. The prose is
   what the judges read, so vague prose gives vague ballots.
@@ -438,7 +437,7 @@ Environment variables: the package reads only the variables you name
 - Use a passphrase, supplied with `--passphrase-env` from `read -rs` or a
   secret manager, never on the command line.
 - Back up the private key offline. Losing it means you can't sign a new
-  constitution or ledger head, and the kernel won't start on a ledger whose
+  constitution or ledger head, and Two-Key won't start on a ledger whose
   head it can't verify.
 - Production should hold the principal key in a TEE/HSM. That isn't
   implemented; keys are files.
@@ -465,7 +464,7 @@ Environment variables: the package reads only the variables you name
   algorithm map.
 
 **Performance tuning** (numbers in [docs/PERFORMANCE.md](docs/PERFORMANCE.md))
-- Real judge latency (network, model) dominates; the kernel adds about 1 ms
+- Real judge latency (network, model) dominates; Two-Key adds about 1 ms
   per decision. Keep `parallel: true` and set `timeout_seconds` to what you
   can tolerate.
 - Signing the ledger head is the largest local cost, especially with hybrid
@@ -482,7 +481,7 @@ Environment variables: the package reads only the variables you name
   produces that record is an open design question (problem F); until it's
   settled, derive fields from the literal arguments wherever you can.
 - Don't run the gateway in a separate process that opens the same ledger
-  file; one process owns the ledger. Several gateways on one kernel are fine:
+  file; one process owns the ledger. Several gateways on one TwoKey instance are fine:
   the used-token record lives in the ledger, so a token is accepted once.
   A second process can't redeem twice either (its redemption fails closed
   with `replayed` or `ledger_concurrent_writer`), but it isn't supported.
@@ -495,7 +494,7 @@ Environment variables: the package reads only the variables you name
 | Symptom | Cause | Fix |
 |---|---|---|
 | `constitution rejected: no allow_only_tools rule` | Path A requires an allow-list | Add an `allow_only_tools` rule |
-| `expected exactly one ```ck-rules block, found 0` | Missing, misspelled, or duplicated rules fence | Exactly one block whose opening line is ```` ```ck-rules ```` |
+| `expected exactly one ```twokey-rules block, found 0` | Missing, misspelled, or duplicated rules fence | Exactly one block whose opening line is ```` ```twokey-rules ```` |
 | `REJECTED: signature does not match` | The constitution changed after signing | Re-sign it |
 | `downgrade refused` / `signed by a key other than the principal's` | Wrong public key or suite | Use the public key that matches the signing key |
 | `INVALID: … set 'model' to a model you have access to` | A `REPLACE_…` placeholder is still in the file | Set the model name |
@@ -503,7 +502,7 @@ Environment variables: the package reads only the variables you name
 | `refusing plain-HTTP judge endpoint` | `http://` to a non-loopback host | Use HTTPS, or `allow_insecure_http: true` on a trusted LAN |
 | `judge set is not heterogeneous enough: insufficient_vendors:1<2` | `min_vendors`/`min_local_judges` not met | Add judges from another vendor or a local model |
 | Deny `path_b_denied:insufficient_responses:1<2` | Fewer than K judges answered | See `decision.quorum` and the ledger's `quorum_result` ballots (`error` says why: `credential: …`, `http 401`, `transport: …`, `timeout …`, `malformed_ballot …`) |
-| Ballot error `credential: environment variable X is not set` | API key not exported | `export X=…` in the process that runs the kernel |
+| Ballot error `credential: environment variable X is not set` | API key not exported | `export X=…` in the process that runs Two-Key |
 | Ballot error `http 404` / `http 400` | Wrong model name or endpoint | Check `model` and `base_url` |
 | Deny `invalid_action:…` | The action record failed validation (unknown field, bad type, unknown data class) | Fix the record; see the field table |
 | Gateway `args_mismatch` | The arguments at invoke differ from those authorized | Pass exactly the same `args` mapping |
@@ -512,15 +511,15 @@ Environment variables: the package reads only the variables you name
 | Gateway `expired` | TTL passed | Authorize closer to execution |
 | Gateway `constitution_hash_mismatch` / `constitution_changed_since_issue` / `revoked` | The constitution was reloaded, or the token revoked, after issuance | Authorize again under the current constitution |
 | Gateway `ledger_root_not_ancestor` / `ledger_fork_detected` | The ledger was rewritten or truncated, or the token comes from another ledger | Run `verify-ledger`; investigate before continuing |
-| `verify-ledger` says `size_mismatch:head=N,file=M` | Entries appended after the last signed head (a crash, or `checkpoint_every=0`) | Run the kernel (it checkpoints), or investigate if unexpected |
+| `verify-ledger` says `size_mismatch:head=N,file=M` | Entries appended after the last signed head (a crash, or `checkpoint_every=0`) | Run Two-Key (it checkpoints), or investigate if unexpected |
 | `LedgerError: existing ledger failed verification` at start | Ledger or head file tampered, or a different key | Restore from backup, or start a new ledger file |
 | `PQUnavailableError` | Hybrid key without an ML-DSA backend | `pip install "cryptography>=50"` or use a classical suite |
 | `CryptoPolicyError: require_fips_module=True but no active FIPS provider` | No validated module active | Deploy on a FIPS-enabled OpenSSL, or drop `require_fips_module` for development |
-| `KernelConfigError: test-double judges supplied` | `compact_kernel.testing` judges in production code | Use real judges (or `allow_test_doubles=True` in tests) |
+| `TwoKeyConfigError: test-double judges supplied` | `two_key.testing` judges in production code | Use real judges (or `allow_test_doubles=True` in tests) |
 
 ## FAQ
 
-**Does the kernel call any network service by itself?** Only the judge
+**Does Two-Key call any network service by itself?** Only the judge
 connectors you configure call out. Path A, the tokens, the gateway, and the
 ledger are local. The tests and the demo make no network calls.
 
@@ -574,13 +573,13 @@ algorithms and can sign with hybrid ML-DSA-65, but it isn't validated. See
 
 | Path | What |
 |---|---|
-| `compact_kernel/kernel.py` | `CompactKernel`: load, authorize, reload, revoke |
-| `compact_kernel/policy_vm.py`, `compiler.py` | Path A compiler and VM; one signed source compiled to bytecode and prose, with hashes |
-| `compact_kernel/quorum.py`, `judges/` | Path B quorum; judge adapters, credentials, config loader |
-| `compact_kernel/capability.py`, `gateway.py` | Tokens and the tool gateway |
-| `compact_kernel/ledger.py`, `merkle.py`, `anchoring.py` | Signed ledger, Merkle proofs, anchoring stub |
-| `compact_kernel/crypto/`, `keys.py`, `constitution.py` | Crypto provider and suites, key files, constitution signing |
-| `compact_kernel/testing.py` | Offline test-double judges (not for deployment) |
+| `two_key/core.py` | `TwoKey`: load, authorize, reload, revoke |
+| `two_key/policy_vm.py`, `compiler.py` | Path A compiler and VM; one signed source compiled to bytecode and prose, with hashes |
+| `two_key/quorum.py`, `judges/` | Path B quorum; judge adapters, credentials, config loader |
+| `two_key/capability.py`, `gateway.py` | Tokens and the tool gateway |
+| `two_key/ledger.py`, `merkle.py`, `anchoring.py` | Signed ledger, Merkle proofs, anchoring stub |
+| `two_key/crypto/`, `keys.py`, `constitution.py` | Crypto provider and suites, key files, constitution signing |
+| `two_key/testing.py` | Offline test-double judges (not for deployment) |
 | `examples/` | Example constitutions (one-file and two-file), hard rules, `judges.yaml` |
 | `tools/doccheck.py` | Runs every snippet in this README and `docs/HOWTO.md` |
 | [docs/HOWTO.md](docs/HOWTO.md) | Step-by-step guide |

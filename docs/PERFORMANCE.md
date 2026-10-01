@@ -26,14 +26,14 @@ during timing.
 | What | Classic (Ed25519) | Hybrid PQ (ML-DSA-65 + Ed25519) | Notes |
 |---|---:|---:|---|
 | Path A policy eval (6 rules, 32 instructions) | 12.1 µs (deny: 7.2 µs) | same | Pure Python VM; no crypto |
-| Token issue / verify (HMAC) | 10.8 / 8.7 µs (`ck1`) | 11.6 / 9.7 µs (`ck1-hs384`) | Bench tokens without the §4 (i) fields (704 B). Kernel-issued tokens now carry them: 1,051 B, verify about +2 µs |
-| Token issue / verify, signed (`ck1-sig`) | n/a | 683 / 300 µs | Optional mode; 6.8 KB token |
+| Token issue / verify (HMAC) | 10.8 / 8.7 µs (`tk1`) | 11.6 / 9.7 µs (`tk1-hs384`) | Bench tokens without the §4 (i) fields (704 B). Two-Key-issued tokens now carry them: 1,051 B, verify about +2 µs |
+| Token issue / verify, signed (`tk1-sig`) | n/a | 683 / 300 µs | Optional mode; 6.8 KB token |
 | Gateway: §4 (i) binding checks (token verify + view check + 1 consistency proof + hash/revocation lookups) | 34 µs | ≈ same (SHA-384) | New in this phase |
 | Gateway `invoke`, full (checks + redeem entry + tool + signed head), fsync off / on | 322 µs / 780 µs | 1.04 ms / 1.91 ms | The signed head and file I/O dominate |
 | Gateway `invoke` on an 18,201-entry ledger, fsync off | 356 µs | n/a | Proofs are O(log n) hashes |
 | Gateway `invoke` with head signing deferred (`checkpoint_every=0`) | 155 µs | n/a (no signature on the call path) | Caller or timer runs `ledger.checkpoint()` |
 | Ledger append + signed head, fsync off / on | 151 µs / 391 µs | 944 µs / 1.40 ms | per append (`auto_sign_every=1`) |
-| Ledger append only (head signed at next checkpoint), fsync off / on | 27 µs / 113 µs | same | Kernel default: one head per decision |
+| Ledger append only (head signed at next checkpoint), fsync off / on | 27 µs / 113 µs | same | Two-Key default: one head per decision |
 | Merkle consistency proof + verify, 10,000 entries (random old size / 6 entries back) | 22.5 / 10.5 µs | ≈ same | RFC 9162 |
 | Merkle inclusion proof, 10,000 entries | 5.7 µs | ≈ same | Was 13.9 ms (rebuilt the whole tree) |
 | Sign / verify | 30 / 95 µs | 664 µs / 270 µs | Hybrid signature is 6.1 KB (base64) |
@@ -50,7 +50,7 @@ during timing.
 | Operation | Old | New | Change |
 |---|---:|---:|---|
 | Path A eval (allow / deny) | 12.5 / 7.5 µs | 12.1 / 7.2 µs | none (noise) |
-| Token verify, kernel-issued token | 8.4 µs (699 B) | 10.6 µs (1,051 B) | **+2 µs**: four more payload fields (isolated re-measurement) |
+| Token verify, Two-Key-issued token | 8.4 µs (699 B) | 10.6 µs (1,051 B) | **+2 µs**: four more payload fields (isolated re-measurement) |
 | Gateway checks-only row (token verify + args hash + normalize + root lookup) | 19.2 µs | 38.2 µs in the full run; **19.7 µs** vs 17.8 µs isolated | The full-run figure did not reproduce; isolated it is +2 µs (the larger token) |
 | **Gateway invoke, head signing deferred** | 131 µs | 155 µs | **+23 µs (+18%). Hot-path regression**: the §4 (i) consistency proof, view check, and hash/revocation checks, plus the linked, larger ledger entries |
 | **Gateway invoke, full, fsync off / on** | 297 / 684 µs | 322 / 780 µs | **+25 µs (+9%) / +96 µs (+14%)**. Hot-path regression, same causes; fsync-on figures are noisy on this VM |
@@ -77,7 +77,7 @@ was O(n).
 
 Measured 2026-09-30 about 18:20–18:45 MDT on the same VM. Single use is now
 tracked by the ledger (`PersonalLedger.redeem`) and shared by every gateway
-on the kernel, instead of a per-gateway set. On each invoke the gateway holds
+on Two-Key, instead of a per-gateway set. On each invoke the gateway holds
 the ledger's lock across its ledger checks and the redemption. The redemption
 also takes an `flock` on the ledger file and `stat`s it to detect another
 writer, and every `append` takes the lock and counts the bytes it wrote.
@@ -125,10 +125,10 @@ not replaced.
 
 * **Path A is in microseconds**: 7–12 µs per evaluation on this machine.
 * **Key parsing is cached.** Public key sets are parsed once
-  (`public_keyset_from_encoded` is LRU-cached; the kernel keeps the parsed
+  (`public_keyset_from_encoded` is LRU-cached; Two-Key keeps the parsed
   trusted key). Token issuers compute the HMAC key schedule once and copy it
   per call. Test: `ClassicSuites.test_public_key_parsing_is_cached`.
-* **No network in the kernel/gateway path.** Test
+* **No network in the Two-Key/gateway path.** Test
   `NoNetworkInGatewayPath` replaces `socket.socket`, `create_connection`, and
   `getaddrinfo` with functions that fail, then runs a full authorize and
   invoke.
@@ -136,11 +136,11 @@ not replaced.
   is the most expensive local step (Ed25519 about 30 µs; hybrid about
   0.65 ms, with a p99 of about 2.5–3 ms because ML-DSA signing uses rejection
   sampling). Options:
-  * kernel `head_signing="decision"` (default): one signature covers every
+  * `TwoKey(head_signing="decision")` (default): one signature covers every
     ledger entry of a decision (8 entries for an allowed action). A decision
     whose checkpoint fails is denied, so no token is released without a
     signed head;
-  * kernel `head_signing="append"`: sign after every append;
+  * `TwoKey(head_signing="append")`: sign after every append;
   * ledger `auto_sign_every=N` (1 by default for direct use; 0 means only on
     `checkpoint()`);
   * gateway `checkpoint_every=N` (1 by default; 0 means the caller
@@ -159,7 +159,7 @@ not replaced.
   constitution load, revocations, and the token's `capability_issued`
   entry.
 * **fsync is configurable** (`PersonalLedger(fsync=…)`,
-  `CompactKernel(ledger_fsync=…)`). The default is on, for durability. On
+  `TwoKey(ledger_fsync=…)`). The default is on, for durability. On
   this VM each fsync'd write costs roughly 0.1–0.2 ms extra (append only:
   27 µs → 106 µs).
 
@@ -173,7 +173,7 @@ magnitude. A single hosted-model call typically takes hundreds of
 milliseconds to several seconds, and a local model (Ollama) depends on your
 hardware. Measure your own providers before setting `timeout_seconds`.
 
-How the kernel bounds it:
+How Two-Key bounds it:
 
 * Judges run **in parallel** (one daemon thread per judge), so Path B takes
   about as long as the *slowest* judge, not the sum. Simulated with sleeping
@@ -197,7 +197,7 @@ End-to-end estimate: `authorize` ≈ local cost from the table (about 1–3 ms)
 
 Under the system interpreter (`cryptography` 43.0.0, no ML-DSA),
 `bench.py --quick` runs the classic rows only. The figures matched the
-table above within noise (e.g. Path A 12.4 µs, `ck1` verify 8.2 µs, §4 (i)
+table above within noise (e.g. Path A 12.4 µs, `tk1` verify 8.2 µs, §4 (i)
 binding checks 31.1 µs, gateway invoke with Ed25519 head 327 µs, authorize
 1.07 ms). Hybrid suites are unavailable there and
 raise `PQUnavailableError`, as designed.
@@ -209,12 +209,12 @@ raise `PQUnavailableError`, as designed.
 | Path A | PolicyVM.eval (32 instr, 6 rules, allow) | 12.1 µs | 19.0 µs |
 | Path A | PolicyVM.eval (deny: spend-cap) | 7.24 µs | 9.05 µs |
 | Path A | normalize_action (input validation) | 3.28 µs | 4.96 µs |
-| Token | issue ck1 (HMAC-SHA-256) | 10.8 µs | 15.7 µs |
-| Token | verify ck1 (HMAC-SHA-256) [704 B token] | 8.74 µs | 11.7 µs |
-| Token | issue ck1-hs384 (HMAC-SHA-384) | 11.6 µs | 14.2 µs |
-| Token | verify ck1-hs384 (HMAC-SHA-384) [731 B token] | 9.67 µs | 13.0 µs |
-| Token | issue ck1-sig (hybrid ML-DSA-65+Ed25519) | 683.4 µs | 2.99 ms |
-| Token | verify ck1-sig (hybrid ML-DSA-65+Ed25519) [6765 B token] | 299.7 µs | 348.0 µs |
+| Token | issue tk1 (HMAC-SHA-256) | 10.8 µs | 15.7 µs |
+| Token | verify tk1 (HMAC-SHA-256) [704 B token] | 8.74 µs | 11.7 µs |
+| Token | issue tk1-hs384 (HMAC-SHA-384) | 11.6 µs | 14.2 µs |
+| Token | verify tk1-hs384 (HMAC-SHA-384) [731 B token] | 9.67 µs | 13.0 µs |
+| Token | issue tk1-sig (hybrid ML-DSA-65+Ed25519) | 683.4 µs | 2.99 ms |
+| Token | verify tk1-sig (hybrid ML-DSA-65+Ed25519) [6765 B token] | 299.7 µs | 348.0 µs |
 | Token | args_hash sha256 | 3.98 µs | 4.57 µs |
 | Token | args_hash sha384 | 4.44 µs | 5.21 µs |
 | Signature | sign   ed25519 | 30.1 µs | 36.0 µs |
@@ -281,10 +281,10 @@ raise `PQUnavailableError`, as designed.
 | key set object hybrid-mldsa65-ed25519 (tracemalloc, Python-side only) | 13.7 KiB |
 | key set object hybrid-mldsa65-p384 (tracemalloc, Python-side only) | 14.1 KiB |
 | 10,000-entry ledger in memory (tracemalloc) | 8.64 MiB |
-| kernel construction incl. self-test, ed25519 (tracemalloc) | 27.1 KiB |
-| kernel construction incl. self-test, ecdsa-p384 (tracemalloc) | 28.2 KiB |
-| kernel construction incl. self-test, hybrid-mldsa65-ed25519 (tracemalloc) | 60.5 KiB |
-| kernel construction incl. self-test, hybrid-mldsa65-p384 (tracemalloc) | 59.9 KiB |
+| TwoKey construction incl. self-test, ed25519 (tracemalloc) | 27.1 KiB |
+| TwoKey construction incl. self-test, ecdsa-p384 (tracemalloc) | 28.2 KiB |
+| TwoKey construction incl. self-test, hybrid-mldsa65-ed25519 (tracemalloc) | 60.5 KiB |
+| TwoKey construction incl. self-test, hybrid-mldsa65-p384 (tracemalloc) | 59.9 KiB |
 | process peak RSS at end of this benchmark run (all suites, 10k-entry ledger loaded) | 76.8 MiB |
 | fresh process, ed25519: after imports -> peak after 1000 authorize+invoke cycles (8001 ledger entries) | 32.6 -> 45.8 MiB |
 | fresh process, ecdsa-p384: after imports -> peak after 1000 authorize+invoke cycles (8001 ledger entries) | 32.7 -> 46.6 MiB |

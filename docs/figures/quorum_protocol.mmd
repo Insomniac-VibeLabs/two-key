@@ -1,7 +1,7 @@
 flowchart TB
   A{"Path A (policy VM)<br/>returned true?"} -- no --> DA["deny; Path B is not convened"]
-  A -- yes --> H{"judge-set selection:<br/>>= min_vendors distinct vendors and<br/>>= min_local_judges on local weight files?<br/>(checked at kernel start and at convene)"}
-  H -- no --> DH["deny: judge_set_not_heterogeneous<br/>(kernel refuses to start)"]
+  A -- yes --> H{"judge-set selection:<br/>>= min_vendors distinct vendors and<br/>>= min_local_judges on local weight files?<br/>(checked at Two-Key start and at convene)"}
+  H -- no --> DH["deny: judge_set_not_heterogeneous<br/>(Two-Key refuses to start)"]
   H -- yes --> IN["Judge inputs: constitution prose + normalized action record only<br/>(judge_inputs=record_only; no agent transcript, no tool outputs)<br/>+ binding {H(action record), H(constitution), nl_hash, bytecode_hash}"]
   IN --> J1["Judge 1 (vendor A)"]
   IN --> J2["Judge 2 (vendor B)"]

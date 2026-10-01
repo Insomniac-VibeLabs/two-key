@@ -60,5 +60,27 @@ chosen or implemented.
 
 ---
 
+## Entry 3
+
+- **Attributed to:** Stephan Busch
+- **Date/time:** 2026-09-30, about 7:39 PM Mountain Time (MDT, UTC-6)
+- **How it was captured:** relayed to the AI engineering assistant by the
+  agent coordinating the work. The instruction is recorded as relayed, in
+  substance; it is not a verbatim quote.
+- **What was decided:** Stephan renamed the product from "Compact Kernel" to
+  "Two-Key".
+
+### How this entry maps to the implementation (assistant's note, not conception)
+
+The product name in prose is "Two-Key"; the repository, the distribution,
+and the CLI are `two-key`; the Python package is `two_key` (the class
+formerly `CompactKernel` is `TwoKey`, in `two_key/core.py`); the constitution
+rules block is `twokey-rules`; example DIDs use `did:twokey:`. Entries 1 and 2,
+`docs/INVENTION_DISCLOSURE.md`, the original invention-package zip, and
+earlier `CHANGES.md` rows keep the former name, because they are historical
+records. The rename changes no mechanism.
+
+---
+
 *Future entries: add a new dated section. Don't edit earlier entries. If
 something needs correcting, add a later entry that says so.*

@@ -5,7 +5,7 @@ flowchart TB
     LEDGER[("Personal ledger<br/>hash chain + Merkle root<br/>signed head")]
   end
   LLM["Any proposing LLM<br/>(vendor or local)"] -->|"proposed action record<br/>+ literal tool args"| K
-  subgraph K["Compact Kernel"]
+  subgraph K["Two-Key"]
     NORM["Normalize / validate<br/>action record"]
     VM["Path A<br/>Deterministic Policy VM<br/>(bytecode, no English)"]
     Q["Path B<br/>Intent quorum convenor<br/>k-of-n, min responding"]

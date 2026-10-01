@@ -23,7 +23,7 @@ application can claim to use FIPS 140-3 validated cryptography only when
    approved for that module.
 
 On the development machine used for this work **no FIPS provider is
-active**: `python -m compact_kernel selftest` reports `hashlib_fips: false`
+active**: `python -m two_key selftest` reports `hashlib_fips: false`
 and `cryptography_fips: false`. CPython's `hashlib` there links the system
 OpenSSL 3.5.7; the pyca `cryptography` 50.0.1 wheel bundles its own OpenSSL
 4.0.2. Neither is a validated module as installed.
@@ -32,12 +32,12 @@ OpenSSL 3.5.7; the pyca `cryptography` 50.0.1 wheel bundles its own OpenSSL
 
 | Mechanism | Where | Behaviour |
 |---|---|---|
-| Single provider | `compact_kernel/crypto/provider.py` (`CryptoProvider`) | Every hash, HMAC, random draw, and signature-algorithm choice goes through it. `canonical.py`, `ledger.py`, `merkle.py` (via the ledger), `capability.py`, `constitution.py`, `keys.py`, and the kernel all take or use a provider. |
+| Single provider | `two_key/crypto/provider.py` (`CryptoProvider`) | Every hash, HMAC, random draw, and signature-algorithm choice goes through it. `canonical.py`, `ledger.py`, `merkle.py` (via the ledger), `capability.py`, `constitution.py`, `keys.py`, and Two-Key all take or use a provider. |
 | `fips_mode=True` | provider | Refuses anything outside the approved list (`CryptoPolicyError`): e.g. `blake2b`, `md5`, `sha1`, `hmac-sha1`, unknown algorithms. Also refuses the `liboqs` PQ backend, because liboqs is not a validated module. `blake2b`/`md5`/`sha1` exist in the code only so the refusal can be tested. Nothing uses them by default. |
 | `require_fips_module=True` | provider | Refuses to start unless **both** OpenSSL instances report FIPS mode (`_hashlib.get_fips_mode()` and pyca `backend._fips_enabled`). This is the switch to turn on in a real FIPS deployment. |
 | RNG | provider `random_bytes` → `os.urandom`; token ids use `secrets` | No other randomness source is used. |
-| Startup self-test | `compact_kernel/crypto/selftest.py` | Runs once per provider before the kernel accepts a constitution. Any failure raises `SelfTestError` and the kernel refuses to start. See section 5. |
-| Key sizes | provider, `capability.py` | HMAC keys shorter than 256 bits are refused. Default token keys are 256 bits (ck1) or 384 bits (ck1-hs384). |
+| Startup self-test | `two_key/crypto/selftest.py` | Runs once per provider before Two-Key accepts a constitution. Any failure raises `SelfTestError` and Two-Key refuses to start. See section 5. |
+| Key sizes | provider, `capability.py` | HMAC keys shorter than 256 bits are refused. Default token keys are 256 bits (tk1) or 384 bits (tk1-hs384). |
 
 The application-level self-test is extra. It does not replace the module's
 own mandatory FIPS 140-3 self-tests.
@@ -71,7 +71,7 @@ key is a hybrid ML-DSA suite (it also applies to the `ecdsa-p384` suite).
 | Ledger hash chain (entry digests) | SHA-256 | SHA-384 (the algorithm is bound into each digest) | FIPS 180-4 |
 | Ledger Merkle tree (RFC 6962 structure) | SHA-256 | SHA-384 | FIPS 180-4 |
 | Ledger chain-head signature | Ed25519 | same suite as the principal key (hybrid) | FIPS 186-5, FIPS 204 |
-| Capability token tag | HMAC-SHA-256 (`ck1`), key ≥ 256 bits | HMAC-SHA-384 (`ck1-hs384`), 384-bit key; optional `ck1-sig` signed tokens (hybrid ML-DSA-65) | FIPS 198-1 + FIPS 180-4; FIPS 204 |
+| Capability token tag | HMAC-SHA-256 (`tk1`), key ≥ 256 bits | HMAC-SHA-384 (`tk1-hs384`), 384-bit key; optional `tk1-sig` signed tokens (hybrid ML-DSA-65) | FIPS 198-1 + FIPS 180-4; FIPS 204 |
 | Tool-call argument binding (`args_hash`) | SHA-256 | SHA-384 | FIPS 180-4 |
 | Ledger consistency and inclusion proofs (RFC 9162), the gateway's ancestor check for the token's root R (PRIOR_ART.md §4 (i)) | SHA-256 | SHA-384 | FIPS 180-4 |
 | `bytecode_hash` = H(canonical Path A bytecode), `nl_hash` = H(Path B prose) (§4 (ii)); bound into ballots and tokens | SHA-256 | SHA-384 | FIPS 180-4 |
@@ -81,7 +81,7 @@ key is a hybrid ML-DSA suite (it also applies to the `ecdsa-p384` suite).
 | Token `jti`, HMAC keys, salts, nonces | `os.urandom` / `secrets` | same | OS CSPRNG. In a FIPS deployment the entropy source and DRBG must be the ones covered by the platform's validation (e.g. a validated kernel crypto module and an SP 800-90B entropy source); check the module's Security Policy. |
 | Key bundle encryption (non-legacy suites) | n/a (legacy keys: PEM PKCS#8 via `BestAvailableEncryption`, whose algorithm is chosen by the `cryptography` library) | PBKDF2-HMAC-SHA-256, 600,000 iterations, 128-bit salt → AES-256-GCM, 96-bit nonce, header as AAD | SP 800-132, SP 800-38D, FIPS 197 |
 | Startup self-test | KATs and PCTs listed in section 5 | same | FIPS 140-3 self-test concept (application level) |
-| Judge HTTPS (Path B) | Python `ssl` (system OpenSSL) | same | Outside the kernel; TLS configuration is the deployment's responsibility |
+| Judge HTTPS (Path B) | Python `ssl` (system OpenSSL) | same | Outside Two-Key; TLS configuration is the deployment's responsibility |
 
 Notes:
 
@@ -96,19 +96,19 @@ Notes:
 
 | Primitive | Quantum threat | What this project does |
 |---|---|---|
-| Ed25519, ECDSA P-384 | Broken by Shor's algorithm on a large fault-tolerant quantum computer | Hybrid suites add **ML-DSA-65** (FIPS 204, NIST security category 3) to constitution signing and the ledger chain head, and optionally to capability tokens (`ck1-sig`). |
+| Ed25519, ECDSA P-384 | Broken by Shor's algorithm on a large fault-tolerant quantum computer | Hybrid suites add **ML-DSA-65** (FIPS 204, NIST security category 3) to constitution signing and the ledger chain head, and optionally to capability tokens (`tk1-sig`). |
 | SHA-256 / SHA-384 | Grover roughly halves preimage security; quantum collision search gives a smaller speed-up | PQ profile uses **SHA-384** for all security-relevant digests (ledger chain, Merkle tree, constitution digest, args binding). |
-| HMAC-SHA-256/384 tokens | Grover at most halves the effective key strength | **Symmetric HMAC tokens with keys of 256 bits or more are already considered quantum-resistant.** Keys below 256 bits are refused. `ck1-hs384` uses 384-bit keys. |
+| HMAC-SHA-256/384 tokens | Grover at most halves the effective key strength | **Symmetric HMAC tokens with keys of 256 bits or more are already considered quantum-resistant.** Keys below 256 bits are refused. `tk1-hs384` uses 384-bit keys. |
 | AES-256-GCM (key bundles) | Grover halves the effective key strength (to about 128 bits) | Adequate. |
 
 ### Hybrid rule and wire format
 
 * Suites: `hybrid-mldsa65-ed25519` and `hybrid-mldsa65-p384`
-  (`compact_kernel/crypto/signatures.py`).
+  (`two_key/crypto/signatures.py`).
 * A hybrid signature is accepted only if **both** components verify. A
   missing, altered, reordered, duplicated, or replaced component, or a
   relabelled suite, means reject. Tests: `tests/test_pq_hybrid.py`.
-* Each component signs `b"compact-kernel/sig/v1\0" + suite + b"\0" +
+* Each component signs `b"two-key/sig/v1\0" + suite + b"\0" +
   message`. The suite name is bound into both halves, so the classical half
   cannot be lifted out and presented as a plain Ed25519 signature.
 * **No downgrade:** the verifier uses the suite of the *trusted* key. A
@@ -117,7 +117,7 @@ Notes:
   `unsupported_token_version`).
 * **No silent fallback:** if a hybrid key is configured but no ML-DSA
   backend is available, key generation, key parsing, verification, and
-  kernel start-up raise `PQUnavailableError`. `require_pq=True` also refuses
+  Two-Key start-up raise `PQUnavailableError`. `require_pq=True` also refuses
   to start with a classical principal key.
 * Encoding: public key = base64 of canonical JSON
   `{"suite", "keys": [[alg, b64], …]}`; signature = base64 of canonical JSON
@@ -172,9 +172,9 @@ before claiming validated PQ signatures.
 | ML-DSA-65 | Pairwise consistency test (sign, verify, negative verify). With the pyca backend, also a seed→public-key regression value produced by this project with pyca 50.0.1. **This is not an official NIST ACVP vector.** |
 | RNG | `os.urandom` returns the requested length |
 
-`python -m compact_kernel selftest [--require-pq]` prints the report and the
+`python -m two_key selftest [--require-pq]` prints the report and the
 provider description. A forced failure (tested in `tests/test_crypto.py`)
-stops the kernel before it writes anything.
+stops Two-Key before it writes anything.
 
 ## 6. What is not done / limits
 
@@ -187,5 +187,5 @@ stops the kernel before it writes anything.
 * ML-DSA KATs from NIST ACVP are not bundled. The ML-DSA self-test is a
   pairwise-consistency test plus a project regression value.
 * Private keys are file-based (encrypted JSON bundle or PEM), not in an HSM.
-* No key-exchange (ML-KEM) is used, because the kernel has no key-exchange
-  step. TLS to judge providers is outside the kernel.
+* No key-exchange (ML-KEM) is used, because Two-Key has no key-exchange
+  step. TLS to judge providers is outside Two-Key.

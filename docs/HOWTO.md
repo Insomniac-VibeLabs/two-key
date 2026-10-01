@@ -1,4 +1,4 @@
-# Compact Kernel how-to
+# Two-Key how-to
 
 A step-by-step guide to every part of the prototype. For the short
 version, see the [README](../README.md#quick-start); for every option in one
@@ -50,7 +50,7 @@ want API keys from the OS keyring. The only hard dependency is
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -q -e ".[yaml,pq]"
-python -c "import compact_kernel, cryptography, yaml; print('ok')"
+python -c "import two_key, cryptography, yaml; print('ok')"
 ```
 
 ## 2. Keys
@@ -71,8 +71,8 @@ Without that flag you're prompted interactively.
 
 <!-- check: expect=^fingerprint: ed25519: -->
 ```bash
-read -rsp "Key passphrase: " CK_KEY_PASSPHRASE; echo; export CK_KEY_PASSPHRASE
-python -m compact_kernel keygen --out ~/.compact-kernel --passphrase-env CK_KEY_PASSPHRASE
+read -rsp "Key passphrase: " TWOKEY_KEY_PASSPHRASE; echo; export TWOKEY_KEY_PASSPHRASE
+python -m two_key keygen --out ~/.two-key --passphrase-env TWOKEY_KEY_PASSPHRASE
 ```
 
 A hybrid key goes in its own directory. Keygen refuses to overwrite an
@@ -80,15 +80,15 @@ existing key.
 
 <!-- check: expect=^fingerprint: hybrid-mldsa65-ed25519: -->
 ```bash
-python -m compact_kernel keygen --out ~/.ck-pq --suite hybrid-mldsa65-ed25519 \
-    --passphrase-env CK_KEY_PASSPHRASE
-ls ~/.ck-pq
+python -m two_key keygen --out ~/.two-key-pq --suite hybrid-mldsa65-ed25519 \
+    --passphrase-env TWOKEY_KEY_PASSPHRASE
+ls ~/.two-key-pq
 ```
 
 <!-- check: expect=refusing to overwrite -->
 <!-- check: expect-fail -->
 ```bash
-python -m compact_kernel keygen --out ~/.compact-kernel --passphrase-env CK_KEY_PASSPHRASE
+python -m two_key keygen --out ~/.two-key --passphrase-env TWOKEY_KEY_PASSPHRASE
 ```
 
 Private key files are created with mode 0600. Legacy PEM keys are
@@ -104,7 +104,7 @@ A constitution has two parts, and you sign them together as one document:
   Be concrete ("never spend more than $200 without asking me"). The judges
   read only this and the action record.
 - **Hard rules** for Path A, in a fenced block whose info string is
-  `ck-rules`, containing JSON: a list of rules, or `{"hard_rules": [...]}`.
+  `twokey-rules`, containing JSON: a list of rules, or `{"hard_rules": [...]}`.
   The document must contain **exactly one** such block. Other code blocks
   count as prose.
 
@@ -119,7 +119,7 @@ I am the principal. The agent works for me, not for the model vendor.
 - Never wire money. Paying known utility bills is fine.
 - Prefer reversible actions.
 
-```ck-rules
+```twokey-rules
 {"hard_rules": [
   {"id": "tool-allowlist", "allow_only_tools": ["search", "email_draft", "pay_bill", "summarize"]},
   {"id": "no-wires", "deny_if": {"tool": "wire_transfer"}},
@@ -173,9 +173,9 @@ Signing checks the rules, so mistakes surface immediately:
 <!-- check: expect=no allow_only_tools rule -->
 <!-- check: expect-fail -->
 ```bash
-printf 'Be careful.\n\n```ck-rules\n[{"deny_if": {"tool": "wire_transfer"}}]\n```\n' > bad.md
-python -m compact_kernel sign-constitution --document bad.md --principal did:ck:alice \
-    --key ~/.compact-kernel/principal.pem --passphrase-env CK_KEY_PASSPHRASE --out bad.signed.json
+printf 'Be careful.\n\n```twokey-rules\n[{"deny_if": {"tool": "wire_transfer"}}]\n```\n' > bad.md
+python -m two_key sign-constitution --document bad.md --principal did:twokey:alice \
+    --key ~/.two-key/principal.pem --passphrase-env TWOKEY_KEY_PASSPHRASE --out bad.signed.json
 ```
 
 ### The two-file format
@@ -185,25 +185,25 @@ You can instead keep the prose and the rules in separate files (format
 takes `.json`/`.yaml`/`.yml`. Both forms are signed as one document, and
 both produce the same compiled hashes for the same prose and rules.
 
-<!-- check: expect=^OK: principal=did:ck:alice -->
+<!-- check: expect=^OK: principal=did:twokey:alice -->
 ```bash
-python -m compact_kernel sign-constitution --text examples/constitution.md \
-    --rules examples/hard_rules.yaml --principal did:ck:alice \
-    --key ~/.compact-kernel/principal.pem --passphrase-env CK_KEY_PASSPHRASE \
+python -m two_key sign-constitution --text examples/constitution.md \
+    --rules examples/hard_rules.yaml --principal did:twokey:alice \
+    --key ~/.two-key/principal.pem --passphrase-env TWOKEY_KEY_PASSPHRASE \
     --out two-file.signed.json
-python -m compact_kernel verify-constitution --signed two-file.signed.json \
-    --pub ~/.compact-kernel/principal.pub.pem
+python -m two_key verify-constitution --signed two-file.signed.json \
+    --pub ~/.two-key/principal.pub.pem
 ```
 
 ## 4. Signing, verifying, loading, and reloading
 
-<!-- check: expect=^OK: principal=did:ck:alice created_at=.* rules=6 bytecode=\d+ -->
+<!-- check: expect=^OK: principal=did:twokey:alice created_at=.* rules=6 bytecode=\d+ -->
 ```bash
-python -m compact_kernel sign-constitution --document my-constitution.md \
-    --principal did:ck:alice --key ~/.compact-kernel/principal.pem \
-    --passphrase-env CK_KEY_PASSPHRASE --out my-constitution.signed.json
-python -m compact_kernel verify-constitution --signed my-constitution.signed.json \
-    --pub ~/.compact-kernel/principal.pub.pem
+python -m two_key sign-constitution --document my-constitution.md \
+    --principal did:twokey:alice --key ~/.two-key/principal.pem \
+    --passphrase-env TWOKEY_KEY_PASSPHRASE --out my-constitution.signed.json
+python -m two_key verify-constitution --signed my-constitution.signed.json \
+    --pub ~/.two-key/principal.pub.pem
 ```
 
 Any change after signing is caught. So is a signature from a different key
@@ -213,48 +213,48 @@ Any change after signing is caught. So is a signature from a different key
 <!-- check: expect-fail -->
 ```bash
 sed 's/\$200/$20000/' my-constitution.signed.json > tampered.signed.json
-python -m compact_kernel verify-constitution --signed tampered.signed.json \
-    --pub ~/.compact-kernel/principal.pub.pem
+python -m two_key verify-constitution --signed tampered.signed.json \
+    --pub ~/.two-key/principal.pub.pem
 ```
 
 <!-- check: expect=downgrade refused -->
 <!-- check: expect-fail -->
 ```bash
-python -m compact_kernel verify-constitution --signed my-constitution.signed.json --pub ~/.ck-pq/principal.pub.json
+python -m two_key verify-constitution --signed my-constitution.signed.json --pub ~/.two-key-pq/principal.pub.json
 ```
 
-When the kernel loads a constitution, it compiles the one signed document
+When Two-Key loads a constitution, it compiles the one signed document
 twice: the rules become Path A bytecode, after a static check that the
 bytecode reads only structured fields, and the prose becomes the judges'
 text. Both hashes (`bytecode_hash`, `nl_hash`) are recorded in the ledger's
 `constitution_loaded` entry and bound into every ballot and token.
 
-The rest of this guide builds kernels with this small helper. Copy it
+The rest of this guide builds TwoKey instances with this small helper. Copy it
 into your own project and adapt the paths.
 
-<!-- check: file=my_kernel.py -->
+<!-- check: file=my_two_key.py -->
 ```python
-"""my_kernel.py: build a CompactKernel from the files created in this guide."""
+"""my_two_key.py: build a TwoKey from the files created in this guide."""
 import os
 from pathlib import Path
 
-from compact_kernel import keys
-from compact_kernel.constitution import load_envelope
-from compact_kernel.judges.config import load_config_file
-from compact_kernel.kernel import CompactKernel
+from two_key import keys
+from two_key.constitution import load_envelope
+from two_key.judges.config import load_config_file
+from two_key.core import TwoKey
 
-HOME = Path.home() / ".compact-kernel"
+HOME = Path.home() / ".two-key"
 
 
 def load_key():
-    return keys.load_private_any(HOME / "principal.pem", os.environ["CK_KEY_PASSPHRASE"].encode())
+    return keys.load_private_any(HOME / "principal.pem", os.environ["TWOKEY_KEY_PASSPHRASE"].encode())
 
 
-def make_kernel(ledger="ledger.jsonl", judges_file="judges.yaml",
+def make_two_key(ledger="ledger.jsonl", judges_file="judges.yaml",
                 constitution="my-constitution.signed.json", **options):
     judges, quorum = load_config_file(Path(judges_file))
     options.setdefault("quorum_policy", quorum)
-    return CompactKernel(load_envelope(Path(constitution)), keys.load_public_any(HOME / "principal.pub.pem"),
+    return TwoKey(load_envelope(Path(constitution)), keys.load_public_any(HOME / "principal.pub.pem"),
                          HOME / ledger, judges, ledger_signing_key=load_key(), **options)
 ```
 
@@ -271,15 +271,15 @@ judges:
   - {id: local, type: ollama, provider: local, model: "<ollama-model-name>"}
 ```
 
-<!-- check: expect=^loaded compact-kernel-constitution/2 -->
+<!-- check: expect=^loaded two-key-constitution/2 -->
 ```bash
 read -rsp "xAI API key: " XAI_API_KEY; echo; export XAI_API_KEY
 read -rsp "Anthropic API key: " ANTHROPIC_API_KEY; echo; export ANTHROPIC_API_KEY
 python - <<'PY'
-from my_kernel import make_kernel
-k = make_kernel("howto-4.jsonl")
-print("loaded", k.compiled.source_format, "bytecode_hash", k.compiled.bytecode_hash[:16],
-      "nl_hash", k.compiled.nl_hash[:16])
+from my_two_key import make_two_key
+tk = make_two_key("howto-4.jsonl")
+print("loaded", tk.compiled.source_format, "bytecode_hash", tk.compiled.bytecode_hash[:16],
+      "nl_hash", tk.compiled.nl_hash[:16])
 PY
 ```
 
@@ -294,28 +294,28 @@ leaves the active constitution in place and is logged as
 <!-- check: expect=constitution_reload_refused -->
 ```python
 from pathlib import Path
-from compact_kernel import keys
-from compact_kernel.constitution import build_source_document, sign_document
-from my_kernel import load_key, make_kernel
+from two_key import keys
+from two_key.constitution import build_source_document, sign_document
+from my_two_key import load_key, make_two_key
 
-k = make_kernel("howto-4b.jsonl")
-gw = k.gateway(tools={"pay_bill": lambda payee, amount: "paid"})
+tk = make_two_key("howto-4b.jsonl")
+gw = tk.gateway(tools={"pay_bill": lambda payee, amount: "paid"})
 args = {"payee": "power-co.example", "amount": 30}
 fields = {"amount_usd": 30, "counterparty": "power-co.example", "data_class": "financial"}
-d = k.authorize({"tool": "pay_bill", **fields, "irreversible": False}, "Pay the power bill.", args)
+d = tk.authorize({"tool": "pay_bill", **fields, "irreversible": False}, "Pay the power bill.", args)
 
 # The principal tightens the spend cap and signs the new version.
 src = Path("my-constitution.md").read_text().replace('"amount_usd_gt": 200', '"amount_usd_gt": 100')
-k.reload_constitution(sign_document(build_source_document("did:ck:alice", src), load_key()))
+tk.reload_constitution(sign_document(build_source_document("did:twokey:alice", src), load_key()))
 print("old token:", gw.invoke(d.capability, "pay_bill", args, fields).reason)
 
 # A vendor tries to push its own version.
 vendor_key = keys.generate_private_key()
 try:
-    k.reload_constitution(sign_document(build_source_document("did:ck:alice", src), vendor_key))
+    tk.reload_constitution(sign_document(build_source_document("did:twokey:alice", src), vendor_key))
 except Exception as e:
     print("vendor reload refused:", type(e).__name__, e)
-print("last ledger entry:", k.ledger.entries[-1].kind)
+print("last ledger entry:", tk.ledger.entries[-1].kind)
 ```
 
 If the reloaded document compiles to exactly the same hashes (the same
@@ -383,7 +383,7 @@ judges:
 
 <!-- check: expect=^OK: 6 judges; required_yes=3 min_responding=4 -->
 ```bash
-python -m compact_kernel check-judges --config judges-all.yaml
+python -m two_key check-judges --config judges-all.yaml
 ```
 
 Notes per provider:
@@ -414,8 +414,8 @@ judge that raises is recorded as an abstention.
 
 <!-- check: expect=^custom judge: yes -->
 ```python
-from compact_kernel.action import normalize_action
-from compact_kernel.judges.base import Ballot, Judge
+from two_key.action import normalize_action
+from two_key.judges.base import Ballot, Judge
 
 
 class KeywordJudge(Judge):
@@ -469,7 +469,7 @@ judges:
   - id: keyring-key        # API key from the OS keyring (working; pip install keyring)
     type: anthropic
     model: <anthropic-model-name>
-    auth: {type: keyring, service: compact-kernel, username: anthropic}
+    auth: {type: keyring, service: two-key, username: anthropic}
   - id: sso                # bearer token from your SSO hook (working hook)
     type: openai_compatible
     base_url: https://llm-gateway.example.com/v1
@@ -492,7 +492,7 @@ judges:
 
 <!-- check: expect=^OK: 5 judges -->
 ```bash
-python -m compact_kernel check-judges --config judges-auth.yaml
+python -m two_key check-judges --config judges-auth.yaml
 ```
 
 To store a key in the OS keyring:
@@ -500,7 +500,7 @@ To store a key in the OS keyring:
 <!-- check: skip needs an interactive OS keyring backend, which the check sandbox doesn't have -->
 ```bash
 pip install keyring
-keyring set compact-kernel anthropic      # prompts for the secret
+keyring set two-key anthropic      # prompts for the secret
 ```
 
 The stubs fail closed. A judge whose credential can't be obtained
@@ -513,8 +513,8 @@ abstains, and the reason is recorded:
 ```bash
 MY_SSO_TOKEN=example-token MY_GATEWAY_PASSWORD=example-password python - <<'PY'
 from pathlib import Path
-from compact_kernel.action import normalize_action
-from compact_kernel.judges.config import load_config_file
+from two_key.action import normalize_action
+from two_key.judges.config import load_config_file
 
 judges, _ = load_config_file(Path("judges-auth.yaml"))
 action = normalize_action({"tool": "search", "data_class": "public", "irreversible": False})
@@ -528,7 +528,7 @@ The username/password provider reads the password from `password_env` when
 it's needed and calls your `login(username, password)` hook; a hook that
 raises is reported as `login failed`. The device-code provider calls
 `fetch_token(provider)`, which should run the RFC 8628 flow (steps in
-`compact_kernel/judges/credentials.py`) and return an access token. In
+`two_key/judges/credentials.py`) and return an access token. In
 Python you can pass hooks directly:
 `OAuthDeviceCodeProvider(..., fetch_token=my_flow, prompt_user=show_code)`.
 
@@ -537,7 +537,7 @@ Python you can pass hooks directly:
 Path B passes only if all of these hold, checked in this order:
 
 1. The judge set meets `min_vendors` and `min_local_judges` (checked at
-   kernel start, at config load, and on every convene).
+   Two-Key start, at config load, and on every convene).
 2. At least `required_yes` judges are configured.
 3. At least **K** = `min_responding` judges returned a valid yes/no ballot.
    Otherwise the result is a deny *without counting*.
@@ -548,7 +548,7 @@ Path B passes only if all of these hold, checked in this order:
 6. At least **T** = `required_yes` of them say yes.
 
 Here are the outcomes, shown with fixed-vote test doubles
-(`compact_kernel.testing`; never use them in production):
+(`two_key.testing`; never use them in production):
 
 <!-- check: expect=^T=2, one yes, two abstain\s+-> False insufficient_responses:1<2 counted=False -->
 <!-- check: expect=^K=3 > valid ballots\s+-> False insufficient_responses:2<3 counted=False -->
@@ -557,9 +557,9 @@ Here are the outcomes, shown with fixed-vote test doubles
 <!-- check: expect=^section4, satisfied\s+-> True quorum_pass counted=True -->
 <!-- check: expect=^local judge abstained\s+-> False responding_not_heterogeneous -->
 ```python
-from compact_kernel.action import normalize_action
-from compact_kernel.quorum import QuorumPolicy, convene
-from compact_kernel.testing import FixedJudge as J
+from two_key.action import normalize_action
+from two_key.quorum import QuorumPolicy, convene
+from two_key.testing import FixedJudge as J
 
 action = normalize_action({"tool": "search", "data_class": "public", "irreversible": False})
 cases = {
@@ -588,7 +588,7 @@ sets `min_vendors=2`, `min_local_judges=1`, `judge_inputs="record_only"`,
 and `require_path_a_first=True`. These are the mechanisms Stephan selected
 from `PRIOR_ART.md` §4 (iii). They are not the general default, because
 which default to use is still open (`DESIGN_OPTIONS.md` §7). In YAML, write
-the keys out. The kernel refuses to start, and `check-judges` reports
+the keys out. Two-Key refuses to start, and `check-judges` reports
 INVALID, if the judge set can't meet them:
 
 <!-- check: file=judges-strict.yaml -->
@@ -614,14 +614,14 @@ judges:
 
 <!-- check: expect=^OK: 3 judges; required_yes=2 min_responding=3 -->
 ```bash
-python -m compact_kernel check-judges --config judges-strict.yaml
+python -m two_key check-judges --config judges-strict.yaml
 ```
 
 <!-- check: expect=insufficient_local_judges:0<1 -->
 <!-- check: expect-fail -->
 ```bash
 grep -v "id: local" judges-strict.yaml > judges-no-local.yaml
-python -m compact_kernel check-judges --config judges-no-local.yaml
+python -m two_key check-judges --config judges-no-local.yaml
 ```
 
 ### Ballot binding
@@ -637,12 +637,12 @@ real prompt and parser against the fake HTTP judges:
 <!-- check: expect=^True dual_path_pass -->
 <!-- check: expect=bindings: \['echo', 'echo', 'echo'\] -->
 ```python
-from my_kernel import make_kernel
+from my_two_key import make_two_key
 
-k = make_kernel("howto-7.jsonl", judges_file="judges-strict.yaml")
-d = k.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Look up the weather.", {})
+tk = make_two_key("howto-7.jsonl", judges_file="judges-strict.yaml")
+d = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Look up the weather.", {})
 print(d.allowed, d.reason)
-q = next(e for e in reversed(k.ledger.entries) if e.kind == "quorum_result").body
+q = next(e for e in reversed(tk.ledger.entries) if e.kind == "quorum_result").body
 print("bindings:", [b["binding"] for b in q["ballots"]])
 ```
 
@@ -665,9 +665,9 @@ also has its own HTTP `timeout` (default 30 s).
 <!-- check: expect=^elapsed under 1s: True -->
 ```python
 import time
-from compact_kernel.action import normalize_action
-from compact_kernel.judges.base import Ballot, Judge
-from compact_kernel.quorum import QuorumPolicy, convene
+from two_key.action import normalize_action
+from two_key.judges.base import Ballot, Judge
+from two_key.quorum import QuorumPolicy, convene
 
 
 class SlowJudge(Judge):
@@ -697,7 +697,7 @@ print("elapsed under 1s:", time.monotonic() - t < 1, "| passed:", q.passed)
 
 ## 8. Authorizing actions
 
-`kernel.authorize(action, proposal, tool_args)` takes the normalized action
+`tk.authorize(action, proposal, tool_args)` takes the normalized action
 record, the proposing model's text, and the literal tool-call arguments.
 It returns a `Decision`:
 
@@ -718,9 +718,9 @@ Any exception inside `authorize` is a deny; nothing fails open.
 <!-- check: expect=^no data_class\s+False path_a_denied:rule_denied:no-sensitive-data -->
 <!-- check: expect=^unknown field\s+False invalid_action:unknown action fields -->
 ```python
-from my_kernel import make_kernel
+from my_two_key import make_two_key
 
-k = make_kernel("howto-8.jsonl")
+tk = make_two_key("howto-8.jsonl")
 bill = {"tool": "pay_bill", "counterparty": "power-co.example", "data_class": "financial", "irreversible": False}
 cases = {
     "pay $30 bill": {**bill, "amount_usd": 30},
@@ -731,7 +731,7 @@ cases = {
     "unknown field": {**bill, "urgency": "high"},
 }
 for name, action in cases.items():
-    d = k.authorize(action, f"Please {name}.", {"note": name})
+    d = tk.authorize(action, f"Please {name}.", {"note": name})
     print(f"{name:<18} {d.allowed} {d.reason}")
 ```
 
@@ -743,8 +743,8 @@ adds `wire_transfer` to the allow-list.
 ## 9. Gateway integration
 
 The gateway is the only component that should hold real tool credentials
-and run tools. Create it from the kernel so it shares the kernel's token
-key and ledger:
+and run tools. Create it with `tk.gateway()` so it shares the TwoKey
+instance's token key and ledger:
 
 <!-- check: expect=^1 wrong args\s+args_mismatch -->
 <!-- check: expect=^2 other tool\s+tool_mismatch -->
@@ -754,9 +754,9 @@ key and ledger:
 <!-- check: expect=^6 after TTL\s+expired -->
 ```python
 import time
-from my_kernel import make_kernel
+from my_two_key import make_two_key
 
-k = make_kernel("howto-9.jsonl", ttl_seconds=1)
+tk = make_two_key("howto-9.jsonl", ttl_seconds=1)
 
 
 def pay_bill(payee, amount):
@@ -767,9 +767,9 @@ def pay_bill_fields(args):          # extractor: derive the scope fields from th
     return {"amount_usd": args["amount"], "counterparty": args["payee"], "data_class": "financial"}
 
 
-gw = k.gateway(tools={"pay_bill": pay_bill}, extractors={"pay_bill": pay_bill_fields})
+gw = tk.gateway(tools={"pay_bill": pay_bill}, extractors={"pay_bill": pay_bill_fields})
 args = {"payee": "power-co.example", "amount": 42.5}
-d = k.authorize({"tool": "pay_bill", "amount_usd": 42.5, "counterparty": "power-co.example",
+d = tk.authorize({"tool": "pay_bill", "amount_usd": 42.5, "counterparty": "power-co.example",
                  "data_class": "financial", "irreversible": False}, "Pay the electric bill.", args)
 steps = [  # (label, tool, args, call_fields declared by the caller)
     ("1 wrong args", "pay_bill", {"payee": "power-co.example", "amount": 4250}, None),
@@ -783,7 +783,7 @@ for name, tool, a, fields in steps:
     r = gw.invoke(d.capability, tool, a, fields)
     print(f"{name:<27} {r.reason} {r.result or ''}")
 
-d = k.authorize({"tool": "pay_bill", "amount_usd": 42.5, "counterparty": "power-co.example",
+d = tk.authorize({"tool": "pay_bill", "amount_usd": 42.5, "counterparty": "power-co.example",
                  "data_class": "financial", "irreversible": False}, "Pay the electric bill.", args)
 time.sleep(1.1)
 print(f"{'6 after TTL':<27} {gw.invoke(d.capability, 'pay_bill', args).reason}")
@@ -833,7 +833,7 @@ the gateway approves it.
 
 **Options.**
 - `checkpoint_every` (default 1) signs the ledger head after every N
-  calls. With `0`, you call `kernel.ledger.checkpoint()` yourself, for
+  calls. With `0`, you call `tk.ledger.checkpoint()` yourself, for
   example on a timer. Until then, the new entries show as `size_mismatch`
   in `verify-ledger`.
 - `view_refresh` (default `token`) moves the gateway's view of the ledger
@@ -844,27 +844,26 @@ the gateway approves it.
 <!-- check: expect=^before checkpoint: size_mismatch -->
 <!-- check: expect=^after checkpoint: ok -->
 ```python
-from my_kernel import load_key, make_kernel
+from my_two_key import load_key, make_two_key
 
-k = make_kernel("howto-9b.jsonl")
-gw = k.gateway(tools={"search": lambda q: f"results for {q}"}, checkpoint_every=0)
+tk = make_two_key("howto-9b.jsonl")
+gw = tk.gateway(tools={"search": lambda q: f"results for {q}"}, checkpoint_every=0)
 args = {"q": "weather"}
-d = k.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Weather?", args)
+d = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Weather?", args)
 print(gw.invoke(d.capability, "search", args, {"data_class": "public"}).reason)
 pub = load_key().public_key()
-print("before checkpoint:", k.ledger.verify(pub).reason)
-k.ledger.checkpoint()
-print("after checkpoint:", k.ledger.verify(pub).reason)
+print("before checkpoint:", tk.ledger.verify(pub).reason)
+tk.ledger.checkpoint()
+print("after checkpoint:", tk.ledger.verify(pub).reason)
 ```
 
 **Deployment rules for the prototype.**
-- Run the gateway in the **same process** as the kernel, using
-  `kernel.gateway()`. The ledger is owned by one process, and a second
+- Run the gateway in the **same process** as Two-Key, using
+  `tk.gateway()`. The ledger is owned by one process, and a second
   process opening the same file won't see new entries, so its checks fail
   closed.
-- You can create **several** gateways on one kernel (for example one per
-  tool family or per worker thread). The used-token record lives in the
-  kernel's ledger, not in the gateway, so every gateway consults the same
+- You can create **several** gateways on one TwoKey instance (for example one per
+  tool family or per worker thread). The used-token record lives in Two-Key's ledger, not in the gateway, so every gateway consults the same
   record and a token is accepted **exactly once** however many gateways or
   threads present it. The checks and the redemption run under the ledger's
   lock. See the example below.
@@ -880,36 +879,36 @@ print("after checkpoint:", k.ledger.verify(pub).reason)
   multi-process support: the ledger still has one owning process.
 - Tokens are bearer secrets. Pass them straight from `authorize` to
   `invoke`; don't log or store them.
-- A restarted kernel gets a new random HMAC key (`capability_secret`), so
+- A restarted TwoKey instance gets a new random HMAC key (`capability_secret`), so
   tokens from before the restart stop working. Replay protection survives
   restarts: the ledger rebuilds its used-token record from its
   `capability_redeemed` entries when it's opened.
 
-Two gateways on one kernel, same token:
+Two gateways on one TwoKey instance, same token:
 
 <!-- check: expect=^first gateway: executed -->
 <!-- check: expect=^second gateway: replayed -->
 <!-- check: expect=^redemptions recorded: 1 -->
 ```python
-from my_kernel import make_kernel
+from my_two_key import make_two_key
 
-k = make_kernel("howto-9b.jsonl")
+tk = make_two_key("howto-9b.jsonl")
 args = {"payee": "power-co.example", "amount": 42.5}
 fields = {"amount_usd": 42.5, "counterparty": "power-co.example", "data_class": "financial"}
-gw1 = k.gateway(tools={"pay_bill": lambda payee, amount: "paid"})
-gw2 = k.gateway(tools={"pay_bill": lambda payee, amount: "paid"})
-d = k.authorize({"tool": "pay_bill", "amount_usd": 42.5, "counterparty": "power-co.example",
+gw1 = tk.gateway(tools={"pay_bill": lambda payee, amount: "paid"})
+gw2 = tk.gateway(tools={"pay_bill": lambda payee, amount: "paid"})
+d = tk.authorize({"tool": "pay_bill", "amount_usd": 42.5, "counterparty": "power-co.example",
                  "data_class": "financial", "irreversible": False}, "Pay the electric bill.", args)
 print("first gateway:", gw1.invoke(d.capability, "pay_bill", args, fields).reason)
 print("second gateway:", gw2.invoke(d.capability, "pay_bill", args, fields).reason)
 jti = d.token_payload["jti"]
-print("redemptions recorded:", sum(1 for e in k.ledger.entries
+print("redemptions recorded:", sum(1 for e in tk.ledger.entries
                                    if e.kind == "capability_redeemed" and e.body["jti"] == jti))
 ```
 
 ## 10. Ordering and short-circuit
 
-By default (`short_circuit_path_b=True`) the kernel doesn't convene
+By default (`short_circuit_path_b=True`) Two-Key doesn't convene
 Path B when Path A denies, so a forbidden proposal is never sent to any
 external judge. The ledger records `quorum_skipped`. With
 `short_circuit_path_b=False` both paths always run, which is useful for
@@ -920,25 +919,25 @@ auditing how the judges would have voted, but either path can still deny.
 <!-- check: expect=^both paths: path_a_denied:rule_denied:tool-allowlist quorum=\{'yes': 0, 'no': 3 -->
 <!-- check: expect=^refused: quorum policy requires Path B only after Path A passes -->
 ```python
-from compact_kernel.kernel import KernelConfigError
-from compact_kernel.quorum import QuorumPolicy
-from my_kernel import make_kernel
+from two_key.core import TwoKeyConfigError
+from two_key.quorum import QuorumPolicy
+from my_two_key import make_two_key
 
 wire = {"tool": "wire_transfer", "amount_usd": 10, "counterparty": "bank.example", "data_class": "financial"}
-d = make_kernel("howto-10a.jsonl").authorize(wire, "Wire $10.", {})
+d = make_two_key("howto-10a.jsonl").authorize(wire, "Wire $10.", {})
 print("default:", d.reason, "quorum=" + str(d.quorum))
-d = make_kernel("howto-10b.jsonl", short_circuit_path_b=False).authorize(wire, "Wire $10.", {})
+d = make_two_key("howto-10b.jsonl", short_circuit_path_b=False).authorize(wire, "Wire $10.", {})
 print("both paths:", d.reason, "quorum=" + str(d.quorum))
 try:
-    make_kernel("howto-10c.jsonl", short_circuit_path_b=False,
+    make_two_key("howto-10c.jsonl", short_circuit_path_b=False,
                 quorum_policy=QuorumPolicy(required_yes=2, require_path_a_first=True))
-except KernelConfigError as e:
+except TwoKeyConfigError as e:
     print("refused:", e)
 ```
 
 ## 11. Revocation
 
-`kernel.revoke(jti)` revokes one token. `kernel.revoke()` with no argument
+`tk.revoke(jti)` revokes one token. `tk.revoke()` with no argument
 revokes every token issued so far; later tokens are unaffected. Each call
 appends a `revocation` entry, and the gateway refuses revoked tokens with
 `revoked`.
@@ -947,20 +946,20 @@ appends a `revocation` entry, and the gateway refuses revoked tokens with
 <!-- check: expect=^all so far: revoked revoked -->
 <!-- check: expect=^issued after: executed -->
 ```python
-from my_kernel import make_kernel
+from my_two_key import make_two_key
 
-k = make_kernel("howto-11.jsonl")
-gw = k.gateway(tools={"search": lambda q: "ok"})
+tk = make_two_key("howto-11.jsonl")
+gw = tk.gateway(tools={"search": lambda q: "ok"})
 act, args, f = {"tool": "search", "data_class": "public", "irreversible": False}, {"q": "x"}, {"data_class": "public"}
 
-d = k.authorize(act, "Search.", args)
-k.revoke(d.token_payload["jti"], reason="changed my mind")
+d = tk.authorize(act, "Search.", args)
+tk.revoke(d.token_payload["jti"], reason="changed my mind")
 print("one token:", gw.invoke(d.capability, "search", args, f).reason)
 
-d1, d2 = k.authorize(act, "Search.", args), k.authorize(act, "Search.", args)
-k.revoke(reason="lost my phone")
+d1, d2 = tk.authorize(act, "Search.", args), tk.authorize(act, "Search.", args)
+tk.revoke(reason="lost my phone")
 print("all so far:", gw.invoke(d1.capability, "search", args, f).reason, gw.invoke(d2.capability, "search", args, f).reason)
-d3 = k.authorize(act, "Search.", args)
+d3 = tk.authorize(act, "Search.", args)
 print("issued after:", gw.invoke(d3.capability, "search", args, f).reason)
 ```
 
@@ -984,8 +983,8 @@ The ledger isn't encrypted; see [Limitations](../README.md#limitations).
 
 <!-- check: expect=^OK: ok \(entries= -->
 ```bash
-python -m compact_kernel verify-ledger --ledger ~/.compact-kernel/howto-8.jsonl \
-    --pub ~/.compact-kernel/principal.pub.pem
+python -m two_key verify-ledger --ledger ~/.two-key/howto-8.jsonl \
+    --pub ~/.two-key/principal.pub.pem
 ```
 
 Changing any line breaks the chain. Rewriting the whole file fails too,
@@ -994,10 +993,10 @@ because the head signature can't be forged without your key.
 <!-- check: expect=^REJECTED: hash_chain_broken -->
 <!-- check: expect-fail -->
 ```bash
-mkdir -p /tmp/ck-tamper && cp ~/.compact-kernel/howto-8.jsonl* /tmp/ck-tamper/
-python -c "import pathlib; p = pathlib.Path('/tmp/ck-tamper/howto-8.jsonl'); \
+mkdir -p /tmp/two-key-tamper && cp ~/.two-key/howto-8.jsonl* /tmp/two-key-tamper/
+python -c "import pathlib; p = pathlib.Path('/tmp/two-key-tamper/howto-8.jsonl'); \
 p.write_text(p.read_text().replace('\"allowed\": false', '\"allowed\": true', 1))"   # turn a deny into an allow
-python -m compact_kernel verify-ledger --ledger /tmp/ck-tamper/howto-8.jsonl --pub ~/.compact-kernel/principal.pub.pem
+python -m two_key verify-ledger --ledger /tmp/two-key-tamper/howto-8.jsonl --pub ~/.two-key/principal.pub.pem
 ```
 
 ### Merkle proofs
@@ -1013,9 +1012,9 @@ or to prove an entry to someone else.
 <!-- check: expect=^forged root rejected: True -->
 ```python
 from pathlib import Path
-from compact_kernel.ledger import PersonalLedger
+from two_key.ledger import PersonalLedger
 
-led = PersonalLedger(Path.home() / ".compact-kernel" / "howto-8.jsonl")
+led = PersonalLedger(Path.home() / ".two-key" / "howto-8.jsonl")
 p = led.inclusion_proof(3)
 print("inclusion ok:", PersonalLedger.verify_inclusion_proof(p), "| proof nodes:", len(p["proof"]))
 
@@ -1040,11 +1039,11 @@ the roots printed inside the proof.
 
 <!-- check: expect=^append: ok \(unsigned entries: 0\) -->
 ```python
-from my_kernel import load_key, make_kernel
+from my_two_key import load_key, make_two_key
 
-k = make_kernel("howto-12.jsonl", head_signing="append", ledger_fsync=False)
-k.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Search.", {})
-print(f"append: {k.ledger.verify(load_key().public_key()).reason} (unsigned entries: {k.ledger.unsigned_entries})")
+tk = make_two_key("howto-12.jsonl", head_signing="append", ledger_fsync=False)
+tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Search.", {})
+print(f"append: {tk.ledger.verify(load_key().public_key()).reason} (unsigned entries: {tk.ledger.unsigned_entries})")
 ```
 
 ### Anchoring (stub)
@@ -1059,12 +1058,12 @@ anchored signed head covers.
 <!-- check: expect='size': \d+ -->
 ```python
 from pathlib import Path
-from compact_kernel.anchoring import LocalFileAnchor
-from my_kernel import make_kernel
+from two_key.anchoring import LocalFileAnchor
+from my_two_key import make_two_key
 
-k = make_kernel("howto-12b.jsonl")
-print(k.ledger.anchor(LocalFileAnchor(Path.home() / ".compact-kernel" / "anchors.jsonl")))
-k.ledger.checkpoint()
+tk = make_two_key("howto-12b.jsonl")
+print(tk.ledger.anchor(LocalFileAnchor(Path.home() / ".two-key" / "anchors.jsonl")))
+tk.ledger.checkpoint()
 ```
 
 ## 13. Crypto: FIPS mode, classic and hybrid keys, token modes
@@ -1075,13 +1074,13 @@ run on a validated module. Details are in [CRYPTO.md](CRYPTO.md).
 
 ### Self-test
 
-The kernel runs known-answer and pairwise tests before it starts. You can
+Two-Key runs known-answer and pairwise tests before it starts. You can
 run them yourself:
 
 <!-- check: expect="ok": true -->
 <!-- check: expect="fips_mode": true -->
 ```bash
-python -m compact_kernel --fips selftest --require-pq
+python -m two_key --fips selftest --require-pq
 ```
 
 ### `fips_mode` and `require_fips_module`
@@ -1096,7 +1095,7 @@ like the one these docs were checked on, it refuses:
 <!-- check: expect=^liboqs refused in fips_mode -->
 <!-- check: expect=^require_fips_module: refused -->
 ```python
-from compact_kernel.crypto import CryptoPolicyError, CryptoProvider
+from two_key.crypto import CryptoPolicyError, CryptoProvider
 
 p = CryptoProvider(fips_mode=True)
 try:
@@ -1114,50 +1113,50 @@ except CryptoPolicyError:
     print("require_fips_module: refused (no active FIPS provider on this machine)")
 ```
 
-Pass the provider to the kernel with `CompactKernel(..., crypto=provider)`,
+Pass the provider to Two-Key with `TwoKey(..., crypto=provider)`,
 or set it process-wide with
-`compact_kernel.crypto.set_default_provider(provider)`.
+`two_key.crypto.set_default_provider(provider)`.
 
 ### Hybrid post-quantum key and `require_pq`
 
-With a hybrid key, the kernel defaults to SHA-384 digests and HMAC-SHA-384
-tokens (`ck1-hs384`). Both signature halves must verify, and nothing falls
+With a hybrid key, Two-Key defaults to SHA-384 digests and HMAC-SHA-384
+tokens (`tk1-hs384`). Both signature halves must verify, and nothing falls
 back to classical-only. `require_pq=True` refuses to start without a
 hybrid key and a working ML-DSA backend.
 
-<!-- check: expect=^OK: principal=did:ck:alice .*signer=hybrid-mldsa65-ed25519: -->
+<!-- check: expect=^OK: principal=did:twokey:alice .*signer=hybrid-mldsa65-ed25519: -->
 ```bash
-python -m compact_kernel sign-constitution --document my-constitution.md --principal did:ck:alice \
-    --key ~/.ck-pq/principal.keys.json --passphrase-env CK_KEY_PASSPHRASE --out pq-constitution.signed.json
-python -m compact_kernel verify-constitution --signed pq-constitution.signed.json --pub ~/.ck-pq/principal.pub.json
+python -m two_key sign-constitution --document my-constitution.md --principal did:twokey:alice \
+    --key ~/.two-key-pq/principal.keys.json --passphrase-env TWOKEY_KEY_PASSPHRASE --out pq-constitution.signed.json
+python -m two_key verify-constitution --signed pq-constitution.signed.json --pub ~/.two-key-pq/principal.pub.json
 ```
 
-<!-- check: expect='signature_suite': 'hybrid-mldsa65-ed25519', 'digest_alg': 'sha384', 'token_mode': 'ck1-hs384' -->
+<!-- check: expect='signature_suite': 'hybrid-mldsa65-ed25519', 'digest_alg': 'sha384', 'token_mode': 'tk1-hs384' -->
 <!-- check: expect=^ed25519 key with require_pq: refused -->
 <!-- check: expect=^invoke: executed -->
 ```python
 import os
 from pathlib import Path
-from compact_kernel import keys
-from compact_kernel.constitution import load_envelope
-from compact_kernel.crypto import CryptoProvider
-from compact_kernel.judges.config import load_config_file
-from compact_kernel.kernel import CompactKernel, KernelConfigError
-from my_kernel import make_kernel
+from two_key import keys
+from two_key.constitution import load_envelope
+from two_key.crypto import CryptoProvider
+from two_key.judges.config import load_config_file
+from two_key.core import TwoKey, TwoKeyConfigError
+from my_two_key import make_two_key
 
-pq = Path.home() / ".ck-pq"
-key = keys.load_private_any(pq / "principal.keys.json", os.environ["CK_KEY_PASSPHRASE"].encode())
+pq = Path.home() / ".two-key-pq"
+key = keys.load_private_any(pq / "principal.keys.json", os.environ["TWOKEY_KEY_PASSPHRASE"].encode())
 judges, quorum = load_config_file(Path("judges.yaml"))
-k = CompactKernel(load_envelope(Path("pq-constitution.signed.json")), keys.load_public_any(pq / "principal.pub.json"),
+tk = TwoKey(load_envelope(Path("pq-constitution.signed.json")), keys.load_public_any(pq / "principal.pub.json"),
                   pq / "ledger.jsonl", judges, ledger_signing_key=key, quorum_policy=quorum,
                   crypto=CryptoProvider(fips_mode=True), require_pq=True)
-print(k.crypto_profile())
-gw = k.gateway(tools={"search": lambda q: "ok"})
-d = k.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Search.", {"q": "x"})
+print(tk.crypto_profile())
+gw = tk.gateway(tools={"search": lambda q: "ok"})
+d = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Search.", {"q": "x"})
 print("invoke:", gw.invoke(d.capability, "search", {"q": "x"}, {"data_class": "public"}).reason)
 try:
-    make_kernel("howto-13.jsonl", require_pq=True)
-except KernelConfigError:
+    make_two_key("howto-13.jsonl", require_pq=True)
+except TwoKeyConfigError:
     print("ed25519 key with require_pq: refused")
 ```
 
@@ -1167,7 +1166,7 @@ operations fail with a clear error instead of downgrading:
 <!-- check: expect=cannot generate hybrid-mldsa65-ed25519 -->
 <!-- check: expect-fail -->
 ```bash
-python -m compact_kernel --pq-backend none keygen --out /tmp/no-pq --suite hybrid-mldsa65-ed25519 --no-passphrase
+python -m two_key --pq-backend none keygen --out /tmp/no-pq --suite hybrid-mldsa65-ed25519 --no-passphrase
 ```
 
 ### ECDSA P-384
@@ -1179,34 +1178,33 @@ outside it.
 
 <!-- check: expect=^OK: .*signer=ecdsa-p384: -->
 ```bash
-python -m compact_kernel keygen --out ~/.ck-p384 --suite ecdsa-p384 --passphrase-env CK_KEY_PASSPHRASE
-python -m compact_kernel sign-constitution --document my-constitution.md --principal did:ck:alice \
-    --key ~/.ck-p384/principal.keys.json --passphrase-env CK_KEY_PASSPHRASE --out p384.signed.json
-python -m compact_kernel --fips verify-constitution --signed p384.signed.json --pub ~/.ck-p384/principal.pub.json
+python -m two_key keygen --out ~/.two-key-p384 --suite ecdsa-p384 --passphrase-env TWOKEY_KEY_PASSPHRASE
+python -m two_key sign-constitution --document my-constitution.md --principal did:twokey:alice \
+    --key ~/.two-key-p384/principal.keys.json --passphrase-env TWOKEY_KEY_PASSPHRASE --out p384.signed.json
+python -m two_key --fips verify-constitution --signed p384.signed.json --pub ~/.two-key-p384/principal.pub.json
 ```
 
 ### Token modes
 
 | `token_mode` | Tag | Notes |
 |---|---|---|
-| `ck1` | HMAC-SHA-256, key ≥ 256 bits | Default for Ed25519 keys |
-| `ck1-hs384` | HMAC-SHA-384 | Default for other suites |
-| `ck1-sig` | Signature by a separate token key (`token_signing_key`, e.g. a hybrid `PrivateKeySet`) | The verifier needs no secret that could also mint tokens. About 7 KB per hybrid token, and slower |
+| `tk1` | HMAC-SHA-256, key ≥ 256 bits | Default for Ed25519 keys |
+| `tk1-hs384` | HMAC-SHA-384 | Default for other suites |
+| `tk1-sig` | Signature by a separate token key (`token_signing_key`, e.g. a hybrid `PrivateKeySet`) | The verifier needs no secret that could also mint tokens. About 7 KB per hybrid token, and slower |
 
 HMAC with a key of 256 bits or more is considered quantum-resistant, so the
-HMAC modes are the recommended default. A token of any other mode than the
-kernel's is refused (`unsupported_token_version`), so there's no downgrade.
+HMAC modes are the recommended default. A token of any other mode than Two-Key's is refused (`unsupported_token_version`), so there's no downgrade.
 
-<!-- check: expect=^ck1-sig executed token length \d{4} -->
+<!-- check: expect=^tk1-sig executed token length \d{4} -->
 ```python
-from compact_kernel.crypto import PrivateKeySet
-from my_kernel import make_kernel
+from two_key.crypto import PrivateKeySet
+from my_two_key import make_two_key
 
-k = make_kernel("howto-13b.jsonl", token_mode="ck1-sig",
+tk = make_two_key("howto-13b.jsonl", token_mode="tk1-sig",
                 token_signing_key=PrivateKeySet.generate("hybrid-mldsa65-ed25519"))
-gw = k.gateway(tools={"search": lambda q: "ok"})
-d = k.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Search.", {"q": "x"})
-print("ck1-sig", gw.invoke(d.capability, "search", {"q": "x"}, {"data_class": "public"}).reason,
+gw = tk.gateway(tools={"search": lambda q: "ok"})
+d = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Search.", {"q": "x"})
+print("tk1-sig", gw.invoke(d.capability, "search", {"q": "x"}, {"data_class": "public"}).reason,
       "token length", len(d.capability))
 ```
 
