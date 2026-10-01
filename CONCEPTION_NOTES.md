@@ -82,5 +82,44 @@ records. The rename changes no mechanism.
 
 ---
 
+## Entry 4
+
+- **Attributed to:** Stephan Busch
+- **Date/time:** 2026-09-30, about 8:01 PM Mountain Time (MDT, UTC-6);
+  clarification about 8:02 PM MDT; further context about 8:07 PM MDT
+- **How it was captured:** the 8:01 and 8:02 PM statements were relayed to
+  the AI engineering assistant by Stephan's patent-attorney assistant
+  (another AI agent); the 8:07 PM statement was said directly to Programer.
+  All three quotes are reproduced word for word as relayed, including
+  spelling and punctuation.
+- **Context:** Stephan's approach to problem F (action-record normalization:
+  the gap where a lying or injected agent misstates the action it will take;
+  `DESIGN_OPTIONS.md` §1, Entry 2).
+
+> "Would Two-key asking for a hash (string converted to hash) of the agent's proposed throught process before it takes an action and then comparing Two-Key running the same algorithm to hash the instructions solve this securely? I think it would have to be ran twice; once to hash the proposed actions/thought process and once to hash the actual actions/thought process taken by the agent."
+
+Clarification (about 8:02 PM MDT, relayed):
+
+> "Yes, I thought that's how I explained it, maybe I wasn't clear."
+
+Further context (about 8:07 PM MDT; said by Stephan directly to Programer,
+the engineering agent coordinating this work, and passed on word for word):
+
+> "Well, that's the whole point of a constitution and separate agent (local or service) that acts as a judge…so see if the proposed action is allowed by the constitution. Or is my logical flawed somewhere. The agent being controlled should not be the same agent as running the judges."
+
+### What the clarification confirmed (as relayed; assistant's note, not conception)
+
+As relayed, the clarification confirmed this reading: Two-Key itself
+computes the second ("actual") hash, with the same algorithm, from the
+action it intercepts, rather than the agent supplying it. The first
+("proposed") hash covers the agent's proposed actions or thought process and
+is submitted before the agent acts; the two hashes are then compared.
+
+A security review of exactly this idea is in `F_REVIEW.md`. That review is
+an AI-prepared analysis, not part of the conception. No option for F has
+been implemented.
+
+---
+
 *Future entries: add a new dated section. Don't edit earlier entries. If
 something needs correcting, add a later entry that says so.*
