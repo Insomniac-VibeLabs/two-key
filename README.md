@@ -114,7 +114,7 @@ checked automatically by `tools/doccheck.py` (see [Testing](#testing)).
 
 <!-- check: skip the checker runs in a copy of this repository instead of cloning it -->
 ```bash
-git clone https://github.com/sbusch305-collab/two-key.git
+git clone https://github.com/Insomniac-VibeLabs/two-key.git
 cd two-key
 ```
 

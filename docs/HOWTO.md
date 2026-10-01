@@ -35,7 +35,7 @@ All commands run from the repository root.
 
 <!-- check: skip the checker works in a copy of the repository -->
 ```bash
-git clone https://github.com/sbusch305-collab/two-key.git
+git clone https://github.com/Insomniac-VibeLabs/two-key.git
 cd two-key
 ```
 
