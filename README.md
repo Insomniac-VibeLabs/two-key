@@ -247,7 +247,7 @@ device-code stubs) · 7. Quorum settings (T, K, `min_vendors`,
 `min_local_judges`, `section4()`, timeouts, parallelism, ballot binding) ·
 8. Authorizing actions · 9. Gateway integration · 10. Ordering and
 short-circuit · 11. Revocation · 12. The ledger (verify, Merkle proofs,
-head signing, fsync, anchoring stub) · 13. Crypto (`fips_mode`, classic vs
+head signing, fsync, anchoring, deployment mode) · 13. Crypto (`fips_mode`, classic vs
 hybrid, P-384, `require_pq`, token modes, self-test) · 14. Performance and
 tests
 
@@ -357,6 +357,9 @@ the file is loaded.
 | `require_pq` | `False` | bool | Refuse to start without a hybrid ML-DSA key and a working backend |
 | `allow_test_doubles` | `False` | bool | Permit `two_key.testing` judges (demos and tests only) |
 | `clock` | `time.time` | callable | Clock for token issue and expiry (tests) |
+| `deployment_mode` | `personal` (or `TWOKEY_DEPLOYMENT_MODE`, or the config file) | `personal`, `enterprise` | Set once per ledger. `enterprise` requires a permissioned-chain `anchor`. All sources that are set must agree. See `docs/DEPLOYMENT_MODES.md` |
+| `deployment_config` | none | path to a JSON/YAML file with `deployment_mode:` | Config-file source for the mode |
+| `anchor` | none | `NullAnchor`, `LocalFileAnchor` (personal); `FabricAnchor`, `RestPermissionedAnchor` (enterprise) | Publish every signed head. In enterprise mode, a failure denies the action (fails closed) |
 
 Methods: `authorize(action, proposal, tool_args)`, `gateway(tools=None,
 extractors=None, checkpoint_every=1, view_refresh="token")`,
@@ -565,8 +568,12 @@ algorithms and can sign with hybrid ML-DSA-65, but it isn't validated. See
   in `docs/SCANNING_HOOKS.md`.
 - **The username/password and OAuth device-code auth modes are stubs.**
   They work only with a hook you supply.
-- **Public anchoring is a stub.** `LocalFileAnchor` writes a local file;
-  nothing is published.
+- **Anchoring.** In `personal` mode (the default), the ledger is local.
+  `LocalFileAnchor` writes a local file and nothing is published. In
+  `enterprise` mode, `FabricAnchor` / `RestPermissionedAnchor` anchor
+  every signed head to a permissioned chain. These anchors are **tested
+  with fakes only**, not against a live network. The endorsement-policy
+  defaults are placeholders. See `docs/DEPLOYMENT_MODES.md`.
 - **Keys are files, not TEE/HSM-held.** Tokens use an HMAC secret shared by
   issuer and gateway by default.
 - **Storage.** The ledger isn't encrypted, and one process must own it.
@@ -585,13 +592,15 @@ algorithms and can sign with hybrid ML-DSA-65, but it isn't validated. See
 | `two_key/quorum.py`, `judges/` | Path B quorum; judge adapters, credentials, config loader |
 | `two_key/capability.py`, `gateway.py` | Tokens and the tool gateway |
 | `two_key/scanning.py` | Optional DLP/antivirus scanning hooks for the gateway |
-| `two_key/ledger.py`, `merkle.py`, `anchoring.py` | Signed ledger, Merkle proofs, anchoring stub |
+| `two_key/ledger.py`, `merkle.py`, `anchoring.py` | Signed ledger, Merkle proofs, local and permissioned-chain anchors |
+| `two_key/deployment.py` | `deployment_mode` (`personal` / `enterprise`): resolution, set-once check, anchor check |
 | `two_key/crypto/`, `keys.py`, `constitution.py` | Crypto provider and suites, key files, constitution signing |
 | `two_key/testing.py` | Offline test-double judges (not for deployment) |
 | `examples/` | Example constitutions (one-file and two-file), hard rules, `judges.yaml` |
 | `tools/doccheck.py` | Runs every snippet in this README and `docs/HOWTO.md` |
 | [docs/HOWTO.md](docs/HOWTO.md) | Step-by-step guide |
 | [docs/CRYPTO.md](docs/CRYPTO.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | FIPS posture and algorithms; measured performance |
+| [docs/DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) | Personal vs enterprise mode, permissioned-ledger anchoring (Fabric, REST), open questions (Entry 9) |
 | [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types (outbound and inbound), pros and cons, Stephan's decisions (Entries 6 and 7), open questions |
 | [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md), `docs/INVENTION_DISCLOSURE.md` (unchanged) | Working specification draft; original disclosure |
 | `CONCEPTION_NOTES.md`, `DESIGN_OPTIONS.md`, `CHANGES.md` | Inventor's dated notes; open design questions; every change and who decided it |

@@ -21,7 +21,10 @@ An append-only JSONL hash chain owned by the principal (spec 5.6), plus:
   boundaries, so one signature covers all entries of a decision;
 - configurable digest algorithm: SHA-256 (legacy default) or SHA-384 (the
   default when the signing key is a post-quantum hybrid suite);
-- an anchoring hook (anchoring.py). It is a stub; nothing is published;
+- an anchoring hook (anchoring.py). With ``head_anchor=`` every signed head is
+  also published to that anchor (enterprise mode: a permissioned chain) and
+  the receipt is recorded as an ``anchored`` entry. Without one, nothing is
+  published;
 - the single-use record for capability tokens (``redeem``). Every gateway
   on this ledger (every ``tk.gateway()`` of one TwoKey instance) consults the
   same record, so a token is accepted once however many gateways exist.
@@ -50,7 +53,7 @@ from pathlib import Path
 from typing import Any
 
 from . import merkle
-from .anchoring import Anchor
+from .anchoring import Anchor, AnchorError
 from .canonical import canonical_bytes, digest_hex
 from .crypto.provider import DIGEST_SIZE, CryptoProvider, default_provider
 from .crypto.signatures import LEGACY_SUITE, as_private_keyset, as_public_keyset
@@ -118,7 +121,8 @@ def _write_private(path: Path, data: str, append: bool, fsync: bool = True) -> N
 
 class PersonalLedger:
     def __init__(self, path: Path, signing_key: Any = None, *, digest_alg: str | None = None,
-                 auto_sign_every: int = 1, fsync: bool = True, crypto: CryptoProvider | None = None):
+                 auto_sign_every: int = 1, fsync: bool = True, crypto: CryptoProvider | None = None,
+                 head_anchor: Anchor | None = None):
         self.path = Path(path)
         self.head_path = self.path.with_name(self.path.name + ".head.json")
         self.crypto = crypto or default_provider()
@@ -139,6 +143,8 @@ class PersonalLedger:
         self._lock_fd: int | None = None            # fd for the cross-process redemption flock (lazy)
         self._stale: str | None = None              # set once redeem() finds another writer on the file
         self._unsigned = 0
+        self.head_anchor = head_anchor              # publish every signed head here (None: local only)
+        self._anchoring = False
         if self.path.exists():
             self._load()
         existing = self.entries[0].alg if self.entries else None
@@ -404,10 +410,33 @@ class PersonalLedger:
             if self._stale:
                 raise LedgerError(self._stale)
             tmp = self.head_path.with_name(self.head_path.name + ".tmp")
-            _write_private(tmp, json.dumps(self.signed_head(), sort_keys=True) + "\n", append=False,
-                           fsync=self.fsync)
+            sh = self.signed_head()
+            _write_private(tmp, json.dumps(sh, sort_keys=True) + "\n", append=False, fsync=self.fsync)
             os.replace(tmp, self.head_path)
             self._unsigned = 0
+            if self.head_anchor is not None and not self._anchoring:
+                self._anchor_head(sh)
+
+    def _anchor_head(self, sh: dict) -> None:
+        """Publish a just-signed head. The receipt (or the failure) is recorded in an ``anchored`` /
+        ``anchor_failed`` entry with the head it covers, then the head is re-signed so the signed head
+        still covers the whole ledger. That last head is anchored by the next checkpoint. A failure
+        raises AnchorError after it is recorded, so the checkpoint fails (and a decision is denied)."""
+        self._anchoring = True
+        try:
+            try:
+                receipt = self.head_anchor.publish(sh)
+            except Exception as e:  # noqa: BLE001 - recorded, then raised as AnchorError
+                self.append("anchor_failed", {"anchor": self.head_anchor.describe(), "size": sh["head"]["size"],
+                                              "error": f"{type(e).__name__}: {e}"[:300]})
+                if self._unsigned:
+                    self._write_head()
+                raise AnchorError(f"anchoring failed: {type(e).__name__}: {e}"[:300]) from None
+            self.append("anchored", {"receipt": receipt, "signed_head": sh})
+            if self._unsigned:
+                self._write_head()
+        finally:
+            self._anchoring = False
 
     def verify(self, trusted_key: Any) -> VerifyReport:
         """Full verification: chain, signed head under the trusted key, size, and Merkle root.
@@ -444,7 +473,7 @@ class PersonalLedger:
             return VerifyReport(False, "merkle_root_mismatch", n)
         return VerifyReport(True, "ok", n)
 
-    # -- anchoring (stub) --------------------------------------------------------
+    # -- anchoring (manual) ------------------------------------------------------
     def anchor(self, anchor: Anchor) -> dict:
         receipt = anchor.publish(self.signed_head())
         self.append("anchored", {"receipt": receipt})

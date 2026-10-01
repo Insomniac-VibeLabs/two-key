@@ -10,6 +10,7 @@ Commands:
   verify-ledger        verify a ledger's hash chain, signed head and Merkle root
   check-judges         validate a judges.yaml (no network calls)
   selftest             run the crypto known-answer self-test and show the provider
+  deployment-mode      show the deployment mode (personal or enterprise) and where it is set
   demo                 run the offline demo
 """
 
@@ -137,6 +138,17 @@ def cmd_selftest(args) -> int:
     return 0
 
 
+def cmd_deployment_mode(args) -> int:
+    from .deployment import DeploymentConfigError, resolve
+    try:
+        c = resolve(args.mode, config_path=args.config)
+    except (DeploymentConfigError, OSError, ValueError) as e:
+        print(f"INVALID: {e}")
+        return 1
+    print(f"OK: deployment_mode={c.mode} source={c.source}")
+    return 0
+
+
 def cmd_demo(args) -> int:
     from .demo import main as demo_main
     demo_main()
@@ -175,6 +187,10 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("selftest", help="run the crypto self-test")
     s.add_argument("--require-pq", action="store_true", help="fail if no ML-DSA backend is available")
     s.set_defaults(fn=cmd_selftest)
+    s = sub.add_parser("deployment-mode", help="show the deployment mode and where it is set")
+    s.add_argument("--mode", help="personal or enterprise (as passed to TwoKey(deployment_mode=))")
+    s.add_argument("--config", help="config file with deployment_mode: (JSON or YAML)")
+    s.set_defaults(fn=cmd_deployment_mode)
     s = sub.add_parser("demo", help="run the offline demo"); s.set_defaults(fn=cmd_demo)
     return p
 

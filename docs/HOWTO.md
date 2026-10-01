@@ -1176,6 +1176,68 @@ print(tk.ledger.anchor(LocalFileAnchor(Path.home() / ".two-key" / "anchors.jsonl
 tk.ledger.checkpoint()
 ```
 
+### Deployment mode and permissioned anchoring
+
+`deployment_mode` is `personal` (the default: the ledger stays local) or
+`enterprise` (every signed head is anchored to a permissioned blockchain).
+Set it with `TwoKey(deployment_mode=...)`, the `TWOKEY_DEPLOYMENT_MODE`
+environment variable, or `deployment_mode:` in a file passed as
+`deployment_config=`. If more than one is set, they must agree. The mode
+is fixed for a ledger once it is set. See
+[DEPLOYMENT_MODES.md](DEPLOYMENT_MODES.md) for the receipts, the Fabric
+chaincode contract, and the open questions.
+
+<!-- check: expect=^OK: deployment_mode=enterprise source=environment -->
+```bash
+TWOKEY_DEPLOYMENT_MODE=enterprise python -m two_key deployment-mode
+```
+
+Enterprise mode refuses to start without a permissioned anchor. Below,
+`DemoGateway` is an in-memory stand-in for a Fabric client bridge. Swap
+in your own bridge, or use `FabricAnchor.from_fabric_sdk_py(...)`.
+
+<!-- check: expect=^refused: deployment_mode 'enterprise' requires a permissioned-ledger anchor -->
+<!-- check: expect=^anchors: \['ok', 'ok' -->
+<!-- check: expect=^mode: enterprise -->
+```python
+from two_key.anchoring import FabricAnchor, check_anchored_entries
+from two_key.core import TwoKeyConfigError
+from my_two_key import load_key, make_two_key
+
+try:
+    make_two_key("howto-12c.jsonl", deployment_mode="enterprise")
+except TwoKeyConfigError as e:
+    print("refused:", e)
+
+
+class DemoGateway:  # in-memory stand-in; a real one talks to Fabric peers
+    def __init__(self):
+        self.state, self.txs = {}, {}
+
+    def submit_transaction(self, channel, chaincode, function, args):
+        key, record_json = args
+        if key in self.state:
+            raise RuntimeError("PutAnchor: key already exists")
+        self.state[key] = record_json
+        tx = {"tx_id": f"tx{len(self.txs) + 1}", "block_number": len(self.txs) + 1,
+              "validation_code": "VALID", "endorsing_orgs": ["Org1MSP", "Org2MSP"]}
+        self.txs[tx["tx_id"]] = tx
+        return tx
+
+    def evaluate_transaction(self, channel, chaincode, function, args):
+        return self.state.get(args[0], "")
+
+    def get_transaction(self, channel, tx_id):
+        return self.txs.get(tx_id)
+
+
+anchor = FabricAnchor(DemoGateway(), channel="audit", chaincode="twokey-anchor", min_endorsing_orgs=2)
+tk = make_two_key("howto-12c.jsonl", deployment_mode="enterprise", anchor=anchor)
+tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Search.", {})
+print("anchors:", [c.reason for c in check_anchored_entries(tk.ledger, load_key().public_key(), anchor)])
+print("mode:", tk.deployment.mode)
+```
+
 ## 13. Crypto: FIPS mode, classic and hybrid keys, token modes
 
 **This code is not FIPS certified or validated.** It uses only

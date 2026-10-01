@@ -33,6 +33,12 @@ PRIOR_ART.md §4 directions selected by Stephan Busch on 2026-09-30
 (iii) judge-set heterogeneity, the availability floor K, bound ballots, and
       record-only judge inputs (quorum.py); Path B runs only after Path A passes.
 
+Deployment mode (deployment.py; CONCEPTION_NOTES.md Entry 9): ``personal``
+(default, unchanged behavior) or ``enterprise`` (every signed ledger head is
+also anchored to a permissioned chain; startup fails without one). Set once,
+early, from the argument, TWOKEY_DEPLOYMENT_MODE, or a config file, and
+recorded in the ledger.
+
 Crypto (two_key.crypto): a CryptoProvider runs its known-answer
 self-test before Two-Key starts; ``fips_mode`` refuses non-approved
 algorithms. The principal key may be legacy Ed25519, ECDSA P-384, or a hybrid
@@ -54,6 +60,8 @@ from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, verify_signed
 from .crypto.provider import CryptoProvider, default_provider
 from .crypto.signatures import LEGACY_SUITE, as_public_keyset
+from . import deployment as _deployment
+from .anchoring import NullAnchor
 from .gateway import Extractor, ToolGateway
 from .judges.base import Judge
 from .ledger import LedgerError, PersonalLedger
@@ -104,7 +112,17 @@ class TwoKey:
         token_signing_key: Any = None,
         head_signing: str = "decision",
         ledger_fsync: bool = True,
+        deployment_mode: str | None = None,
+        deployment_config: Path | str | None = None,
+        anchor: Any = None,
     ):
+        # Deployment mode first (Entry 9): an early, global setting other settings can depend on later.
+        try:
+            self.deployment = _deployment.resolve(deployment_mode, config_path=deployment_config)
+            _deployment.check_anchor(self.deployment, anchor)
+        except _deployment.DeploymentConfigError as e:
+            raise TwoKeyConfigError(str(e)) from e
+        self.anchor = anchor
         # Crypto first: the known-answer self-test must pass before anything else (raises SelfTestError).
         self.crypto = crypto or default_provider()
         self.selftest = self.crypto.ensure_selftest()
@@ -140,7 +158,12 @@ class TwoKey:
         self.head_signing = head_signing
         self.ledger = PersonalLedger(Path(ledger_path), signing_key=ledger_signing_key, digest_alg=self.digest_alg,
                                      auto_sign_every=1 if head_signing == "append" else 0,
-                                     fsync=ledger_fsync, crypto=self.crypto)
+                                     fsync=ledger_fsync, crypto=self.crypto,
+                                     head_anchor=None if isinstance(anchor, NullAnchor) else anchor)
+        recorded = _deployment.recorded_mode(self.ledger)
+        if recorded is not None and recorded != self.deployment.mode:
+            raise TwoKeyConfigError(f"this ledger was set up in deployment_mode {recorded!r}; it is set once and "
+                                    f"can't be reopened as {self.deployment.mode!r}")
         if self.ledger.entries:
             if ledger_signing_key is not None:
                 rep = self.ledger.verify(trusted)
@@ -196,6 +219,8 @@ class TwoKey:
             "short_circuit_path_b": self.short_circuit_path_b,
             "quorum": self.quorum_policy.to_record(),
             "crypto": self.crypto_profile(),
+            "deployment": {**self.deployment.to_record(),
+                           "anchor": None if self.anchor is None else self.anchor.describe()},
             **extra,
         })
 

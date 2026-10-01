@@ -299,6 +299,52 @@ listed as open in `docs/SCANNING_HOOKS.md`.
 - From Entry 7 on, earlier entries and earlier `CHANGES.md` rows are not
   edited; new information is only appended.
 
+## Entry 9
+
+- **Attributed to:** Stephan Busch
+- **Date/time:** 2026-09-30, about 10:26 PM Mountain Time (MDT, UTC-6); the
+  question quoted as context was asked at about 10:20 PM MT.
+- **How it was captured:** relayed word for word to the AI engineering
+  assistant in the task instructions from Programer, the engineering agent
+  coordinating this work. The quotes are reproduced exactly as relayed,
+  including spelling, spacing, quotation marks, and apostrophes.
+- **Context:** Stephan's question about the ledger (about 10:20 PM MT):
+
+> "Just to be clear, the ‘ledger’ is a cryptographic ledger like a blockchain right?  Where it’s auditable and nonreputable?
+>
+> If so, I think it’s currently locally stored; is that true?"
+
+### Assistant's answer to that question (not conception)
+
+- The ledger is a cryptographic ledger, but not a blockchain. It is a hash
+  chain of entries plus a Merkle tree over them, with a head signed by the
+  principal's key. Tampering with, reordering, or truncating entries is
+  detectable against a signed head, which makes it auditable.
+- Yes, it is stored locally: one file per principal, with its signed head
+  next to it.
+- Non-repudiation needs external anchoring. The principal holds the signing
+  key, so the principal could rewrite the history and sign a new head unless
+  earlier heads were published somewhere the principal doesn't control.
+- `two_key/anchoring.py` had only two anchors, `NullAnchor` and
+  `LocalFileAnchor`. Neither publishes anything outside the machine.
+
+### Stephan's statement (about 10:26 PM MT)
+
+> "I think locally is fine for personal use.  However, I think for enterprise use, an enterprise level (not fully public) blockchain would be the best for this.  If you concur, create the option.  Tie the configuration to a whether or not it’s being used for personal use or for an enterprise (likely need to be an early on configuration setting/global variable to denote ‘personal’ or ‘enterprise’ use; as many other settings will likely need to be addressed based on the use case.)"
+
+### Assistant's note (not conception)
+
+- The assistant concurred. It cautioned that a permissioned chain adds
+  non-repudiation only if its nodes, and the organizations that endorse
+  transactions, are run by parties who are not all under one
+  administrator. If one administrator controls every node, that
+  administrator can rewrite the chain too.
+- The implementation (the `deployment_mode` setting, a permissioned-ledger
+  anchor interface, and a Hyperledger Fabric adapter) is AI-prepared
+  engineering. It is described in `docs/DEPLOYMENT_MODES.md` and
+  `CHANGES.md` row 88. Settings he has not decided are listed there as
+  open questions.
+
 ---
 
 *Future entries: add a new dated section. Don't edit earlier entries. If
