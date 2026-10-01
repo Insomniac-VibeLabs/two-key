@@ -4,7 +4,7 @@
 
 **Short name:** Two-Key ("two-key")
 
-**Draft prepared:** 2026-09-30. Derived from `docs/INVENTION_DISCLOSURE.md` (disclosure date 30 September 2026, kept unchanged for the record) and updated to match the prototype in this repository. **Updated 2026-09-30, about 7:40 AM MT:** added the cryptographic profile (`docs/CRYPTO.md`), the measured performance (`docs/PERFORMANCE.md`), and the three `PRIOR_ART.md` §4 directions that Stephan selected at about 7:02 AM MT (§§5.6–5.13, Figures 5–7).
+**Draft prepared:** 2026-09-30. Derived from `docs/INVENTION_DISCLOSURE.md` (disclosure date 30 September 2026, kept unchanged for the record) and updated to match the prototype in this repository. **Updated 2026-09-30, about 7:40 AM MT:** added the cryptographic profile (`docs/CRYPTO.md`), the measured performance (`docs/PERFORMANCE.md`), and the three `PRIOR_ART.md` §4 directions that Stephan selected at about 7:02 AM MT (§§5.6–5.13, Figures 5–7). **Updated 2026-10-01:** §5.14 (seed-phrase backup and enterprise PKI, Entry 11) and the §6 status table; current per-feature evidence is in `docs/PROVISIONAL_READINESS.md`.
 
 **Status:** Working draft for review by a registered patent attorney. Not a filed application. Not legal advice.
 
@@ -15,6 +15,7 @@
 | **[D §n]** | Carried over from the original invention disclosure, section n |
 | **[SB-1]** | Stephan Busch's conception statement, `CONCEPTION_NOTES.md` entry 1 (2026-09-30, ~4:03 AM MT) |
 | **[SB-2 (i)/(ii)/(iii)]** | Stephan Busch's **selection**, `CONCEPTION_NOTES.md` entry 2 (2026-09-30, ~7:02 AM MT, relayed through his patent-attorney assistant): "A, B, C, and F all together", choosing directions (i), (ii), (iii) of `PRIOR_ART.md` §4 and flagging the normalization problem (F). The wording of each direction comes from `PRIOR_ART.md` §4, an AI-prepared prior-art memo by the patent-attorney agent that is kept outside this repository. Selecting among proposed directions is recorded as a selection, not as conception; counsel should assess |
+| **[SB-11]** | Stephan Busch's direction, `CONCEPTION_NOTES.md` entry 11 (2026-10-01, 9:56 AM MT): "add a seed phrase backup for personal use and PKI for enterprise use". The mechanisms in §5.14 were proposed by the AI assistant that morning (recorded there as not conception) and are tagged [IMPL] |
 | **[IMPL]** | How the prototype implements something. It is an engineering detail, not asserted as inventive. Where several designs are possible, see `DESIGN_OPTIONS.md` |
 
 **Inventorship:** to be determined with counsel. Some mechanisms in §§5.5, 5.7 and 5.8 were proposed by an AI agent (`PRIOR_ART.md` §4) and selected by Stephan; each is tagged accordingly. The conception record is in `CONCEPTION_NOTES.md`; engineering changes and who decided them are in `CHANGES.md`. The original disclosure text and the prototype code were largely drafted with an AI assistant. AI is not an inventor.
@@ -176,7 +177,7 @@ Hash chain: `digest_i = H(canonical(seq, ts, kind, body, prev))`. Verification w
 - The ledger logs the full canonical action record, the args hash, the ballots, the token hash, and the deny reason or rule.
 - The principal's key signs the chain head {size, head digest, RFC 6962/9162 Merkle root}, by default once per decision (`head_signing="decision"`; `"append"` signs every append). A full rewrite, truncation, or an unsigned append is then detected. Digests are SHA-256 (legacy) or SHA-384 (post-quantum profile, with the algorithm bound into each digest). The head signature uses the principal's suite, including hybrid ML-DSA-65.
 - Merkle inclusion proofs and RFC 9162 consistency proofs between any two sizes are available (`inclusion_proof`, `consistency_proof`, `verify_consistency_proof`).
-- Anchoring is an interface with local stubs only; nothing is published.
+- Public anchoring is an interface with local stubs only; nothing is published to a public log. In enterprise mode every signed head is anchored to a permissioned chain (Hyperledger Fabric or a REST adapter; `docs/DEPLOYMENT_MODES.md`, Entry 9), tested with in-memory fakes only.
 - Files are created with mode 0600. The ledger is not encrypted.
 
 ### 5.10 Fail-closed defaults [D §5.7]
@@ -222,6 +223,13 @@ One run on a shared 8-vCPU cloud VM, 2026-09-30 about 07:33 MDT, with local test
 
 Compared with the code before the §4 phase, measured in the same session, the §4 (i)–(iii) checks added about 23–25 µs (9–18%) to gateway `invoke`, 53 µs on an 18,000-entry ledger, and 66–117 µs (6–12%) to `authorize`. Details and causes are in `docs/PERFORMANCE.md`. Real judge latency, which is network- and model-bound and not measured, dominates end to end. Judges run in parallel under an overall deadline.
 
+### 5.14 Keys and identities: seed-phrase backup (personal) and PKI (enterprise) [SB-11; IMPL]
+
+Stephan's direction [SB-11]: a seed-phrase backup for personal use and PKI for enterprise use. Details (`docs/KEYS_AND_PKI.md`) are [IMPL]:
+- **Personal: optional seed-phrase backup.** A BIP-39 24-word phrase (256-bit entropy, checksum) with an optional passphrase. The BIP-39 seed (PBKDF2-HMAC-SHA-512) is expanded by HKDF-SHA-384 under one domain label per algorithm into the Ed25519 key, the ML-DSA-65 seed, and the P-384 scalar. Refused in `fips_mode` and in enterprise mode; the words are never logged.
+- **Enterprise: PKI identities.** The principal, agents, and judges are X.509 identities: chain validation to configured trust anchors, key usage and validity, CRL/OCSP revocation (unreachable status fails closed by default, a placeholder), and certificate subject/SAN mapped to the Two-Key roles. Enterprise startup refuses without PKI and a principal certificate that certifies the principal's key. Each authorization carries an agent assertion signed with the agent's certified key, bound to the request, fresh, and not replayed. Keys may be on a PKCS#11 token.
+- **Hybrid with certificates.** The CA binds the holder's ML-DSA-65 public key by including its SHA-384 in a non-critical certificate extension; the identity's key is then ML-DSA-65 + the certificate's classical key, both required. Chosen over a holder-signed binding record because the CA's signature does not fall with the classical key.
+
 ## 6. Reduction to practice (as of 2026-09-30)
 
 [IMPL] The Python 3 prototype is in `two_key/`. The test suite (`python -m unittest discover -s tests`, 249 tests) covers:
@@ -255,7 +263,11 @@ Compared with the code before the §4 phase, measured in the same session, the �
 | Action-record normalization design (F) | **Open; no option implemented** |
 | PRIOR_ART.md §4 (iv) replay audit, (v) imputation logging, (vi) model-swap | Not selected; not implemented |
 | Public anchoring | Stub interface only |
-| Hardware-backed keys (TEE/HSM) | Not implemented |
+| Content-scanning hooks, outbound and inbound (Entries 5–7) [added 2026-10-01] | Implemented; tested with local fakes only |
+| Permissioned-chain anchoring, deployment modes (Entry 9) [added 2026-10-01] | Implemented; tested with in-memory fakes only |
+| Seed-phrase backup, personal mode [SB-11] [added 2026-10-01] | Implemented |
+| Enterprise PKI identities [SB-11] [added 2026-10-01] | Implemented; tested with a generated test CA only |
+| Hardware-backed keys (TEE/HSM) | PKCS#11 signer interface (2026-10-01): tested with SoftHSM 2.6 and a fake token, no real HSM or smart card; TEE not implemented |
 | Ledger encryption | Not implemented |
 
 ## 7. Example claims

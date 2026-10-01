@@ -4,7 +4,10 @@ Global options (before the command): --fips (refuse non-approved algorithms),
 --pq-backend auto|pyca|liboqs|none.
 
 Commands:
-  keygen               generate the principal's key pair (--suite, default ed25519)
+  keygen               generate the principal's key pair (--suite, default ed25519;
+                       --seed-phrase also shows a 24-word backup once, personal mode only)
+  recover-key          rebuild the key file from the 24-word seed phrase
+  verify-seed-phrase   check the seed phrase (checksum, and against a public key) without writing anything
   sign-constitution    bundle a plain-English constitution plus a hard-rules file and sign them
   verify-constitution  verify a signed constitution against the principal's public key
   verify-ledger        verify a ledger's hash chain, signed head and Merkle root
@@ -12,6 +15,7 @@ Commands:
   selftest             run the crypto known-answer self-test and show the provider
   deployment-mode      show the deployment mode (personal or enterprise) and where it is set
   demo                 run the offline demo
+  e2e-demo             exercise every capability end to end, offline (exit 0 = every check passed)
 """
 
 from __future__ import annotations
@@ -43,6 +47,56 @@ def _passphrase(args, confirm: bool = False) -> bytes | None:
     return p.encode() or None
 
 
+def _seed_policy(args):
+    """Seed phrases: personal mode only, never in fips_mode (seedphrase.check_allowed)."""
+    from .crypto import default_provider
+    from .deployment import DeploymentConfigError, resolve
+    from .seedphrase import SeedPhrasePolicyError, check_allowed
+    try:
+        dep = resolve(getattr(args, "deployment_mode", None), config_path=getattr(args, "deployment_config", None))
+        check_allowed(default_provider(), dep)
+    except (SeedPhrasePolicyError, DeploymentConfigError) as e:
+        sys.exit(f"REFUSED: {e}")
+    return dep
+
+
+def _seed_passphrase(args, confirm: bool = False) -> str:
+    """The optional BIP-39 passphrase (not the key-file passphrase). Empty means none."""
+    if getattr(args, "seed_passphrase_env", None):
+        v = os.environ.get(args.seed_passphrase_env)
+        if v is None:
+            sys.exit(f"environment variable {args.seed_passphrase_env} is not set")
+        return v
+    if getattr(args, "seed_passphrase_prompt", False):
+        p = getpass.getpass("Seed passphrase (empty for none): ")
+        if confirm and p and getpass.getpass("Repeat seed passphrase: ") != p:
+            sys.exit("seed passphrases do not match")
+        return p
+    return ""
+
+
+def _read_words() -> str:
+    """The 24 words from the terminal (not echoed) or from stdin. Never logged or echoed."""
+    if sys.stdin.isatty():
+        return getpass.getpass("Seed phrase (24 words, not echoed): ")
+    return sys.stdin.readline()
+
+
+def _save_key(out: Path, suite: str, k, args) -> tuple[Path, Path]:
+    legacy = suite == "ed25519"
+    priv = out / ("principal.pem" if legacy else "principal.keys.json")
+    pub = out / ("principal.pub.pem" if legacy else "principal.pub.json")
+    if priv.exists():
+        sys.exit(f"refusing to overwrite {priv}")
+    if legacy:
+        keys.save_private_key(priv, k, _passphrase(args, confirm=True))
+        keys.save_public_key(pub, k)
+    else:
+        keys.save_keyset(priv, k, _passphrase(args, confirm=True))
+        keys.save_public_keyset(pub, k.public())
+    return priv, pub
+
+
 def cmd_keygen(args) -> int:
     from .crypto import PQUnavailableError
     out = Path(args.out)
@@ -51,6 +105,24 @@ def cmd_keygen(args) -> int:
     pub = out / ("principal.pub.pem" if legacy else "principal.pub.json")
     if priv.exists():
         sys.exit(f"refusing to overwrite {priv}")
+    if args.seed_phrase:
+        from .seedphrase import SeedPhraseError, generate
+        dep = _seed_policy(args)
+        try:
+            phrase, k = generate(args.suite, _seed_passphrase(args, confirm=True), deployment=dep)
+        except (PQUnavailableError, SeedPhraseError) as e:
+            sys.exit(f"cannot generate {args.suite}: {e}")
+        priv, pub = _save_key(out, args.suite, k, args)
+        words = phrase.reveal().split()
+        print("SEED PHRASE BACKUP: shown once, not stored. Write it down and keep it offline.")
+        print("Anyone with these words (and the seed passphrase, if you set one) can rebuild this key.")
+        for i in range(0, 24, 6):
+            print("  " + "  ".join(f"{n + 1:>2}. {w:<9}" for n, w in enumerate(words[i:i + 6], start=i)).rstrip())
+        del words, phrase
+        print(f"private key: {priv} (mode 0600, keep it secret, never commit)")
+        print(f"public key : {pub}")
+        print(f"fingerprint: {keys.fingerprint(k)}")
+        return 0
     try:
         k = keys.generate_keyset(args.suite)
     except PQUnavailableError as e:
@@ -64,6 +136,49 @@ def cmd_keygen(args) -> int:
     print(f"private key: {priv} (mode 0600, keep it secret, never commit)")
     print(f"public key : {pub}")
     print(f"fingerprint: {keys.fingerprint(k)}")
+    return 0
+
+
+def cmd_recover_key(args) -> int:
+    """Rebuild the key file from the seed phrase (stdin or a hidden prompt)."""
+    from .crypto import PQUnavailableError
+    from .crypto.signatures import as_public_keyset
+    from .seedphrase import SeedPhraseError, derive_key
+    dep = _seed_policy(args)
+    try:
+        k = derive_key(_read_words(), args.suite, _seed_passphrase(args), deployment=dep)
+    except (PQUnavailableError, SeedPhraseError) as e:
+        sys.exit(f"REJECTED: {e}")
+    if args.expect_pub and as_public_keyset(keys.load_public_any(Path(args.expect_pub))).encoded != \
+            as_public_keyset(k).encoded:
+        sys.exit("REJECTED: the phrase (and seed passphrase) do not give the expected public key; nothing was written")
+    priv, pub = _save_key(Path(args.out), args.suite, k, args)
+    print(f"recovered private key: {priv} (mode 0600)")
+    print(f"public key : {pub}")
+    print(f"fingerprint: {keys.fingerprint(k)}")
+    return 0
+
+
+def cmd_verify_seed_phrase(args) -> int:
+    """Check the words (and, with --pub, that they re-derive that key). Writes nothing."""
+    from .crypto import PQUnavailableError
+    from .seedphrase import SeedPhraseError, matches, validate
+    dep = _seed_policy(args)
+    try:
+        words = _read_words()
+        validate(words)
+        if not args.pub:
+            print("OK: 24 words, BIP-39 checksum valid (no --pub given, so the key itself was not checked)")
+            return 0
+        pub = keys.load_public_any(Path(args.pub))
+        ok = matches(words, pub, _seed_passphrase(args), deployment=dep)
+    except (PQUnavailableError, SeedPhraseError) as e:
+        print(f"REJECTED: {e}")
+        return 1
+    if not ok:
+        print("MISMATCH: checksum valid, but the phrase (and seed passphrase) give a different key")
+        return 1
+    print(f"OK: the phrase re-derives {keys.fingerprint(pub)}; nothing was written")
     return 0
 
 
@@ -155,6 +270,11 @@ def cmd_demo(args) -> int:
     return 0
 
 
+def cmd_e2e_demo(args) -> int:
+    from .e2e_demo import main as e2e_main
+    return e2e_main()
+
+
 def build_parser() -> argparse.ArgumentParser:
     from .crypto.signatures import SUITES
     p = argparse.ArgumentParser(prog="two-key", description="Two-Key prototype CLI")
@@ -169,7 +289,24 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("keygen", help="generate the principal key pair"); s.add_argument("--out", required=True); pw(s)
     s.add_argument("--suite", default="ed25519", choices=sorted(SUITES),
                    help="ed25519 (legacy PEM), ecdsa-p384, or a hybrid ML-DSA-65 suite")
+
+    def seed(sp):
+        sp.add_argument("--seed-passphrase-env", help="optional BIP-39 passphrase from this environment variable")
+        sp.add_argument("--seed-passphrase-prompt", action="store_true", help="prompt for an optional BIP-39 passphrase")
+        sp.add_argument("--deployment-mode", help="personal or enterprise (seed phrases: personal only)")
+        sp.add_argument("--deployment-config", help="config file with deployment_mode:")
+    s.add_argument("--seed-phrase", action="store_true",
+                   help="derive the key from a new 24-word BIP-39 phrase, shown once (personal mode; not with --fips)")
+    seed(s)
     s.set_defaults(fn=cmd_keygen)
+    s = sub.add_parser("recover-key", help="rebuild the key file from the 24-word seed phrase (read from stdin)")
+    s.add_argument("--out", required=True); pw(s); seed(s)
+    s.add_argument("--suite", default="ed25519", choices=sorted(SUITES))
+    s.add_argument("--expect-pub", help="refuse to write unless the result matches this public key file")
+    s.set_defaults(fn=cmd_recover_key)
+    s = sub.add_parser("verify-seed-phrase", help="check the seed phrase without writing anything")
+    s.add_argument("--pub", help="public key file the phrase should re-derive (suite taken from it)"); seed(s)
+    s.set_defaults(fn=cmd_verify_seed_phrase)
     s = sub.add_parser("sign-constitution", help="sign constitution text + hard rules, or one single-source document")
     s.add_argument("--text", help=".txt/.md plain-English constitution")
     s.add_argument("--rules", help=".json/.yaml hard rules for Path A")
@@ -192,6 +329,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--config", help="config file with deployment_mode: (JSON or YAML)")
     s.set_defaults(fn=cmd_deployment_mode)
     s = sub.add_parser("demo", help="run the offline demo"); s.set_defaults(fn=cmd_demo)
+    s = sub.add_parser("e2e-demo", help="exercise every capability end to end, offline")
+    s.set_defaults(fn=cmd_e2e_demo)
     return p
 
 

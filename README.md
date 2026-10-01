@@ -67,6 +67,11 @@ to a tamper-evident ledger signed with your key.
    execution is appended to a JSONL hash chain with a Merkle tree. The chain
    head is signed with your key, so rewriting, truncating, or appending
    without your key is detected.
+8. **Keys and identities.** For personal use, the key can optionally be
+   backed up as a 24-word seed phrase. In enterprise mode, the principal,
+   agents, and judges are X.509 certificate identities from your PKI:
+   chain-checked, revocation-checked, mapped to roles, and optionally held
+   on a PKCS#11 HSM or smart card ([docs/KEYS_AND_PKI.md](docs/KEYS_AND_PKI.md)).
 
 Diagrams: [architecture](docs/figures/architecture.svg),
 [authorize flow](docs/figures/authorize_flow.svg),
@@ -266,6 +271,9 @@ The installed console script `two-key` is the same program.
 | `--pq-backend` (global) | `auto` | `auto`, `pyca`, `liboqs`, `none` | ML-DSA backend. `auto` = pyca if its OpenSSL has ML-DSA, else liboqs (not in FIPS mode), else none |
 | `keygen --out DIR` | required | directory | Writes `principal.pem`/`principal.pub.pem` (ed25519) or `principal.keys.json`/`principal.pub.json` (other suites). Refuses to overwrite |
 | `keygen --suite` | `ed25519` | `ed25519`, `ecdsa-p384`, `hybrid-mldsa65-ed25519`, `hybrid-mldsa65-p384` | Signature suite of the principal key |
+| `keygen --seed-phrase` | off | flag | Derive the key from a new 24-word BIP-39 phrase, printed once. Personal mode only; refused with `--fips`. `--seed-passphrase-env VAR` / `--seed-passphrase-prompt` add the optional BIP-39 passphrase |
+| `recover-key --out DIR [--suite S] [--expect-pub FILE]` | | | Rebuild the key file from the 24 words (stdin or hidden prompt). With `--expect-pub`, writes nothing unless the result matches |
+| `verify-seed-phrase [--pub FILE]` | | | Check the words' checksum and, with `--pub`, that they re-derive that key. Writes nothing |
 | `--passphrase-env VAR` (keygen, sign-constitution) | prompt | env var name | Read the key passphrase from `VAR`. Without it and without `--no-passphrase` you are prompted (empty = none) |
 | `--no-passphrase` (keygen, sign-constitution) | off | flag | Unencrypted private key (testing only) |
 | `sign-constitution --document FILE` | — | `.md`/`.markdown`/`.txt` with one `twokey-rules` block | Sign a single-source constitution (format `/2`) |
@@ -276,6 +284,7 @@ The installed console script `two-key` is the same program.
 | `check-judges --config FILE` | required | `.yaml`/`.yml` or `.json` | Validate a judge config without network calls |
 | `selftest [--require-pq]` | | flag | Run the crypto self-test and print the provider; `--require-pq` fails without ML-DSA |
 | `demo` | | | Offline demo with test-double judges |
+| `e2e-demo` | | | Every capability end to end, offline (seed backup, signing, both paths, tokens, gateway, scanning, ledger, anchoring, PKI). Exit 0 = every check passed |
 | `python bench.py [--quick] [--json FILE]` | full run | | Latency and memory benchmark (`docs/PERFORMANCE.md`) |
 
 ### `judges.yaml`: `quorum:` section (`QuorumPolicy`)
@@ -357,11 +366,15 @@ the file is loaded.
 | `require_pq` | `False` | bool | Refuse to start without a hybrid ML-DSA key and a working backend |
 | `allow_test_doubles` | `False` | bool | Permit `two_key.testing` judges (demos and tests only) |
 | `clock` | `time.time` | callable | Clock for token issue and expiry (tests) |
-| `deployment_mode` | `personal` (or `TWOKEY_DEPLOYMENT_MODE`, or the config file) | `personal`, `enterprise` | Set once per ledger. `enterprise` requires a permissioned-chain `anchor`. All sources that are set must agree. See `docs/DEPLOYMENT_MODES.md` |
+| `deployment_mode` | `personal` (or `TWOKEY_DEPLOYMENT_MODE`, or the config file) | `personal`, `enterprise` | Set once per ledger. `enterprise` requires a permissioned-chain `anchor` and PKI identities (`pki`, `principal_credential`). All sources that are set must agree. See `docs/DEPLOYMENT_MODES.md` |
 | `deployment_config` | none | path to a JSON/YAML file with `deployment_mode:` | Config-file source for the mode |
 | `anchor` | none | `NullAnchor`, `LocalFileAnchor` (personal); `FabricAnchor`, `RestPermissionedAnchor` (enterprise) | Publish every signed head. In enterprise mode, a failure denies the action (fails closed) |
+| `pki` | none (required in enterprise mode) | `PkiConfig`, `PkiVerifier`, or a mapping; or a `pki:` section in `deployment_config` | Trust anchors, CRL/OCSP revocation (`revocation_unreachable="fail_closed"` by default), `role_map`, `require_agent_identity` (default `True`), `require_judge_identities` (default `False`). See `docs/KEYS_AND_PKI.md` |
+| `principal_credential` | none (required in enterprise mode) | `pki.Credential` | The principal's certificate (and ML-DSA-65 key for hybrid). Must verify for role `principal` and certify `trusted_public_key` |
+| `judge_credentials` | `{}` | `{judge_id: Credential}` | Judge certificates, verified for role `judge` at startup and recorded |
 
-Methods: `authorize(action, proposal, tool_args)`, `gateway(tools=None,
+Methods: `authorize(action, proposal, tool_args, agent_assertion=None)` (the assertion comes from
+`pki.sign_agent_request`; required in enterprise mode by default), `gateway(tools=None,
 extractors=None, checkpoint_every=1, view_refresh="token")`,
 `reload_constitution(envelope)`, `revoke(jti=None, reason="")`,
 `crypto_profile()`.
@@ -578,8 +591,16 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
   every signed head to a permissioned chain. These anchors are **tested
   with fakes only**, not against a live network. The endorsement-policy
   defaults are placeholders. See `docs/DEPLOYMENT_MODES.md`.
-- **Keys are files, not TEE/HSM-held.** Tokens use an HMAC secret shared by
-  issuer and gateway by default.
+- **Keys are files unless a PKCS#11 token holds them.** `pki.Pkcs11PrivateKey`
+  signs on a token, but it has been tested only with SoftHSM 2.6 and a fake
+  token, not with a real HSM or smart card. There is no TEE support. Tokens
+  use an HMAC secret shared by issuer and gateway by default.
+- **PKI is tested only with a generated test CA.** CRL and OCSP are
+  checked against in-memory sources. The HTTP transport (`default_transport`)
+  has not been run against a real CA or responder. Fail-closed on
+  unreachable revocation and the enterprise identity requirements are
+  placeholders pending Stephan (`docs/KEYS_AND_PKI.md`).
+- **Seed-phrase backup is personal-mode only and off in `fips_mode`.**
 - **Storage.** The ledger isn't encrypted, and one process must own it.
 - **Defaults are permissive.** The §4 (iii) quorum floors are off by
   default (`section4()` turns them on); which default to use is open
@@ -597,7 +618,10 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
 | `two_key/capability.py`, `gateway.py` | Tokens and the tool gateway |
 | `two_key/scanning.py` | Optional DLP/antivirus scanning hooks for the gateway |
 | `two_key/ledger.py`, `merkle.py`, `anchoring.py` | Signed ledger, Merkle proofs, local and permissioned-chain anchors |
-| `two_key/deployment.py` | `deployment_mode` (`personal` / `enterprise`): resolution, set-once check, anchor check |
+| `two_key/deployment.py` | `deployment_mode` (`personal` / `enterprise`): resolution, set-once check, anchor and PKI checks |
+| `two_key/seedphrase.py`, `data/bip39_english.txt` | Optional 24-word BIP-39 seed-phrase backup of the principal key (personal mode) |
+| `two_key/pki.py`, `pki_testing.py` | Enterprise X.509 identities: chain, revocation, roles, ML-DSA-65 binding, agent assertions, PKCS#11 keys; a throwaway test CA |
+| `two_key/e2e_demo.py` | `python -m two_key e2e-demo`: every capability end to end, offline |
 | `two_key/crypto/`, `keys.py`, `constitution.py` | Crypto provider and suites, key files, constitution signing |
 | `two_key/testing.py` | Offline test-double judges (not for deployment) |
 | `examples/` | Example constitutions (one-file and two-file), hard rules, `judges.yaml` |
@@ -605,6 +629,8 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
 | [docs/HOWTO.md](docs/HOWTO.md) | Step-by-step guide |
 | [docs/CRYPTO.md](docs/CRYPTO.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | FIPS posture and algorithms; measured performance |
 | [docs/DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) | Personal vs enterprise mode, permissioned-ledger anchoring (Fabric, REST), open questions (Entry 9) |
+| [docs/KEYS_AND_PKI.md](docs/KEYS_AND_PKI.md) | Seed-phrase backup (personal) and PKI identities (enterprise), Entry 11 |
+| [docs/PROVISIONAL_READINESS.md](docs/PROVISIONAL_READINESS.md) | Each claimed feature, where it is implemented, its evidence; stubs and placeholders; open questions |
 | [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types (outbound and inbound), pros and cons, Stephan's decisions (Entries 6 and 7), open questions |
 | [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md), `docs/INVENTION_DISCLOSURE.md` (unchanged) | Working specification draft; original disclosure |
 | `CONCEPTION_NOTES.md`, `DESIGN_OPTIONS.md`, `CHANGES.md` | Inventor's dated notes; open design questions; every change and who decided it |

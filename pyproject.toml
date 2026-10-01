@@ -23,3 +23,6 @@ two-key = "two_key.cli:main"
 
 [tool.setuptools]
 packages = ["two_key", "two_key.judges", "two_key.crypto"]
+
+[tool.setuptools.package-data]
+two_key = ["data/*.txt", "data/*.md"]

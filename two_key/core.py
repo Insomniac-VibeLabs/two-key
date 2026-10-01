@@ -39,6 +39,14 @@ also anchored to a permissioned chain; startup fails without one). Set once,
 early, from the argument, TWOKEY_DEPLOYMENT_MODE, or a config file, and
 recorded in the ledger.
 
+PKI identities (pki.py; CONCEPTION_NOTES.md Entry 11): with ``pki=`` (required
+in enterprise mode), the principal's X.509 certificate must chain to a trust
+anchor, be unrevoked, map to the role ``principal``, and certify the trusted
+key. Judge certificates (``judge_credentials=``) are checked at startup.
+In enterprise mode each ``authorize`` call needs an agent assertion
+(``pki.sign_agent_request``) unless ``require_agent_identity`` is off. Every
+verified identity is recorded in the ledger.
+
 Crypto (two_key.crypto): a CryptoProvider runs its known-answer
 self-test before Two-Key starts; ``fips_mode`` refuses non-approved
 algorithms. The principal key may be legacy Ed25519, ECDSA P-384, or a hybrid
@@ -57,6 +65,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+from . import pki as _pki
 from .action import Action, ActionValidationError, normalize_action
 from .canonical import DOMAIN_ACTION_RECORD, ENCODING, digest_hex, freeze_call, typed_hash
 from .capability import CapabilityIssuer, args_hash
@@ -119,6 +128,9 @@ class TwoKey:
         deployment_mode: str | None = None,
         deployment_config: Path | str | None = None,
         anchor: Any = None,
+        pki: Any = None,
+        principal_credential: Any = None,
+        judge_credentials: Mapping[str, Any] | None = None,
     ):
         # Deployment mode first (Entry 9): an early, global setting other settings can depend on later.
         try:
@@ -151,6 +163,7 @@ class TwoKey:
         self.digest_alg = digest_alg or "sha384"
         self.crypto.check("hash", self.digest_alg)
         self.token_mode = token_mode or "tk1-hs384"
+        self._setup_pki(pki, principal_credential, judge_credentials or {}, deployment_config, trusted, judges)
 
         # Refuse unsigned, modified, or foreign-signed constitutions (spec 5.1 item 2).
         self.trusted_public_key = trusted_public_key
@@ -208,6 +221,94 @@ class TwoKey:
         self._append_loaded()
         self.ledger.checkpoint()
 
+    # -- PKI identities (Entry 11) ---------------------------------------------
+    def _setup_pki(self, pki, principal_credential, judge_credentials, deployment_config, trusted, judges) -> None:
+        if pki is None and deployment_config is not None:
+            data = _deployment.load_config_file(deployment_config)
+            if "pki" in data:
+                pki = data["pki"]
+                base = Path(deployment_config).parent
+            else:
+                base = Path(".")
+        else:
+            base = Path(".")
+        try:
+            if isinstance(pki, Mapping):
+                pki = _pki.PkiConfig.from_mapping(pki, base)
+            if isinstance(pki, _pki.PkiConfig):
+                pki = _pki.PkiVerifier(pki, self.crypto)
+            if pki is not None and not isinstance(pki, _pki.PkiVerifier):
+                raise TwoKeyConfigError("pki must be a PkiConfig, PkiVerifier, or a config mapping")
+            _deployment.check_pki(self.deployment, pki)
+        except (_deployment.DeploymentConfigError, _pki.PkiError, OSError) as e:
+            raise TwoKeyConfigError(str(e)) from e
+        self.pki = pki
+        self.principal_identity = None
+        self.judge_identities: dict = {}
+        self._agent_nonces: set = set()
+        if pki is None:
+            if principal_credential is not None or judge_credentials:
+                raise TwoKeyConfigError("certificates were given but no pki is configured")
+            return
+        if principal_credential is None:
+            if self.deployment.is_enterprise:
+                raise TwoKeyConfigError("deployment_mode 'enterprise' requires principal_credential= (the "
+                                        "principal's certificate); placeholder pending Stephan")
+        else:
+            try:
+                ident = pki.verify(principal_credential, "principal")
+            except _pki.PkiError as e:
+                raise TwoKeyConfigError(f"principal certificate rejected: {e}") from e
+            if ident.public_keyset.encoded != trusted.encoded:
+                raise TwoKeyConfigError("the principal certificate does not certify the trusted principal key "
+                                        f"(certificate key {ident.public_keyset.fingerprint}, trusted "
+                                        f"{trusted.fingerprint})")
+            self.principal_identity = ident
+        ids = {getattr(j, "judge_id", None) for j in judges}
+        unknown = set(judge_credentials) - ids
+        if unknown:
+            raise TwoKeyConfigError(f"judge_credentials for unknown judges: {sorted(unknown)}")
+        if pki.config.require_judge_identities and set(judge_credentials) != ids:
+            raise TwoKeyConfigError(f"require_judge_identities: missing certificates for "
+                                    f"{sorted(i for i in ids - set(judge_credentials) if i)}")
+        for jid, cred in judge_credentials.items():
+            try:
+                self.judge_identities[jid] = pki.verify(cred, "judge")
+            except _pki.PkiError as e:
+                raise TwoKeyConfigError(f"judge {jid!r} certificate rejected: {e}") from e
+
+    def identity_record(self) -> dict | None:
+        if self.pki is None:
+            return None
+        return {"pki": self.pki.describe(),
+                "principal": None if self.principal_identity is None else self.principal_identity.to_record(),
+                "judges": {k: v.to_record() for k, v in sorted(self.judge_identities.items())}}
+
+    @property
+    def agent_identity_required(self) -> bool:
+        return self.pki is not None and self.deployment.is_enterprise and self.pki.config.require_agent_identity
+
+    def _check_agent(self, rec: dict, proposal: str, args: dict, assertion: Any) -> str | None:
+        """None if the agent check passes (or isn't required); otherwise the deny reason."""
+        if assertion is None:
+            if self.agent_identity_required:
+                self.ledger.append("agent_identity", {"ok": False, "reason": "agent_identity_required"})
+                return "agent_identity_required"
+            return None
+        if self.pki is None:
+            self.ledger.append("agent_identity", {"ok": False, "reason": "no_pki_configured"})
+            return "agent_identity_rejected:no_pki_configured"
+        digest = _pki.request_digest(rec, proposal, args_hash(rec["tool"], args, "sha384", self.crypto), self.crypto)
+        try:
+            ident = _pki.verify_agent_assertion(self.pki, assertion, digest, self._agent_nonces)
+        except _pki.PkiError as e:
+            reason = getattr(e, "reason", type(e).__name__)
+            self.ledger.append("agent_identity", {"ok": False, "reason": reason, "detail": str(e)[:300]})
+            return f"agent_identity_rejected:{reason}"
+        self.ledger.append("agent_identity", {"ok": True, "identity": ident.to_record(),
+                                              "nonce": str(assertion.get("nonce")), "request_digest": digest})
+        return None
+
     # -- constitution (§4 (ii)) ------------------------------------------------
     def _install(self, constitution: Constitution) -> None:
         compiled = compile_both(constitution, max_steps=self.max_steps, digest_alg=self.digest_alg,
@@ -235,6 +336,7 @@ class TwoKey:
             "crypto": self.crypto_profile(),
             "deployment": {**self.deployment.to_record(),
                            "anchor": None if self.anchor is None else self.anchor.describe()},
+            **({"identity": self.identity_record()} if self.pki is not None else {}),
             **extra,
         })
 
@@ -306,9 +408,10 @@ class TwoKey:
         return Decision(False, reason, ledger_digest=self.ledger.root(), action=action_rec, **kw)
 
     def authorize(self, proposed: Action | Mapping[str, Any], proposal: str,
-                  tool_args: Mapping[str, Any] | None = None) -> Decision:
+                  tool_args: Mapping[str, Any] | None = None, agent_assertion: Any = None) -> Decision:
+        """``agent_assertion``: from ``pki.sign_agent_request`` (required in enterprise mode by default)."""
         try:
-            d = self._authorize(proposed, proposal, {} if tool_args is None else tool_args)
+            d = self._authorize(proposed, proposal, {} if tool_args is None else tool_args, agent_assertion)
         except Exception as e:  # spec 5.7: no best-effort allow; the ledger or any component failing means deny
             d = Decision(False, f"internal_error:{type(e).__name__}", ledger_digest=self.ledger.root())
         try:
@@ -323,7 +426,7 @@ class TwoKey:
         """H(action record) for ballots and decisions: two-key-enc/2 under the action-record label."""
         return typed_hash(action_record, DOMAIN_ACTION_RECORD, self.digest_alg, self.crypto)
 
-    def _authorize(self, proposed, proposal: str, tool_args: Mapping[str, Any]) -> Decision:
+    def _authorize(self, proposed, proposal: str, tool_args: Mapping[str, Any], agent_assertion: Any = None) -> Decision:
         if not isinstance(proposal, str):
             proposal = str(proposal)
         # Read the tool args once (F_REVIEW finding 1): the logged args and args_hash come from the same bytes.
@@ -348,6 +451,9 @@ class TwoKey:
         binding = self.ballot_binding(rec)
         self.ledger.append("action_normalized", {"action": rec, "action_digest": binding["action_hash"],
                                                  "args_hash": a_hash})
+        agent_denied = self._check_agent(rec, proposal, frozen.args(), agent_assertion)
+        if agent_denied is not None:
+            return self._deny(agent_denied, rec)
 
         vm_res = self.vm.eval(action)
         self.ledger.append("vm_result", {"allowed": vm_res.allowed, "reason": vm_res.reason,

@@ -466,6 +466,8 @@ def as_private_keyset(key: Any, provider: CryptoProvider | None = None) -> Priva
     if isinstance(key, PrivateKeySet):
         if provider is None or key.provider is provider:
             return key
+        if any(getattr(p, "external", False) for p in key._privs):  # e.g. a PKCS#11 key: not exportable, reuse it
+            return PrivateKeySet(key.suite, key._privs, provider)
         return PrivateKeySet.from_components(key.suite, key.export_components(), provider)
     if isinstance(key, Ed25519PrivateKey):
         return PrivateKeySet(LEGACY_SUITE, [key], provider)

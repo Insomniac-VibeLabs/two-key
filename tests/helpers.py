@@ -1,4 +1,5 @@
 """Shared test fixtures. Keys are generated per test and never written to the repo."""
+import os
 import tempfile
 from pathlib import Path
 
@@ -12,6 +13,20 @@ DEFAULT_TEXT = "I am the principal. The agent is my fiduciary. No wires. No medi
 def signed(rules, text=DEFAULT_TEXT, principal="did:twokey:test", key=None):
     key = key or keys.generate_private_key()
     return sign_document(build_document(principal, text, rules), key), key
+
+
+PRINCIPAL_EMAIL = "principal@two-key.test.invalid"
+AGENT_URI = "spiffe://two-key.test/agent"
+ROLE_MAP = {f"email:{PRINCIPAL_EMAIL}": ["principal"], f"uri:{AGENT_URI}": ["agent"],
+            "dns:judge.two-key.test.invalid": ["judge"]}
+
+
+def enterprise_pki(key, **config_kw):
+    """A throwaway test PKI certifying ``key`` as the principal. Returns (TwoKey kwargs, TestPki)."""
+    from two_key.pki_testing import TestPki
+    t = TestPki()
+    cert, _ = t.issue("Principal", email=PRINCIPAL_EMAIL, key=key)
+    return {"pki": t.config(ROLE_MAP, **config_kw), "principal_credential": t.credential(cert)}, t
 
 
 class TwoKeyFixture:
@@ -36,6 +51,12 @@ class TwoKeyFixture:
 
     def _extra(self, key, kw):
         kw.setdefault("ledger_signing_key", key)
+        mode = kw.get("deployment_mode") or os.environ.get("TWOKEY_DEPLOYMENT_MODE")
+        if str(mode).strip().lower() == "enterprise" and "pki" not in kw:
+            # Enterprise mode needs PKI identities (Entry 11). Tests written before that don't send agent
+            # assertions, so the fixture turns that requirement off; tests/test_pki.py covers assertions.
+            extra, self.pki = enterprise_pki(key, require_agent_identity=False)
+            kw.update(extra)
         return kw
 
     def __exit__(self, *exc):

@@ -59,6 +59,20 @@ KDF_KATS = {  # (password, salt, iterations, length, expected)
     "pbkdf2-hmac-sha384": (b"password", b"salt", 4096, 48,
                            "559726be38db125bc85ed7895f6e3cf574c7a01c080c3447db1e8a76764deb3c"
                            "307b94853fbe424f6488c5f4f1289626"),
+    # BIP-39 reference vector (trezor/python-mnemonic vectors.json): the seed of the 24-word all-zero
+    # mnemonic "abandon x23 art" with passphrase "TREZOR" (salt "mnemonic" + passphrase, 2048 iterations).
+    "pbkdf2-hmac-sha512": (b"abandon " * 23 + b"art", b"mnemonicTREZOR", 2048, 64,
+                           "bda85446c68413707090a52022edd26a1c9462295029f2e60cd7c4f2bbd30971"
+                           "70af7a4d73245cafa9c3cca8d561a7c3de6f5d4a10be8ed2a5e608d68f92fcc8"),
+}
+HKDF_KATS = {  # (ikm, salt, info, length, expected): Wycheproof hkdf_sha384_test.json tcId 70
+    "hkdf-sha384": ("85ba55d5efee8d65e66197a87baea00f10d589670aa73e923cf71c8424bf2149"
+                    "c88366e5b4967586c198e8e540c85940",
+                    "329975ce0abab183674171fe82098db2b5b5e594160e7f5e94c9c69fcf9a16ff"
+                    "7193a45f572fe7a08eaf2122012abe40",
+                    "ff957fdd4c71518f", 48,
+                    "ae4b400a00bedbbafce33fc4e56a57146ed8c64ae9723d355799232b15d9be71"
+                    "728546d215d8b0e7378a1740a9ef9f3c"),
 }
 ED25519_KAT = {
     "sk": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
@@ -97,9 +111,16 @@ def run_selftest(p: CryptoProvider) -> dict:
         from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
         for alg, (pw, salt, n, length, want) in KDF_KATS.items():
             p.check("kdf", alg)
-            h = _hashes.SHA384() if alg.endswith("sha384") else _hashes.SHA256()
+            h = {"sha256": _hashes.SHA256, "sha384": _hashes.SHA384, "sha512": _hashes.SHA512}[alg.rsplit("-", 1)[1]]()
             _check(PBKDF2HMAC(h, length, salt, n).derive(pw).hex() == want, f"KAT {alg}")
-            passed.append(f"KAT {alg} ({'RFC 7914' if alg.endswith('sha256') else 'project regression value'})")
+            src = {"sha256": "RFC 7914", "sha384": "project regression value", "sha512": "BIP-39 vector"}
+            passed.append(f"KAT {alg} ({src[alg.rsplit('-', 1)[1]]})")
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+        for alg, (ikm, salt, info, length, want) in HKDF_KATS.items():
+            p.check("kdf", alg)
+            got = HKDF(_hashes.SHA384(), length, bytes.fromhex(salt), bytes.fromhex(info)).derive(bytes.fromhex(ikm))
+            _check(got.hex() == want, f"KAT {alg}")
+            passed.append(f"KAT {alg} (Wycheproof tcId 70)")
 
         p.check("sig", "ed25519")
         sk = _Ed25519.private_from_raw(bytes.fromhex(ED25519_KAT["sk"]))

@@ -12,7 +12,7 @@ from two_key.anchoring import (AnchorError, AnchorUnavailable, FabricAnchor, Loc
 from two_key.core import TwoKey, TwoKeyConfigError
 from two_key.quorum import QuorumPolicy
 from two_key.testing import FixedJudge
-from helpers import TwoKeyFixture, signed
+from helpers import TwoKeyFixture, enterprise_pki, signed
 
 RULES = [{"id": "tools", "allow_only_tools": ["email_send"]}]
 YES = [FixedJudge("a", "yes", "p1"), FixedJudge("b", "yes", "p2")]
@@ -153,7 +153,8 @@ class Modes(unittest.TestCase):
                    allow_test_doubles=True)
             with self.assertRaisesRegex(TwoKeyConfigError, "set once"):
                 TwoKey(env, key.public_key(), path, YES, ledger_signing_key=key, quorum_policy=QP,
-                       allow_test_doubles=True, deployment_mode="enterprise", anchor=fabric())
+                       allow_test_doubles=True, deployment_mode="enterprise", anchor=fabric(),
+                       **enterprise_pki(key)[0])
             TwoKey(env, key.public_key(), path, YES, ledger_signing_key=key, quorum_policy=QP,
                    allow_test_doubles=True, deployment_mode="personal")      # same mode reopens fine
 

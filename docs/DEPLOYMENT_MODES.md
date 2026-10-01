@@ -39,7 +39,13 @@ and every endorsing org, that administrator can rewrite the chain too.
 | Mode | Default | Anchor allowed | Startup check |
 |---|---|---|---|
 | `personal` | yes | none, `NullAnchor`, `LocalFileAnchor` | A permissioned anchor is refused. Set `enterprise` to use one. |
-| `enterprise` | no | a `PermissionedLedgerAnchor` (`FabricAnchor`, `RestPermissionedAnchor`, or your own subclass) | Startup fails if no permissioned anchor is configured (placeholder pending Stephan) |
+| `enterprise` | no | a `PermissionedLedgerAnchor` (`FabricAnchor`, `RestPermissionedAnchor`, or your own subclass) | Startup fails if no permissioned anchor is configured, or (since Entry 11) without `pki` and a valid principal certificate (placeholders pending Stephan) |
+
+**Identities by mode (CONCEPTION_NOTES Entry 11).** Personal mode keeps
+key files and can add an optional 24-word seed-phrase backup. Enterprise
+mode uses PKI: X.509 certificates for the principal, agents, and judges,
+with chain, revocation, and role checks, and optional PKCS#11 keys. Seed
+phrases are refused there. See [KEYS_AND_PKI.md](KEYS_AND_PKI.md).
 
 There are three places to set it. If more than one is set, they must
 agree; if they disagree, startup fails rather than picking one.
@@ -167,7 +173,8 @@ bearer token. A custom `transport=` can replace HTTP.
    - `fips_mode`;
    - whether content scanners are required;
    - timeout defaults;
-   - key storage (file vs HSM/TEE);
+   - key storage (file vs HSM/TEE; a PKCS#11 signer now exists, but
+     enterprise mode does not require it);
    - SSO-only auth for enterprise.
 7. **Which chain.** Fabric is implemented. Should others (for example
    Besu with permissioning, or Corda) get their own adapters, or is the

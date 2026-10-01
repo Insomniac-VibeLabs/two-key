@@ -15,12 +15,17 @@ settings will likely need to be addressed based on the use case".
   ``constitution_loaded`` entry (``deployment``). Reopening that ledger in the
   other mode is refused. A ledger created before this setting existed counts
   as ``personal``.
-- **What it changes today.** Only anchoring:
+- **What it changes today.** Anchoring and identities:
   - ``personal``: local ledger as before; anchor ``None``,
-    ``NullAnchor``, or ``LocalFileAnchor``.
+    ``NullAnchor``, or ``LocalFileAnchor``. Optional seed-phrase key
+    backup (seedphrase.py; Entry 11).
   - ``enterprise``: every signed ledger head is also anchored to a
     permissioned chain through a ``PermissionedLedgerAnchor``. With none
     configured, startup fails (PLACEHOLDER pending Stephan).
+  - ``enterprise`` also uses PKI identities (pki.py; CONCEPTION_NOTES
+    Entry 11): a ``pki`` configuration and a principal certificate are
+    required at startup (PLACEHOLDER pending Stephan), and seed phrases are
+    refused.
 - **Other mode-dependent settings** hang off ``DeploymentConfig.mode_defaults``
   later. It is empty on purpose: nothing else changes with the mode until
   Stephan decides. Candidates are listed in docs/DEPLOYMENT_MODES.md.
@@ -120,6 +125,15 @@ def check_anchor(config: DeploymentConfig, anchor: Anchor | None) -> None:
     elif anchor is not None and not isinstance(anchor, (NullAnchor, LocalFileAnchor)):
         raise DeploymentConfigError("deployment_mode 'personal' keeps the ledger local: use no anchor, NullAnchor, "
                                     "or LocalFileAnchor (set deployment_mode='enterprise' for a permissioned chain)")
+
+
+def check_pki(config: DeploymentConfig, pki: Any) -> None:
+    """Enterprise mode uses PKI identities (Entry 11): refuse to start without a PKI configuration."""
+    if config.is_enterprise and pki is None:
+        raise DeploymentConfigError(
+            "deployment_mode 'enterprise' requires PKI identities (pki=PkiConfig(...) or a 'pki:' section in the "
+            "deployment config, plus principal_credential=); none is configured. This startup check is a "
+            "placeholder pending Stephan (docs/KEYS_AND_PKI.md)")
 
 
 def recorded_mode(ledger: Any) -> str | None:

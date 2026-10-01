@@ -97,6 +97,48 @@ PBKDF2-HMAC-SHA-384 (600,000 iterations) and AES-256-GCM (bundles written
 earlier with PBKDF2-HMAC-SHA-256 still load). Load either kind
 in Python with `keys.load_private_any` / `keys.load_public_any`.
 
+### Seed-phrase backup (personal mode, optional)
+
+`keygen --seed-phrase` derives the key from a new 24-word BIP-39 phrase and
+prints the words once. Write them down offline. Anyone with them can
+rebuild the key. Add `--seed-passphrase-prompt` (or
+`--seed-passphrase-env VAR`) for an optional BIP-39 passphrase; a
+different passphrase gives a different key. The key file is written as
+usual, with its own passphrase. See [KEYS_AND_PKI.md](KEYS_AND_PKI.md) for
+the derivation.
+
+<!-- check: expect=^SEED PHRASE BACKUP: shown once -->
+<!-- check: expect=^ +1\. \w+ +2\. \w+ -->
+<!-- check: expect=^fingerprint: ed25519: -->
+```bash
+python -m two_key keygen --out ~/.two-key-seed --seed-phrase --passphrase-env TWOKEY_KEY_PASSPHRASE
+```
+
+To rebuild the key file, pipe the words in (or type them at the hidden
+prompt). `--expect-pub` refuses to write unless the result matches the key
+you expect. `verify-seed-phrase` writes nothing. The phrase below is the
+public BIP-39 test vector; never use it for a real key.
+
+<!-- check: expect=^recovered private key: .*principal.pem -->
+<!-- check: expect=^OK: the phrase re-derives ed25519: -->
+```bash
+PHRASE="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+echo "$PHRASE" | python -m two_key recover-key --out ~/.two-key-vector --passphrase-env TWOKEY_KEY_PASSPHRASE
+echo "$PHRASE" | python -m two_key verify-seed-phrase --pub ~/.two-key-vector/principal.pub.pem
+```
+
+A wrong or swapped word fails the checksum. Seed phrases are refused in
+`fips_mode` and in enterprise mode, which uses PKI (section 12):
+
+<!-- check: expect=^REJECTED: checksum mismatch -->
+<!-- check: expect=^REFUSED: seed-phrase backup is disabled in fips_mode -->
+<!-- check: expect=^REFUSED: seed-phrase backup is for personal mode only -->
+```bash
+echo "art abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon " | python -m two_key verify-seed-phrase || true
+echo "$PHRASE" | python -m two_key --fips verify-seed-phrase 2>&1 || true
+echo "$PHRASE" | python -m two_key verify-seed-phrase --deployment-mode enterprise 2>&1 || true
+```
+
 ## 3. Writing a constitution
 
 A constitution has two parts, and you sign them together as one document:
@@ -1212,6 +1254,7 @@ in your own bridge, or use `FabricAnchor.from_fabric_sdk_py(...)`.
 ```python
 from two_key.anchoring import FabricAnchor, check_anchored_entries
 from two_key.core import TwoKeyConfigError
+from two_key.pki_testing import TestPki
 from my_two_key import load_key, make_two_key
 
 try:
@@ -1241,11 +1284,81 @@ class DemoGateway:  # in-memory stand-in; a real one talks to Fabric peers
         return self.txs.get(tx_id)
 
 
+# Enterprise mode also needs PKI identities (next section). A throwaway test CA stands in for yours here,
+# and agent assertions are switched off to keep this example about anchoring.
+test_ca = TestPki()
+cert, _ = test_ca.issue("Principal", email="principal@example.com", key=load_key())
+identity = {"pki": test_ca.config({"email:principal@example.com": ["principal"]}, require_agent_identity=False),
+            "principal_credential": test_ca.credential(cert)}
 anchor = FabricAnchor(DemoGateway(), channel="audit", chaincode="twokey-anchor", min_endorsing_orgs=2)
-tk = make_two_key("howto-12c.jsonl", deployment_mode="enterprise", anchor=anchor)
+tk = make_two_key("howto-12c.jsonl", deployment_mode="enterprise", anchor=anchor, **identity)
 tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Search.", {})
 print("anchors:", [c.reason for c in check_anchored_entries(tk.ledger, load_key().public_key(), anchor)])
 print("mode:", tk.deployment.mode)
+```
+
+### Enterprise: PKI identities
+
+In enterprise mode the principal, agents, and judges are X.509
+certificate identities. Startup refuses without `pki` and a principal
+certificate that chains to a trust anchor, isn't revoked, maps to the
+role `principal`, and certifies the principal key. By default, each
+`authorize` call needs an agent assertion, which the agent signs with its
+certified key; it may be held on a PKCS#11 token. When revocation status
+can't be obtained, the certificate is rejected
+(`revocation_unreachable="fail_closed"`, a placeholder default). See
+[KEYS_AND_PKI.md](KEYS_AND_PKI.md) for every check, the ML-DSA-65 binding
+extension, and the `pki:` config-file section.
+
+Below, `TestPki` is a throwaway CA with an in-memory OCSP responder, and
+`SoftwareToken` is a fake PKCS#11 token. Use your CA and
+`pki.PythonPkcs11Token(module, token_label, pin)` for real.
+
+<!-- check: expect=^refused: .*requires PKI identities -->
+<!-- check: expect=^no assertion: agent_identity_required -->
+<!-- check: expect=^agent on token: dual_path_pass CN=Ops Agent -->
+<!-- check: expect=^replayed: agent_identity_rejected:assertion_replay -->
+<!-- check: expect=^revoked: agent_identity_rejected:revoked -->
+<!-- check: expect=^unreachable: revocation_unreachable -->
+```python
+from two_key import pki
+from two_key.anchoring import FabricAnchor
+from two_key.core import TwoKeyConfigError
+from two_key.e2e_demo import InMemoryFabric
+from two_key.pki_testing import SoftwareToken, TestPki
+from my_two_key import load_key, make_two_key
+
+ca = TestPki()
+roles = {"email:principal@example.com": ["principal"], "uri:spiffe://example.com/agent/ops": ["agent"]}
+cert, _ = ca.issue("Principal", email="principal@example.com", key=load_key())
+
+
+def anchor():
+    return FabricAnchor(InMemoryFabric(), channel="audit", chaincode="twokey-anchor")
+
+
+try:
+    make_two_key("howto-12d.jsonl", deployment_mode="enterprise", anchor=anchor())
+except TwoKeyConfigError as e:
+    print("refused:", e)
+tk = make_two_key("howto-12d.jsonl", deployment_mode="enterprise", anchor=anchor(),
+                  pki=ca.config(roles, ocsp=True), principal_credential=ca.credential(cert))
+
+token = SoftwareToken()                                   # stands in for an HSM or smart card
+agent, agent_key = ca.identity("Ops Agent", uri="spiffe://example.com/agent/ops", key=token.generate("ops"))
+action = {"tool": "search", "data_class": "public", "irreversible": False}
+print("no assertion:", tk.authorize(action, "Search.", {}).reason)
+a = pki.sign_agent_request(agent, agent_key, action, "Search.", {})
+d = tk.authorize(action, "Search.", {}, agent_assertion=a)
+print("agent on token:", d.reason, [e for e in tk.ledger.entries if e.kind == "agent_identity"][-1].body["identity"]["subject"])
+print("replayed:", tk.authorize(action, "Search.", {}, agent_assertion=a).reason)
+ca.revoke(agent.certificate)                               # the OCSP responder now says "revoked"
+print("revoked:", tk.authorize(action, "Search.", {},
+                               agent_assertion=pki.sign_agent_request(agent, agent_key, action, "Search.", {})).reason)
+try:
+    pki.PkiVerifier(ca.config(roles, crl=False)).verify(ca.credential(cert), "principal")
+except pki.CertificateRejected as e:
+    print("unreachable:", e.reason)
 ```
 
 ## 13. Crypto: FIPS mode, classic and hybrid keys, token modes
@@ -1408,6 +1521,17 @@ development VM, Path A takes about 7–12 µs, a full `authorize` with local
 test judges about 1.1 ms (Ed25519) or 2.1 ms (hybrid), and a gateway
 `invoke` about 0.3 ms (Ed25519) or 1.0 ms (hybrid). Real judge latency
 dominates all of these.
+
+The end-to-end demo exercises every capability offline, one check per
+line: seed backup, signing, hybrid signatures, both paths, tokens, the
+gateway, scanning, the ledger, anchoring, and PKI. Exit status 0 means
+every check passed. [PROVISIONAL_READINESS.md](PROVISIONAL_READINESS.md)
+maps each check to the feature it shows.
+
+<!-- check: expect=^e2e summary: \d+ passed, 0 failed, 0 skipped -->
+```bash
+python -m two_key e2e-demo | tail -n 1
+```
 
 The test suite makes no network calls:
 

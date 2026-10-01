@@ -95,6 +95,8 @@ profiles already used SHA-384 and HMAC-SHA-384.
 | Token `jti`, HMAC keys, salts, nonces | `os.urandom` / `secrets` | unchanged | OS CSPRNG. In a FIPS deployment the entropy source and DRBG must be the ones covered by the platform's validation (e.g. a validated kernel crypto module and an SP 800-90B entropy source); check the module's Security Policy. |
 | Key bundle encryption (JSON bundles, non-Ed25519 suites) | PBKDF2-HMAC-SHA-384, 600,000 iterations, 128-bit salt → AES-256-GCM, 96-bit nonce, header as AAD | PBKDF2-HMAC-SHA-256 (still loaded) | SP 800-132, SP 800-38D, FIPS 197 |
 | Ed25519 PEM keys | PKCS#8 via pyca `BestAvailableEncryption` (scheme chosen by the library) | unchanged | see notes |
+| Seed-phrase backup (optional, personal mode; `docs/KEYS_AND_PKI.md`) | BIP-39: 256-bit entropy (`os.urandom`), 24 words, PBKDF2-HMAC-SHA-512 (2048 iterations) → 64-byte seed; HKDF-SHA-384 per algorithm with domain labels → Ed25519 key, ML-DSA-65 seed, P-384 scalar (FIPS 186-5 A.2.1) | (new) | SP 800-132, SP 800-56C. **Refused in `fips_mode`:** keys derived from words a person holds are outside a validated module's key generation |
+| PKI identities (enterprise; `docs/KEYS_AND_PKI.md`) | X.509 chains via pyca's verifier; certificate keys ECDSA P-384 or Ed25519; ML-DSA-65 key bound by SHA-384 in a CA-signed extension; OCSP request IDs SHA-256 | (new) | RFC 5280, RFC 6960, FIPS 186-5, FIPS 204 |
 | Key fingerprint shown for Ed25519 keys | `ed25519:` + first 128 bits of SHA-256 of the public key (a display identifier; verification compares the full key) | unchanged | FIPS 180-4 |
 | Startup self-test | KATs and PCTs listed in section 5 | fewer KATs | FIPS 140-3 self-test concept (application level) |
 | Judge HTTPS (Path B) | Python `ssl` (system OpenSSL) | unchanged | Outside Two-Key; TLS configuration is the deployment's responsibility |
@@ -239,6 +241,8 @@ before claiming validated PQ signatures.
 | HMAC-SHA-256, -384, -512 | RFC 4231 test case 2 |
 | PBKDF2-HMAC-SHA-256 | RFC 7914 §11 ("passwd", "salt", c = 1) |
 | PBKDF2-HMAC-SHA-384 | Project regression value ("password", "salt", c = 4096, 48 bytes), cross-checked against Python's `hashlib`. **Not an official NIST ACVP vector.** |
+| PBKDF2-HMAC-SHA-512 | BIP-39 reference vector (trezor/python-mnemonic `vectors.json`: 24-word all-zero mnemonic, passphrase "TREZOR") |
+| HKDF-SHA-384 | Wycheproof `hkdf_sha384_test.json` tcId 70 |
 | Ed25519 key derivation, signature, verify, negative verify | RFC 8032 §7.1 TEST 1 |
 | ECDSA P-384 | Pairwise consistency test (signatures are randomised) |
 | ML-DSA-65 | Pairwise consistency test (sign, verify, negative verify). With the pyca backend, also a seed→public-key regression value produced by this project with pyca 50.0.1. **This is not an official NIST ACVP vector.** |
