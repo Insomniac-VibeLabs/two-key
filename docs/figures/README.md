@@ -11,7 +11,7 @@
 | 7 | Quorum protocol: heterogeneity, K floor, bound ballots, record-only inputs (§4 (iii)) | `quorum_protocol.mmd` | `quorum_protocol.svg`, `quorum_protocol.png` |
 
 The figures show the prototype as implemented on 2026-09-30. Figures 5–7 are drafts
-of the PRIOR_ART.md §4 directions (i)–(iii) that Stephan Busch selected on
+of the PRIOR_ART.md §4 directions (i)–(iii) that the author selected on
 2026-09-30 (CONCEPTION_NOTES.md Entry 2); Figures 2 and 3 were updated for them. A patent
 attorney will usually want formal drawings redrawn from these.
 

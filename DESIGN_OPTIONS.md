@@ -1,8 +1,8 @@
-# Design options memo: open questions for Stephan
+# Design options memo: open questions for the maintainers
 
-**Prepared:** 2026-09-30, by the AI engineering assistant, for Stephan Busch.
+**Prepared:** 2026-09-30, by the AI engineering assistant, for the author.
 **Status:** options only. **No decision has been made on any item below**,
-except where a section says so. **Update 2026-09-30, ~7:02 AM MT:** Stephan
+except where a section says so. **Update 2026-09-30, ~7:02 AM MT:** The author
 selected the patent-attorney agent's `PRIOR_ART.md` §4 directions (i)
 ledger-root-bound token, (ii) one signed constitution / two compilations,
 and (iii) quorum protocol specifics, and flagged the normalization problem
@@ -16,7 +16,7 @@ The prototype needs *some* behavior to run. Where a question is still open,
 the code uses a minimal, clearly configurable reference behavior and marks
 it "current prototype default". That default is an engineering placeholder,
 not a recommendation and not a claimed design. Choosing among these options,
-or coming up with others, is Stephan's call, and it may matter for
+or coming up with others, is the author's call, and it may matter for
 conception and inventorship. Talk to the patent attorney before treating
 any option as part of the invention.
 
@@ -35,7 +35,7 @@ canonicalization (`action.py`) and conservative defaults for missing fields
 (`capability.args_hash`). The gateway has a per-tool extractor hook
 (`ToolGateway(extractors=...)`).
 
-**Status after 2026-09-30 (Entry 2, "F"):** Stephan flagged this problem
+**Status after 2026-09-30 (Entry 2, "F"):** The author flagged this problem
 together with §4 (i)–(iii). **No option has been chosen or implemented.**
 The hooks below are unchanged.
 
@@ -62,7 +62,7 @@ least two distinct model vendors or local weight files". How to *ensure*
 independence is open.
 
 **Current prototype default:** no independence enforcement.
-`min_distinct_providers: 1`; the check exists but is off. Since Stephan's
+`min_distinct_providers: 1`; the check exists but is off. Since the author's
 2026-09-30 selection of §4 (iii), a vendor and local-weights floor exists
 (`min_vendors`, `min_local_judges`; `QuorumPolicy.section4()` sets §4's
 figures of ≥ 2 vendors including ≥ 1 local weight file). It is still off by
@@ -86,7 +86,7 @@ simply not "yes", and they don't count toward `min_responding`).
 
 ## 3. Capability-token binding details
 
-**Current prototype default** (the reference option specified in Stephan's
+**Current prototype default** (the reference option specified in the author's
 2026-09-30 instructions): a single-use HMAC token bound to principal, tool,
 scope {amount, counterparty, data class}, **args_hash** (canonical hash of the
 literal tool-call args), ledger root, and constitution digest; TTL 30 s.
@@ -104,9 +104,9 @@ literal tool-call args), ledger root, and constitution digest; TTL 30 s.
 
 ## 4. Ordering of Path A and Path B
 
-**Current prototype default** (per Stephan's 2026-09-30 instructions, for
+**Current prototype default** (per the author's 2026-09-30 instructions, for
 privacy): `short_circuit_path_b=True`, so Path B is skipped if Path A denies.
-Set `False` to run both. §4 (iii), which Stephan selected, says "Path B
+Set `False` to run both. §4 (iii), which the author selected, says "Path B
 invoked only after Path A returns true". `require_path_a_first=True` (set
 by `QuorumPolicy.section4()`) makes Two-Key refuse `False`; see §7.21.
 
@@ -120,7 +120,7 @@ by `QuorumPolicy.section4()`) makes Two-Key refuse `False`; see §7.21.
 
 ## 5. Credential, username/password, and SSO handling for judges
 
-Stephan's conception (CONCEPTION_NOTES.md entry 1) names "api or
+The author's conception (CONCEPTION_NOTES.md entry 1) names "api or
 username/password or single sign on login".
 
 **Implemented:** API key from an environment variable; API key from the OS
@@ -150,7 +150,7 @@ hook) and `OAuthDeviceCodeProvider` (RFC 8628 steps documented; needs a
 
 ## 7. Open points in the PRIOR_ART.md §4 (i)–(iii) implementation
 
-Stephan selected these three directions on 2026-09-30 (`CONCEPTION_NOTES.md`
+The author selected these three directions on 2026-09-30 (`CONCEPTION_NOTES.md`
 Entry 2). The code follows the text of `PRIOR_ART.md` §4. Where §4 does not
 settle a detail, the prototype uses the minimal, configurable reference
 behaviour listed here. **These are engineering placeholders, not decisions.**

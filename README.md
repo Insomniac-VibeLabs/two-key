@@ -388,7 +388,7 @@ extractors=None, checkpoint_every=1, view_refresh="token")`,
 | `gateway(checkpoint_every=)` | `1` | int ≥ 0 | Sign the ledger head every N calls; `0` = you call `tk.ledger.checkpoint()` |
 | `gateway(view_refresh=)` | `token` | `token`, `every_call` | Advance the gateway's ledger view from verified tokens, or also on every call |
 | `gateway(scanners=)` | none | list of `ContentScanner` | Optional third-party DLP/antivirus hooks (API, ICAP, plugin, sidecar, async); none required. See [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) |
-| `gateway(scan_settings=)` | `ScanSettings()` | `timeout_seconds` (10), `on_timeout` (`block`/`allow`), `payload` (`exact`/`digest_only`), `order` (`parallel`/`sequential`) | Stephan's decisions (Entries 6 and 7): timeout configurable, defaulting to block; scanner errors logged and treated like timeouts; parallel; any conviction denies; scanners get the exact bytes and decoded strings |
+| `gateway(scan_settings=)` | `ScanSettings()` | `timeout_seconds` (10), `on_timeout` (`block`/`allow`), `payload` (`exact`/`digest_only`), `order` (`parallel`/`sequential`) | The author's decisions (Entries 6 and 7): timeout configurable, defaulting to block; scanner errors logged and treated like timeouts; parallel; any conviction denies; scanners get the exact bytes and decoded strings |
 | `gateway(file_extractors=)` | `{}` | `{name: fn(args) -> [(name, bytes, content_type)]}` | File parts to scan, e.g. decoded attachments |
 | `gateway(result_file_extractors=)` | `{}` | `{name: fn(result) -> [(name, bytes, content_type)]}` | Inbound file parts: tool results are scanned before the agent gets them (Entry 7) |
 | `PersonalLedger(auto_sign_every=)` | `1` | int ≥ 0 | Direct ledger use: sign after every N appends; `0` = only on `checkpoint()` |
@@ -599,7 +599,7 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
   checked against in-memory sources. The HTTP transport (`default_transport`)
   has not been run against a real CA or responder. Fail-closed on
   unreachable revocation and the enterprise identity requirements are
-  placeholders pending Stephan (`docs/KEYS_AND_PKI.md`).
+  placeholders pending a maintainer decision (`docs/KEYS_AND_PKI.md`).
 - **Seed-phrase backup is personal-mode only and off in `fips_mode`.**
 - **Storage.** The ledger isn't encrypted, and one process must own it.
 - **Defaults are permissive.** The §4 (iii) quorum floors are off by
@@ -631,7 +631,7 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
 | [docs/DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) | Personal vs enterprise mode, permissioned-ledger anchoring (Fabric, REST), open questions (Entry 9) |
 | [docs/KEYS_AND_PKI.md](docs/KEYS_AND_PKI.md) | Seed-phrase backup (personal) and PKI identities (enterprise), Entry 11 |
 | [docs/PROVISIONAL_READINESS.md](docs/PROVISIONAL_READINESS.md) | Each claimed feature, where it is implemented, its evidence; stubs and placeholders; open questions |
-| [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types (outbound and inbound), pros and cons, Stephan's decisions (Entries 6 and 7), open questions |
+| [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types (outbound and inbound), pros and cons, the author's decisions (Entries 6 and 7), open questions |
 | [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md), `docs/INVENTION_DISCLOSURE.md` (unchanged) | Working specification draft; original disclosure |
 | `CONCEPTION_NOTES.md`, `DESIGN_OPTIONS.md`, `CHANGES.md` | Inventor's dated notes; open design questions; every change and who decided it |
 

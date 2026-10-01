@@ -225,7 +225,7 @@ class TwoKeyGuards(unittest.TestCase):
 
 class AnchorReceiptSize(unittest.TestCase):
     """LocalFileAnchor read 'size' from the top of the signed head, which is {"head": {...}, "sig": ...},
-    so every receipt said 'size': None. It now reads head['size'] (engineering fix, Stephan's instruction)."""
+    so every receipt said 'size': None. It now reads head['size'] (engineering fix, the author's instruction)."""
 
     def test_receipt_reports_signed_head_size(self):
         import json

@@ -19,7 +19,7 @@ Two-Key: dual-path constitutional enforcement
    (``head_signing="append"``); if the signed-head checkpoint fails, the
    decision is a deny.
 
-PRIOR_ART.md §4 directions selected by Stephan Busch on 2026-09-30
+PRIOR_ART.md §4 directions selected by the author on 2026-09-30
 (CONCEPTION_NOTES.md Entry 2):
 (i)   tokens bind the ledger Merkle root R and size at issuance plus
       H(bytecode) and H(NL constitution). The gateway checks ancestry by
@@ -253,7 +253,7 @@ class TwoKey:
         if principal_credential is None:
             if self.deployment.is_enterprise:
                 raise TwoKeyConfigError("deployment_mode 'enterprise' requires principal_credential= (the "
-                                        "principal's certificate); placeholder pending Stephan")
+                                        "principal's certificate); placeholder pending a maintainer decision")
         else:
             try:
                 ident = pki.verify(principal_credential, "principal")

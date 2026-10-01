@@ -1,13 +1,13 @@
 # Provisional-patent readiness (2026-10-01)
 
-This is a working checklist for Stephan and his patent counsel. It is not
+This is a working checklist for the maintainers. It is not
 legal advice. It lists every capability claimed in `README.md`,
 `docs/SPEC_DRAFT.md`, and `CONCEPTION_NOTES.md` Entries 1–11; where each is
 implemented; and the evidence that it works. It then lists what is a stub,
 a placeholder, or untested against real vendors, and the open questions
-for Stephan.
+for the maintainers.
 
-Prepared by the AI engineering assistant at Stephan's 2026-10-01 9:56 AM MT
+Prepared by the AI engineering assistant at the author's 2026-10-01 9:56 AM MT
 direction (Entry 11: "make sure the code is at least functional enough for
 a provisional patent"). This document records engineering status. It is
 not conception, and it does not decide any design question.
@@ -39,11 +39,11 @@ not conception, and it does not decide any design question.
 |---|---|---|---|
 | 1 | Constitution upload and signing: one uploaded document signed by the principal; modified or foreign-signed documents refused (Entry 1; SPEC §5.2) | `two_key/constitution.py`, `two_key/keys.py`, `two_key/cli.py` (`keygen`, `sign`, `verify`) | `tests/test_constitution.py` (SignVerify, FileUpload), `tests/test_cli_demo.py`; e2e §2 |
 | 2 | Action record and Path A: constitution rules compiled to bytecode and evaluated by a deterministic policy VM; faults deny (D §5.2–5.3; SPEC §5.3–5.4) | `two_key/action.py`, `two_key/compiler.py`, `two_key/policy_vm.py` | `tests/test_original.py` (VMTests), `tests/test_bugfixes.py` (CompilerStrictness, VMFaults, AmountValidation); e2e §4 |
-| 3 | One signed constitution, two compilations: prose for Path B, rules for Path A (SB-2 (ii); SPEC §5.5) | `two_key/constitution.py`, `two_key/compiler.py` | `tests/test_two_compilations.py`; e2e §2 |
-| 4 | Path B: a quorum of judges on the principal's chosen AI, with a strict ballot schema, model heterogeneity, an availability floor, and ballot binding (Entry 1; SB-2 (iii); SPEC §5.6–5.7) | `two_key/quorum.py`, `two_key/judges/` | `tests/test_judges.py`, `tests/test_quorum_protocol.py`, `tests/test_perf_paths.py` (ParallelJudges); e2e §4 |
+| 3 | One signed constitution, two compilations: prose for Path B, rules for Path A (CN-2 (ii); SPEC §5.5) | `two_key/constitution.py`, `two_key/compiler.py` | `tests/test_two_compilations.py`; e2e §2 |
+| 4 | Path B: a quorum of judges on the principal's chosen AI, with a strict ballot schema, model heterogeneity, an availability floor, and ballot binding (Entry 1; CN-2 (iii); SPEC §5.6–5.7) | `two_key/quorum.py`, `two_key/judges/` | `tests/test_judges.py`, `tests/test_quorum_protocol.py`, `tests/test_perf_paths.py` (ParallelJudges); e2e §4 |
 | 5 | Both paths required for an allow, with Path B ordered after Path A by default (D §5.4; SPEC §5.10a) | `two_key/core.py` (`TwoKey.authorize`) | `tests/test_original.py` (TwoKeyTests), `tests/test_ordering.py`; e2e §4 (each path denies on its own) |
 | 6 | Capability tokens: single use, bound to tool and args hash, with expiry; HMAC-SHA-384 or signed `tk1-sig` (D §5.5; SPEC §5.8) | `two_key/capability.py` | `tests/test_gateway_ledger.py` (GatewayChecks), `tests/test_shared_redemption.py`; e2e §5 |
-| 7 | Ledger-root-bound tokens: a token carries the ledger root, and execution is linked to the token entry (SB-2 (i); SPEC §5.8) | `two_key/capability.py`, `two_key/ledger.py`, `two_key/gateway.py` | `tests/test_ledger_root_token.py` |
+| 7 | Ledger-root-bound tokens: a token carries the ledger root, and execution is linked to the token entry (CN-2 (i); SPEC §5.8) | `two_key/capability.py`, `two_key/ledger.py`, `two_key/gateway.py` | `tests/test_ledger_root_token.py` |
 | 8 | Gateway enforcement with frozen bytes: the call is serialized once, checked, and executed from the same bytes (Entry 10, F_REVIEW §8) | `two_key/gateway.py` (`ToolGateway`), `two_key/canonical.py` (`freeze_call`) | `tests/test_f_review.py` (HashThenExecute, InjectiveEncoding); e2e §5 |
 | 9 | Content-scanning hooks, outbound (before execution) and inbound (results, files, email); five hook types; verdict bound into the token and ledger (Entries 5–7) | `two_key/scanning.py`, `two_key/gateway.py` | `tests/test_scanning_adapters.py`, `tests/test_scanning_gateway.py`; e2e §6 |
 | 10 | Ledger: hash chain, signed head (size, head, Merkle root), RFC 9162 inclusion and consistency proofs (D §5.6; SPEC §5.9) | `two_key/ledger.py`, `two_key/merkle.py` | `tests/test_gateway_ledger.py` (LedgerIntegrity), `tests/test_merkle_consistency.py`, `tests/test_perf_paths.py` (MerkleAndCheckpoints); e2e §7 |
@@ -99,7 +99,7 @@ not conception, and it does not decide any design question.
   FIPS module**. No FIPS provider was active on the development machine.
   Two-Key is FIPS-ready, not FIPS validated.
 
-**Placeholders pending Stephan** (each is a setting, so changing it is a
+**Placeholders pending a maintainer decision** (each is a setting, so changing it is a
 one-line edit)
 - `PkiConfig.revocation_unreachable = "fail_closed"`: if no revocation
   answer can be obtained, the certificate is refused.
@@ -119,7 +119,7 @@ one-line edit)
 - Quorum and ordering defaults (`short_circuit_path_b=True`; quorum
   sizes) in `DESIGN_OPTIONS.md` §§4, 7.
 
-## 3. Open questions for Stephan
+## 3. Open questions for the maintainers
 
 New with Entry 11 (seed phrase and PKI):
 1. **Revocation unreachable.** Keep fail closed (deny when no CRL or OCSP
@@ -140,7 +140,7 @@ New with Entry 11 (seed phrase and PKI):
    policy OIDs map to roles?
 6. **ML-DSA binding.** A CA-issued certificate extension was chosen over a
    holder-signed binding record. Is that acceptable? Should the OID be
-   registered under a Two-Key/Stephan arc? Should composite or pure
+   registered under a Two-Key arc? Should composite or pure
    ML-DSA certificates replace it once CAs issue them?
 7. **PKI in personal mode.** It is optional today. Should it be refused,
    allowed, or encouraged?
@@ -154,7 +154,7 @@ New with Entry 11 (seed phrase and PKI):
 Still open from earlier entries (details in the linked documents):
 10. **Problem F**: which normalization option, if any (`DESIGN_OPTIONS.md`
     §1; `F_REVIEW.md` §9).
-11. Quorum protocol and ordering open points from Stephan's §4 (iii)
+11. Quorum protocol and ordering open points from the author's §4 (iii)
     selection (`DESIGN_OPTIONS.md` §§4, 7).
 12. Judge credentials and SSO (`DESIGN_OPTIONS.md` §5).
 13. Deployment modes: endorsement policy, enterprise without an anchor,

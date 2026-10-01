@@ -6,7 +6,7 @@ ballot. Implementations must never raise into the quorum: any failure is
 reported as an ``abstain`` ballot with ``error`` set, and abstentions never
 count toward "yes" (fail closed).
 
-Quorum protocol specifics (PRIOR_ART.md §4 (iii), selected by Stephan Busch on
+Quorum protocol specifics (PRIOR_ART.md §4 (iii), selected by the author on
 2026-09-30, CONCEPTION_NOTES.md Entry 2 "C"):
 * ``vendor`` and ``local_weights`` describe the judge so that the judge set
   can be checked for vendor heterogeneity (quorum.check_judge_set);

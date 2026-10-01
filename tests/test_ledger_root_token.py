@@ -1,4 +1,4 @@
-"""PRIOR_ART.md §4 (i): ledger-root-bound token (selected by Stephan Busch, 2026-09-30, Entry 2 "A").
+"""PRIOR_ART.md §4 (i): ledger-root-bound token (selected by the author, 2026-09-30, Entry 2 "A").
 
 Token carries R (ledger_merkle_root at ledger_size), H(bytecode), H(NL constitution). Before executing, the
 gateway (1) checks R equals or is an ancestor of its last-known root via a consistency proof, (2) checks the

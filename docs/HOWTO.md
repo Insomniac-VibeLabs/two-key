@@ -628,7 +628,7 @@ for name, (policy, judges) in cases.items():
 
 `QuorumPolicy.section4(required_yes=2, min_responding=None, **overrides)`
 sets `min_vendors=2`, `min_local_judges=1`, `judge_inputs="record_only"`,
-and `require_path_a_first=True`. These are the mechanisms Stephan selected
+and `require_path_a_first=True`. These are the mechanisms the author selected
 from `PRIOR_ART.md` §4 (iii). They are not the general default, because
 which default to use is still open (`DESIGN_OPTIONS.md` §7). In YAML, write
 the keys out. Two-Key refuses to start, and `check-judges` reports
@@ -966,7 +966,7 @@ types: a vendor API (REST or gRPC), ICAP, an in-process plugin, a local
 sidecar, or an asynchronous scanner. None is required, and with no scanners
 the gateway behaves exactly as above.
 
-Stephan decided three things (`CONCEPTION_NOTES.md` Entry 6):
+The author decided three things (`CONCEPTION_NOTES.md` Entry 6):
 - **Timeout:** both the seconds to wait (`timeout_seconds`, default 10) and
   the action (`on_timeout`) are configurable. The action defaults to block
   and can be set to `"allow"`.

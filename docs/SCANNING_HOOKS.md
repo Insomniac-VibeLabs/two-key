@@ -2,7 +2,7 @@
 
 Two-Key can hand what an agent is about to send to third-party data-loss
 prevention (DLP) and antivirus (AV) software, and act on the verdict. This
-follows Stephan's direction (`CONCEPTION_NOTES.md` Entry 5, 2026-09-30):
+follows the author's direction (`CONCEPTION_NOTES.md` Entry 5, 2026-09-30):
 third-party DLP hooks into Two-Key rather than Two-Key having DLP built in;
 all five hook types are offered, vendor- and version-agnostic; **none is
 required**, since there may be no DLP software in place; and antivirus gets
@@ -10,13 +10,13 @@ the same availability.
 
 The code is in `two_key/scanning.py` and the gateway wiring is in
 `two_key/gateway.py`. The implementation is AI-prepared engineering.
-Stephan decided the timeout, the combination rule, and what scanners receive
+The author decided the timeout, the combination rule, and what scanners receive
 on 2026-09-30 (`CONCEPTION_NOTES.md` Entry 6; see
-[Stephan's decisions (Entry 6)](#stephans-decisions-entry-6)), and then
+[The author's decisions (Entry 6)](#the-authors-decisions-entry-6)), and then
 scanner errors, run order, holding for the verdict, data-class disagreement,
 and inbound scanning (Entry 7; see
-[Stephan's decisions (Entry 7)](#stephans-decisions-entry-7)). What is still
-open is listed under [Open questions for Stephan](#open-questions-for-stephan).
+[The author's decisions (Entry 7)](#the-authors-decisions-entry-7)). What is still
+open is listed under [Open questions for the maintainers](#open-questions-for-the-maintainers).
 
 ## Contents
 
@@ -26,10 +26,10 @@ open is listed under [Open questions for Stephan](#open-questions-for-stephan).
 - [The five hook types](#the-five-hook-types)
 - [Comparison](#comparison)
 - [Antivirus, malicious scripts, and AMSI](#antivirus-malicious-scripts-and-amsi)
-- [Stephan's decisions (Entry 6)](#stephans-decisions-entry-6)
-- [Stephan's decisions (Entry 7)](#stephans-decisions-entry-7)
+- [The author's decisions (Entry 6)](#the-authors-decisions-entry-6)
+- [The author's decisions (Entry 7)](#the-authors-decisions-entry-7)
 - [Engineering defaults and interpretations](#engineering-defaults-and-interpretations)
-- [Open questions for Stephan](#open-questions-for-stephan)
+- [Open questions for the maintainers](#open-questions-for-the-maintainers)
 - [Limits](#limits)
 
 ## Where scanning happens
@@ -86,7 +86,7 @@ takes the original code path unchanged. The regression test is
 
 ## Inbound: before the agent receives or processes content
 
-Stephan: "Scans should be done before files are sent.  Likewise, they should
+The author: "Scans should be done before files are sent.  Likewise, they should
 be done before files are received or processed." (Entry 7)
 
 - **Tool results.** After the tool runs, the gateway scans its return value
@@ -126,7 +126,7 @@ crafted argument object can show different values the second time. The
 single snapshot in step 2 closes that gap **only when scanners are
 configured**, because the scanned bytes have to be the executed bytes.
 Without scanners the gap is still there. That bug is not fixed by this
-change, and fixing it in general needs Stephan's decision (F_REVIEW Q15).
+change, and fixing it in general needs a maintainer decision (F_REVIEW Q15).
 The snapshot also changes what the tool receives when scanning is on: it
 gets the JSON-decoded copy, so tuples arrive as lists and non-string keys as
 strings.
@@ -308,9 +308,9 @@ receiver = WebhookReceiver(scanner, secret=b"a shared secret of at least 32 byte
 
 ## Comparison
 
-This is a neutral comparison to support Stephan's choice. He said he is
+This is a neutral comparison to support the author's choice. The author said they are
 "thinking API is the best, but want to compare" (Entry 5). All five stay
-available whatever he picks.
+available whatever the author picks.
 
 | | 1. Vendor API (REST/gRPC) | 2. ICAP | 3. In-process plugin | 4. Sidecar (local socket) | 5. Async post-send |
 |---|---|---|---|---|---|
@@ -350,9 +350,9 @@ available whatever he picks.
   antivirus through AMSI's scan call. That is one possible optional plugin,
   and it is not implemented here.
 
-## Stephan's decisions (Entry 6)
+## The author's decisions (Entry 6)
 
-Stephan decided these on 2026-09-30, about 9:49 PM MT (`CONCEPTION_NOTES.md`
+The author decided these on 2026-09-30, about 9:49 PM MT (`CONCEPTION_NOTES.md`
 Entry 6). They resolve open questions (a), (b), and (c) from Entry 5.
 
 | Decision | What the code does |
@@ -370,9 +370,9 @@ above `public`). Entry 7 replaced both; see the next section.
 per-scanner choice, for example for a hash-reputation service. It is not the
 default, and content scanners return `error` in that mode.
 
-## Stephan's decisions (Entry 7)
+## The author's decisions (Entry 7)
 
-Stephan decided these on 2026-09-30, about 10:16 PM MT (`CONCEPTION_NOTES.md`
+The author decided these on 2026-09-30, about 10:16 PM MT (`CONCEPTION_NOTES.md`
 Entry 7). They resolve the open questions left after Entry 6.
 
 | Decision | What the code does |
@@ -385,18 +385,18 @@ Entry 7). They resolve the open questions left after Entry 6.
 
 ## Engineering defaults and interpretations
 
-These are AI-prepared engineering, not Stephan's decisions:
+These are AI-prepared engineering, not the author's decisions:
 
 | Item | Choice | Note |
 |---|---|---|
-| `timeout_seconds` | 10 | The setting is his decision (Entry 6); the number isn't. In parallel order it is the total wait. |
+| `timeout_seconds` | 10 | The setting is the author's decision (Entry 6); the number isn't. In parallel order it is the total wait. |
 | Parallel early stop | Stop waiting at the first deny; the scanners still running are recorded as `cancelled` | Waiting longer can't change a deny. Without a deny, every scanner is awaited up to the timeout. |
 | Inbound data class | The token's data class also applies to what comes back | "If one convicts, deny" read as covering inbound content too. |
 | Withheld results | The tool has already run; only the result is withheld | A tool's side effects can't be undone by a later scan. |
 | ICAP inbound | `RESPMOD` | Inbound content is a response. |
 | `digest_only` | Per-scanner opt-in only | Entry 6 (c) is exact bytes and strings. |
 
-## Open questions for Stephan
+## Open questions for the maintainers
 
 The questions from Entries 5 and 6 are decided (Entries 6 and 7). Still
 open:

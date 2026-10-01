@@ -1,7 +1,7 @@
 """
 Two-Key: content-scanning hooks for third-party DLP and antivirus
 =================================================================
-Stephan's direction (CONCEPTION_NOTES.md Entry 5, 2026-09-30): third-party
+The author's direction (CONCEPTION_NOTES.md Entry 5, 2026-09-30): third-party
 DLP software should be able to hook into Two-Key and scan what agents send,
 through any of five hook types, all optional and none required (there may be
 no DLP software in place), vendor- and version-agnostic, with the same
@@ -29,7 +29,7 @@ it, and records each verdict (scanner id and version, digest of the scanned
 bytes, outcome) in the ledger. With no scanners configured the gateway
 behaves exactly as before.
 
-Stephan's decisions (CONCEPTION_NOTES.md Entry 6, 2026-09-30 9:49 PM MT):
+The author's decisions (CONCEPTION_NOTES.md Entry 6, 2026-09-30 9:49 PM MT):
   (a) a scan timeout is configurable, both the seconds to wait and the action;
       the action defaults to deny (block), and can be set to allow;
   (b) most restrictive wins: if Two-Key or any DLP/AV scanner denies or
@@ -37,10 +37,10 @@ Stephan's decisions (CONCEPTION_NOTES.md Entry 6, 2026-09-30 9:49 PM MT):
       restrictive of the call's own class and the DLP classes;
   (c) scanners get the exact bytes sent and the decoded strings (for
       malicious-script detection); the digest binding covers the exact bytes.
-Stephan's decisions (CONCEPTION_NOTES.md Entry 7, 2026-09-30 10:16 PM MT):
+The author's decisions (CONCEPTION_NOTES.md Entry 7, 2026-09-30 10:16 PM MT):
   - a scanner error is recorded in the ledger and treated like a timeout
     (``on_error`` follows ``on_timeout``);
-  - scanners run in parallel by default (he delegated the choice to "whichever
+  - scanners run in parallel by default (the author delegated the choice to "whichever
     is more optimized"); ``order="sequential"`` remains an option;
   - always hold until the verdict or the timeout (``hold_until_verdict=True``
     by default; post-send mode is a weaker, non-default option);
@@ -110,19 +110,19 @@ class ScanTimeout(ScanError):
 
 
 # ---------------------------------------------------------------------------
-# Settings (Stephan's decisions, Entries 6 and 7)
+# Settings (the author's decisions, Entries 6 and 7)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ScanSettings:
     """Gateway scanning settings.
 
-    Stephan's decisions (CONCEPTION_NOTES.md Entry 6):
+    The author's decisions (CONCEPTION_NOTES.md Entry 6):
 
     - ``timeout_seconds`` and ``on_timeout`` (decision a): how long to wait for
       each scanner, and what a timeout does. ``on_timeout="block"`` (the
       default, deny) or ``"allow"`` (proceed; the timeout is still recorded).
       The value 10 seconds is an engineering default; the seconds are
-      configurable as he decided.
+      configurable as the author decided.
     - ``on_error`` (Entry 7): a scanner error is treated like a timeout, so it
       follows ``on_timeout``. Leave it unset (``None``); a value different
       from ``on_timeout`` is refused.
@@ -130,7 +130,7 @@ class ScanSettings:
       the gateway is about to execute plus the decoded strings. A scanner can
       still be set to ``"digest_only"`` (names, sizes, and digests only) as an
       explicit choice.
-    - ``order`` (Entry 7; Stephan delegated the choice to the faster one):
+    - ``order`` (Entry 7; the author delegated the choice to the faster one):
       ``"parallel"`` (default) runs every scanner at once, so the wait is
       about the slowest scanner rather than the sum. As soon as a verdict
       denies, the call is denied (nothing can turn that into an allow), and
@@ -143,10 +143,10 @@ class ScanSettings:
       token permits.
     """
     timeout_seconds: float = 10.0            # configurable (Entry 6, decision a); 10 s is an engineering default
-    on_timeout: str = "block"                # Stephan's decision (Entry 6, a): default deny, optional allow
+    on_timeout: str = "block"                # the author's decision (Entry 6, a): default deny, optional allow
     on_error: str | None = None              # Entry 7: errors are treated like timeouts (follows on_timeout)
-    payload: str = "exact"                   # Stephan's decision (Entry 6, c)
-    order: str = "parallel"                  # Entry 7: the faster order, chosen per Stephan's delegation
+    payload: str = "exact"                   # the author's decision (Entry 6, c)
+    order: str = "parallel"                  # Entry 7: the faster order, chosen per the author's delegation
 
     def __post_init__(self):
         if self.on_timeout not in ON_TIMEOUT:
@@ -1312,7 +1312,7 @@ class AsyncCallbackScanner(ContentScanner):
     storage-event handler, or run ``WebhookReceiver``. ``response`` is mapped
     with ``mapping``.
 
-    - ``hold_until_verdict=True`` (the default, Stephan's decision, Entry 7:
+    - ``hold_until_verdict=True`` (the default, the author's decision, Entry 7:
       "Always hold a file until verdict is returned [...] or the timeout limit
       is reached"): ``scan`` waits for the verdict, up to the engine's
       timeout, and the gateway decides on it like any other verdict. No

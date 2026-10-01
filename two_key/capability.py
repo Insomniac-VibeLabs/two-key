@@ -23,7 +23,7 @@ Payload fields: v, jti (unique id for single-use), principal, tool,
 scope{amount_usd, counterparty, data_class}, args_hash, args_enc, issued_at,
 expires_at, ledger_root, constitution_digest.
 
-Ledger-root binding (PRIOR_ART.md §4 (i) and (ii), selected by Stephan Busch
+Ledger-root binding (PRIOR_ART.md §4 (i) and (ii), selected by the author
 on 2026-09-30): Two-Key also binds
   ledger_size, ledger_merkle_root  the principal's Merkle ledger root R and the
                                    ledger size at issuance (before the token's
@@ -32,7 +32,7 @@ on 2026-09-30): Two-Key also binds
                                    the constitution that authorized the action
 The gateway refuses tokens that lack these fields.
 
-Reference option (per Stephan's instructions, 2026-09-30): the token is bound
+Reference option (per the author's instructions, 2026-09-30): the token is bound
 to ``args_hash``, the hash (SHA-384 by default) of the two-key-enc/2 encoding
 (``args_enc``) of {tool, args} for the literal tool-call arguments: typed,
 injective, and domain-separated (canonical.py; F_REVIEW finding 2). A token

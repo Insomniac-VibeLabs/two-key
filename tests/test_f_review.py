@@ -1,4 +1,4 @@
-"""Regression tests for the F_REVIEW findings fixed under Stephan's approval (CONCEPTION_NOTES Entry 10).
+"""Regression tests for the F_REVIEW findings fixed under the author's approval (CONCEPTION_NOTES Entry 10).
 
 1. Hash-then-execute (A5): the gateway reads the caller's args once, into immutable bytes, and runs the
    tool on values decoded from those bytes, with or without content scanners.

@@ -4,7 +4,7 @@ sequenceDiagram
   participant L as Principal's ledger<br/>(hash chain + Merkle tree)
   participant G as Tool gateway<br/>(last-known view: size V, root R_V)
   participant T as Tool
-  Note over K,L: PRIOR_ART.md §4 (i), selected by Stephan Busch 2026-09-30
+  Note over K,L: PRIOR_ART.md §4 (i), selected 2026-09-30
   K->>L: size n, Merkle root R = root(n)
   K->>K: token {jti, tool, scope, args_hash,<br/>ledger_size=n, ledger_merkle_root=R,<br/>bytecode_hash, nl_hash, constitution_digest}
   K->>L: capability_issued at seq n (token hash + binding)

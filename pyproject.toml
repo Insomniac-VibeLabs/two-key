@@ -8,7 +8,7 @@ version = "0.2.0.dev0"
 description = "Dual-path constitutional enforcement for AI agents (prototype, not production crypto)"
 requires-python = ">=3.10"
 dependencies = ["cryptography>=41"]
-# No license is declared here on purpose: licensing is Stephan's decision.
+# No license is declared here on purpose: licensing is the maintainers' decision.
 
 [project.optional-dependencies]
 yaml = ["pyyaml>=6"]

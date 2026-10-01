@@ -1,6 +1,6 @@
 """Optional seed-phrase backup of the principal's signing keys (personal mode only).
 
-Stephan Busch, 2026-10-01 (CONCEPTION_NOTES.md Entry 11): "add a seed phrase
+The author, 2026-10-01 (CONCEPTION_NOTES.md Entry 11): "add a seed phrase
 backup for personal use". Before this, keys were random and kept only in a
 passphrase-encrypted file; losing the file lost the key. This module is
 AI-prepared engineering. The open settings are listed in

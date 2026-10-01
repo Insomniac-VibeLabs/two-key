@@ -147,7 +147,7 @@ class Revocation(unittest.TestCase):
         self.assertEqual(self.reason(crl=False), "revocation_unreachable")           # nothing configured
         cfg = self.t.config(ROLE_MAP, crl=False)
         cfg.ocsp_fetcher = self.t.ocsp_fetcher(unreachable=True)
-        with self.assertRaisesRegex(CertificateRejected, "placeholder pending Stephan"):
+        with self.assertRaisesRegex(CertificateRejected, "placeholder pending a maintainer decision"):
             PkiVerifier(cfg).verify(self.cred, "principal")
 
     def test_fail_open_setting_records_unreachable(self):

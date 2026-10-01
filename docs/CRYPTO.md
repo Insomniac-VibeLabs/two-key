@@ -1,7 +1,7 @@
 # Cryptography: FIPS 140-3 posture and quantum resistance
 
-Status as of 2026-09-30. Written by the AI engineering assistant at Stephan
-Busch's direction.
+Status as of 2026-09-30. Written by the AI engineering assistant at the author's
+direction.
 
 **Posture: FIPS-approved algorithms, validated module required for compliance.**
 
@@ -10,7 +10,7 @@ this repository makes it so. Every algorithm goes through one pluggable
 crypto provider, so the software *can* be deployed on a FIPS 140-3
 validated cryptographic module.
 
-Since the F_REVIEW fixes (approved by Stephan, CONCEPTION_NOTES Entry 10:
+Since the F_REVIEW fixes (approved by the author, CONCEPTION_NOTES Entry 10:
 "A, but ensure quantum resistance and fips 140-3 compliance where
 applicable"), every profile uses SHA-384 hashes and HMAC-SHA-384 MACs with
 keys of 256 bits or more by default. Tool arguments and action records are

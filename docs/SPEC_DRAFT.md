@@ -4,7 +4,7 @@
 
 **Short name:** Two-Key ("two-key")
 
-**Draft prepared:** 2026-09-30. Derived from `docs/INVENTION_DISCLOSURE.md` (disclosure date 30 September 2026, kept unchanged for the record) and updated to match the prototype in this repository. **Updated 2026-09-30, about 7:40 AM MT:** added the cryptographic profile (`docs/CRYPTO.md`), the measured performance (`docs/PERFORMANCE.md`), and the three `PRIOR_ART.md` §4 directions that Stephan selected at about 7:02 AM MT (§§5.6–5.13, Figures 5–7). **Updated 2026-10-01:** §5.14 (seed-phrase backup and enterprise PKI, Entry 11) and the §6 status table; current per-feature evidence is in `docs/PROVISIONAL_READINESS.md`.
+**Draft prepared:** 2026-09-30. Derived from `docs/INVENTION_DISCLOSURE.md` (disclosure date 30 September 2026, kept unchanged for the record) and updated to match the prototype in this repository. **Updated 2026-09-30, about 7:40 AM MT:** added the cryptographic profile (`docs/CRYPTO.md`), the measured performance (`docs/PERFORMANCE.md`), and the three `PRIOR_ART.md` §4 directions that the author selected at about 7:02 AM MT (§§5.6–5.13, Figures 5–7). **Updated 2026-10-01:** §5.14 (seed-phrase backup and enterprise PKI, Entry 11) and the §6 status table; current per-feature evidence is in `docs/PROVISIONAL_READINESS.md`.
 
 **Status:** Working draft for review by a registered patent attorney. Not a filed application. Not legal advice.
 
@@ -13,12 +13,12 @@
 | Tag | Meaning |
 |---|---|
 | **[D §n]** | Carried over from the original invention disclosure, section n |
-| **[SB-1]** | Stephan Busch's conception statement, `CONCEPTION_NOTES.md` entry 1 (2026-09-30, ~4:03 AM MT) |
-| **[SB-2 (i)/(ii)/(iii)]** | Stephan Busch's **selection**, `CONCEPTION_NOTES.md` entry 2 (2026-09-30, ~7:02 AM MT, relayed through his patent-attorney assistant): "A, B, C, and F all together", choosing directions (i), (ii), (iii) of `PRIOR_ART.md` §4 and flagging the normalization problem (F). The wording of each direction comes from `PRIOR_ART.md` §4, an AI-prepared prior-art memo by the patent-attorney agent that is kept outside this repository. Selecting among proposed directions is recorded as a selection, not as conception; counsel should assess |
-| **[SB-11]** | Stephan Busch's direction, `CONCEPTION_NOTES.md` entry 11 (2026-10-01, 9:56 AM MT): "add a seed phrase backup for personal use and PKI for enterprise use". The mechanisms in §5.14 were proposed by the AI assistant that morning (recorded there as not conception) and are tagged [IMPL] |
+| **[CN-1]** | The author's conception statement, `CONCEPTION_NOTES.md` entry 1 (2026-09-30, ~4:03 AM MT) |
+| **[CN-2 (i)/(ii)/(iii)]** | The author's **selection**, `CONCEPTION_NOTES.md` entry 2 (2026-09-30, ~7:02 AM MT, relayed through the author's patent-attorney assistant): "A, B, C, and F all together", choosing directions (i), (ii), (iii) of `PRIOR_ART.md` §4 and flagging the normalization problem (F). The wording of each direction comes from `PRIOR_ART.md` §4, an AI-prepared prior-art memo by the patent-attorney agent that is kept outside this repository. Selecting among proposed directions is recorded as a selection, not as conception; counsel should assess |
+| **[CN-11]** | The author's direction, `CONCEPTION_NOTES.md` entry 11 (2026-10-01, 9:56 AM MT): "add a seed phrase backup for personal use and PKI for enterprise use". The mechanisms in §5.14 were proposed by the AI assistant that morning (recorded there as not conception) and are tagged [IMPL] |
 | **[IMPL]** | How the prototype implements something. It is an engineering detail, not asserted as inventive. Where several designs are possible, see `DESIGN_OPTIONS.md` |
 
-**Inventorship:** to be determined with counsel. Some mechanisms in §§5.5, 5.7 and 5.8 were proposed by an AI agent (`PRIOR_ART.md` §4) and selected by Stephan; each is tagged accordingly. The conception record is in `CONCEPTION_NOTES.md`; engineering changes and who decided them are in `CHANGES.md`. The original disclosure text and the prototype code were largely drafted with an AI assistant. AI is not an inventor.
+**Inventorship:** to be determined with counsel. Some mechanisms in §§5.5, 5.7 and 5.8 were proposed by an AI agent (`PRIOR_ART.md` §4) and selected by the author; each is tagged accordingly. The conception record is in `CONCEPTION_NOTES.md`; engineering changes and who decided them are in `CHANGES.md`. The original disclosure text and the prototype code were largely drafted with an AI assistant. AI is not an inventor.
 
 ---
 
@@ -34,16 +34,16 @@ Binding an agent to a person (a hardware key, a biometric template) answers "who
 
 ## 3. Summary
 
-A runtime sits between any language model and any tool gateway. A proposed action reaches the real world only if **two independent paths both agree** [D §3; SB-1: "Both path A and B need to agree to let the action occur."]. Then a short-lived capability token is issued, and the whole decision is written to a principal-controlled ledger.
+A runtime sits between any language model and any tool gateway. A proposed action reaches the real world only if **two independent paths both agree** [D §3; CN-1: "Both path A and B need to agree to let the action occur."]. Then a short-lived capability token is issued, and the whole decision is written to a principal-controlled ledger.
 
-- **Constitution upload.** The principal supplies a constitution written in ordinary human language [SB-1: "have a user able to upload a human language constitution"]. Alongside it goes a restricted-schema set of hard rules for Path A [D §5.3]. The principal signs the bundle; changing it requires a fresh signature, and model vendors cannot push a new constitution [D §5.1 item 2].
+- **Constitution upload.** The principal supplies a constitution written in ordinary human language [CN-1: "have a user able to upload a human language constitution"]. Alongside it goes a restricted-schema set of hard rules for Path A [D §5.3]. The principal signs the bundle; changing it requires a fresh signature, and model vendors cannot push a new constitution [D §5.1 item 2].
 - **Path A: deterministic policy VM.** The hard rules are compiled ahead of time into bytecode for a small stack machine. At decision time it reads only fields of a normalized action record. It does not read English [D §3].
-- **Path B: multi-model intent quorum.** N judges each receive the principal's natural-language constitution and the proposal, and each votes on whether the proposal is consistent with the constitution. A threshold must be met [D §3]. The judges are connected to whichever AI the principal chooses, local or vendor. The connection may use an API key, a username/password, or single sign-on [SB-1: "the AI judge/judges be connected to whichever AI (local or vendor) the user desires (api or username/password or single sign on login)"].
+- **Path B: multi-model intent quorum.** N judges each receive the principal's natural-language constitution and the proposal, and each votes on whether the proposal is consistent with the constitution. A threshold must be met [D §3]. The judges are connected to whichever AI the principal chooses, local or vendor. The connection may use an API key, a username/password, or single sign-on [CN-1: "the AI judge/judges be connected to whichever AI (local or vendor) the user desires (api or username/password or single sign on login)"].
 - **Capability issuance.** Only after both paths pass is a token issued. It is bound to the principal, the tool, the numeric and party scope, a short expiry, and the current ledger root [D §3]. A tool gateway refuses any invocation without a valid, unexpired, correctly scoped token [D §3, §5.5].
 - **Personal ledger.** Every proposal, VM result, ballot, and issued capability is appended to a hash chain under the principal's control [D §3, §5.6].
-- **Ledger-root-bound token** [SB-2 (i)]. The token carries the root R of the principal's append-only Merkle ledger at issuance, H(bytecode), and H(NL constitution). Before executing, the gateway verifies that R equals its last-known root or is an ancestor of it, via a Merkle consistency proof. It checks that the hashes match the ledger's latest constitution-load entry, rejects tokens issued before a later reload or revocation, and appends the result linked to the token's entry (§5.8).
-- **One signed constitution, two compilations** [SB-2 (ii)]. The principal signs one document. A deterministic compiler splits it into stack bytecode for Path A, which does no string operations on natural-language fields, and the prose judge prompt for Path B. Both hashes are recorded at load and bound into ballots and tokens. A vendor-signed update cannot replace either (§5.5).
-- **Quorum protocol specifics** [SB-2 (iii)]. Judge-set selection enforces vendor heterogeneity (at least two vendors, including at least one local weight file). An availability floor K, distinct from the approval threshold T, denies without counting. Ballots are schema-constrained Booleans bound to H(action record) and H(constitution); a malformed ballot is an abstain, which counts as deny. Judge inputs are restricted to the normalized record and the constitution. Path B runs only after Path A returns true (§5.7, §5.10a).
+- **Ledger-root-bound token** [CN-2 (i)]. The token carries the root R of the principal's append-only Merkle ledger at issuance, H(bytecode), and H(NL constitution). Before executing, the gateway verifies that R equals its last-known root or is an ancestor of it, via a Merkle consistency proof. It checks that the hashes match the ledger's latest constitution-load entry, rejects tokens issued before a later reload or revocation, and appends the result linked to the token's entry (§5.8).
+- **One signed constitution, two compilations** [CN-2 (ii)]. The principal signs one document. A deterministic compiler splits it into stack bytecode for Path A, which does no string operations on natural-language fields, and the prose judge prompt for Path B. Both hashes are recorded at load and bound into ballots and tokens. A vendor-signed update cannot replace either (§5.5).
+- **Quorum protocol specifics** [CN-2 (iii)]. Judge-set selection enforces vendor heterogeneity (at least two vendors, including at least one local weight file). An availability floor K, distinct from the approval threshold T, denies without counting. Ballots are schema-constrained Booleans bound to H(action record) and H(constitution); a malformed ballot is an abstain, which counts as deny. Judge inputs are restricted to the normalized record and the constitution. Path B runs only after Path A returns true (§5.7, §5.10a).
 
 Technical improvements stated in the disclosure [D §3]:
 - less unauthorized tool invocation under prompt injection, because Path A has no natural-language parser;
@@ -71,13 +71,13 @@ Components [D §5.1]: principal device, constitution store, proposal interface, 
 
 [IMPL] Python package `two_key`: `constitution.py`, `compiler.py` (§5.5), `action.py`, `policy_vm.py`, `quorum.py`, `judges/`, `capability.py`, `gateway.py`, `ledger.py`, `merkle.py`, `anchoring.py`, `crypto/` (§5.12), `core.py` (class `TwoKey`), `cli.py`.
 
-### 5.2 Constitution upload and signing [SB-1; D §5.1 item 2]
+### 5.2 Constitution upload and signing [CN-1; D §5.1 item 2]
 
 The principal provides (a) a plain-English constitution file (`.txt`/`.md`) and (b) a hard-rules file (`.json`/`.yaml`).
 
 [IMPL] The two are bundled into a canonical document {format, principal, created_at, constitution_text, its SHA-384 (SHA-256 in documents signed before the F_REVIEW fixes, still accepted), hard_rules} and signed with the principal's key: Ed25519 (legacy default), ECDSA P-384, or a hybrid ML-DSA-65 suite in which both component signatures must verify (§5.12). Before use, Two-Key verifies the signature against a public key the principal trusts. It rejects unsigned envelopes, modified text or rules, envelopes signed by a different key, envelopes whose embedded key was swapped, and suite downgrades. CLI: `keygen [--suite]`, `sign-constitution`, `verify-constitution`.
 
-[SB-2 (ii); IMPL for the format] The principal may instead sign **one** Markdown source (format `two-key-constitution/2`, `sign-constitution --document`). The rules sit in a single fenced ```` ```twokey-rules ```` block of JSON inside the prose; §5.5 describes the split.
+[CN-2 (ii); IMPL for the format] The principal may instead sign **one** Markdown source (format `two-key-constitution/2`, `sign-constitution --document`). The rules sit in a single fenced ```` ```twokey-rules ```` block of JSON inside the prose; §5.5 describes the split.
 
 ### 5.3 Action record and normalization [D §5.2]
 
@@ -85,7 +85,7 @@ Fields: tool, amount_usd, currency, counterparty, data_class ∈ {public, person
 
 [IMPL] Validation rejects negative, non-finite, and non-numeric amounts, unknown fields, and non-boolean `irreversible`. Strings are trimmed and case-folded, and data_class must be one of the enum values. Invalid records become an explicit, logged deny.
 
-*Open question (DESIGN_OPTIONS.md §1):* which component produces the action record (the proposing model, the gateway working from the literal tool-call arguments, a classifier, or a hybrid). The prototype accepts a caller-supplied record and offers a gateway extractor hook. It does not select a design. On 2026-09-30 Stephan flagged this as problem "F" together with his §4 selection [SB-2]. **No option has been chosen or implemented;** the hooks are unchanged.
+*Open question (DESIGN_OPTIONS.md §1):* which component produces the action record (the proposing model, the gateway working from the literal tool-call arguments, a classifier, or a hybrid). The prototype accepts a caller-supplied record and offers a gateway extractor hook. It does not select a design. On 2026-09-30 the author flagged this as problem "F" together with his §4 selection [CN-2]. **No option has been chosen or implemented;** the hooks are unchanged.
 
 ### 5.4 Path A: constitution compilation and VM [D §5.3]
 
@@ -97,9 +97,9 @@ The hard rules use a restricted schema: `allow_only_tools`, `deny_counterparties
 - VM faults (type errors, stack underflow, unknown opcodes, exceeding the step limit) are denies.
 - The step limit is configurable (default 4096) and checked at compile time.
 
-### 5.5 One signed constitution, two compilations (Figure 6: `docs/figures/two_compilations.svg`) [SB-2 (ii)]
+### 5.5 One signed constitution, two compilations (Figure 6: `docs/figures/two_compilations.svg`) [CN-2 (ii)]
 
-The principal signs one constitution document. A compiler splits it deterministically: structured rules become stack bytecode with no string operations on natural-language fields, and the prose becomes the judge prompt. Both hashes are recorded in the ledger at load and bound into each ballot and token. A vendor-signed update cannot replace either without the principal's signature [SB-2 (ii), wording from PRIOR_ART.md §4 (ii) and §3 item 2; the principal-signature requirement is also D §5.1 item 2].
+The principal signs one constitution document. A compiler splits it deterministically: structured rules become stack bytecode with no string operations on natural-language fields, and the prose becomes the judge prompt. Both hashes are recorded in the ledger at load and bound into each ballot and token. A vendor-signed update cannot replace either without the principal's signature [CN-2 (ii), wording from PRIOR_ART.md §4 (ii) and §3 item 2; the principal-signature requirement is also D §5.1 item 2].
 
 [IMPL]
 - `compiler.compile_both` takes the verified document and produces the Path A bytecode (`policy_vm.compile_constitution`) and the Path B judge text. `bytecode_hash` = H(canonical JSON of `[[opcode name, operands...], ...]`) and `nl_hash` = H(judge text), using SHA-256 in the legacy profile and SHA-384 in the post-quantum profile.
@@ -111,7 +111,7 @@ The principal signs one constitution document. A compiler splits it deterministi
 
 *Open points: DESIGN_OPTIONS.md §7.8–7.13.*
 
-### 5.6 Path B: judges connected to the principal's chosen AI, and the quorum protocol [SB-1; D §5.4]
+### 5.6 Path B: judges connected to the principal's chosen AI, and the quorum protocol [CN-1; D §5.4]
 
 Each judge receives the constitution text and the proposal and returns a structured ballot {consistent, confidence, rationale}. The convenor counts booleans; it doesn't average prose. Judges must be independently reachable, and the convenor refuses to decide if fewer than K judges respond [D §5.4].
 
@@ -132,9 +132,9 @@ Each judge receives the constitution text and the proposal and returns a structu
 
 *Open question (DESIGN_OPTIONS.md §2):* how judge independence should be ensured. §5.7 adds the §4 (iii) mechanisms.
 
-### 5.7 Quorum protocol specifics (Figure 7: `docs/figures/quorum_protocol.svg`) [SB-2 (iii)]
+### 5.7 Quorum protocol specifics (Figure 7: `docs/figures/quorum_protocol.svg`) [CN-2 (iii)]
 
-Judge-set selection enforces vendor heterogeneity, with at least two vendors including at least one local weight file [SB-2 (iii); cf. D Claim 4, "at least two distinct model vendors or local weight files"]. An availability floor K, distinct from the approval threshold T, means fewer than K valid ballots is a deny without counting [SB-2 (iii); K itself is D §5.4]. Ballots are schema-constrained Booleans bound to H(action record) and H(constitution), and a malformed ballot is an abstention, which counts as deny [SB-2 (iii)]. Judge inputs are restricted to the normalized record and the constitution, never the agent transcript or tool outputs [SB-2 (iii)]. Path B is invoked only after Path A returns true [SB-2 (iii); previously a configurable default, §5.10a].
+Judge-set selection enforces vendor heterogeneity, with at least two vendors including at least one local weight file [CN-2 (iii); cf. D Claim 4, "at least two distinct model vendors or local weight files"]. An availability floor K, distinct from the approval threshold T, means fewer than K valid ballots is a deny without counting [CN-2 (iii); K itself is D §5.4]. Ballots are schema-constrained Booleans bound to H(action record) and H(constitution), and a malformed ballot is an abstention, which counts as deny [CN-2 (iii)]. Judge inputs are restricted to the normalized record and the constitution, never the agent transcript or tool outputs [CN-2 (iii)]. Path B is invoked only after Path A returns true [CN-2 (iii); previously a configurable default, §5.10a].
 
 [IMPL]
 - Each judge has `vendor` (defaulting to its provider label) and `local_weights` (true by default for Ollama judges; configurable), plus an optional recorded `weights_sha256`. `QuorumPolicy.min_vendors` and `min_local_judges` are checked when Two-Key starts, and it refuses to start below the floor. The convenor checks again (`judge_set_not_heterogeneous`). With `heterogeneity_scope="responding"`, the floor must also hold among the judges that returned valid ballots. `QuorumPolicy.section4()` applies §4's figures (2 vendors, 1 local). The general default is still permissive (open point).
@@ -145,19 +145,19 @@ Judge-set selection enforces vendor heterogeneity, with at least two vendors inc
 
 *Open points: DESIGN_OPTIONS.md §7.14–7.21.*
 
-### 5.8 Capability token and tool gateway (Figure 3: `docs/figures/token_gateway_sequence.svg`; Figure 5: `docs/figures/ledger_root_token.svg`) [D §5.5; SB-2 (i)]
+### 5.8 Capability token and tool gateway (Figure 3: `docs/figures/token_gateway_sequence.svg`; Figure 5: `docs/figures/ledger_root_token.svg`) [D §5.5; CN-2 (i)]
 
 Payload [D §5.5]: principal, tool, scope, issued_at, expires_at, ledger_root. Default TTL is 30 seconds. The gateway checks the signature, expiry, tool match, that the amount is within scope, that the counterparty matches, and that the ledger root equals the last-known root or is an ancestor of it. The disclosure states that replay across tools, replay after expiry, and replay after a new constitution load (if the gateway tracks roots) all fail [D §5.5].
 
 [IMPL]
 - The token also carries a single-use `jti`, `args_hash`, and the constitution digest.
 - Its tag is HMAC-SHA-384 (`tk1-hs384`, the default for every key suite since the F_REVIEW fixes) or, if chosen explicitly, HMAC-SHA-256 (`tk1`, legacy). The payload carries `args_enc` (`two-key-enc/2`); tokens without it are refused. A signed mode (`tk1-sig`, e.g. hybrid ML-DSA-65 + Ed25519) is optional. Production would use a hardware-backed key [D §5.1 item 6].
-- The gateway additionally checks the principal, data class, `args_hash` (the canonical hash of the literal tool-call arguments), that no constitution has been loaded since the token's root, and single use. The used-jti record is kept by the ledger itself, so every gateway on one TwoKey instance and its ledger shares it and a token is accepted exactly once however many gateways or threads present it (checks and redemption run under the ledger's lock; on POSIX the redemption also holds an `flock` on the ledger file and refuses, fail closed, if another writer has changed the file: `replayed` / `ledger_concurrent_writer`). The record is rebuilt from the ledger's `capability_redeemed` entries on restart [IMPL; engineering fix on Stephan's instruction, 2026-09-30].
+- The gateway additionally checks the principal, data class, `args_hash` (the canonical hash of the literal tool-call arguments), that no constitution has been loaded since the token's root, and single use. The used-jti record is kept by the ledger itself, so every gateway on one TwoKey instance and its ledger shares it and a token is accepted exactly once however many gateways or threads present it (checks and redemption run under the ledger's lock; on POSIX the redemption also holds an `flock` on the ledger file and refuses, fail closed, if another writer has changed the file: `replayed` / `ledger_concurrent_writer`). The record is rebuilt from the ledger's `capability_redeemed` entries on restart [IMPL; engineering fix on the author's instruction, 2026-09-30].
 - The full token goes back to the caller; only its digest (`token_digest`, SHA-384 by default) is logged.
 
-*Open question (DESIGN_OPTIONS.md §3):* the token binding details. `args_hash` is the reference option specified in Stephan's 2026-09-30 instructions, and alternatives are listed in the memo.
+*Open question (DESIGN_OPTIONS.md §3):* the token binding details. `args_hash` is the reference option specified in the author's 2026-09-30 instructions, and alternatives are listed in the memo.
 
-**Ledger-root-bound token** [SB-2 (i)]. The token carries (a) the root R of the principal's append-only Merkle ledger at issuance, (b) H(bytecode), and (c) H(NL constitution). Before executing, the gateway (1) verifies that R equals its last-known root or is an ancestor of it, via a Merkle consistency proof; (2) verifies that H(bytecode) and H(constitution) match the ledger's latest constitution-load entry; (3) rejects any token issued before a later constitution-reload or revocation entry; and (4) appends the execution result, linking it to the token's entry [SB-2 (i), wording from PRIOR_ART.md §4 (i); the ancestor idea itself is D §5.5].
+**Ledger-root-bound token** [CN-2 (i)]. The token carries (a) the root R of the principal's append-only Merkle ledger at issuance, (b) H(bytecode), and (c) H(NL constitution). Before executing, the gateway (1) verifies that R equals its last-known root or is an ancestor of it, via a Merkle consistency proof; (2) verifies that H(bytecode) and H(constitution) match the ledger's latest constitution-load entry; (3) rejects any token issued before a later constitution-reload or revocation entry; and (4) appends the execution result, linking it to the token's entry [CN-2 (i), wording from PRIOR_ART.md §4 (i); the ancestor idea itself is D §5.5].
 
 [IMPL]
 - New payload fields: `ledger_size` and `ledger_merkle_root` (R: the ledger's size and RFC 9162 Merkle root just before the token's own `capability_issued` entry), `bytecode_hash`, and `nl_hash`. The chain-tip `ledger_root` and `constitution_digest` stay.
@@ -188,7 +188,7 @@ If the VM faults, deny. If the quorum isn't met, deny. If the issuer can't sign,
 
 ### 5.10a Ordering of the paths
 
-[IMPL] By default Path B is not convened when Path A denies (`short_circuit_path_b=True`), so forbidden proposals aren't sent to external judges. It can be configured to run both. Both must pass for an allow either way. Stephan's §4 (iii) selection includes "Path B invoked only after Path A returns true" [SB-2 (iii)]; `require_path_a_first=True` enforces it (§5.7). *Open question: DESIGN_OPTIONS.md §4, §7.21.*
+[IMPL] By default Path B is not convened when Path A denies (`short_circuit_path_b=True`), so forbidden proposals aren't sent to external judges. It can be configured to run both. Both must pass for an allow either way. The author's §4 (iii) selection includes "Path B invoked only after Path A returns true" [CN-2 (iii)]; `require_path_a_first=True` enforces it (§5.7). *Open question: DESIGN_OPTIONS.md §4, §7.21.*
 
 ### 5.11 Model-swap invariance [D §5.8]
 
@@ -196,7 +196,7 @@ Replacing the proposing model doesn't require a new constitution. Replacing a ju
 
 ### 5.12 Cryptographic profile, FIPS 140-3 posture, and quantum resistance (from `docs/CRYPTO.md`) [IMPL]
 
-Added at Stephan's 2026-09-30 instruction (CHANGES.md rows 43–59). It is engineering detail, not asserted as inventive.
+Added at the author's 2026-09-30 instruction (CHANGES.md rows 43–59). It is engineering detail, not asserted as inventive.
 - **Not FIPS certified or validated.** FIPS 140-3 validates cryptographic modules, not applications. The prototype uses only FIPS-approved algorithms, routed through one `CryptoProvider`, so it can be deployed on a validated module. `fips_mode=True` refuses non-approved algorithms (and the liboqs backend). `require_fips_module=True` refuses to start unless both OpenSSL instances report FIPS mode. No FIPS provider was active on the development machine. Candidate modules and their certificate status are listed in `docs/CRYPTO.md` §2 (for example, the OpenSSL 3.1.2 FIPS provider, #4985, has no ML-DSA, and Ed25519 is not approved there, so ECDSA P-384 suites are needed on it).
 - **Algorithms.**
   - Signatures: Ed25519, ECDSA P-384, and ML-DSA-65 (FIPS 186-5, FIPS 204). Hybrid suites `hybrid-mldsa65-ed25519` and `hybrid-mldsa65-p384`: both components must verify, the suite name is bound into each component, and downgrades and silent fallback are refused.
@@ -223,9 +223,9 @@ One run on a shared 8-vCPU cloud VM, 2026-09-30 about 07:33 MDT, with local test
 
 Compared with the code before the §4 phase, measured in the same session, the §4 (i)–(iii) checks added about 23–25 µs (9–18%) to gateway `invoke`, 53 µs on an 18,000-entry ledger, and 66–117 µs (6–12%) to `authorize`. Details and causes are in `docs/PERFORMANCE.md`. Real judge latency, which is network- and model-bound and not measured, dominates end to end. Judges run in parallel under an overall deadline.
 
-### 5.14 Keys and identities: seed-phrase backup (personal) and PKI (enterprise) [SB-11; IMPL]
+### 5.14 Keys and identities: seed-phrase backup (personal) and PKI (enterprise) [CN-11; IMPL]
 
-Stephan's direction [SB-11]: a seed-phrase backup for personal use and PKI for enterprise use. Details (`docs/KEYS_AND_PKI.md`) are [IMPL]:
+The author's direction [CN-11]: a seed-phrase backup for personal use and PKI for enterprise use. Details (`docs/KEYS_AND_PKI.md`) are [IMPL]:
 - **Personal: optional seed-phrase backup.** A BIP-39 24-word phrase (256-bit entropy, checksum) with an optional passphrase. The BIP-39 seed (PBKDF2-HMAC-SHA-512) is expanded by HKDF-SHA-384 under one domain label per algorithm into the Ed25519 key, the ML-DSA-65 seed, and the P-384 scalar. Refused in `fips_mode` and in enterprise mode; the words are never logged.
 - **Enterprise: PKI identities.** The principal, agents, and judges are X.509 identities: chain validation to configured trust anchors, key usage and validity, CRL/OCSP revocation (unreachable status fails closed by default, a placeholder), and certificate subject/SAN mapped to the Two-Key roles. Enterprise startup refuses without PKI and a principal certificate that certifies the principal's key. Each authorization carries an agent assertion signed with the agent's certified key, bound to the request, fresh, and not replayed. Keys may be on a PKCS#11 token.
 - **Hybrid with certificates.** The CA binds the holder's ML-DSA-65 public key by including its SHA-384 in a non-critical certificate extension; the identity's key is then ML-DSA-65 + the certificate's classical key, both required. Chosen over a holder-signed binding record because the CA's signature does not fall with the classical key.
@@ -240,9 +240,9 @@ Stephan's direction [SB-11]: a seed-phrase backup for personal use and PKI for e
 - constitution and token signature tampering;
 - malformed judge output;
 - FIPS-mode rejection, the crypto self-test, and hybrid-signature tampering and downgrade;
-- [SB-2 (i)] RFC 9162 consistency proofs against a reference implementation for every pair of sizes up to 65, with tampered, truncated, and extended proofs. Gateway ancestry, fork and truncation detection, hash mismatch, reload, revocation, a token without its ledger entry, and result linking (`tests/test_merkle_consistency.py`, `tests/test_ledger_root_token.py`);
-- [SB-2 (ii)] the deterministic split, the static structured-only check, identical hashes for `/1` and `/2`, hashes in the load entry, ballots, and tokens, judges receiving the prose only, and vendor-signed or forged reloads being refused (`tests/test_two_compilations.py`);
-- [SB-2 (iii)] heterogeneity at selection and among responders, the K floor denying without counting, K distinct from T, stamped and echoed ballot binding including LLM echo, record-only judge inputs, and Path A first (`tests/test_quorum_protocol.py`).
+- [CN-2 (i)] RFC 9162 consistency proofs against a reference implementation for every pair of sizes up to 65, with tampered, truncated, and extended proofs. Gateway ancestry, fork and truncation detection, hash mismatch, reload, revocation, a token without its ledger entry, and result linking (`tests/test_merkle_consistency.py`, `tests/test_ledger_root_token.py`);
+- [CN-2 (ii)] the deterministic split, the static structured-only check, identical hashes for `/1` and `/2`, hashes in the load entry, ballots, and tokens, judges receiving the prose only, and vendor-signed or forged reloads being refused (`tests/test_two_compilations.py`);
+- [CN-2 (iii)] heterogeneity at selection and among responders, the K floor denying without counting, K distinct from T, stamped and echoed ballot binding including LLM echo, record-only judge inputs, and Path A first (`tests/test_quorum_protocol.py`).
 
 `python -m two_key demo` runs the original three scenarios plus the review's regressions, entirely offline with test-double judges. No real vendor API has been called; the connectors are tested against mocked transports.
 
@@ -250,14 +250,14 @@ Stephan's direction [SB-11]: a seed-phrase backup for personal use and PKI for e
 |---|---|
 | Constitution upload and signing (Ed25519, ECDSA P-384, hybrid ML-DSA-65) | Implemented |
 | Path A compiler and VM | Implemented |
-| One signed constitution, two compilations, hashes recorded and bound [SB-2 (ii)] | Implemented |
+| One signed constitution, two compilations, hashes recorded and bound [CN-2 (ii)] | Implemented |
 | Path B quorum protocol | Implemented |
-| Heterogeneity floor, K floor without counting, bound ballots, record-only inputs [SB-2 (iii)] | Implemented (heterogeneity floor off by default; `QuorumPolicy.section4()`) |
+| Heterogeneity floor, K floor without counting, bound ballots, record-only inputs [CN-2 (iii)] | Implemented (heterogeneity floor off by default; `QuorumPolicy.section4()`) |
 | Path B connectors (OpenAI-compatible, Anthropic, Gemini, Ollama) | Implemented; tested with mocks only |
 | API-key and keyring auth | Implemented |
 | Username/password and OAuth device-code auth | Interface only (documented stub) |
 | Capability token and gateway checks | Implemented |
-| Ledger-root-bound token with consistency-proof ancestry, revocation, linked results [SB-2 (i)] | Implemented |
+| Ledger-root-bound token with consistency-proof ancestry, revocation, linked results [CN-2 (i)] | Implemented |
 | Ledger: hash chain, signed head, Merkle tree, inclusion and consistency proofs | Implemented |
 | FIPS-approved-algorithm mode, self-test, hybrid PQ signatures | Implemented; not a validated module |
 | Action-record normalization design (F) | **Open; no option implemented** |
@@ -265,8 +265,8 @@ Stephan's direction [SB-11]: a seed-phrase backup for personal use and PKI for e
 | Public anchoring | Stub interface only |
 | Content-scanning hooks, outbound and inbound (Entries 5–7) [added 2026-10-01] | Implemented; tested with local fakes only |
 | Permissioned-chain anchoring, deployment modes (Entry 9) [added 2026-10-01] | Implemented; tested with in-memory fakes only |
-| Seed-phrase backup, personal mode [SB-11] [added 2026-10-01] | Implemented |
-| Enterprise PKI identities [SB-11] [added 2026-10-01] | Implemented; tested with a generated test CA only |
+| Seed-phrase backup, personal mode [CN-11] [added 2026-10-01] | Implemented |
+| Enterprise PKI identities [CN-11] [added 2026-10-01] | Implemented; tested with a generated test CA only |
 | Hardware-backed keys (TEE/HSM) | PKCS#11 signer interface (2026-10-01): tested with SoftHSM 2.6 and a fake token, no real HSM or smart card; TEE not implemented |
 | Ledger encryption | Not implemented |
 
@@ -275,17 +275,17 @@ Stephan's direction [SB-11]: a seed-phrase backup for personal use and PKI for e
 The seven teaching claims in `docs/INVENTION_DISCLOSURE.md` §7 are **unchanged** and not reproduced here; the attorney should work from that text. This draft adds no claim language.
 
 Themes the attorney may want to consider, by source:
-- User-uploaded human-language constitution, signed by the principal, as the input to Path B, together with compiled hard rules as the input to Path A [SB-1; D §5.1 item 2].
-- Path B judges connected to principal-selected AI providers, local or vendor, through principal-selected authentication (API key, username/password, SSO) [SB-1].
-- Both paths must agree before any action occurs [SB-1; D §3; Claim 1(d)].
-- The three narrower directions Stephan selected on 2026-09-30 [SB-2 (i), (ii), (iii)]. Their wording is from the patent-attorney agent's `PRIOR_ART.md` §4, and §§5.5, 5.7, and 5.8 above describe how they are implemented. Whether they are claimable, and whether a selection among AI-proposed directions supports inventorship, is for counsel.
+- User-uploaded human-language constitution, signed by the principal, as the input to Path B, together with compiled hard rules as the input to Path A [CN-1; D §5.1 item 2].
+- Path B judges connected to principal-selected AI providers, local or vendor, through principal-selected authentication (API key, username/password, SSO) [CN-1].
+- Both paths must agree before any action occurs [CN-1; D §3; Claim 1(d)].
+- The three narrower directions the author selected on 2026-09-30 [CN-2 (i), (ii), (iii)]. Their wording is from the patent-attorney agent's `PRIOR_ART.md` §4, and §§5.5, 5.7, and 5.8 above describe how they are implemented. Whether they are claimable, and whether a selection among AI-proposed directions supports inventorship, is for counsel.
 
 The open design questions in `DESIGN_OPTIONS.md` (including §7, the details §4 left open, and §1, the normalization problem F) are not reflected in any claim theme.
 
 ## 8. Notes for counsel
 
 - The original disclosure cites USPTO guidance (revised 28 Nov 2025) on AI-assisted inventions and *Ex parte Desjardins* on technical-improvement framing [D §1, §9]. Neither has been verified by the assistant.
-- Licensing: the repository's license is Stephan's decision. The `LICENSE` file comes from the original repository's history and was not changed by this work. Whether the repository or package has ever been public is unknown; please check the commit history and visibility history.
-- `PRIOR_ART.md` (the patent-attorney agent's prior-art triage) is referenced here but is kept outside this repository. Its §4 wording is quoted only as the source of the [SB-2] directions.
-- Problem F (who produces the action record) was flagged by Stephan but is deliberately unimplemented; the (i)–(iii) guarantees depend on the fields Path A reads, which F would settle.
+- Licensing: the repository's license is the author's decision. The `LICENSE` file comes from the original repository's history and was not changed by this work. Whether the repository or package has ever been public is unknown; please check the commit history and visibility history.
+- `PRIOR_ART.md` (the patent-attorney agent's prior-art triage) is referenced here but is kept outside this repository. Its §4 wording is quoted only as the source of the [CN-2] directions.
+- Problem F (who produces the action record) was flagged by the author but is deliberately unimplemented; the (i)–(iii) guarantees depend on the fields Path A reads, which F would settle.
 - The original disclosure's advocacy sections (§8, and most of §9 on institutional risk surveys and climate funding) are left out of this draft. They remain in the original file.

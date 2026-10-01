@@ -8,9 +8,9 @@ separately in `CHANGES.md` and in git history. It is not conception.
 
 ## Entry 1
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-09-30, about 4:03 AM Mountain Time (MDT, UTC-6)
-- **How it was captured:** Stephan typed it in a chat with his AI assistant.
+- **How it was captured:** The author typed it in a chat with the AI assistant.
   The assistant copied it here word for word, with no edits to spelling,
   grammar, or punctuation.
 - **Context:** Given after reviewing the Two-Key invention disclosure
@@ -31,10 +31,10 @@ separately in `CHANGES.md` and in git history. It is not conception.
 
 ## Entry 2
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-09-30, about 7:02 AM Mountain Time (MDT, UTC-6)
-- **How it was captured:** Stephan's selection was relayed to the AI
-  engineering assistant through his patent-attorney assistant (another AI
+- **How it was captured:** The author's selection was relayed to the AI
+  engineering assistant through the author's patent-attorney assistant (another AI
   agent). The quoted text is reproduced word for word as relayed.
 - **Context:** Given after reviewing the patent-attorney agent's prior-art
   triage (`PRIOR_ART.md`, kept outside this repository), §4 "Suggested
@@ -54,7 +54,7 @@ separately in `CHANGES.md` and in git history. It is not conception.
 
 This entry records a *selection* among directions that the attorney agent
 proposed. The directions' wording comes from `PRIOR_ART.md`, which is an
-AI-prepared document; this entry does not attribute that wording to Stephan.
+AI-prepared document; this entry does not attribute that wording to the author.
 For F, the selection identifies the problem; no solution option has been
 chosen or implemented.
 
@@ -62,12 +62,12 @@ chosen or implemented.
 
 ## Entry 3
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-09-30, about 7:39 PM Mountain Time (MDT, UTC-6)
 - **How it was captured:** relayed to the AI engineering assistant by the
   agent coordinating the work. The instruction is recorded as relayed, in
   substance; it is not a verbatim quote.
-- **What was decided:** Stephan named the product "Two-Key".
+- **What was decided:** The author named the product "Two-Key".
 
 ### How this entry maps to the implementation (assistant's note, not conception)
 
@@ -83,15 +83,15 @@ updated per Entry 6.)
 
 ## Entry 4
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-09-30, about 8:01 PM Mountain Time (MDT, UTC-6);
   clarification about 8:02 PM MDT; further context about 8:07 PM MDT
 - **How it was captured:** the 8:01 and 8:02 PM statements were relayed to
-  the AI engineering assistant by Stephan's patent-attorney assistant
-  (another AI agent); the 8:07 PM statement was said directly to Programer.
+  the AI engineering assistant by the author's patent-attorney assistant
+  (another AI agent); the 8:07 PM statement was said directly to the AI assistant coordinating the work.
   All three quotes are reproduced word for word as relayed, including
   spelling and punctuation.
-- **Context:** Stephan's approach to problem F (action-record normalization:
+- **Context:** The author's approach to problem F (action-record normalization:
   the gap where a lying or injected agent misstates the action it will take;
   `DESIGN_OPTIONS.md` §1, Entry 2).
 
@@ -101,8 +101,8 @@ Clarification (about 8:02 PM MDT, relayed):
 
 > "Yes, I thought that's how I explained it, maybe I wasn't clear."
 
-Further context (about 8:07 PM MDT; said by Stephan directly to Programer,
-the engineering agent coordinating this work, and passed on word for word):
+Further context (about 8:07 PM MDT; said by the author directly to the AI assistant
+coordinating this work, and passed on word for word):
 
 > "Well, that's the whole point of a constitution and separate agent (local or service) that acts as a judge…so see if the proposed action is allowed by the constitution. Or is my logical flawed somewhere. The agent being controlled should not be the same agent as running the judges."
 
@@ -120,11 +120,11 @@ been implemented.
 
 ## Entry 5
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-09-30, about 8:13 PM Mountain Time (MDT, UTC-6);
   further statements at 8:17 PM, 8:19 PM, and 8:22 PM MDT
 - **How it was captured:** relayed word for word to the AI engineering
-  assistant in the task instructions from Programer, the engineering agent
+  assistant in the task instructions from the AI assistant
   coordinating this work. The quotes are reproduced exactly as relayed,
   including spelling and punctuation.
 - **Context:** content scanning (data-loss prevention and antivirus) of what
@@ -151,7 +151,7 @@ About 8:13 PM MDT:
 ### What the AI assistant said in between (assistant's statements, not conception)
 
 These are the AI assistant's contributions to the exchange, recorded as
-context. They are not Stephan's conception.
+context. They are not the author's conception.
 
 - The assistant presented five hook types for third-party scanners:
   1. a vendor API (REST or gRPC);
@@ -161,7 +161,7 @@ context. They are not Stephan's conception.
   5. asynchronous post-send scanning by webhook or storage-event callback.
      This only flags a problem after the fact, unless the payload is held
      until the verdict arrives.
-- The assistant agreed with Stephan's direction that third-party DLP should
+- The assistant agreed with the author's direction that third-party DLP should
   hook into Two-Key rather than be built in.
 - The assistant noted that the gateway passing the actual intercepted
   content lets the scan verdict replace the agent's self-label.
@@ -171,20 +171,20 @@ context. They are not Stephan's conception.
   one optional Windows local plugin.
 
 The implementation of these hooks (`two_key/scanning.py`,
-`docs/SCANNING_HOOKS.md`) is AI-prepared engineering. Settings that Stephan
+`docs/SCANNING_HOOKS.md`) is AI-prepared engineering. Settings that the author
 has not decided ship with placeholder defaults, and those questions are
 listed as open in `docs/SCANNING_HOOKS.md`.
 
 ## Entry 6
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-09-30, about 9:49 PM Mountain Time (MDT, UTC-6)
 - **How it was captured:** relayed word for word to the AI engineering
-  assistant in the task instructions from Programer, the engineering agent
+  assistant in the task instructions from the AI assistant
   coordinating this work. The quote is reproduced exactly as relayed,
   including spelling, punctuation, quotation marks, and ellipses.
-- **Context:** Stephan's decisions on the open content-scanning questions
-  from Entry 5, and his authorization to finish the rename.
+- **Context:** The author's decisions on the open content-scanning questions
+  from Entry 5, and the author's authorization to finish the rename.
 
 > "The timeout option should be configurable (both time in seconds to wait and action taken…default should be deny but with the optional configuration to be changed to allow.)
 >
@@ -207,14 +207,14 @@ listed as open in `docs/SCANNING_HOOKS.md`.
   places and references". Per that authorization, the non-quote wording of
   earlier entries that still used the former name was updated.
   `docs/INVENTION_DISCLOSURE.md` and the original invention-package zip are
-  not changed. Stephan's verbatim quotes are not changed; this entry's quote
+  not changed. The author's verbatim quotes are not changed; this entry's quote
   keeps the former name because it is verbatim. The changes, with the
   original text preserved here for the record:
   - **Entry 3, "What was decided".** Original:
-    > Stephan renamed the product from "Compact Kernel" to "Two-Key".
+    > The author renamed the product from "Compact Kernel" to "Two-Key".
 
     Now:
-    > Stephan named the product "Two-Key".
+    > The author named the product "Two-Key".
   - **Entry 3, implementation note.** Original:
     > (the class formerly `CompactKernel` is `TwoKey`, in `two_key/core.py`)
     > [...] Entries 1 and 2, `docs/INVENTION_DISCLOSURE.md`, the original
@@ -240,13 +240,13 @@ listed as open in `docs/SCANNING_HOOKS.md`.
 
 ## Entry 7
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-09-30, about 10:16 PM Mountain Time (MDT, UTC-6)
 - **How it was captured:** relayed word for word to the AI engineering
-  assistant in the task instructions from Programer, the engineering agent
+  assistant in the task instructions from the AI assistant
   coordinating this work. The quote is reproduced exactly as relayed,
   including spelling, punctuation, spacing, and the apostrophe.
-- **Context:** Stephan's answers to the content-scanning questions left open
+- **Context:** The author's answers to the content-scanning questions left open
   after Entry 6 (scanner errors, run order, holding for the verdict,
   data-class disagreement), plus a new statement about inbound content.
 
@@ -262,24 +262,24 @@ listed as open in `docs/SCANNING_HOOKS.md`.
 
 ### Assistant's note (not conception)
 
-- **Run order.** Stephan asked which is faster and delegated the choice
+- **Run order.** The author asked which is faster and delegated the choice
   ("Whichever is more optimized, choose that."). The assistant answered that
   running the scanners at the same time (parallel) is faster: the wait is
   about as long as the slowest scanner, not the sum of all of them. Because
   any deny decides the call (most restrictive wins, Entry 6), the order
-  doesn't change the outcome. So parallel was selected, per his delegation.
+  doesn't change the outcome. So parallel was selected, per the author's delegation.
   Running one after the other (sequential) remains available as an option.
 - **How the statements are implemented** is AI-prepared engineering,
   described in `docs/SCANNING_HOOKS.md` and `CHANGES.md` row 86.
 
 ## Entry 8
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-09-30, about 10:17 PM Mountain Time (MDT, UTC-6)
 - **How it was captured:** relayed word for word to the AI engineering
-  assistant in the task instructions from Programer, the engineering agent
+  assistant in the task instructions from the AI assistant
   coordinating this work. The quote is reproduced exactly as relayed.
-- **Context:** Stephan's answer to whether the original wording should be
+- **Context:** The author's answer to whether the original wording should be
   restored in Entries 1 and 3 and in `CHANGES.md` rows 3, 59, 78, 79, and 81,
   which were edited for the rename.
 
@@ -287,28 +287,28 @@ listed as open in `docs/SCANNING_HOOKS.md`.
 
 ### Assistant's note (not conception)
 
-- Stephan directed the edits to the non-quote wording of Entries 1 and 3
+- The author directed the edits to the non-quote wording of Entries 1 and 3
   and of `CHANGES.md` rows 3, 59, 78, 79, and 81, for better naming
-  conventions. His instruction is recorded verbatim in Entry 6 (2026-09-30,
+  conventions. The author's instruction is recorded verbatim in Entry 6 (2026-09-30,
   about 9:49 PM MT): "yes modify it so it reflects ‘two-key’ in all
   places and references".
 - The original wording is preserved in Entry 6 (Entries 1 and 3) and in git
   commit 97dedbd (all of them).
-- The patent lawyer advised against editing earlier entries. Stephan chose
+- The patent lawyer advised against editing earlier entries. The author chose
   to keep the edited wording ("Keep as is"). Nothing was reverted.
 - From Entry 7 on, earlier entries and earlier `CHANGES.md` rows are not
   edited; new information is only appended.
 
 ## Entry 9
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-09-30, about 10:26 PM Mountain Time (MDT, UTC-6); the
   question quoted as context was asked at about 10:20 PM MT.
 - **How it was captured:** relayed word for word to the AI engineering
-  assistant in the task instructions from Programer, the engineering agent
+  assistant in the task instructions from the AI assistant
   coordinating this work. The quotes are reproduced exactly as relayed,
   including spelling, spacing, quotation marks, and apostrophes.
-- **Context:** Stephan's question about the ledger (about 10:20 PM MT):
+- **Context:** The author's question about the ledger (about 10:20 PM MT):
 
 > "Just to be clear, the ‘ledger’ is a cryptographic ledger like a blockchain right?  Where it’s auditable and nonreputable?
 >
@@ -328,7 +328,7 @@ listed as open in `docs/SCANNING_HOOKS.md`.
 - `two_key/anchoring.py` had only two anchors, `NullAnchor` and
   `LocalFileAnchor`. Neither publishes anything outside the machine.
 
-### Stephan's statement (about 10:26 PM MT)
+### The author's statement (about 10:26 PM MT)
 
 > "I think locally is fine for personal use.  However, I think for enterprise use, an enterprise level (not fully public) blockchain would be the best for this.  If you concur, create the option.  Tie the configuration to a whether or not it’s being used for personal use or for an enterprise (likely need to be an early on configuration setting/global variable to denote ‘personal’ or ‘enterprise’ use; as many other settings will likely need to be addressed based on the use case.)"
 
@@ -342,33 +342,33 @@ listed as open in `docs/SCANNING_HOOKS.md`.
 - The implementation (the `deployment_mode` setting, a permissioned-ledger
   anchor interface, and a Hyperledger Fabric adapter) is AI-prepared
   engineering. It is described in `docs/DEPLOYMENT_MODES.md` and
-  `CHANGES.md` row 88. Settings he has not decided are listed there as
+  `CHANGES.md` row 88. Settings the author has not decided are listed there as
   open questions.
 
 ## Entry 10
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-09-30, 10:30 PM Mountain Time (MDT, UTC-6)
-- **How it was captured:** relayed by Stephan's patent-attorney agent, and
-  passed on to the AI engineering assistant by Programer, the engineering
-  agent coordinating this work. The quote is reproduced exactly as relayed.
-- **Nature:** **an approval of routine bug fixes, not conception.** Stephan
+- **How it was captured:** relayed by the author's patent-attorney agent, and
+  passed on to the AI engineering assistant by the AI assistant
+  coordinating this work. The quote is reproduced exactly as relayed.
+- **Nature:** **an approval of routine bug fixes, not conception.** The author
   approved fixing defects found in the existing code (F_REVIEW.md §8,
   findings 1–3: the gateway's hash-then-execute gap, the non-injective
   canonical encoding, and unescaped judge-prompt delimiters). This entry
-  records his approval and his condition. It does not record an inventive
+  records the author's approval and condition. It does not record an inventive
   contribution.
 
-### Stephan's words (10:30 PM MT, relayed by the patent-attorney agent)
+### The author's words (10:30 PM MT, relayed by the patent-attorney agent)
 
 > "A, but ensure quantum resistance and fips 140-3 compliance where applicable."
 
 ### Assistant's note (not conception)
 
 - According to the relaying instruction, "A" means approving the three
-  F_REVIEW bug fixes. The text of the options he was choosing between was
+  F_REVIEW bug fixes. The text of the options the author was choosing between was
   not relayed to the engineering assistant.
-- The fixes, and how his condition was applied, are AI-prepared
+- The fixes, and how the author's condition was applied, are AI-prepared
   engineering:
   - hashes and MACs use FIPS-approved algorithms with a quantum margin
     (SHA-384, HMAC-SHA-384, keys of at least 256 bits) by default in every
@@ -383,7 +383,7 @@ listed as open in `docs/SCANNING_HOOKS.md`.
 
 ## Entry 11
 
-- **Attributed to:** Stephan Busch
+- **Attributed to:** the author
 - **Date/time:** 2026-10-01, 7:42 AM to 9:56 AM Mountain Time (MDT, UTC-6),
   four messages
 - **How it was captured:** relayed word for word to the AI engineering
@@ -391,7 +391,7 @@ listed as open in `docs/SCANNING_HOOKS.md`.
   quotes are reproduced exactly as relayed, including spacing and
   apostrophes.
 
-### Stephan's words
+### The author's words
 
 7:42 AM MT:
 
@@ -441,9 +441,9 @@ listed as open in `docs/SCANNING_HOOKS.md`.
     HSMs or smart cards; certificate subject/SAN mapped to Two-Key roles.
   - **Post-quantum:** keep hybrid ML-DSA-65 alongside the classical
     certificate key until post-quantum certificates are common.
-- The implementation that follows Stephan's 9:56 AM instruction is
+- The implementation that follows the author's 9:56 AM instruction is
   AI-prepared engineering, described in `docs/KEYS_AND_PKI.md`,
-  `docs/PROVISIONAL_READINESS.md`, and `CHANGES.md`. Settings he has not
+  `docs/PROVISIONAL_READINESS.md`, and `CHANGES.md`. Settings the author has not
   decided are placeholders, listed there as open questions.
 
 ---

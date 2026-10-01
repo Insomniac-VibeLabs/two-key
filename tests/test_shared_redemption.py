@@ -1,4 +1,4 @@
-"""Single use is shared by every gateway on one TwoKey instance and its ledger (Stephan's instruction,
+"""Single use is shared by every gateway on one TwoKey instance and its ledger (the author's instruction,
 2026-09-30 evening).
 
 Before this fix each ToolGateway kept its own used-token set, rebuilt from the ledger only when the gateway

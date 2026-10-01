@@ -1,4 +1,4 @@
-"""PRIOR_ART.md §4 (ii): one signed constitution, two compilations (Stephan Busch selection, 2026-09-30, "B").
+"""PRIOR_ART.md §4 (ii): one signed constitution, two compilations (the author selection, 2026-09-30, "B").
 
 The principal signs one document. A deterministic compiler splits it: structured rules -> stack bytecode (no
 string operations on natural-language fields), prose -> judge prompt. Both hashes are recorded in the ledger at

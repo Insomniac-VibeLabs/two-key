@@ -1,6 +1,6 @@
 """Deployment mode: one early, global setting, ``personal`` or ``enterprise``.
 
-Stephan (CONCEPTION_NOTES.md Entry 9, 2026-09-30): a local ledger is fine for
+The author (CONCEPTION_NOTES.md Entry 9, 2026-09-30): a local ledger is fine for
 personal use; for enterprise use, anchor to an enterprise-level (not fully
 public) blockchain; tie the configuration to whether Two-Key is used
 personally or by an enterprise, as an early setting, because "many other
@@ -21,14 +21,14 @@ settings will likely need to be addressed based on the use case".
     backup (seedphrase.py; Entry 11).
   - ``enterprise``: every signed ledger head is also anchored to a
     permissioned chain through a ``PermissionedLedgerAnchor``. With none
-    configured, startup fails (PLACEHOLDER pending Stephan).
+    configured, startup fails (PLACEHOLDER pending a maintainer decision).
   - ``enterprise`` also uses PKI identities (pki.py; CONCEPTION_NOTES
     Entry 11): a ``pki`` configuration and a principal certificate are
-    required at startup (PLACEHOLDER pending Stephan), and seed phrases are
+    required at startup (PLACEHOLDER pending a maintainer decision), and seed phrases are
     refused.
 - **Other mode-dependent settings** hang off ``DeploymentConfig.mode_defaults``
   later. It is empty on purpose: nothing else changes with the mode until
-  Stephan decides. Candidates are listed in docs/DEPLOYMENT_MODES.md.
+  The maintainers decide. Candidates are listed in docs/DEPLOYMENT_MODES.md.
 """
 
 from __future__ import annotations
@@ -121,7 +121,7 @@ def check_anchor(config: DeploymentConfig, anchor: Anchor | None) -> None:
             raise DeploymentConfigError(
                 "deployment_mode 'enterprise' requires a permissioned-ledger anchor (anchor=FabricAnchor(...), "
                 "RestPermissionedAnchor(...), or another PermissionedLedgerAnchor); none is configured. "
-                "This startup check is a placeholder pending Stephan (docs/DEPLOYMENT_MODES.md)")
+                "This startup check is a placeholder pending a maintainer decision (docs/DEPLOYMENT_MODES.md)")
     elif anchor is not None and not isinstance(anchor, (NullAnchor, LocalFileAnchor)):
         raise DeploymentConfigError("deployment_mode 'personal' keeps the ledger local: use no anchor, NullAnchor, "
                                     "or LocalFileAnchor (set deployment_mode='enterprise' for a permissioned chain)")
@@ -133,7 +133,7 @@ def check_pki(config: DeploymentConfig, pki: Any) -> None:
         raise DeploymentConfigError(
             "deployment_mode 'enterprise' requires PKI identities (pki=PkiConfig(...) or a 'pki:' section in the "
             "deployment config, plus principal_credential=); none is configured. This startup check is a "
-            "placeholder pending Stephan (docs/KEYS_AND_PKI.md)")
+            "placeholder pending a maintainer decision (docs/KEYS_AND_PKI.md)")
 
 
 def recorded_mode(ledger: Any) -> str | None:

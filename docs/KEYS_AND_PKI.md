@@ -1,9 +1,9 @@
 # Keys and identities: seed-phrase backup (personal) and PKI (enterprise)
 
-**Origin.** Stephan Busch, 2026-10-01, 9:56 AM MT (`CONCEPTION_NOTES.md`
+**Origin.** The author, 2026-10-01, 9:56 AM MT (`CONCEPTION_NOTES.md`
 Entry 11): "add a seed phrase backup for personal use and PKI for
 enterprise use". Everything below is AI-prepared engineering of that
-direction. Settings Stephan has not decided are marked **placeholder**.
+direction. Settings the author has not decided are marked **placeholder**.
 They are collected in [PROVISIONAL_READINESS.md](PROVISIONAL_READINESS.md)
 §3.
 
@@ -107,7 +107,7 @@ offline. A record signed only by the holder's classical key would be
 forgeable by anyone who breaks that classical key, which is exactly the
 quantum threat. The extension depends on the CA key instead. The trade-off
 is that the CA must add the extension when it issues the certificate. This
-is the "sound option" the task asked for; Stephan may choose otherwise.
+is the "sound option" the task asked for; the maintainers may choose otherwise.
 
 **Agent assertions.** `pki.sign_agent_request(credential, key, action,
 proposal, tool_args)` signs SHA-384 over two-key-enc/2 of the normalized
@@ -164,7 +164,7 @@ pki:
   require_judge_identities: false
 ```
 
-**Enterprise startup** (**placeholder** pending Stephan) refuses:
+**Enterprise startup** (**placeholder** pending a maintainer decision) refuses:
 - without a permissioned anchor (Entry 9);
 - without `pki`;
 - without `principal_credential`;
@@ -176,5 +176,5 @@ The verified identities go into the first `constitution_loaded` entry
 
 ## Placeholders and open questions
 
-The placeholders in this document and the open questions for Stephan are
+The placeholders in this document and the open questions for the maintainers are
 listed in [PROVISIONAL_READINESS.md](PROVISIONAL_READINESS.md) §§2–3.

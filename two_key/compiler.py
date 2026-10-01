@@ -1,7 +1,7 @@
 """
 Two-Key: one signed constitution, two compilations (PRIOR_ART.md §4 (ii))
 ===============================================================================
-Selected by Stephan Busch on 2026-09-30 (CONCEPTION_NOTES.md Entry 2, "B").
+Selected by the author on 2026-09-30 (CONCEPTION_NOTES.md Entry 2, "B").
 
 The principal signs ONE constitution document. This module compiles that
 single document deterministically into both enforcement inputs:

@@ -1,4 +1,4 @@
-"""PRIOR_ART.md §4 (iii): quorum protocol specifics (Stephan Busch selection, 2026-09-30, Entry 2 "C").
+"""PRIOR_ART.md §4 (iii): quorum protocol specifics (the author selection, 2026-09-30, Entry 2 "C").
 
 * judge-set selection enforcing vendor heterogeneity (>= 2 vendors including >= 1 local weight file);
 * availability floor K distinct from approval threshold T; fewer than K valid ballots -> deny without counting;

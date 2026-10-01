@@ -1,7 +1,7 @@
 """Ledger anchoring: publish signed ledger heads outside the local ledger.
 
 Spec 5.6 says production "writes the root to a public log on a schedule".
-Stephan (CONCEPTION_NOTES.md Entry 9, 2026-09-30) said a local ledger is fine
+The author (CONCEPTION_NOTES.md Entry 9, 2026-09-30) said a local ledger is fine
 for personal use, and that for enterprise use "an enterprise level (not fully
 public) blockchain would be the best". So there are two kinds of anchor:
 
@@ -21,7 +21,7 @@ public) blockchain would be the best". So there are two kinds of anchor:
 Non-repudiation from a permissioned chain holds only if its nodes (and the
 endorsing organizations) are run by parties who are not all under one
 administrator. ``min_endorsing_orgs`` and ``required_orgs`` let a deployment
-require that; the defaults are placeholders pending Stephan
+require that; the defaults are placeholders pending a maintainer decision
 (docs/DEPLOYMENT_MODES.md).
 
 Nothing here is tested against a live network: the Fabric adapter is tested
@@ -127,7 +127,7 @@ class PermissionedLedgerAnchor(Anchor):
     A receipt is accepted only if the transaction is ``VALID`` and endorsed by
     at least ``min_endorsing_orgs`` distinct organizations, including every
     org in ``required_orgs``. Both are PLACEHOLDER defaults (1 and none)
-    pending Stephan; a real deployment should require organizations that are
+    pending a maintainer decision; a real deployment should require organizations that are
     not all under one administrator.
     """
     kind = "permissioned"

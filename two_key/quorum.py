@@ -21,7 +21,7 @@ Fixes from the original prototype (see CHANGES.md):
   hung provider can never produce a "yes" and cannot stall Two-Key beyond
   the deadline. Per-request HTTP timeouts are still set on each LLM judge.
 
-Quorum protocol specifics (PRIOR_ART.md §4 (iii), selected by Stephan Busch on
+Quorum protocol specifics (PRIOR_ART.md §4 (iii), selected by the author on
 2026-09-30, CONCEPTION_NOTES.md Entry 2 "C"):
 - Vendor heterogeneity in judge-set selection: ``min_vendors`` distinct
   vendors and ``min_local_judges`` judges on local weight files

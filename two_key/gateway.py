@@ -19,7 +19,7 @@ any tool runs, it checks everything spec 5.5 lists, plus single-use:
   8. data class matches        -> data_class_mismatch
   9. ledger_root (chain digest) is a known entry -> unknown_ledger_root
      (checked after 10a)
- 10. ledger-root binding, PRIOR_ART.md §4 (i), selected by Stephan Busch on
+ 10. ledger-root binding, PRIOR_ART.md §4 (i), selected by the author on
      2026-09-30 (CONCEPTION_NOTES.md Entry 2):
      a. the gateway keeps its own last-known view (size, Merkle root) of the
         principal's ledger and checks on every call that the ledger still

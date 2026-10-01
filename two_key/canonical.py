@@ -19,7 +19,7 @@ already verifies changes bytes.
 
 ``typed_bytes`` (``two-key-enc/2``) is the injective, typed, versioned
 encoding for values the agent supplies and a tool receives (F_REVIEW §7.2,
-finding 2; approved by Stephan, CONCEPTION_NOTES Entry 10). Every value
+finding 2; approved by the author, CONCEPTION_NOTES Entry 10). Every value
 carries a type tag, so a tuple and a list, ``1`` and ``"1"``, ``1`` and
 ``1.0``, and ``True`` and ``1`` all encode differently. Mapping keys must
 be strings. The output is a canonical JSON object with the encoding

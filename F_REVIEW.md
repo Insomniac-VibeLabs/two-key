@@ -2,8 +2,8 @@
 
 *AI-prepared security analysis (engineering assistant), 2026-09-30 about
 8:10 PM MDT, at the patent-attorney assistant's request. It reviews the idea
-Stephan Busch stated in `CONCEPTION_NOTES.md` Entry 4. That entry, not this
-document, is the record of his conception. **Nothing here has been
+The author stated in `CONCEPTION_NOTES.md` Entry 4. That entry, not this
+document, is the record of the author's conception. **Nothing here has been
 implemented, and no code was changed for this review.** Measurements were
 taken with the prototype at commit `cc05425` using throwaway scripts; the
 scripts were not added to the repository.*
@@ -18,7 +18,7 @@ scripts were not added to the repository.*
 6. Attack analysis
 7. Engineering conditions for the comparison to be sound
 8. Findings in the current code surfaced by this review (not fixed)
-9. Where it works / minimal conditions: questions and choices for Stephan
+9. Where it works / minimal conditions: questions and choices for the maintainers
 10. Verdict
 11. References
 
@@ -42,7 +42,7 @@ scripts were not added to the repository.*
   that either one is safe or honestly described. A hijacked agent that
   proposes a harmful action and then performs exactly that action produces
   matching hashes.
-- **Stephan's 8:07 PM point is right, and it is how Two-Key is built:** the
+- **The author's 8:07 PM point is right, and it is how Two-Key is built:** the
   hash covers *consistency*, and the separate judges plus the deterministic
   Path A cover *permissibility*. The agent being controlled is not the one
   doing the judging.
@@ -189,7 +189,7 @@ It does **not** prove:
 - that the agent wasn't hijacked before proposing;
 - anything about fields outside the hash.
 
-**Division of labor (Stephan's 8:07 PM point).** This matches Two-Key's
+**Division of labor (the author's 8:07 PM point).** This matches Two-Key's
 existing architecture and is correct as far as it goes:
 
 | Question | Who answers it in Two-Key |
@@ -450,7 +450,7 @@ Two-Key's MAC, and the gateway enforces them.
 
 ## 8. Findings in the current code surfaced by this review (not fixed)
 
-This task changes no code. These are recorded for Stephan's decision.
+This task changes no code. These are recorded for a maintainer decision.
 
 1. **Gateway TOCTOU (A5), high severity under this threat model.** The
    arguments are read separately for `args_hash` and for execution; a
@@ -469,7 +469,7 @@ This task changes no code. These are recorded for Stephan's decision.
 4. **Minor:** `proposal_sha256` is fixed at SHA-256 even in SHA-384
    profiles (§7.3).
 
-## 9. Where it works / minimal conditions: questions and choices for Stephan
+## 9. Where it works / minimal conditions: questions and choices for the maintainers
 
 The idea works as an **integrity check**: it guarantees that what executes
 is what was approved, provided the conditions in §7 hold. Whether it also
@@ -573,7 +573,7 @@ already provides part of it.
   encoding findings (§8) must be fixed for it to hold against a crafted
   caller.
 - **Not secure, on its own, as a solution to F:** equality proves
-  consistency, not truth or benignness. Stephan's 8:07 PM point correctly
+  consistency, not truth or benignness. The author's 8:07 PM point correctly
   assigns permissibility to Path A and the separate judges, and that division
   is how Two-Key works. The remaining gap is that the judges and Path A rule
   on the agent's description of the action. As long as fields like
@@ -611,8 +611,8 @@ review it; this document draws no conclusion about it.
 *Appended; nothing above this section was changed. The review above
 describes the code at commit `cc05425`.*
 
-Stephan approved fixing findings 1–3 at 10:30 PM MT on 2026-09-30, relayed
-by his patent-attorney agent: "A, but ensure quantum resistance and fips
+The author approved fixing findings 1–3 at 10:30 PM MT on 2026-09-30, relayed
+by the author's patent-attorney agent: "A, but ensure quantum resistance and fips
 140-3 compliance where applicable." (`CONCEPTION_NOTES.md` Entry 10, an
 approval of routine bug fixes, not conception.) The fixes, prepared by the
 AI engineering assistant:
@@ -628,7 +628,7 @@ AI engineering assistant:
 2. **Finding 2 (encoding), fixed.** `two-key-enc/2` is typed (tuple ≠ list,
    int ≠ str ≠ float ≠ bool), refuses non-string keys, and carries a version
    and a domain-separation label. Tokens carry `args_enc`. No Unicode
-   normalization was added; that remains a choice for Stephan (§7.2).
+   normalization was added; that remains a choice for the maintainers (§7.2).
 3. **Finding 3 (judge-prompt delimiters), fixed.** The action record and
    the proposal are sent as JSON with `<`, `>` and `&` escaped, so they
    can't contain a section tag. The system prompt says so. The broader

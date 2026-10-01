@@ -1,8 +1,8 @@
 """Enterprise PKI identities: X.509 certificates for principals, agents, and judges.
 
-Stephan Busch, 2026-10-01 (CONCEPTION_NOTES.md Entry 11): "add ... PKI for
+The author, 2026-10-01 (CONCEPTION_NOTES.md Entry 11): "add ... PKI for
 enterprise use". This module is AI-prepared engineering. Every setting not
-yet decided by Stephan is marked PLACEHOLDER and listed in
+yet decided by the maintainers is marked PLACEHOLDER and listed in
 docs/PROVISIONAL_READINESS.md.
 
 What a certificate is checked for (``PkiVerifier.verify``)
@@ -17,7 +17,7 @@ What a certificate is checked for (``PkiVerifier.verify``)
    CRL (``revocation="ocsp_then_crl"``), or just one of them. OCSP responses
    and CRLs are signature-checked and must be current. When no answer can
    be obtained, ``revocation_unreachable="fail_closed"`` (the default)
-   rejects the certificate. PLACEHOLDER pending Stephan; ``"fail_open"``
+   rejects the certificate. PLACEHOLDER pending a maintainer decision; ``"fail_open"``
    accepts it and records ``status="unreachable"``.
 4. **Role:** the subject DN and each SAN (``subject:<RFC 4514>``,
    ``email:``, ``uri:``, ``dns:``) are looked up in ``role_map``. The
@@ -67,10 +67,10 @@ MLDSA_BINDING_OID = x509.ObjectIdentifier("2.25.14104731584338621470742454738321
 ID_ML_DSA_65 = "2.16.840.1.101.3.4.3.18"           # NIST OID for ML-DSA-65 (FIPS 204)
 REVOCATION_METHODS = ("ocsp_then_crl", "ocsp", "crl")
 REVOCATION_UNREACHABLE = ("fail_closed", "fail_open")
-DEFAULT_REVOCATION_UNREACHABLE = "fail_closed"     # PLACEHOLDER pending Stephan
+DEFAULT_REVOCATION_UNREACHABLE = "fail_closed"     # PLACEHOLDER pending a maintainer decision
 AGENT_ASSERTION_FORMAT = "two-key-agent-assertion/1"
 DOMAIN_AGENT_REQUEST = "two-key/agent-request"
-DEFAULT_AGENT_ASSERTION_MAX_AGE = 300              # seconds; PLACEHOLDER pending Stephan
+DEFAULT_AGENT_ASSERTION_MAX_AGE = 300              # seconds; PLACEHOLDER pending a maintainer decision
 
 
 class PkiError(Exception):
@@ -263,10 +263,10 @@ class PkiConfig:
     ocsp_fetcher: Callable[[str, bytes], bytes] | None = None
     ocsp_url: str | None = None
     revocation: str = "ocsp_then_crl"
-    revocation_unreachable: str = DEFAULT_REVOCATION_UNREACHABLE     # PLACEHOLDER pending Stephan
+    revocation_unreachable: str = DEFAULT_REVOCATION_UNREACHABLE     # PLACEHOLDER pending a maintainer decision
     role_map: Mapping[str, Sequence[str]] = field(default_factory=dict)
-    require_agent_identity: bool = True        # enterprise default; PLACEHOLDER pending Stephan
-    require_judge_identities: bool = False     # PLACEHOLDER pending Stephan
+    require_agent_identity: bool = True        # enterprise default; PLACEHOLDER pending a maintainer decision
+    require_judge_identities: bool = False     # PLACEHOLDER pending a maintainer decision
     agent_assertion_max_age: int = DEFAULT_AGENT_ASSERTION_MAX_AGE
     max_chain_depth: int = 4
 
@@ -444,7 +444,7 @@ class PkiVerifier:
             return (subject, "none", "unreachable")
         raise CertificateRejected("revocation_unreachable",
                                   f"no revocation status for {subject} ({'; '.join(problems)}); "
-                                  "revocation_unreachable='fail_closed' (placeholder pending Stephan)")
+                                  "revocation_unreachable='fail_closed' (placeholder pending a maintainer decision)")
 
     def _crl(self, cert, issuer, now) -> str:
         candidates = [c for c in self.config.crls if c.issuer == issuer.subject]

@@ -1,13 +1,13 @@
 # Deployment modes and permissioned-ledger anchoring
 
-Stephan's direction (CONCEPTION_NOTES Entry 9, 2026-09-30, about 10:26 PM
+The author's direction (CONCEPTION_NOTES Entry 9, 2026-09-30, about 10:26 PM
 MT): local storage is fine for personal use. Enterprise use should anchor
 to an enterprise-level (not fully public) blockchain. Whether the
 installation is personal or enterprise should be an early, global setting,
 because other settings will depend on it.
 
 Everything below is AI-prepared engineering that carries out that
-direction. It is not part of the conception. Where Stephan has not
+direction. It is not part of the conception. Where the author has not
 decided something, the code uses a placeholder and the question is listed
 at the end.
 
@@ -39,7 +39,7 @@ and every endorsing org, that administrator can rewrite the chain too.
 | Mode | Default | Anchor allowed | Startup check |
 |---|---|---|---|
 | `personal` | yes | none, `NullAnchor`, `LocalFileAnchor` | A permissioned anchor is refused. Set `enterprise` to use one. |
-| `enterprise` | no | a `PermissionedLedgerAnchor` (`FabricAnchor`, `RestPermissionedAnchor`, or your own subclass) | Startup fails if no permissioned anchor is configured, or (since Entry 11) without `pki` and a valid principal certificate (placeholders pending Stephan) |
+| `enterprise` | no | a `PermissionedLedgerAnchor` (`FabricAnchor`, `RestPermissionedAnchor`, or your own subclass) | Startup fails if no permissioned anchor is configured, or (since Entry 11) without `pki` and a valid principal certificate (placeholders pending a maintainer decision) |
 
 **Identities by mode (CONCEPTION_NOTES Entry 11).** Personal mode keeps
 key files and can add an optional 24-word seed-phrase backup. Enterprise
@@ -153,7 +153,7 @@ Both answer with `tx_id`, `block_number`, `validation_code`, and
 be HTTPS (loopback HTTP is allowed). `credential.get_token()` supplies a
 bearer token. A custom `transport=` can replace HTTP.
 
-## Open questions for Stephan
+## Open questions for the maintainers
 
 1. **Endorsement policy defaults.** `min_endorsing_orgs=1` and
    `required_orgs=()` are placeholders. Should enterprise mode require at
