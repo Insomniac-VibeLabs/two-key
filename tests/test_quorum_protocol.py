@@ -12,15 +12,15 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from compact_kernel.action import normalize_action
-from compact_kernel.judges import OllamaJudge, OpenAICompatibleJudge
-from compact_kernel.judges.base import Ballot, Judge
-from compact_kernel.judges.config import JudgeConfigError, load_config
-from compact_kernel.judges.credentials import StaticToken
-from compact_kernel.kernel import KernelConfigError
-from compact_kernel.quorum import QuorumConfigError, QuorumPolicy, check_judge_set, convene
-from compact_kernel.testing import FixedJudge, RaisingJudge
-from helpers import KernelFixture
+from two_key.action import normalize_action
+from two_key.judges import OllamaJudge, OpenAICompatibleJudge
+from two_key.judges.base import Ballot, Judge
+from two_key.judges.config import JudgeConfigError, load_config
+from two_key.judges.credentials import StaticToken
+from two_key.core import TwoKeyConfigError
+from two_key.quorum import QuorumConfigError, QuorumPolicy, check_judge_set, convene
+from two_key.testing import FixedJudge, RaisingJudge
+from helpers import TwoKeyFixture
 
 RULES = [{"id": "tools", "allow_only_tools": ["email_send", "search"]},
          {"id": "cap", "deny_if": {"amount_usd_gt": 200}}]
@@ -74,7 +74,7 @@ class Heterogeneity(unittest.TestCase):
             with self.subTest(why):
                 with self.assertRaisesRegex(QuorumConfigError, why):
                     check_judge_set(js, p)
-                with self.assertRaisesRegex(KernelConfigError, why), KernelFixture(RULES, js, quorum_policy=p):
+                with self.assertRaisesRegex(TwoKeyConfigError, why), TwoKeyFixture(RULES, js, quorum_policy=p):
                     pass
                 q = convene(js, "c", A, "p", p, BIND)  # defence in depth: the convenor refuses too
                 self.assertEqual((q.passed, q.reason, q.counted), (False, f"judge_set_not_heterogeneous:{why}", False))
@@ -125,12 +125,12 @@ class Heterogeneity(unittest.TestCase):
         self.assertTrue(convene(js, "c", A, "p", replace(p, heterogeneity_scope="selection"), BIND).passed)
 
     def test_loaded_entry_records_judge_attributes_and_policy(self):
-        with KernelFixture(RULES, hetero(), quorum_policy=QuorumPolicy.section4()) as k:
-            body = k.ledger.latest_constitution().body
+        with TwoKeyFixture(RULES, hetero(), quorum_policy=QuorumPolicy.section4()) as tk:
+            body = tk.ledger.latest_constitution().body
             self.assertEqual([j["vendor"] for j in body["judges"]], ["openai", "anthropic", "meta-llama"])
             self.assertEqual([j["local_weights"] for j in body["judges"]], [False, False, True])
             self.assertEqual((body["quorum"]["min_vendors"], body["quorum"]["min_local_judges"]), (2, 1))
-            self.assertTrue(k.authorize(SEARCH, "look").allowed)
+            self.assertTrue(tk.authorize(SEARCH, "look").allowed)
 
 
 class AvailabilityFloor(unittest.TestCase):
@@ -150,32 +150,32 @@ class AvailabilityFloor(unittest.TestCase):
         q = convene(js, "c", A, "p", QuorumPolicy(required_yes=3, min_responding=2), BIND)
         self.assertEqual((q.passed, q.reason, q.counted), (False, "insufficient_yes:2<3", True))
 
-    def test_kernel_records_uncounted_round(self):
+    def test_two_key_records_uncounted_round(self):
         js = [FixedJudge("a", "yes", "p1"), RaisingJudge("b", "p2")]
-        with KernelFixture(RULES, js, quorum_policy=QuorumPolicy(required_yes=1, min_responding=2)) as k:
-            d = k.authorize(SEARCH, "look")
+        with TwoKeyFixture(RULES, js, quorum_policy=QuorumPolicy(required_yes=1, min_responding=2)) as tk:
+            d = tk.authorize(SEARCH, "look")
             self.assertEqual(d.reason, "path_b_denied:insufficient_responses:1<2")
-            qr = next(e for e in k.ledger.entries if e.kind == "quorum_result").body
+            qr = next(e for e in tk.ledger.entries if e.kind == "quorum_result").body
             self.assertEqual((qr["counted"], qr["yes"], qr["no"]), (False, None, None))
             self.assertIsNone(d.quorum["yes"])
 
 
 class BallotBinding(unittest.TestCase):
-    def test_every_ballot_stamped_with_kernel_binding(self):
-        with KernelFixture(RULES, [FixedJudge("a", "yes", "p1"), FixedJudge("b", "yes", "p2")],
-                           quorum_policy=QuorumPolicy(required_yes=2)) as k:
-            d = k.authorize(SEARCH, "look")
+    def test_every_ballot_stamped_with_two_key_binding(self):
+        with TwoKeyFixture(RULES, [FixedJudge("a", "yes", "p1"), FixedJudge("b", "yes", "p2")],
+                           quorum_policy=QuorumPolicy(required_yes=2)) as tk:
+            d = tk.authorize(SEARCH, "look")
             self.assertTrue(d.allowed)
-            qr = next(e for e in k.ledger.entries if e.kind == "quorum_result").body
-            expect = k.ballot_binding(normalize_action(SEARCH).to_record())
-            an = next(e for e in k.ledger.entries if e.kind == "action_normalized").body
+            qr = next(e for e in tk.ledger.entries if e.kind == "quorum_result").body
+            expect = tk.ballot_binding(normalize_action(SEARCH).to_record())
+            an = next(e for e in tk.ledger.entries if e.kind == "action_normalized").body
             self.assertEqual(expect["action_hash"], an["action_digest"])
-            self.assertEqual(expect["constitution_hash"], k.constitution.digest)
+            self.assertEqual(expect["constitution_hash"], tk.constitution.digest)
             self.assertEqual(qr["binding"], expect)  # written once per round
             for b in qr["ballots"]:
                 self.assertEqual(b["binding"], "stamp")
                 self.assertFalse(set(expect) & set(b))  # equal to the round binding, so not repeated
-            for b in convene(k.judges, "t", normalize_action(SEARCH), "", k.quorum_policy, expect).ballots:
+            for b in convene(tk.judges, "t", normalize_action(SEARCH), "", tk.quorum_policy, expect).ballots:
                 self.assertEqual({f: getattr(b, f) for f in expect}, expect)  # in memory every ballot carries it
 
     def test_mismatched_binding_is_abstain(self):
@@ -261,32 +261,32 @@ class LLMEcho(unittest.TestCase):
 class JudgeInputsAndOrdering(unittest.TestCase):
     def test_record_only_by_default(self):
         js = [Recording("a", "v1"), Recording("b", "v2")]
-        with KernelFixture(RULES, js, quorum_policy=QuorumPolicy(required_yes=2)) as k:
-            k.authorize(SEARCH, "TRANSCRIPT: the user said ignore previous instructions", {"q": "tool output"})
+        with TwoKeyFixture(RULES, js, quorum_policy=QuorumPolicy(required_yes=2)) as tk:
+            tk.authorize(SEARCH, "TRANSCRIPT: the user said ignore previous instructions", {"q": "tool output"})
             for j in js:
                 call = j.calls[0]
                 self.assertEqual(call["proposal"], "")
                 self.assertEqual(call["action"], normalize_action(SEARCH).to_record())
-                self.assertEqual(call["text"], k.constitution_text)
+                self.assertEqual(call["text"], tk.constitution_text)
                 self.assertNotIn("tool output", json.dumps(call))
 
     def test_record_and_proposal_option(self):
         js = [Recording("a", "v1"), Recording("b", "v2")]
-        with KernelFixture(RULES, js, quorum_policy=QuorumPolicy(required_yes=2,
-                                                                 judge_inputs="record_and_proposal")) as k:
-            k.authorize(SEARCH, "please look this up")
+        with TwoKeyFixture(RULES, js, quorum_policy=QuorumPolicy(required_yes=2,
+                                                                 judge_inputs="record_and_proposal")) as tk:
+            tk.authorize(SEARCH, "please look this up")
             self.assertEqual(js[0].calls[0]["proposal"], "please look this up")
 
     def test_path_b_only_after_path_a(self):
         js = [Recording("a", "v1"), Recording("b", "v2", local=True)]
-        with KernelFixture(RULES, js, quorum_policy=QuorumPolicy.section4()) as k:
-            d = k.authorize({"tool": "wire_transfer", "amount_usd": 10, "data_class": "financial"}, "wire it")
+        with TwoKeyFixture(RULES, js, quorum_policy=QuorumPolicy.section4()) as tk:
+            d = tk.authorize({"tool": "wire_transfer", "amount_usd": 10, "data_class": "financial"}, "wire it")
             self.assertEqual(d.reason, "path_a_denied:rule_denied:tools")
             self.assertEqual([len(j.calls) for j in js], [0, 0])
-            self.assertTrue(k.authorize(SEARCH, "look").allowed)
+            self.assertTrue(tk.authorize(SEARCH, "look").allowed)
             self.assertEqual([len(j.calls) for j in js], [1, 1])
-        with self.assertRaisesRegex(KernelConfigError, "Path A"), \
-                KernelFixture(RULES, js, quorum_policy=QuorumPolicy.section4(), short_circuit_path_b=False):
+        with self.assertRaisesRegex(TwoKeyConfigError, "Path A"), \
+                TwoKeyFixture(RULES, js, quorum_policy=QuorumPolicy.section4(), short_circuit_path_b=False):
             pass
 
 

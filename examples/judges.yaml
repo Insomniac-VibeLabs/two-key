@@ -48,8 +48,8 @@ judges:
 
 # Optional per-judge keys: vendor (defaults to provider), local_weights, weights_sha256, echo_binding.
 
-# Other auth modes (interfaces; see compact_kernel/judges/credentials.py):
-#   auth: {type: keyring, service: compact-kernel, username: openai}
+# Other auth modes (interfaces; see two_key/judges/credentials.py):
+#   auth: {type: keyring, service: two-key, username: openai}
 #   auth: {type: username_password, username: me, password_env: MY_GATEWAY_PASSWORD,
 #          login: "my_hooks:login"}                  # you supply the login hook
 #   auth: {type: oauth_device_code, client_id: ..., device_authorization_endpoint: ...,

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compact_kernel import cli
+from two_key import cli
 
 EX = Path(__file__).parent.parent / "examples"
 
@@ -25,7 +25,7 @@ class CLI(unittest.TestCase):
             for rules in ("hard_rules.json", "hard_rules.yaml"):
                 out = f"{d}/signed-{rules}.json"
                 code, _ = run("sign-constitution", "--text", str(EX / "constitution.md"), "--rules", str(EX / rules),
-                              "--principal", "did:ck:t", "--key", f"{d}/k/principal.pem", "--no-passphrase",
+                              "--principal", "did:twokey:t", "--key", f"{d}/k/principal.pem", "--no-passphrase",
                               "--out", out)
                 self.assertEqual(code, 0)
                 code, txt = run("verify-constitution", "--signed", out, "--pub", f"{d}/k/principal.pub.pem")

@@ -1,9 +1,10 @@
-"""Single use is shared by every gateway on one kernel/ledger (Stephan's instruction, 2026-09-30 evening).
+"""Single use is shared by every gateway on one TwoKey instance and its ledger (Stephan's instruction,
+2026-09-30 evening).
 
 Before this fix each ToolGateway kept its own used-token set, rebuilt from the ledger only when the gateway
-was created, so two live gateways on one kernel would each accept the same token once. The used-token record
-now lives in PersonalLedger (``redeem``), under the ledger's lock, and on POSIX also under an flock on the
-ledger file. These tests cover: two gateways, concurrent threads, restart persistence, and a second ledger
+was created, so two live gateways on one TwoKey instance would each accept the same token once. The used-token
+record now lives in PersonalLedger (``redeem``), under the ledger's lock, and on POSIX also under an flock on
+the ledger file. These tests cover: two gateways, concurrent threads, restart persistence, and a second ledger
 instance / second process on the same file.
 """
 import multiprocessing
@@ -13,11 +14,11 @@ import threading
 import unittest
 from pathlib import Path
 
-from compact_kernel.gateway import ToolGateway
-from compact_kernel.ledger import LedgerError, PersonalLedger
-from compact_kernel.quorum import QuorumPolicy
-from compact_kernel.testing import FixedJudge
-from helpers import KernelFixture
+from two_key.gateway import ToolGateway
+from two_key.ledger import LedgerError, PersonalLedger
+from two_key.quorum import QuorumPolicy
+from two_key.testing import FixedJudge
+from helpers import TwoKeyFixture
 
 try:
     import fcntl  # noqa: F401
@@ -38,8 +39,8 @@ def redemptions(ledger, jti):
 
 class Base(unittest.TestCase):
     def setUp(self):
-        self.fx = KernelFixture(RULES, YES, quorum_policy=QuorumPolicy(required_yes=2))
-        self.k = self.fx.__enter__()
+        self.fx = TwoKeyFixture(RULES, YES, quorum_policy=QuorumPolicy(required_yes=2))
+        self.tk = self.fx.__enter__()
         self.calls = []
         self._calls_lock = threading.Lock()
 
@@ -53,14 +54,14 @@ class Base(unittest.TestCase):
 
     def token(self, invoice="INV-7"):
         args = dict(ARGS, invoice=invoice)
-        d = self.k.authorize(PAY, "Pay the electric bill.", args)
+        d = self.tk.authorize(PAY, "Pay the electric bill.", args)
         self.assertTrue(d.allowed, d.reason)
         return d, args
 
 
 class TwoGateways(Base):
     def test_two_gateways_same_token_only_first_accepted(self):
-        g1, g2 = self.k.gateway(tools={"pay_bill": self.tool}), self.k.gateway(tools={"pay_bill": self.tool})
+        g1, g2 = self.tk.gateway(tools={"pay_bill": self.tool}), self.tk.gateway(tools={"pay_bill": self.tool})
         d, args = self.token()  # both gateways exist before the token is issued or redeemed
         r1 = g1.invoke(d.capability, "pay_bill", args, FIELDS)
         r2 = g2.invoke(d.capability, "pay_bill", args, FIELDS)
@@ -68,29 +69,29 @@ class TwoGateways(Base):
         self.assertEqual((r2.allowed, r2.reason), (False, "replayed"))
         self.assertEqual(len(self.calls), 1)
         jti = d.token_payload["jti"]
-        self.assertEqual(len(redemptions(self.k.ledger, jti)), 1)
-        self.assertEqual(self.k.ledger.entries[-1].kind, "gateway_denied")
-        self.assertEqual(self.k.ledger.entries[-1].body["reason"], "replayed")
-        self.assertTrue(self.k.ledger.verify(self.fx.key.public_key()).ok)
+        self.assertEqual(len(redemptions(self.tk.ledger, jti)), 1)
+        self.assertEqual(self.tk.ledger.entries[-1].kind, "gateway_denied")
+        self.assertEqual(self.tk.ledger.entries[-1].body["reason"], "replayed")
+        self.assertTrue(self.tk.ledger.verify(self.fx.key.public_key()).ok)
 
     def test_order_does_not_matter_and_new_gateway_sees_it(self):
         d, args = self.token()
-        g2 = self.k.gateway(tools={"pay_bill": self.tool})
+        g2 = self.tk.gateway(tools={"pay_bill": self.tool})
         self.assertEqual(g2.invoke(d.capability, "pay_bill", args, FIELDS).reason, "executed")
-        for g in (self.k.gateway(tools={"pay_bill": self.tool}), g2):
+        for g in (self.tk.gateway(tools={"pay_bill": self.tool}), g2):
             self.assertEqual(g.invoke(d.capability, "pay_bill", args, FIELDS).reason, "replayed")
         self.assertEqual(len(self.calls), 1)
 
     def test_gateway_without_executor_also_consumes_token(self):
         d, args = self.token()
-        self.assertEqual(self.k.gateway().invoke(d.capability, "pay_bill", args, FIELDS).reason,
+        self.assertEqual(self.tk.gateway().invoke(d.capability, "pay_bill", args, FIELDS).reason,
                          "authorized_no_executor")
-        self.assertEqual(self.k.gateway(tools={"pay_bill": self.tool}).invoke(
+        self.assertEqual(self.tk.gateway(tools={"pay_bill": self.tool}).invoke(
             d.capability, "pay_bill", args, FIELDS).reason, "replayed")
         self.assertEqual(self.calls, [])
 
     def test_ledger_redeem_api(self):
-        led = self.k.ledger
+        led = self.tk.ledger
         e, why = led.redeem("jti-x", {"note": "direct"})
         self.assertEqual((e.kind, e.body["jti"], why), ("capability_redeemed", "jti-x", "ok"))
         self.assertTrue(led.is_redeemed("jti-x"))
@@ -101,19 +102,19 @@ class TwoGateways(Base):
 
     def test_failed_redemption_write_still_burns_token(self):
         d, args = self.token()
-        g = self.k.gateway(tools={"pay_bill": self.tool})
-        real = self.k.ledger.append
+        g = self.tk.gateway(tools={"pay_bill": self.tool})
+        real = self.tk.ledger.append
 
         def failing(kind, body):
             if kind == "capability_redeemed":
                 raise OSError("disk full")
             return real(kind, body)
-        self.k.ledger.append = failing
+        self.tk.ledger.append = failing
         with self.assertRaises(OSError):
             g.invoke(d.capability, "pay_bill", args, FIELDS)
-        self.k.ledger.append = real
-        self.assertTrue(self.k.ledger.is_redeemed(d.token_payload["jti"]))
-        self.assertIsNone(self.k.ledger.redemption_for(d.token_payload["jti"]))
+        self.tk.ledger.append = real
+        self.assertTrue(self.tk.ledger.is_redeemed(d.token_payload["jti"]))
+        self.assertIsNone(self.tk.ledger.redemption_for(d.token_payload["jti"]))
         self.assertEqual(g.invoke(d.capability, "pay_bill", args, FIELDS).reason, "replayed")
         self.assertEqual(self.calls, [])
 
@@ -141,23 +142,23 @@ class Concurrent(Base):
 
     def test_concurrent_attempts_many_gateways(self):
         d, args = self.token()
-        out = self._race([self.k.gateway(tools={"pay_bill": self.tool}) for _ in range(self.N)], d, args)
+        out = self._race([self.tk.gateway(tools={"pay_bill": self.tool}) for _ in range(self.N)], d, args)
         self.assertEqual(sorted(out), ["executed"] + ["replayed"] * (self.N - 1))
         self.assertEqual(len(self.calls), 1)
-        self.assertEqual(len(redemptions(self.k.ledger, d.token_payload["jti"])), 1)
-        self.k.ledger.checkpoint()
-        self.assertTrue(self.k.ledger.verify(self.fx.key.public_key()).ok)
+        self.assertEqual(len(redemptions(self.tk.ledger, d.token_payload["jti"])), 1)
+        self.tk.ledger.checkpoint()
+        self.assertTrue(self.tk.ledger.verify(self.fx.key.public_key()).ok)
 
     def test_concurrent_attempts_one_shared_gateway(self):
         d, args = self.token()
-        g = self.k.gateway(tools={"pay_bill": self.tool})
+        g = self.tk.gateway(tools={"pay_bill": self.tool})
         out = self._race([g] * self.N, d, args)
         self.assertEqual(sorted(out), ["executed"] + ["replayed"] * (self.N - 1))
         self.assertEqual(len(self.calls), 1)
 
     def test_many_tokens_many_threads_chain_stays_valid(self):
         toks = [self.token(f"INV-{i}") for i in range(6)]
-        gws = [self.k.gateway(tools={"pay_bill": self.tool}) for _ in range(4)]
+        gws = [self.tk.gateway(tools={"pay_bill": self.tool}) for _ in range(4)]
         barrier = threading.Barrier(len(toks) * len(gws))
         out, errs = [], []
 
@@ -176,22 +177,22 @@ class Concurrent(Base):
         for d, _ in toks:
             jti = d.token_payload["jti"]
             self.assertEqual(sorted(r for j, r in out if j == jti), ["executed"] + ["replayed"] * (len(gws) - 1))
-            self.assertEqual(len(redemptions(self.k.ledger, jti)), 1)
+            self.assertEqual(len(redemptions(self.tk.ledger, jti)), 1)
         self.assertEqual(len(self.calls), len(toks))
-        self.k.ledger.checkpoint()
-        self.assertTrue(self.k.ledger.verify(self.fx.key.public_key()).ok)
-        reloaded = PersonalLedger(self.k.ledger.path, self.fx.key)
+        self.tk.ledger.checkpoint()
+        self.assertTrue(self.tk.ledger.verify(self.fx.key.public_key()).ok)
+        reloaded = PersonalLedger(self.tk.ledger.path, self.fx.key)
         self.assertTrue(reloaded.verify(self.fx.key.public_key()).ok)
 
 
 class Restart(Base):
     def test_replay_rejected_after_restart(self):
         d, args = self.token()
-        self.assertEqual(self.k.gateway(tools={"pay_bill": self.tool}).invoke(
+        self.assertEqual(self.tk.gateway(tools={"pay_bill": self.tool}).invoke(
             d.capability, "pay_bill", args, FIELDS).reason, "executed")
-        led2 = PersonalLedger(self.k.ledger.path, self.fx.key)  # the process restarts and reopens the ledger
+        led2 = PersonalLedger(self.tk.ledger.path, self.fx.key)  # the process restarts and reopens the ledger
         self.assertTrue(led2.is_redeemed(d.token_payload["jti"]))
-        gws = [ToolGateway(self.k.issuer, led2, self.k.principal, {"pay_bill": self.tool}) for _ in range(2)]
+        gws = [ToolGateway(self.tk.issuer, led2, self.tk.principal, {"pay_bill": self.tool}) for _ in range(2)]
         for g in gws:
             self.assertEqual(g.invoke(d.capability, "pay_bill", args, FIELDS).reason, "replayed")
         self.assertEqual(len(self.calls), 1)
@@ -199,44 +200,44 @@ class Restart(Base):
 
     def test_unused_token_still_redeemable_once_after_restart(self):
         d, args = self.token()
-        led2 = PersonalLedger(self.k.ledger.path, self.fx.key)
-        g = ToolGateway(self.k.issuer, led2, self.k.principal, {"pay_bill": self.tool})
+        led2 = PersonalLedger(self.tk.ledger.path, self.fx.key)
+        g = ToolGateway(self.tk.issuer, led2, self.tk.principal, {"pay_bill": self.tool})
         self.assertEqual(g.invoke(d.capability, "pay_bill", args, FIELDS).reason, "executed")
         self.assertEqual(g.invoke(d.capability, "pay_bill", args, FIELDS).reason, "replayed")
 
 
 @unittest.skipIf(fcntl is None, "cross-process redemption guard needs POSIX flock")
 class OtherWriter(Base):
-    """A second PersonalLedger on the same file (another process, or a second kernel) cannot redeem twice."""
+    """A second PersonalLedger on the same file (another process, or a second TwoKey instance) cannot redeem twice."""
 
     def test_second_instance_cannot_redeem_again(self):
         d, args = self.token()
-        other = PersonalLedger(self.k.ledger.path, self.fx.key)  # opened before the redemption
-        g_other = ToolGateway(self.k.issuer, other, self.k.principal, {"pay_bill": self.tool})
-        self.assertEqual(self.k.gateway(tools={"pay_bill": self.tool}).invoke(
+        other = PersonalLedger(self.tk.ledger.path, self.fx.key)  # opened before the redemption
+        g_other = ToolGateway(self.tk.issuer, other, self.tk.principal, {"pay_bill": self.tool})
+        self.assertEqual(self.tk.gateway(tools={"pay_bill": self.tool}).invoke(
             d.capability, "pay_bill", args, FIELDS).reason, "executed")
-        size, head = self.k.ledger.path.stat().st_size, self.k.ledger.head_path.read_bytes()
+        size, head = self.tk.ledger.path.stat().st_size, self.tk.ledger.head_path.read_bytes()
         r = g_other.invoke(d.capability, "pay_bill", args, FIELDS)
         self.assertEqual((r.allowed, r.reason), (False, "replayed"))
         self.assertEqual(len(self.calls), 1)
-        self.assertEqual(self.k.ledger.path.stat().st_size, size)  # the stale instance wrote nothing
-        self.assertEqual(self.k.ledger.head_path.read_bytes(), head)  # nor re-signed the owner's head
+        self.assertEqual(self.tk.ledger.path.stat().st_size, size)  # the stale instance wrote nothing
+        self.assertEqual(self.tk.ledger.head_path.read_bytes(), head)  # nor re-signed the owner's head
         with self.assertRaises(LedgerError):
             other.append("note", {})
         with self.assertRaises(LedgerError):
             other._write_head()
-        self.assertTrue(PersonalLedger(self.k.ledger.path, self.fx.key).verify(self.fx.key.public_key()).ok)
+        self.assertTrue(PersonalLedger(self.tk.ledger.path, self.fx.key).verify(self.fx.key.public_key()).ok)
 
     def test_unrelated_foreign_write_fails_closed(self):
         d, args = self.token()
-        other = PersonalLedger(self.k.ledger.path, self.fx.key)
-        self.k.ledger.append("note", {"by": "owner"})  # the owner writes something else
-        r = ToolGateway(self.k.issuer, other, self.k.principal, {"pay_bill": self.tool}).invoke(
+        other = PersonalLedger(self.tk.ledger.path, self.fx.key)
+        self.tk.ledger.append("note", {"by": "owner"})  # the owner writes something else
+        r = ToolGateway(self.tk.issuer, other, self.tk.principal, {"pay_bill": self.tool}).invoke(
             d.capability, "pay_bill", args, FIELDS)
         self.assertEqual((r.allowed, r.reason), (False, "ledger_concurrent_writer"))
         self.assertEqual(self.calls, [])
         # The owner, whose view of the file is current, still redeems normally.
-        self.assertEqual(self.k.gateway(tools={"pay_bill": self.tool}).invoke(
+        self.assertEqual(self.tk.gateway(tools={"pay_bill": self.tool}).invoke(
             d.capability, "pay_bill", args, FIELDS).reason, "executed")
 
 
@@ -267,7 +268,7 @@ class Processes(Base):
         q, start = ctx.Queue(), ctx.Event()
         with tempfile.TemporaryDirectory() as tmp:
             marker = Path(tmp) / "executions"
-            ps = [ctx.Process(target=_child, args=(self.k.issuer, self.k.ledger.path, self.fx.key, self.k.principal,
+            ps = [ctx.Process(target=_child, args=(self.tk.issuer, self.tk.ledger.path, self.fx.key, self.tk.principal,
                                                    marker, start, q)) for _ in range(4)]
             for p in ps:
                 p.start()
@@ -278,7 +279,7 @@ class Processes(Base):
                 p.join(30)
             self.assertEqual(out, ["executed", "replayed", "replayed", "replayed"])
             self.assertEqual(marker.read_text(), "x\n")
-        reloaded = PersonalLedger(self.k.ledger.path, self.fx.key)
+        reloaded = PersonalLedger(self.tk.ledger.path, self.fx.key)
         self.assertEqual(len(redemptions(reloaded, d.token_payload["jti"])), 1)
         self.assertTrue(reloaded.verify(self.fx.key.public_key()).ok)
 

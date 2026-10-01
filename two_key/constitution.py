@@ -6,15 +6,15 @@ The principal uploads two files:
 
 Both are bundled into a canonical document and signed with the principal's
 key: legacy Ed25519 (default), ECDSA P-384, or a hybrid ML-DSA-65 suite
-(compact_kernel.crypto.signatures; both halves of a hybrid must verify). The kernel loads a constitution only after verifying the
+(two_key.crypto.signatures; both halves of a hybrid must verify). Two-Key loads a constitution only after verifying the
 signature against a public key the principal trusts. Unsigned, modified,
 or foreign-signed constitutions are rejected (spec 5.1 item 2: "Changing it
 requires a fresh signature. Model vendors cannot push a new constitution.").
 
 Two document formats are accepted (both signed as one document):
-  compact-kernel-constitution/1  separate ``constitution_text`` and ``hard_rules`` fields
-  compact-kernel-constitution/2  one Markdown ``source``; compiler.split_source
-                                 extracts the ```ck-rules block (PRIOR_ART.md §4 (ii))
+  two-key-constitution/1  separate ``constitution_text`` and ``hard_rules`` fields
+  two-key-constitution/2  one Markdown ``source``; compiler.split_source
+                                 extracts the ```twokey-rules block (PRIOR_ART.md §4 (ii))
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ from .crypto.provider import CryptoProvider
 from .crypto.signatures import LEGACY_SUITE, SUITES, as_private_keyset, as_public_keyset
 from .policy_vm import ConstitutionError, validate_rules
 
-FORMAT = "compact-kernel-constitution/1"
-FORMAT_V2 = "compact-kernel-constitution/2"
+FORMAT = "two-key-constitution/1"
+FORMAT_V2 = "two-key-constitution/2"
 TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
 RULES_SUFFIXES = {".json", ".yaml", ".yml"}
 MAX_TEXT_BYTES = 1_000_000
@@ -106,7 +106,7 @@ def build_document(principal: str, text: str, hard_rules: list, created_at: str 
 
 
 def build_source_document(principal: str, source: str, created_at: str | None = None) -> dict:
-    """Single-source (/2) document: prose plus exactly one ```ck-rules JSON block."""
+    """Single-source (/2) document: prose plus exactly one ```twokey-rules JSON block."""
     from .compiler import split_source
     if not isinstance(principal, str) or not principal.strip():
         raise ConstitutionError("principal identifier required")

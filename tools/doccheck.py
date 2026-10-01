@@ -18,7 +18,7 @@ Fenced blocks tagged ``bash`` or ``python`` run unless skipped. ``text``
 blocks are sample output and are not run. Any other block without a
 directive is reported as UNCHECKED and fails the run.
 
-Judge HTTP calls never reach the network: when CK_DOCCHECK_FAKE_LLM=1 a
+Judge HTTP calls never reach the network: when TWOKEY_DOCCHECK_FAKE_LLM=1 a
 sitecustomize module replaces urllib.request.urlopen with a local fake that
 answers in each provider's response format (OpenAI-compatible, Anthropic,
 Gemini, Ollama). The fake votes "consistent" unless the action record names
@@ -42,7 +42,7 @@ DIRECTIVE = re.compile(r"^<!--\s*check:\s*(.*?)\s*-->\s*$")
 
 SITECUSTOMIZE = r'''
 import io, json, os, re, urllib.request
-if os.environ.get("CK_DOCCHECK_FAKE_LLM") == "1":
+if os.environ.get("TWOKEY_DOCCHECK_FAKE_LLM") == "1":
     class _Resp(io.BytesIO):
         def __enter__(self): return self
         def __exit__(self, *a): self.close()
@@ -74,7 +74,7 @@ if os.environ.get("CK_DOCCHECK_FAKE_LLM") == "1":
             resp = {"message": {"content": b}}
         else:
             raise OSError("doccheck: unexpected URL " + url)
-        log = os.environ.get("CK_DOCCHECK_LOG")
+        log = os.environ.get("TWOKEY_DOCCHECK_LOG")
         if log:
             with open(log, "a") as f:
                 f.write(json.dumps({"url": url, "headers": sorted(getattr(req, "headers", {}))}) + "\n")
@@ -107,8 +107,8 @@ def parse(md: Path):
 
 
 def build_script(blocks, outdir: Path):
-    out = ["set -euo pipefail", "CK_TAG=start; CK_LOG=/dev/null",
-           "trap 'echo \"::: FAILED in $CK_TAG\"; cat \"$CK_LOG\"' ERR"]
+    out = ["set -euo pipefail", "TWOKEY_TAG=start; TWOKEY_LOG=/dev/null",
+           "trap 'echo \"::: FAILED in $TWOKEY_TAG\"; cat \"$TWOKEY_LOG\"' ERR"]
     report = []
     for n, b in enumerate(blocks):
         ds, lang, tag = b["directives"], b["lang"], f"block {n} (line {b['line']}, {b['lang'] or 'plain'})"
@@ -131,7 +131,7 @@ def build_script(blocks, outdir: Path):
         log = outdir / f"block{n}.out"
         # A brace group runs in the current shell, so cd/export/activate persist between blocks.
         run = f"{{ {body}\n}} > '{log}' 2>&1"
-        out += [f"CK_TAG='{tag}'; CK_LOG='{log}'"]
+        out += [f"TWOKEY_TAG='{tag}'; TWOKEY_LOG='{log}'"]
         if d == "expect-fail":
             out += [f'echo "::: {tag} (expect failure)"',
                     f"if {run}; then cat '{log}'; echo '::: UNEXPECTED SUCCESS: {tag}'; exit 1; fi",
@@ -156,7 +156,7 @@ def shlex_quote(s: str) -> str:
 
 def run_doc(md: Path, keep: bool, python: str) -> bool:
     blocks = parse(md)
-    sandbox = Path(tempfile.mkdtemp(prefix="ck-doccheck-"))
+    sandbox = Path(tempfile.mkdtemp(prefix="two-key-doccheck-"))
     repo, home, harness = sandbox / "two-key", sandbox / "home", sandbox / "harness"
     for p in (home, harness):
         p.mkdir()
@@ -171,8 +171,8 @@ def run_doc(md: Path, keep: bool, python: str) -> bool:
     script, report = build_script(blocks, harness)
     (harness / "doc.sh").write_text(script)
     env = {"HOME": str(home), "PATH": f"{Path(python).parent if os.sep in python else ''}:{os.environ['PATH']}".lstrip(":"),
-           "PYTHONPATH": str(harness), "PYTHONDONTWRITEBYTECODE": "1", "CK_DOCCHECK_FAKE_LLM": "1",
-           "CK_DOCCHECK_LOG": str(harness / "http.log"), "LANG": "C.UTF-8", "TERM": "dumb"}
+           "PYTHONPATH": str(harness), "PYTHONDONTWRITEBYTECODE": "1", "TWOKEY_DOCCHECK_FAKE_LLM": "1",
+           "TWOKEY_DOCCHECK_LOG": str(harness / "http.log"), "LANG": "C.UTF-8", "TERM": "dumb"}
     stdin = "doccheck-not-a-real-secret\n" * 50
     print(f"== {md} ({len(blocks)} fenced blocks) sandbox={sandbox}")
     r = subprocess.run(["bash", str(harness / "doc.sh")], cwd=repo, env=env, input=stdin, text=True,

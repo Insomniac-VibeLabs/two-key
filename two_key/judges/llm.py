@@ -12,7 +12,7 @@ Every connector:
   ballot binding (H(action record), H(constitution)) and requires it to be
   echoed as two extra JSON keys. A missing or different echo is malformed,
   that is, an abstention,
-- omits the proposal section when the kernel sends record-only judge inputs
+- omits the proposal section when Two-Key sends record-only judge inputs
   (proposal == ""),
 - enforces HTTPS except for loopback hosts, unless allow_insecure_http is set.
 """

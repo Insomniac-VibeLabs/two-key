@@ -1,5 +1,5 @@
 """
-Compact Kernel: one signed constitution, two compilations (PRIOR_ART.md §4 (ii))
+Two-Key: one signed constitution, two compilations (PRIOR_ART.md §4 (ii))
 ===============================================================================
 Selected by Stephan Busch on 2026-09-30 (CONCEPTION_NOTES.md Entry 2, "B").
 
@@ -13,9 +13,9 @@ single document deterministically into both enforcement inputs:
   NL text, so the prose cannot steer Path A.
 * Path B: the prose -> the judge prompt text.
 
-Both outputs are hashed with the kernel's digest algorithm:
+Both outputs are hashed with Two-Key's digest algorithm:
 ``bytecode_hash = H(canonical bytecode)`` and ``nl_hash = H(judge prompt text)``.
-The kernel records both in the ledger's ``constitution_loaded`` entry and binds
+Two-Key records both in the ledger's ``constitution_loaded`` entry and binds
 them into every ballot and capability token. The gateway checks them against
 the latest ``constitution_loaded`` entry before any tool runs. Both come from
 the same principal-signed document. A document signed by any other key (for
@@ -23,10 +23,10 @@ example, a model vendor) is refused before compilation, so neither output can
 be replaced without the principal's signature.
 
 Source formats:
-  compact-kernel-constitution/1  prose and rules in separate fields of one
+  two-key-constitution/1  prose and rules in separate fields of one
                                  signed document (the original format).
-  compact-kernel-constitution/2  a single signed Markdown ``source``. Exactly one
-                                 fenced block with the info string ``ck-rules``
+  two-key-constitution/2  a single signed Markdown ``source``. Exactly one
+                                 fenced block with the info string ``twokey-rules``
                                  holds the rules as JSON. Everything else is prose.
                                  See ``split_source``.
 
@@ -46,8 +46,8 @@ from .canonical import canonical_bytes, digest_hex
 from .crypto.provider import CryptoProvider
 from .policy_vm import DEFAULT_MAX_STEPS, ConstitutionError, Op, compile_constitution
 
-COMPILER_ID = "ck-compiler/1"
-RULES_FENCE = "ck-rules"
+COMPILER_ID = "two-key-compiler/1"
+RULES_FENCE = "twokey-rules"
 # Fields Path A may read: the structured, normalized action fields. "raw" (free-form
 # extension data) is excluded, and so is anything natural-language.
 STRUCTURED_FIELDS = frozenset(KNOWN_FIELDS - {"raw"})
@@ -77,7 +77,7 @@ def split_source(source: str) -> tuple[str, list]:
     """Deterministically split a /2 source into (prose, rules).
 
     The source must contain exactly one fenced block whose info string is
-    ``ck-rules``. Its body is parsed as JSON: a list of rules, or
+    ``twokey-rules``. Its body is parsed as JSON: a list of rules, or
     {"hard_rules": [...]}. The prose is the source with that block (including
     its fence lines) removed, and with leading and trailing whitespace stripped.
     Other fenced blocks are prose. An unterminated fence is an error.

@@ -1,5 +1,5 @@
 """
-Compact Kernel: dual-path constitutional enforcement
+Two-Key: dual-path constitutional enforcement
 ====================================================
 1. Load the principal's signed constitution: plain-English text for Path B
    and hard rules compiled for Path A. The principal's signature (Ed25519, ECDSA
@@ -33,8 +33,8 @@ PRIOR_ART.md §4 directions selected by Stephan Busch on 2026-09-30
 (iii) judge-set heterogeneity, the availability floor K, bound ballots, and
       record-only judge inputs (quorum.py); Path B runs only after Path A passes.
 
-Crypto (compact_kernel.crypto): a CryptoProvider runs its known-answer
-self-test before the kernel starts; ``fips_mode`` refuses non-approved
+Crypto (two_key.crypto): a CryptoProvider runs its known-answer
+self-test before Two-Key starts; ``fips_mode`` refuses non-approved
 algorithms. The principal key may be legacy Ed25519, ECDSA P-384, or a hybrid
 ML-DSA-65 suite; ``require_pq=True`` refuses to start without a hybrid key and
 a working ML-DSA backend. Non-legacy suites default to SHA-384 digests and
@@ -61,7 +61,7 @@ from .policy_vm import DEFAULT_MAX_STEPS, PolicyVM
 from .quorum import QuorumConfigError, QuorumPolicy, check_judge_set, convene
 
 
-class KernelConfigError(ValueError):
+class TwoKeyConfigError(ValueError):
     pass
 
 
@@ -80,7 +80,7 @@ class Decision:
     action: dict | None = field(default=None, repr=False)
 
 
-class CompactKernel:
+class TwoKey:
     def __init__(
         self,
         signed_constitution: dict,
@@ -111,24 +111,24 @@ class CompactKernel:
         trusted = as_public_keyset(trusted_public_key, self.crypto)  # PQUnavailableError if hybrid w/o backend
         if require_pq:
             if not trusted.is_pq:
-                raise KernelConfigError(f"require_pq=True but the principal key suite {trusted.suite!r} "
+                raise TwoKeyConfigError(f"require_pq=True but the principal key suite {trusted.suite!r} "
                                         "is not a hybrid ML-DSA suite")
             self.crypto.require_pq()
         if head_signing not in ("decision", "append"):
-            raise KernelConfigError("head_signing must be 'decision' or 'append'")
+            raise TwoKeyConfigError("head_signing must be 'decision' or 'append'")
         if not judges:
-            raise KernelConfigError("at least one Path B judge is required")
+            raise TwoKeyConfigError("at least one Path B judge is required")
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
-            raise KernelConfigError("test-double judges supplied; pass allow_test_doubles=True for demos/tests only")
+            raise TwoKeyConfigError("test-double judges supplied; pass allow_test_doubles=True for demos/tests only")
         if ledger_signing_key is None and not allow_unsigned_ledger:
-            raise KernelConfigError("ledger_signing_key required (or allow_unsigned_ledger=True for testing)")
+            raise TwoKeyConfigError("ledger_signing_key required (or allow_unsigned_ledger=True for testing)")
         if ledger_signing_key is not None and \
                 as_public_keyset(ledger_signing_key, self.crypto).encoded != trusted.encoded:
-            raise KernelConfigError("ledger_signing_key must be the principal's key")
+            raise TwoKeyConfigError("ledger_signing_key must be the principal's key")
         legacy = trusted.suite == LEGACY_SUITE
         self.digest_alg = digest_alg or ("sha256" if legacy else "sha384")
         self.crypto.check("hash", self.digest_alg)
-        self.token_mode = token_mode or ("ck1" if legacy else "ck1-hs384")
+        self.token_mode = token_mode or ("tk1" if legacy else "tk1-hs384")
 
         # Refuse unsigned, modified, or foreign-signed constitutions (spec 5.1 item 2).
         self.trusted_public_key = trusted_public_key
@@ -155,16 +155,16 @@ class CompactKernel:
         self.judges = list(judges)
         self.quorum_policy = quorum_policy or QuorumPolicy(required_yes=min(2, len(self.judges)))
         if self.quorum_policy.required_yes > len(self.judges):
-            raise KernelConfigError("required_yes exceeds the number of judges")
+            raise TwoKeyConfigError("required_yes exceeds the number of judges")
         try:  # §4 (iii): judge-set selection must meet the heterogeneity floor
             check_judge_set(self.judges, self.quorum_policy)
         except QuorumConfigError as e:
-            raise KernelConfigError(str(e)) from e
+            raise TwoKeyConfigError(str(e)) from e
         self.ttl_seconds = ttl_seconds
         # Ordering option (DESIGN_OPTIONS.md section 4). Default: skip Path B when Path A
         # denies, so forbidden proposals are never sent to external judges (privacy).
         if self.quorum_policy.require_path_a_first and not short_circuit_path_b:
-            raise KernelConfigError("quorum policy requires Path B only after Path A passes "
+            raise TwoKeyConfigError("quorum policy requires Path B only after Path A passes "
                                     "(short_circuit_path_b must be True)")
         self.short_circuit_path_b = short_circuit_path_b
 
@@ -208,7 +208,7 @@ class CompactKernel:
         try:
             c = verify_signed(signed_constitution, self.trusted_keyset, self.crypto)
             if c.principal != self.principal:
-                raise KernelConfigError("reloaded constitution names a different principal")
+                raise TwoKeyConfigError("reloaded constitution names a different principal")
             prev = self.constitution, self.compiled
             self._install(c)
         except Exception as e:

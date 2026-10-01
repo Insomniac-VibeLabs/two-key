@@ -1,5 +1,5 @@
 """
-Compact Kernel: Path B, the multi-model intent quorum
+Two-Key: Path B, the multi-model intent quorum
 =====================================================
 N judges, each connected to whichever AI the principal chooses, vote on
 whether a proposal is consistent with the principal's natural-language
@@ -18,14 +18,14 @@ Fixes from the original prototype (see CHANGES.md):
 - Judges run in parallel (one thread per judge) under an overall deadline
   ``timeout_seconds`` (default 45 s). A judge that has not answered by the
   deadline is recorded as an abstention (``error="timeout..."``), so a slow or
-  hung provider can never produce a "yes" and cannot stall the kernel beyond
+  hung provider can never produce a "yes" and cannot stall Two-Key beyond
   the deadline. Per-request HTTP timeouts are still set on each LLM judge.
 
 Quorum protocol specifics (PRIOR_ART.md §4 (iii), selected by Stephan Busch on
 2026-09-30, CONCEPTION_NOTES.md Entry 2 "C"):
 - Vendor heterogeneity in judge-set selection: ``min_vendors`` distinct
   vendors and ``min_local_judges`` judges on local weight files
-  (check_judge_set; the kernel refuses to start otherwise). §4's figures are
+  (check_judge_set; Two-Key refuses to start otherwise). §4's figures are
   >= 2 vendors including >= 1 local weight file (``QuorumPolicy.section4``).
   With ``heterogeneity_scope="responding"`` the same floor also applies to the
   judges that actually returned valid ballots.
@@ -43,9 +43,9 @@ Quorum protocol specifics (PRIOR_ART.md §4 (iii), selected by Stephan Busch on
   normalized action record and the constitution, never the agent's proposal
   text (transcript) or tool outputs. "record_and_proposal" restores the
   earlier behaviour.
-- Path B only after Path A returns true: the kernel's default
-  (short_circuit_path_b=True). ``require_path_a_first=True`` makes the
-  kernel refuse to run otherwise.
+- Path B only after Path A returns true: Two-Key's default
+  (short_circuit_path_b=True). ``require_path_a_first=True`` makes Two-Key
+  refuse to run otherwise.
 """
 
 from __future__ import annotations
@@ -246,12 +246,12 @@ def _collect(judges: Sequence[Judge], constitution_text: str, action: Action, pr
     deadline = None if policy.timeout_seconds is None else time.monotonic() + policy.timeout_seconds
     if policy.parallel:
         for i, j in enumerate(judges):
-            threading.Thread(target=run, args=(i, j), name=f"ck-judge-{i}", daemon=True).start()
+            threading.Thread(target=run, args=(i, j), name=f"twokey-judge-{i}", daemon=True).start()
     else:  # sequential, but still under the overall deadline
         def run_all() -> None:
             for i, j in enumerate(judges):
                 run(i, j)
-        threading.Thread(target=run_all, name="ck-judge-seq", daemon=True).start()
+        threading.Thread(target=run_all, name="twokey-judge-seq", daemon=True).start()
     ballots = []
     for i, j in enumerate(judges):
         remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
@@ -273,7 +273,7 @@ def convene(
 ) -> QuorumResult:
     """Convene the judges.
 
-    ``binding`` = {action_hash, constitution_hash, nl_hash, bytecode_hash} (the kernel always passes it).
+    ``binding`` = {action_hash, constitution_hash, nl_hash, bytecode_hash} (Two-Key always passes it).
     """
     policy = policy or QuorumPolicy()
     k_floor = policy.effective_min_responding

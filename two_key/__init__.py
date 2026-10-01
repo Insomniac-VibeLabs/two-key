@@ -1,4 +1,4 @@
-"""Compact Kernel: dual-path constitutional enforcement for AI agents.
+"""Two-Key: dual-path constitutional enforcement for AI agents.
 
 Prototype. Not production cryptography. See README.md.
 """

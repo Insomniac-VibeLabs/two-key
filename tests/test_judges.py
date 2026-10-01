@@ -6,13 +6,13 @@ import urllib.error
 from pathlib import Path
 from unittest import mock
 
-from compact_kernel.action import normalize_action
-from compact_kernel.judges import AnthropicJudge, GeminiJudge, OllamaJudge, OpenAICompatibleJudge
-from compact_kernel.judges.config import JudgeConfigError, load_config, load_config_file
-from compact_kernel.judges.credentials import (CallbackTokenProvider, EnvApiKey, OAuthDeviceCodeProvider,
+from two_key.action import normalize_action
+from two_key.judges import AnthropicJudge, GeminiJudge, OllamaJudge, OpenAICompatibleJudge
+from two_key.judges.config import JudgeConfigError, load_config, load_config_file
+from two_key.judges.credentials import (CallbackTokenProvider, EnvApiKey, OAuthDeviceCodeProvider,
                                                StaticToken, UsernamePasswordProvider)
-from compact_kernel.judges.llm import MalformedBallot, parse_ballot_strict
-from compact_kernel.quorum import QuorumPolicy, convene
+from two_key.judges.llm import MalformedBallot, parse_ballot_strict
+from two_key.quorum import QuorumPolicy, convene
 
 CONST = "I am the principal. UNIQUE-CONSTITUTION-MARKER-7731. Never wire money."
 ACTION = normalize_action({"tool": "email_draft", "data_class": "personal", "irreversible": False})
@@ -149,8 +149,8 @@ class StrictParser(unittest.TestCase):
 
 class Credentials(unittest.TestCase):
     def test_env_key_read_at_call_time_and_redacted(self):
-        p = EnvApiKey("CK_TEST_KEY")
-        with mock.patch.dict(os.environ, {"CK_TEST_KEY": SECRET}):
+        p = EnvApiKey("TWOKEY_TEST_KEY")
+        with mock.patch.dict(os.environ, {"TWOKEY_TEST_KEY": SECRET}):
             self.assertEqual(p.get_token(), SECRET)
         self.assertNotIn(SECRET, repr(p))
 
@@ -158,17 +158,17 @@ class Credentials(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             t = Recorder(openai_resp(GOOD))
             j = OpenAICompatibleJudge(judge_id="j", provider="p", model="m", base_url="https://x.example/v1",
-                                      credential=EnvApiKey("CK_MISSING"), transport=t)
+                                      credential=EnvApiKey("TWOKEY_MISSING"), transport=t)
             b = j.score(CONST, ACTION, "p")
             self.assertEqual(b.vote, "abstain")
             self.assertEqual(t.calls, [])
 
     def test_username_password_stub_and_hook(self):
-        stub = UsernamePasswordProvider("me", "CK_PW")
+        stub = UsernamePasswordProvider("me", "TWOKEY_PW")
         with self.assertRaises(NotImplementedError):
             stub.get_token()
-        with mock.patch.dict(os.environ, {"CK_PW": "pw"}):
-            p = UsernamePasswordProvider("me", "CK_PW", login=lambda u, pw: f"session-for-{u}")
+        with mock.patch.dict(os.environ, {"TWOKEY_PW": "pw"}):
+            p = UsernamePasswordProvider("me", "TWOKEY_PW", login=lambda u, pw: f"session-for-{u}")
             self.assertEqual(p.get_token(), "session-for-me")
 
     def test_oauth_device_code_stub_abstains(self):

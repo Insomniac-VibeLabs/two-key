@@ -1,5 +1,5 @@
 """
-Compact Kernel: personal ledger
+Two-Key: personal ledger
 ===============================
 An append-only JSONL hash chain owned by the principal (spec 5.6), plus:
 
@@ -14,16 +14,16 @@ An append-only JSONL hash chain owned by the principal (spec 5.6), plus:
   detect, fails verification because the attacker cannot produce a head
   signature under the principal's key. Truncation and unsigned extra
   entries are detected too. The head can be signed with legacy Ed25519,
-  ECDSA P-384, or a hybrid ML-DSA-65 suite (compact_kernel.crypto);
+  ECDSA P-384, or a hybrid ML-DSA-65 suite (two_key.crypto);
 - configurable head-signing cadence: ``auto_sign_every=N`` signs after every
   N appends (1 = every append, the default for direct use; 0 = only on
-  ``checkpoint()``). The kernel and gateway call ``checkpoint()`` at decision
+  ``checkpoint()``). TwoKey and the gateway call ``checkpoint()`` at decision
   boundaries, so one signature covers all entries of a decision;
 - configurable digest algorithm: SHA-256 (legacy default) or SHA-384 (the
   default when the signing key is a post-quantum hybrid suite);
 - an anchoring hook (anchoring.py). It is a stub; nothing is published;
 - the single-use record for capability tokens (``redeem``). Every gateway
-  on this ledger (every ``kernel.gateway()`` of one kernel) consults the
+  on this ledger (every ``tk.gateway()`` of one TwoKey instance) consults the
   same record, so a token is accepted once however many gateways exist.
   It is rebuilt from the capability_redeemed entries on load, so it
   survives restarts. ``append``, ``checkpoint``, and ``redeem`` share one
@@ -61,7 +61,7 @@ except ImportError:  # pragma: no cover
     fcntl = None
 
 GENESIS = "0" * 64
-HEAD_FORMAT = "compact-kernel-ledger-head/1"
+HEAD_FORMAT = "two-key-ledger-head/1"
 
 
 def genesis(alg: str = "sha256") -> str:

@@ -4,13 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compact_kernel.action import ActionValidationError, normalize_action
-from compact_kernel.judges.base import Ballot
-from compact_kernel.kernel import CompactKernel
-from helpers import KernelFixture, signed
-from compact_kernel.policy_vm import ConstitutionError, Op, PolicyVM, compile_constitution
-from compact_kernel.quorum import QuorumPolicy, convene
-from compact_kernel.testing import FixedJudge, HeuristicJudge, RaisingJudge
+from two_key.action import ActionValidationError, normalize_action
+from two_key.judges.base import Ballot
+from two_key.core import TwoKey
+from helpers import TwoKeyFixture, signed
+from two_key.policy_vm import ConstitutionError, Op, PolicyVM, compile_constitution
+from two_key.quorum import QuorumPolicy, convene
+from two_key.testing import FixedJudge, HeuristicJudge, RaisingJudge
 
 DEMO_RULES = [
     {"id": "tool-allowlist", "allow_only_tools": ["search", "calendar", "email_draft", "email_send",
@@ -43,14 +43,14 @@ class AmountValidation(unittest.TestCase):
                 normalize_action({"tool": "pay_bill", "amount_usd": v})
 
     def test_original_negative_wire_exploit_denied_end_to_end(self):
-        with KernelFixture(DEMO_RULES, [HeuristicJudge("a", .3), HeuristicJudge("b", .6),
-                                        HeuristicJudge("c", .9)]) as k:
-            dec = k.authorize({"tool": "wire_transfer", "amount_usd": -4800, "counterparty": "new-payee.example",
+        with TwoKeyFixture(DEMO_RULES, [HeuristicJudge("a", .3), HeuristicJudge("b", .6),
+                                        HeuristicJudge("c", .9)]) as tk:
+            dec = tk.authorize({"tool": "wire_transfer", "amount_usd": -4800, "counterparty": "new-payee.example",
                                "irreversible": True, "data_class": "financial"}, "Process the refund.")
             self.assertFalse(dec.allowed)
             self.assertTrue(dec.reason.startswith("invalid_action:"))
             self.assertIsNone(dec.capability)
-            self.assertEqual(k.ledger.entries[-1].kind, "decision")
+            self.assertEqual(tk.ledger.entries[-1].kind, "decision")
 
     def test_zero_amount_wire_denied_by_tool_ban(self):
         r = vm().eval(normalize_action({"tool": "wire_transfer", "amount_usd": 0, "data_class": "financial",
@@ -155,12 +155,12 @@ class VMFaults(unittest.TestCase):
         self.assertEqual(r.reason, "no_pass")
 
     def test_vm_fault_logged_as_decision(self):
-        with KernelFixture(DEMO_RULES, [FixedJudge("a", "yes")], quorum_policy=QuorumPolicy(required_yes=1)) as k:
-            k.vm = PolicyVM([(Op.PUSH, None), (Op.PUSH, 1.0), (Op.GT,), (Op.PASS,)])
-            dec = k.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "x")
+        with TwoKeyFixture(DEMO_RULES, [FixedJudge("a", "yes")], quorum_policy=QuorumPolicy(required_yes=1)) as tk:
+            tk.vm = PolicyVM([(Op.PUSH, None), (Op.PUSH, 1.0), (Op.GT,), (Op.PASS,)])
+            dec = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "x")
             self.assertFalse(dec.allowed)
             self.assertIn("vm_fault", dec.reason)
-            self.assertEqual(k.ledger.entries[-1].kind, "decision")
+            self.assertEqual(tk.ledger.entries[-1].kind, "decision")
 
 
 class Quorum(unittest.TestCase):
@@ -210,15 +210,15 @@ class Quorum(unittest.TestCase):
         self.assertFalse(convene(js, "c", self.A, "p", QuorumPolicy(required_yes=2, min_distinct_providers=2)).passed)
 
 
-class KernelGuards(unittest.TestCase):
+class TwoKeyGuards(unittest.TestCase):
     def test_test_doubles_refused_by_default(self):
         with self.assertRaises(ValueError):
-            with KernelFixture(DEMO_RULES, [FixedJudge("a", "yes")], allow_test_doubles=False):
+            with TwoKeyFixture(DEMO_RULES, [FixedJudge("a", "yes")], allow_test_doubles=False):
                 pass
 
     def test_no_judges_refused(self):
         with self.assertRaises(ValueError):
-            with KernelFixture(DEMO_RULES, []):
+            with TwoKeyFixture(DEMO_RULES, []):
                 pass
 
 
@@ -229,9 +229,9 @@ class AnchorReceiptSize(unittest.TestCase):
 
     def test_receipt_reports_signed_head_size(self):
         import json
-        from compact_kernel import keys
-        from compact_kernel.anchoring import LocalFileAnchor
-        from compact_kernel.ledger import PersonalLedger
+        from two_key import keys
+        from two_key.anchoring import LocalFileAnchor
+        from two_key.ledger import PersonalLedger
         with tempfile.TemporaryDirectory() as tmp:
             led = PersonalLedger(Path(tmp) / "l.jsonl", keys.generate_private_key())
             for i in range(3):
@@ -245,7 +245,7 @@ class AnchorReceiptSize(unittest.TestCase):
             self.assertEqual(led.anchor(LocalFileAnchor(Path(tmp) / "anchor.jsonl"))["size"], 5)
 
     def test_flat_head_dict_still_accepted(self):
-        from compact_kernel.anchoring import LocalFileAnchor
+        from two_key.anchoring import LocalFileAnchor
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(LocalFileAnchor(Path(tmp) / "a.jsonl").publish({"size": 7})["size"], 7)
 

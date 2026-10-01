@@ -2,7 +2,7 @@
 
 ``normalize_action`` validates and canonicalizes a proposed action before
 the Policy VM sees it. Any validation failure raises ``ActionValidationError``,
-and the kernel turns that into an explicit, logged DENY.
+and Two-Key turns that into an explicit, logged DENY.
 
 Missing-field defaults follow disclosure section 5.2 and Claim 5: a missing
 ``irreversible`` means ``True`` and a missing ``data_class`` means

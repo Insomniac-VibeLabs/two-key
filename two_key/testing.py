@@ -3,7 +3,7 @@
 ``HeuristicJudge`` is the original prototype's keyword heuristic. It is kept
 only so the demo and tests run without network access. Unlike a real judge it
 does not consult the constitution meaningfully, so never use it in
-deployment. ``kernel.CompactKernel`` refuses test doubles unless
+deployment. ``core.TwoKey`` refuses test doubles unless
 ``allow_test_doubles=True``.
 """
 

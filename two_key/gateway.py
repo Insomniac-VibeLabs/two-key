@@ -1,5 +1,5 @@
 """
-Compact Kernel: tool gateway
+Two-Key: tool gateway
 ============================
 The only component allowed to cause side effects (spec 5.1 item 7). Before
 any tool runs, it checks everything spec 5.5 lists, plus single-use:
@@ -38,7 +38,7 @@ any tool runs, it checks everything spec 5.5 lists, plus single-use:
                                -> capability_not_recorded
  11. single use (jti)          -> replayed
      The used-token record lives in the ledger (``PersonalLedger.redeem``),
-     not in the gateway, so every gateway on one kernel/ledger shares it:
+     not in the gateway, so every gateway on one TwoKey instance shares it:
      a token is accepted once no matter how many gateways or threads try.
      Checks 9-11 and the redemption run under the ledger's lock. Across
      processes on POSIX, a redemption that finds another writer has changed
@@ -107,7 +107,7 @@ class ToolGateway:
         # Single use is tracked by the ledger (ledger.redeem), shared by every gateway on it and rebuilt
         # from the ledger's capability_redeemed entries on load, so replay protection survives restarts.
         # Last-known ledger view (§4 (i)): (size, Merkle root). Taken from the ledger at construction;
-        # the kernel has verified the ledger against the principal's signed head by then. The view
+        # Two-Key has verified the ledger against the principal's signed head by then. The view
         # only ever moves forward along a verified consistency proof.
         if view_refresh not in ("token", "every_call"):
             raise ValueError("view_refresh must be 'token' or 'every_call'")

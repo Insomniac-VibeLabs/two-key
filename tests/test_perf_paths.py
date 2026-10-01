@@ -9,15 +9,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from compact_kernel import merkle
-from compact_kernel.action import normalize_action
-from compact_kernel.judges.base import Ballot, Judge
-from compact_kernel.judges.config import load_config
-from compact_kernel.ledger import PersonalLedger
-from compact_kernel.quorum import QuorumConfigError, QuorumPolicy, convene
-from compact_kernel.testing import FixedJudge
-from compact_kernel import keys
-from helpers import KernelFixture
+from two_key import merkle
+from two_key.action import normalize_action
+from two_key.judges.base import Ballot, Judge
+from two_key.judges.config import load_config
+from two_key.ledger import PersonalLedger
+from two_key.quorum import QuorumConfigError, QuorumPolicy, convene
+from two_key.testing import FixedJudge
+from two_key import keys
+from helpers import TwoKeyFixture
 
 A = normalize_action({"tool": "search"})
 RULES = [{"id": "tools", "allow_only_tools": ["pay_bill"]}]
@@ -49,7 +49,7 @@ class ParallelJudges(unittest.TestCase):
         self.assertTrue(q.passed, q.reason)
         self.assertLess(elapsed, 0.75, "3 x 0.3 s judges should overlap, not run back to back")
         self.assertEqual([b.judge_id for b in q.ballots], ["j0", "j1", "j2"])  # order preserved
-        self.assertTrue(all(j.threads[0].startswith("ck-judge") for j in js))
+        self.assertTrue(all(j.threads[0].startswith("twokey-judge") for j in js))
 
     def test_timeout_counts_as_abstain_and_returns_promptly(self):
         js = [FixedJudge("fast", "yes"), SlowJudge("hung", 3.0)]
@@ -84,13 +84,13 @@ class ParallelJudges(unittest.TestCase):
 class NoNetworkInGatewayPath(unittest.TestCase):
     def test_authorize_and_invoke_make_no_network_calls(self):
         def boom(*a, **kw):
-            raise AssertionError("network access attempted in the kernel/gateway hot path")
+            raise AssertionError("network access attempted in the Two-Key/gateway hot path")
 
-        with KernelFixture(RULES, YES) as k:
-            gw = k.gateway(tools={"pay_bill": lambda **a: "paid"})
+        with TwoKeyFixture(RULES, YES) as tk:
+            gw = tk.gateway(tools={"pay_bill": lambda **a: "paid"})
             with mock.patch.object(socket, "socket", boom), mock.patch.object(socket, "create_connection", boom), \
                     mock.patch.object(socket, "getaddrinfo", boom):
-                d = k.authorize(PAY, "Pay.", PAY_ARGS)
+                d = tk.authorize(PAY, "Pay.", PAY_ARGS)
                 self.assertTrue(d.allowed, d.reason)
                 self.assertEqual(gw.invoke(d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason, "executed")
 
@@ -133,41 +133,41 @@ class MerkleAndCheckpoints(unittest.TestCase):
         with self.assertRaises(ValueError):
             PersonalLedger(self.d / "x.jsonl", auto_sign_every=-1)
 
-    def test_kernel_signs_one_head_per_decision(self):
-        with KernelFixture(RULES, YES) as k:
-            with mock.patch.object(k.ledger, "_write_head", wraps=k.ledger._write_head) as w:
-                d = k.authorize(PAY, "Pay.", PAY_ARGS)
+    def test_two_key_signs_one_head_per_decision(self):
+        with TwoKeyFixture(RULES, YES) as tk:
+            with mock.patch.object(tk.ledger, "_write_head", wraps=tk.ledger._write_head) as w:
+                d = tk.authorize(PAY, "Pay.", PAY_ARGS)
                 self.assertTrue(d.allowed)
                 self.assertEqual(w.call_count, 1)
-                k.gateway().invoke(d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
+                tk.gateway().invoke(d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
                 self.assertEqual(w.call_count, 2)
-            self.assertEqual(k.ledger.unsigned_entries, 0)
-            self.assertEqual(k.ledger.verify(k.trusted_public_key).reason, "ok")
+            self.assertEqual(tk.ledger.unsigned_entries, 0)
+            self.assertEqual(tk.ledger.verify(tk.trusted_public_key).reason, "ok")
 
     def test_gateway_checkpoint_every(self):
-        with KernelFixture(RULES, YES) as k:
-            gw = k.gateway(checkpoint_every=0)
-            decs = [k.authorize(PAY, "Pay.", PAY_ARGS) for _ in range(3)]
+        with TwoKeyFixture(RULES, YES) as tk:
+            gw = tk.gateway(checkpoint_every=0)
+            decs = [tk.authorize(PAY, "Pay.", PAY_ARGS) for _ in range(3)]
             for d in decs:
                 gw.invoke(d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
-            self.assertEqual(k.ledger.unsigned_entries, 3)  # one capability_redeemed per call, unsigned
-            self.assertTrue(k.ledger.verify(k.trusted_public_key).reason.startswith("size_mismatch"))
-            k.ledger.checkpoint()
-            self.assertEqual(k.ledger.verify(k.trusted_public_key).reason, "ok")
+            self.assertEqual(tk.ledger.unsigned_entries, 3)  # one capability_redeemed per call, unsigned
+            self.assertTrue(tk.ledger.verify(tk.trusted_public_key).reason.startswith("size_mismatch"))
+            tk.ledger.checkpoint()
+            self.assertEqual(tk.ledger.verify(tk.trusted_public_key).reason, "ok")
             with self.assertRaises(ValueError):
-                k.gateway(checkpoint_every=-1)
+                tk.gateway(checkpoint_every=-1)
 
-    def test_kernel_per_append_mode(self):
-        with KernelFixture(RULES, YES, head_signing="append") as k:
-            with mock.patch.object(k.ledger, "_write_head", wraps=k.ledger._write_head) as w:
-                n0 = len(k.ledger.entries)
-                k.authorize(PAY, "Pay.", PAY_ARGS)
-                self.assertEqual(w.call_count, len(k.ledger.entries) - n0)
+    def test_two_key_per_append_mode(self):
+        with TwoKeyFixture(RULES, YES, head_signing="append") as tk:
+            with mock.patch.object(tk.ledger, "_write_head", wraps=tk.ledger._write_head) as w:
+                n0 = len(tk.ledger.entries)
+                tk.authorize(PAY, "Pay.", PAY_ARGS)
+                self.assertEqual(w.call_count, len(tk.ledger.entries) - n0)
 
     def test_checkpoint_failure_denies_and_withholds_token(self):
-        with KernelFixture(RULES, YES) as k:
-            with mock.patch.object(k.ledger, "checkpoint", side_effect=OSError("disk full")):
-                d = k.authorize(PAY, "Pay.", PAY_ARGS)
+        with TwoKeyFixture(RULES, YES) as tk:
+            with mock.patch.object(tk.ledger, "checkpoint", side_effect=OSError("disk full")):
+                d = tk.authorize(PAY, "Pay.", PAY_ARGS)
             self.assertFalse(d.allowed)
             self.assertIsNone(d.capability)
             self.assertIn("ledger_checkpoint", d.reason)

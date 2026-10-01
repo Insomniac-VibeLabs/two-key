@@ -1,5 +1,5 @@
 """
-Compact Kernel: capability tokens
+Two-Key: capability tokens
 =================================
 Short-lived, scope-bound, single-use bearer tokens (spec 5.5).
 
@@ -8,14 +8,14 @@ Token = mode + "." + b64url(canonical payload) + "." + b64url(tag over mode + ".
 Token modes (the issuer and the gateway must agree; a token of any other mode
 is refused as ``unsupported_token_version``, so there is no downgrade):
 
-  ck1        HMAC-SHA-256, >= 256-bit key (legacy default)
-  ck1-hs384  HMAC-SHA-384, 384-bit key by default (default for PQ profiles)
-  ck1-sig    signed with a separate token key set (PrivateKeySet), e.g. hybrid
+  tk1        HMAC-SHA-256, >= 256-bit key (legacy default)
+  tk1-hs384  HMAC-SHA-384, 384-bit key by default (default for PQ profiles)
+  tk1-sig    signed with a separate token key set (PrivateKeySet), e.g. hybrid
              ML-DSA-65 + Ed25519. Optional: about 4.6 KB per token, and slower.
 
 HMAC with a >= 256-bit key is already considered quantum-resistant (Grover's
 algorithm at most halves the effective key strength), so the HMAC modes are
-the recommended default; ck1-sig exists for deployments where the verifier
+the recommended default; tk1-sig exists for deployments where the verifier
 must not hold a secret that can also mint tokens.
 
 Payload fields: v, jti (unique id for single-use), principal, tool,
@@ -23,7 +23,7 @@ scope{amount_usd, counterparty, data_class}, args_hash, issued_at,
 expires_at, ledger_root, constitution_digest.
 
 Ledger-root binding (PRIOR_ART.md §4 (i) and (ii), selected by Stephan Busch
-on 2026-09-30): the kernel also binds
+on 2026-09-30): Two-Key also binds
   ledger_size, ledger_merkle_root  the principal's Merkle ledger root R and the
                                    ledger size at issuance (before the token's
                                    own capability_issued entry)
@@ -51,10 +51,10 @@ from .canonical import canonical_bytes, canonical_hash
 from .crypto.provider import CryptoProvider, PQUnavailableError, default_provider
 from .crypto.signatures import as_private_keyset, as_public_keyset
 
-PREFIX = "ck1"
+PREFIX = "tk1"
 MIN_SECRET_BYTES = 32
-MAC_MODES = {"ck1": ("hmac-sha256", 32), "ck1-hs384": ("hmac-sha384", 48)}
-TOKEN_MODES = tuple(MAC_MODES) + ("ck1-sig",)
+MAC_MODES = {"tk1": ("hmac-sha256", 32), "tk1-hs384": ("hmac-sha384", 48)}
+TOKEN_MODES = tuple(MAC_MODES) + ("tk1-sig",)
 
 
 class TokenError(ValueError):
@@ -98,7 +98,7 @@ class IssuedCapability:
 
 class CapabilityIssuer:
     def __init__(self, secret: bytes | None = None, clock: Callable[[], float] = time.time, *,
-                 mode: str = "ck1", signing_key: Any = None, verify_key: Any = None,
+                 mode: str = "tk1", signing_key: Any = None, verify_key: Any = None,
                  crypto: CryptoProvider | None = None):
         if mode not in TOKEN_MODES:
             raise ValueError(f"token mode must be one of {TOKEN_MODES}")
@@ -114,7 +114,7 @@ class CapabilityIssuer:
             self._mac_fn = self.crypto.hmac_factory(alg, secret)  # key schedule computed once
         else:
             if signing_key is None and verify_key is None:
-                raise ValueError("ck1-sig mode needs a token signing key set (and/or a verify key)")
+                raise ValueError("tk1-sig mode needs a token signing key set (and/or a verify key)")
             if signing_key is not None:
                 self._signer = as_private_keyset(signing_key, self.crypto)
             vk = verify_key if verify_key is not None else self._signer.public()
@@ -125,7 +125,7 @@ class CapabilityIssuer:
 
     def _tag(self, signing_input: str) -> str:
         data = signing_input.encode("ascii")
-        if self._signer is None and self.mode == "ck1-sig":
+        if self._signer is None and self.mode == "tk1-sig":
             raise ValueError("this issuer holds only a verify key")
         if self.mode in MAC_MODES:
             return _b64u(self._mac_fn(data))

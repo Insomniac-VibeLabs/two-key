@@ -1,4 +1,4 @@
-"""Command-line interface: ``python -m compact_kernel <command>``.
+"""Command-line interface: ``two-key <command>`` (or ``python -m two_key <command>``).
 
 Global options (before the command): --fips (refuse non-approved algorithms),
 --pq-backend auto|pyca|liboqs|none.
@@ -145,7 +145,7 @@ def cmd_demo(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     from .crypto.signatures import SUITES
-    p = argparse.ArgumentParser(prog="compact_kernel", description="Compact Kernel prototype CLI")
+    p = argparse.ArgumentParser(prog="two-key", description="Two-Key prototype CLI")
     p.add_argument("--fips", action="store_true", help="fips_mode: refuse non-approved algorithms and liboqs")
     p.add_argument("--pq-backend", default="auto", choices=["auto", "pyca", "liboqs", "none"])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -161,8 +161,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("sign-constitution", help="sign constitution text + hard rules, or one single-source document")
     s.add_argument("--text", help=".txt/.md plain-English constitution")
     s.add_argument("--rules", help=".json/.yaml hard rules for Path A")
-    s.add_argument("--document", help="single .md source with one ```ck-rules JSON block (format /2)")
-    s.add_argument("--principal", required=True, help="principal identifier, e.g. did:ck:alice")
+    s.add_argument("--document", help="single .md source with one ```twokey-rules JSON block (format /2)")
+    s.add_argument("--principal", required=True, help="principal identifier, e.g. did:twokey:alice")
     s.add_argument("--key", required=True, help="principal private key (PEM or .keys.json bundle)")
     s.add_argument("--out", required=True); pw(s); s.set_defaults(fn=cmd_sign)
     s = sub.add_parser("verify-constitution", help="verify a signed constitution")

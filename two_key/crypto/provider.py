@@ -1,7 +1,7 @@
 """Pluggable crypto provider with an optional FIPS mode.
 
-Every hash, MAC, random draw, and signature algorithm choice in Compact
-Kernel goes through a ``CryptoProvider``. The provider:
+Every hash, MAC, random draw, and signature algorithm choice in Two-Key
+goes through a ``CryptoProvider``. The provider:
 
 * allows only algorithms on the FIPS-approved list below when ``fips_mode``
   is on, and raises ``CryptoPolicyError`` for anything else;

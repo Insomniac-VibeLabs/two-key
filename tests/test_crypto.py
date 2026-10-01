@@ -8,17 +8,17 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from compact_kernel import keys
-from compact_kernel.capability import CapabilityIssuer, TokenError
-from compact_kernel.cli import main as cli_main
-from compact_kernel.constitution import (ConstitutionSignatureError, build_document, sign_document,
+from two_key import keys
+from two_key.capability import CapabilityIssuer, TokenError
+from two_key.cli import main as cli_main
+from two_key.constitution import (ConstitutionSignatureError, build_document, sign_document,
                                          verify_signed)
-from compact_kernel.crypto import (CryptoPolicyError, CryptoProvider, PQUnavailableError, PrivateKeySet,
+from two_key.crypto import (CryptoPolicyError, CryptoProvider, PQUnavailableError, PrivateKeySet,
                                    SelfTestError, openssl_fips_status, public_keyset_from_encoded)
-from compact_kernel.crypto import selftest as st
-from compact_kernel.kernel import CompactKernel, KernelConfigError
-from compact_kernel.ledger import PersonalLedger
-from compact_kernel.testing import FixedJudge
+from two_key.crypto import selftest as st
+from two_key.core import TwoKey, TwoKeyConfigError
+from two_key.ledger import PersonalLedger
+from two_key.testing import FixedJudge
 from crypto_helpers import PQ, fake_oqs, flip_component, no_oqs, pyca_without_mldsa
 from helpers import DEFAULT_TEXT, signed
 
@@ -65,21 +65,21 @@ class FipsModeRejection(unittest.TestCase):
         with self.assertRaises(CryptoPolicyError):
             self.lax.hmac_factory("hmac-sha256", b"k" * 31)
         with self.assertRaises(ValueError):
-            CapabilityIssuer(b"k" * 16, mode="ck1-hs384")
+            CapabilityIssuer(b"k" * 16, mode="tk1-hs384")
 
-    def test_ledger_and_kernel_refuse_non_approved_digest_in_fips_mode(self):
+    def test_ledger_and_two_key_refuse_non_approved_digest_in_fips_mode(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(CryptoPolicyError):
                 PersonalLedger(Path(d) / "l.jsonl", digest_alg="blake2b", crypto=self.fips)
             env, key = signed(RULES)
             with self.assertRaises(CryptoPolicyError):
-                CompactKernel(env, key.public_key(), Path(d) / "k.jsonl", YES, ledger_signing_key=key,
+                TwoKey(env, key.public_key(), Path(d) / "k.jsonl", YES, ledger_signing_key=key,
                               allow_test_doubles=True, crypto=self.fips, digest_alg="blake2b")
-            # The same kernel runs in fips_mode with approved algorithms.
-            k = CompactKernel(env, key.public_key(), Path(d) / "k2.jsonl", YES, ledger_signing_key=key,
+            # The same TwoKey setup runs in fips_mode with approved algorithms.
+            tk = TwoKey(env, key.public_key(), Path(d) / "k2.jsonl", YES, ledger_signing_key=key,
                               allow_test_doubles=True, crypto=self.fips)
-            self.assertTrue(k.authorize(PAY, "Pay.", PAY_ARGS).allowed)
-            self.assertTrue(k.crypto_profile()["fips_mode"])
+            self.assertTrue(tk.authorize(PAY, "Pay.", PAY_ARGS).allowed)
+            self.assertTrue(tk.crypto_profile()["fips_mode"])
 
     def test_liboqs_refused_in_fips_mode(self):
         with self.assertRaises(CryptoPolicyError):
@@ -129,7 +129,7 @@ class SelfTest(unittest.TestCase):
             with self.assertRaises(SelfTestError):
                 CryptoProvider().ensure_selftest()
 
-    def test_broken_provider_fails_selftest_and_kernel_refuses_to_start(self):
+    def test_broken_provider_fails_selftest_and_two_key_refuses_to_start(self):
         class Broken(CryptoProvider):
             def hash_hex(self, alg, data):
                 return "f" * 96 if alg == "sha384" else super().hash_hex(alg, data)
@@ -139,18 +139,18 @@ class SelfTest(unittest.TestCase):
         env, key = signed(RULES)
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(SelfTestError):
-                CompactKernel(env, key.public_key(), Path(d) / "l.jsonl", YES, ledger_signing_key=key,
+                TwoKey(env, key.public_key(), Path(d) / "l.jsonl", YES, ledger_signing_key=key,
                               allow_test_doubles=True, crypto=Broken())
             self.assertFalse((Path(d) / "l.jsonl").exists())  # nothing was written
 
-    def test_kernel_records_selftest_and_profile(self):
+    def test_two_key_records_selftest_and_profile(self):
         env, key = signed(RULES)
         with tempfile.TemporaryDirectory() as d:
-            k = CompactKernel(env, key.public_key(), Path(d) / "l.jsonl", YES, ledger_signing_key=key,
+            tk = TwoKey(env, key.public_key(), Path(d) / "l.jsonl", YES, ledger_signing_key=key,
                               allow_test_doubles=True)
-            prof = k.ledger.entries[0].body["crypto"]
+            prof = tk.ledger.entries[0].body["crypto"]
             self.assertEqual((prof["signature_suite"], prof["digest_alg"], prof["token_mode"]),
-                             ("ed25519", "sha256", "ck1"))
+                             ("ed25519", "sha256", "tk1"))
             self.assertTrue(prof["selftest"]["ok"])
 
     def test_cli_selftest(self):
@@ -189,7 +189,7 @@ class MissingPQLibrary(unittest.TestCase):
 
     def test_verifying_hybrid_without_backend_raises_not_downgrades(self):
         p, ks = self._hybrid_under_fake()
-        env = sign_document(build_document("did:ck:t", DEFAULT_TEXT, RULES), ks, p)
+        env = sign_document(build_document("did:twokey:t", DEFAULT_TEXT, RULES), ks, p)
         self.assertEqual(verify_signed(env, ks.public(), p).signer_suite, "hybrid-mldsa65-ed25519")
         none = CryptoProvider(pq_backend="none")
         with self.assertRaises(PQUnavailableError):
@@ -197,58 +197,58 @@ class MissingPQLibrary(unittest.TestCase):
         with self.assertRaises(PQUnavailableError):
             verify_signed(env, public_keyset_from_encoded(ks.public().encoded, none), none)
 
-    def test_kernel_with_hybrid_key_and_no_backend_refuses_to_start(self):
+    def test_two_key_with_hybrid_key_and_no_backend_refuses_to_start(self):
         p, ks = self._hybrid_under_fake()
-        env = sign_document(build_document("did:ck:t", DEFAULT_TEXT, RULES), ks, p)
+        env = sign_document(build_document("did:twokey:t", DEFAULT_TEXT, RULES), ks, p)
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(PQUnavailableError):
-                CompactKernel(env, ks.public(), Path(d) / "l.jsonl", YES,
+                TwoKey(env, ks.public(), Path(d) / "l.jsonl", YES,
                               ledger_signing_key=ks, allow_test_doubles=True,
                               crypto=CryptoProvider(pq_backend="none"))
 
     def test_require_pq_with_classic_key_refused(self):
         env, key = signed(RULES)
         with tempfile.TemporaryDirectory() as d:
-            with self.assertRaises(KernelConfigError):
-                CompactKernel(env, key.public_key(), Path(d) / "l.jsonl", YES, ledger_signing_key=key,
+            with self.assertRaises(TwoKeyConfigError):
+                TwoKey(env, key.public_key(), Path(d) / "l.jsonl", YES, ledger_signing_key=key,
                               allow_test_doubles=True, require_pq=True)
 
     def test_fake_liboqs_backend_end_to_end(self):
-        """The liboqs adapter plumbing (hybrid sign/verify/tamper, kernel start) with a fake oqs module."""
+        """The liboqs adapter plumbing (hybrid sign/verify/tamper, Two-Key start) with a fake oqs module."""
         p, ks = self._hybrid_under_fake()
         self.assertEqual(p.pq_backend().describe()["backend"], "liboqs-python")
         sig = ks.sign(b"msg")
         self.assertTrue(ks.public().verify(b"msg", sig))
         self.assertFalse(ks.public().verify(b"msg", flip_component(sig, 0)))
         self.assertFalse(ks.public().verify(b"msg", flip_component(sig, 1)))
-        env = sign_document(build_document("did:ck:t", DEFAULT_TEXT, RULES), ks, p)
+        env = sign_document(build_document("did:twokey:t", DEFAULT_TEXT, RULES), ks, p)
         with tempfile.TemporaryDirectory() as d:
-            k = CompactKernel(env, ks.public(), Path(d) / "l.jsonl", YES, ledger_signing_key=ks,
+            tk = TwoKey(env, ks.public(), Path(d) / "l.jsonl", YES, ledger_signing_key=ks,
                               allow_test_doubles=True, crypto=p, require_pq=True)
-            dec = k.authorize(PAY, "Pay.", PAY_ARGS)
+            dec = tk.authorize(PAY, "Pay.", PAY_ARGS)
             self.assertTrue(dec.allowed, dec.reason)
-            self.assertTrue(dec.capability.startswith("ck1-hs384."))
-            self.assertEqual(k.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
+            self.assertTrue(dec.capability.startswith("tk1-hs384."))
+            self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
                              "authorized_no_executor")
-            self.assertEqual(k.ledger.verify(ks.public()).reason, "ok")
+            self.assertEqual(tk.ledger.verify(ks.public()).reason, "ok")
 
 
 class ClassicSuites(unittest.TestCase):
-    def test_ecdsa_p384_constitution_and_kernel(self):
+    def test_ecdsa_p384_constitution_and_two_key(self):
         ks = PrivateKeySet.generate("ecdsa-p384")
-        env = sign_document(build_document("did:ck:t", DEFAULT_TEXT, RULES), ks)
+        env = sign_document(build_document("did:twokey:t", DEFAULT_TEXT, RULES), ks)
         c = verify_signed(env, ks.public())
         self.assertEqual((c.signer_suite, c.digest_alg, len(c.digest)), ("ecdsa-p384", "sha384", 96))
-        bad = dict(env, constitution=dict(env["constitution"], principal="did:ck:mallory"))
+        bad = dict(env, constitution=dict(env["constitution"], principal="did:twokey:mallory"))
         with self.assertRaises(ConstitutionSignatureError):
             verify_signed(bad, ks.public())
         with tempfile.TemporaryDirectory() as d:
-            k = CompactKernel(env, ks.public(), Path(d) / "l.jsonl", YES, ledger_signing_key=ks,
+            tk = TwoKey(env, ks.public(), Path(d) / "l.jsonl", YES, ledger_signing_key=ks,
                               allow_test_doubles=True)
-            dec = k.authorize(PAY, "Pay.", PAY_ARGS)
-            self.assertTrue(dec.allowed and dec.capability.startswith("ck1-hs384."))
-            self.assertEqual(len(k.ledger.tip()), 96)
-            self.assertEqual(k.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
+            dec = tk.authorize(PAY, "Pay.", PAY_ARGS)
+            self.assertTrue(dec.allowed and dec.capability.startswith("tk1-hs384."))
+            self.assertEqual(len(tk.ledger.tip()), 96)
+            self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
                              "authorized_no_executor")
             self.assertEqual(PersonalLedger(Path(d) / "l.jsonl").verify(ks.public()).reason, "ok")
 
@@ -260,8 +260,8 @@ class ClassicSuites(unittest.TestCase):
         self.assertIn("downgrade refused", str(cm.exception))
 
     def test_hs384_issuer_refuses_ck1_tokens(self):
-        a = CapabilityIssuer(b"k" * 48, mode="ck1")
-        b = CapabilityIssuer(b"k" * 48, mode="ck1-hs384")
+        a = CapabilityIssuer(b"k" * 48, mode="tk1")
+        b = CapabilityIssuer(b"k" * 48, mode="tk1-hs384")
         tok = a.issue(principal="p", tool="t", scope={}, args_digest="h", ledger_root="r",
                       constitution_digest="c", ttl_seconds=5).token
         with self.assertRaises(TokenError) as cm:
@@ -269,7 +269,7 @@ class ClassicSuites(unittest.TestCase):
         self.assertEqual(cm.exception.reason, "unsupported_token_version")
         # Relabelled prefix: the MAC no longer matches.
         with self.assertRaises(TokenError) as cm:
-            b.verify("ck1-hs384." + tok.split(".", 1)[1])
+            b.verify("tk1-hs384." + tok.split(".", 1)[1])
         self.assertEqual(cm.exception.reason, "bad_signature")
 
     def test_public_key_parsing_is_cached(self):

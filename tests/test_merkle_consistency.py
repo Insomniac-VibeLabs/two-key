@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compact_kernel import keys, merkle
-from compact_kernel.ledger import PersonalLedger
+from two_key import keys, merkle
+from two_key.ledger import PersonalLedger
 
 
 def sha384(b):

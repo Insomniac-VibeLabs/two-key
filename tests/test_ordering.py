@@ -1,9 +1,9 @@
 """Configurable Path A / Path B ordering."""
 import unittest
 
-from compact_kernel.quorum import QuorumPolicy
-from compact_kernel.testing import FixedJudge
-from helpers import KernelFixture
+from two_key.quorum import QuorumPolicy
+from two_key.testing import FixedJudge
+from helpers import TwoKeyFixture
 
 RULES = [{"allow_only_tools": ["search"]}]
 
@@ -21,10 +21,10 @@ class CountingJudge(FixedJudge):
 class Ordering(unittest.TestCase):
     def run_case(self, short_circuit):
         j = CountingJudge("a", "yes")
-        with KernelFixture(RULES, [j], quorum_policy=QuorumPolicy(required_yes=1),
-                           short_circuit_path_b=short_circuit) as k:
-            d = k.authorize({"tool": "wire_transfer", "data_class": "public", "irreversible": False}, "wire it")
-            kinds = [e.kind for e in k.ledger.entries]
+        with TwoKeyFixture(RULES, [j], quorum_policy=QuorumPolicy(required_yes=1),
+                           short_circuit_path_b=short_circuit) as tk:
+            d = tk.authorize({"tool": "wire_transfer", "data_class": "public", "irreversible": False}, "wire it")
+            kinds = [e.kind for e in tk.ledger.entries]
         return d, j.calls, kinds
 
     def test_default_short_circuits_after_path_a_deny(self):
@@ -44,8 +44,8 @@ class Ordering(unittest.TestCase):
 
     def test_path_b_still_runs_when_path_a_allows(self):
         j = CountingJudge("a", "no")
-        with KernelFixture(RULES, [j], quorum_policy=QuorumPolicy(required_yes=1)) as k:
-            d = k.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "search")
+        with TwoKeyFixture(RULES, [j], quorum_policy=QuorumPolicy(required_yes=1)) as tk:
+            d = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "search")
         self.assertEqual(j.calls, 1)
         self.assertFalse(d.allowed)
         self.assertTrue(d.reason.startswith("path_b_denied"))

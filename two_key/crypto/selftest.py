@@ -3,7 +3,7 @@
 Modelled on the FIPS 140-3 pre-operational / conditional self-test idea. A
 validated module runs its own mandatory self-tests; these application-level
 tests are an extra check that the provider in use computes the right answers
-before the kernel accepts any constitution or issues any token.
+before Two-Key accepts any constitution or issues any token.
 
 Vectors
 -------
@@ -17,7 +17,7 @@ Vectors
                                           The regression value was produced by this project
                                           with pyca cryptography 50.0.1; it is NOT an
                                           official NIST ACVP vector.
-Any failure raises SelfTestError and the kernel refuses to start.
+Any failure raises SelfTestError and Two-Key refuses to start.
 """
 
 from __future__ import annotations
@@ -84,8 +84,8 @@ def run_selftest(p: CryptoProvider) -> dict:
 
         p.check("sig", "ecdsa-p384")
         ek = _EcdsaP384.generate()
-        esig = _EcdsaP384.sign(ek, b"compact-kernel selftest")
-        _check(_EcdsaP384.verify(ek.public_key(), esig, b"compact-kernel selftest"), "PCT ECDSA P-384")
+        esig = _EcdsaP384.sign(ek, b"two-key selftest")
+        _check(_EcdsaP384.verify(ek.public_key(), esig, b"two-key selftest"), "PCT ECDSA P-384")
         _check(not _EcdsaP384.verify(ek.public_key(), esig, b"tampered"), "PCT ECDSA P-384 negative")
         passed.append("PCT ECDSA P-384")
 
@@ -102,8 +102,8 @@ def run_selftest(p: CryptoProvider) -> dict:
                        "ML-DSA-65 seed keygen regression")
                 passed.append("ML-DSA-65 seed keygen regression (project value)")
             k = pq.generate()
-            s = pq.sign(k, b"compact-kernel selftest")
-            _check(pq.verify(pq.public_of(k), s, b"compact-kernel selftest"), "PCT ML-DSA-65")
+            s = pq.sign(k, b"two-key selftest")
+            _check(pq.verify(pq.public_of(k), s, b"two-key selftest"), "PCT ML-DSA-65")
             _check(not pq.verify(pq.public_of(k), s, b"tampered"), "PCT ML-DSA-65 negative")
             passed.append(f"PCT ML-DSA-65 ({pq.name})")
         elif not any(x.startswith("ML-DSA-65 skipped") for x in passed):

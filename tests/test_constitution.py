@@ -5,12 +5,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compact_kernel import keys
-from compact_kernel.constitution import (ConstitutionSignatureError, build_document, load_rules_file,
+from two_key import keys
+from two_key.constitution import (ConstitutionSignatureError, build_document, load_rules_file,
                                          load_text_file, sign_document, sign_files, verify_signed)
-from compact_kernel.kernel import CompactKernel
-from compact_kernel.policy_vm import ConstitutionError
-from compact_kernel.testing import FixedJudge
+from two_key.core import TwoKey
+from two_key.policy_vm import ConstitutionError
+from two_key.testing import FixedJudge
 
 RULES = [{"allow_only_tools": ["search"]}, {"deny_if": {"data_class_in": ["medical"]}}]
 
@@ -18,11 +18,11 @@ RULES = [{"allow_only_tools": ["search"]}, {"deny_if": {"data_class_in": ["medic
 class SignVerify(unittest.TestCase):
     def setUp(self):
         self.key = keys.generate_private_key()
-        self.env = sign_document(build_document("did:ck:p", "Never share medical data.", RULES), self.key)
+        self.env = sign_document(build_document("did:twokey:p", "Never share medical data.", RULES), self.key)
 
     def test_roundtrip(self):
         c = verify_signed(self.env, self.key.public_key())
-        self.assertEqual(c.principal, "did:ck:p")
+        self.assertEqual(c.principal, "did:twokey:p")
         self.assertEqual(c.text, "Never share medical data.")
 
     def test_modified_text_rejected(self):
@@ -66,15 +66,15 @@ class SignVerify(unittest.TestCase):
         with self.assertRaises(ConstitutionError):
             build_document("p", "text", [{"deny_iff": {}}])
 
-    def test_kernel_refuses_unsigned_and_tampered(self):
+    def test_two_key_refuses_unsigned_and_tampered(self):
         with tempfile.TemporaryDirectory() as d:
             env = copy.deepcopy(self.env)
             env["constitution"]["constitution_text"] += " (edited by vendor)"
             with self.assertRaises(ConstitutionSignatureError):
-                CompactKernel(env, self.key.public_key(), Path(d) / "l", [FixedJudge("a", "yes")], ledger_signing_key=self.key,
+                TwoKey(env, self.key.public_key(), Path(d) / "l", [FixedJudge("a", "yes")], ledger_signing_key=self.key,
                               allow_test_doubles=True)
             with self.assertRaises(ConstitutionSignatureError):
-                CompactKernel({"constitution": self.env["constitution"]}, self.key.public_key(),
+                TwoKey({"constitution": self.env["constitution"]}, self.key.public_key(),
                               Path(d) / "l", [FixedJudge("a", "yes")], allow_test_doubles=True, ledger_signing_key=self.key)
 
 
@@ -84,7 +84,7 @@ class FileUpload(unittest.TestCase):
             t = Path(d) / "c.md"; t.write_text("# My constitution\nNo wires.\n")
             r = Path(d) / "r.json"; r.write_text(json.dumps({"hard_rules": RULES}))
             key = keys.generate_private_key()
-            env = sign_files(t, r, "did:ck:p", key)
+            env = sign_files(t, r, "did:twokey:p", key)
             self.assertIn("No wires.", verify_signed(env, key.public_key()).text)
 
     def test_yaml_rules(self):

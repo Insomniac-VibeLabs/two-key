@@ -14,7 +14,7 @@ import types
 from contextlib import contextmanager
 from unittest import mock
 
-from compact_kernel.crypto import CryptoProvider, pq_available
+from two_key.crypto import CryptoProvider, pq_available
 
 PQ = pq_available(CryptoProvider())
 

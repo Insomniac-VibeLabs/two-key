@@ -4,7 +4,7 @@ Hashes and signatures are computed over these bytes, so the encoding
 must be deterministic. Keys are sorted, separators are fixed, output is
 ASCII-only, and NaN/Infinity are rejected.
 
-All hashing goes through the crypto provider (compact_kernel.crypto), so the
+All hashing goes through the crypto provider (two_key.crypto), so the
 FIPS-mode algorithm policy applies. ``sha256_hex`` keeps the legacy
 SHA-256 behaviour; ``digest_hex``/``canonical_hash`` take an algorithm
 (e.g. "sha384" for the post-quantum profiles).

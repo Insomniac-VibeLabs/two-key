@@ -2,7 +2,7 @@
 
 Legacy Ed25519 keys are PEM files (PKCS#8 private, SPKI public), as before.
 Other suites (ECDSA P-384, hybrid ML-DSA-65 + Ed25519/P-384; see
-compact_kernel.crypto.signatures) are stored as a JSON key bundle. The
+two_key.crypto.signatures) are stored as a JSON key bundle. The
 private components are encrypted with AES-256-GCM under a key derived by
 PBKDF2-HMAC-SHA-256 (600,000 iterations, SP 800-132) from the passphrase.
 
@@ -84,8 +84,8 @@ def load_public_key(path: Path) -> Ed25519PublicKey:
 # ---------------------------------------------------------------------------
 # Key sets (non-legacy suites)
 # ---------------------------------------------------------------------------
-KEYSET_FORMAT = "compact-kernel-keyset/1"
-PUBLIC_KEYSET_FORMAT = "compact-kernel-public-keyset/1"
+KEYSET_FORMAT = "two-key-keyset/1"
+PUBLIC_KEYSET_FORMAT = "two-key-public-keyset/1"
 PBKDF2_ITERATIONS = 600_000
 
 
@@ -139,7 +139,7 @@ def load_keyset(path: Path, passphrase: bytes | None = None, provider=None):
     provider = provider or default_provider()
     d = json.loads(Path(path).read_text(encoding="utf-8"))
     if d.get("format") != KEYSET_FORMAT:
-        raise ValueError("not a compact-kernel key bundle")
+        raise ValueError("not a two-key key bundle")
     enc = d.get("encryption")
     if enc:
         if not passphrase:
@@ -178,7 +178,7 @@ def load_public_any(path: Path, provider=None):
         return load_public_key(path)
     d = json.loads(data)
     if d.get("format") != PUBLIC_KEYSET_FORMAT:
-        raise ValueError("not a compact-kernel public key set")
+        raise ValueError("not a two-key public key set")
     pub = public_keyset_from_encoded(d["public_key"], provider)
     if pub.suite != d.get("suite"):
         raise ValueError("public key set suite mismatch")

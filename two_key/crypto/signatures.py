@@ -15,7 +15,7 @@ rejected. The verifier requires the suite of the TRUSTED key, so a
 signature made under a weaker suite is refused (no downgrade).
 
 For non-legacy suites each component signs the domain-separated message
-``b"compact-kernel/sig/v1\\0" + suite + b"\\0" + message``. That binds the
+``b"two-key/sig/v1\\0" + suite + b"\\0" + message``. That binds the
 suite name into every component, so a component cannot be lifted out of a
 hybrid signature and replayed as a standalone classic signature.
 
@@ -40,7 +40,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 
 from .provider import CryptoPolicyError, CryptoProvider, PQUnavailableError, default_provider
 
-DOMAIN = b"compact-kernel/sig/v1\x00"
+DOMAIN = b"two-key/sig/v1\x00"
 LEGACY_SUITE = "ed25519"
 SUITES: dict[str, tuple[str, ...]] = {
     "ed25519": ("ed25519",),

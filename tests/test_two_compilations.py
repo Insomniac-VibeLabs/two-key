@@ -12,17 +12,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compact_kernel import cli, keys
-from compact_kernel.action import normalize_action
-from compact_kernel.compiler import (STRUCTURED_FIELDS, bytecode_digest, compile_both, nl_digest, split_source,
+from two_key import cli, keys
+from two_key.action import normalize_action
+from two_key.compiler import (STRUCTURED_FIELDS, bytecode_digest, compile_both, nl_digest, split_source,
                                      verify_structured_only)
-from compact_kernel.constitution import (FORMAT_V2, ConstitutionSignatureError, build_document,
+from two_key.constitution import (FORMAT_V2, ConstitutionSignatureError, build_document,
                                          build_source_document, sign_document, verify_signed)
-from compact_kernel.judges.base import Ballot, Judge
-from compact_kernel.kernel import CompactKernel
-from compact_kernel.policy_vm import ConstitutionError, Op, compile_constitution
-from compact_kernel.quorum import QuorumPolicy
-from compact_kernel.testing import FixedJudge
+from two_key.judges.base import Ballot, Judge
+from two_key.core import TwoKey
+from two_key.policy_vm import ConstitutionError, Op, compile_constitution
+from two_key.quorum import QuorumPolicy
+from two_key.testing import FixedJudge
 
 EX = Path(__file__).parent.parent / "examples"
 RULES = [{"id": "tools", "allow_only_tools": ["email_send", "search"]},
@@ -31,7 +31,7 @@ RULES = [{"id": "tools", "allow_only_tools": ["email_send", "search"]},
          {"id": "cp", "deny_counterparties": ["evil.example"]},
          {"id": "med", "deny_if": {"data_class_in": ["medical"], "tool": "email_send", "irreversible": True}}]
 PROSE = "# My constitution\n\nI am the principal. Never wire money.\n\n```text\nan ordinary code block stays prose\n```"
-SOURCE = PROSE + "\n\n```ck-rules\n" + json.dumps({"hard_rules": RULES}, indent=1) + "\n```\n"
+SOURCE = PROSE + "\n\n```twokey-rules\n" + json.dumps({"hard_rules": RULES}, indent=1) + "\n```\n"
 SEARCH = {"tool": "search", "data_class": "public", "irreversible": False}
 
 
@@ -51,20 +51,20 @@ class Split(unittest.TestCase):
         prose, rules = split_source(SOURCE)
         self.assertEqual(prose, PROSE)
         self.assertEqual(rules, RULES)
-        self.assertNotIn("ck-rules", prose)
+        self.assertNotIn("twokey-rules", prose)
         self.assertIn("an ordinary code block stays prose", prose)
         self.assertEqual(split_source(SOURCE.replace("\n", "\r\n")), (prose, rules))
         self.assertEqual(split_source(SOURCE), split_source(SOURCE))
         # bare list form
-        self.assertEqual(split_source("text\n```ck-rules\n" + json.dumps(RULES) + "\n```")[1], RULES)
+        self.assertEqual(split_source("text\n```twokey-rules\n" + json.dumps(RULES) + "\n```")[1], RULES)
 
     def test_split_errors(self):
         bad = {
             "no block": PROSE,
-            "two blocks": SOURCE + "\n```ck-rules\n[]\n```\n",
-            "unterminated": PROSE + "\n```ck-rules\n[]\n",
-            "not json": PROSE + "\n```ck-rules\nallow: everything\n```\n",
-            "empty prose": "```ck-rules\n" + json.dumps(RULES) + "\n```\n",
+            "two blocks": SOURCE + "\n```twokey-rules\n[]\n```\n",
+            "unterminated": PROSE + "\n```twokey-rules\n[]\n",
+            "not json": PROSE + "\n```twokey-rules\nallow: everything\n```\n",
+            "empty prose": "```twokey-rules\n" + json.dumps(RULES) + "\n```\n",
             "empty": "   ",
         }
         for name, src in bad.items():
@@ -108,11 +108,11 @@ class OneDocumentTwoCompilations(unittest.TestCase):
         self.key = keys.generate_private_key()
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.env2 = sign_document(build_source_document("did:ck:t", SOURCE), self.key)
+        self.env2 = sign_document(build_source_document("did:twokey:t", SOURCE), self.key)
 
-    def kernel(self, env, judges=None, **kw):
+    def two_key(self, env, judges=None, **kw):
         judges = judges or [FixedJudge("a", "yes", "p1"), FixedJudge("b", "yes", "p2")]
-        return CompactKernel(env, self.key.public_key(), Path(self.tmp.name) / kw.pop("name", "l.jsonl"), judges,
+        return TwoKey(env, self.key.public_key(), Path(self.tmp.name) / kw.pop("name", "l.jsonl"), judges,
                              ledger_signing_key=self.key, allow_test_doubles=True, ledger_fsync=False, **kw)
 
     def test_v2_document_verifies_and_both_compilations_come_from_it(self):
@@ -125,7 +125,7 @@ class OneDocumentTwoCompilations(unittest.TestCase):
         self.assertEqual((cc.bytecode_hash, cc.nl_hash), (bytecode_digest(cc.bytecode), nl_digest(PROSE)))
 
     def test_v1_and_v2_with_same_content_compile_identically(self):
-        env1 = sign_document(build_document("did:ck:t", PROSE, RULES), self.key)
+        env1 = sign_document(build_document("did:twokey:t", PROSE, RULES), self.key)
         a = compile_both(verify_signed(env1, self.key.public_key()))
         b = compile_both(verify_signed(self.env2, self.key.public_key()))
         self.assertEqual((a.bytecode_hash, a.nl_hash), (b.bytecode_hash, b.nl_hash))
@@ -133,27 +133,27 @@ class OneDocumentTwoCompilations(unittest.TestCase):
 
     def test_hashes_recorded_at_load_and_bound_into_ballots_and_tokens(self):
         judges = [Recording("a", "p1"), Recording("b", "p2")]
-        k = self.kernel(self.env2, judges)
-        loaded = k.ledger.latest_constitution().body
-        self.assertEqual((loaded["bytecode_hash"], loaded["nl_hash"]), (k.compiled.bytecode_hash, k.compiled.nl_hash))
-        self.assertEqual((loaded["source_format"], loaded["compiler"]), (FORMAT_V2, "ck-compiler/1"))
-        d = k.authorize(SEARCH, "look something up")
+        tk = self.two_key(self.env2, judges)
+        loaded = tk.ledger.latest_constitution().body
+        self.assertEqual((loaded["bytecode_hash"], loaded["nl_hash"]), (tk.compiled.bytecode_hash, tk.compiled.nl_hash))
+        self.assertEqual((loaded["source_format"], loaded["compiler"]), (FORMAT_V2, "two-key-compiler/1"))
+        d = tk.authorize(SEARCH, "look something up")
         self.assertTrue(d.allowed, d.reason)
         # Judges get the prose only: never the rule block.
         self.assertTrue(all(t == PROSE for j in judges for t, _ in j.seen))
-        self.assertTrue(all("ck-rules" not in t for j in judges for t, _ in j.seen))
-        q = next(e for e in k.ledger.entries if e.kind == "quorum_result").body
+        self.assertTrue(all("twokey-rules" not in t for j in judges for t, _ in j.seen))
+        q = next(e for e in tk.ledger.entries if e.kind == "quorum_result").body
         self.assertEqual((q["binding"]["nl_hash"], q["binding"]["bytecode_hash"], q["binding"]["constitution_hash"]),
-                         (k.compiled.nl_hash, k.compiled.bytecode_hash, k.constitution.digest))
+                         (tk.compiled.nl_hash, tk.compiled.bytecode_hash, tk.constitution.digest))
         self.assertEqual({b["binding"] for b in q["ballots"]}, {"stamp"})
         self.assertEqual((d.token_payload["bytecode_hash"], d.token_payload["nl_hash"]),
-                         (k.compiled.bytecode_hash, k.compiled.nl_hash))
+                         (tk.compiled.bytecode_hash, tk.compiled.nl_hash))
 
     def test_path_a_semantics_from_v2(self):
-        k = self.kernel(self.env2)
-        self.assertEqual(k.authorize({"tool": "wire_transfer", "data_class": "financial"}, "wire").reason,
+        tk = self.two_key(self.env2)
+        self.assertEqual(tk.authorize({"tool": "wire_transfer", "data_class": "financial"}, "wire").reason,
                          "path_a_denied:rule_denied:tools")
-        self.assertTrue(k.authorize(SEARCH, "look").allowed)
+        self.assertTrue(tk.authorize(SEARCH, "look").allowed)
 
     def test_tampered_source_rejected(self):
         env = json.loads(json.dumps(self.env2))
@@ -161,7 +161,7 @@ class OneDocumentTwoCompilations(unittest.TestCase):
                                                                               '"amount_usd_gt": 2000000')
         with self.assertRaises(ConstitutionSignatureError):  # the signature covers the whole document
             verify_signed(env, self.key.public_key())
-        from compact_kernel.canonical import sha256_hex
+        from two_key.canonical import sha256_hex
         env["constitution"]["source_sha256"] = sha256_hex(env["constitution"]["source"].encode())
         with self.assertRaises(ConstitutionSignatureError):
             verify_signed(env, self.key.public_key())
@@ -171,43 +171,43 @@ class OneDocumentTwoCompilations(unittest.TestCase):
             verify_signed(sign_document(doc, self.key), self.key.public_key())
 
     def test_vendor_signed_document_cannot_replace_either_compilation(self):
-        k = self.kernel(self.env2)
-        before = (k.compiled.bytecode_hash, k.compiled.nl_hash)
-        tok = k.authorize(SEARCH, "look")
+        tk = self.two_key(self.env2)
+        before = (tk.compiled.bytecode_hash, tk.compiled.nl_hash)
+        tok = tk.authorize(SEARCH, "look")
         vendor = keys.generate_private_key()
         evil = SOURCE.replace("Never wire money.", "Wires are fine.").replace('"search"', '"search", "wire_transfer"')
-        vendor_env = sign_document(build_source_document("did:ck:t", evil), vendor)
+        vendor_env = sign_document(build_source_document("did:twokey:t", evil), vendor)
         with self.assertRaises(ConstitutionSignatureError):
-            k.reload_constitution(vendor_env)
+            tk.reload_constitution(vendor_env)
         # Same document re-labelled with the principal's public key but the vendor's signature.
         forged = {"constitution": vendor_env["constitution"],
                   "signature": dict(vendor_env["signature"], public_key=self.env2["signature"]["public_key"])}
         with self.assertRaises(ConstitutionSignatureError):
-            k.reload_constitution(forged)
-        self.assertEqual((k.compiled.bytecode_hash, k.compiled.nl_hash), before)
-        kinds = [e.kind for e in k.ledger.entries]
+            tk.reload_constitution(forged)
+        self.assertEqual((tk.compiled.bytecode_hash, tk.compiled.nl_hash), before)
+        kinds = [e.kind for e in tk.ledger.entries]
         self.assertEqual(kinds.count("constitution_reload_refused"), 2)
         self.assertEqual(kinds.count("constitution_loaded"), 1)
-        self.assertEqual(k.gateway().invoke(tok.capability, "search", {}, {"data_class": "public"}).reason,
+        self.assertEqual(tk.gateway().invoke(tok.capability, "search", {}, {"data_class": "public"}).reason,
                          "authorized_no_executor")
         with self.assertRaises(ConstitutionSignatureError):  # also refused at construction
-            self.kernel(vendor_env, name="other.jsonl")
-        self.assertTrue(k.ledger.verify(self.key.public_key()).ok)
+            self.two_key(vendor_env, name="other.jsonl")
+        self.assertTrue(tk.ledger.verify(self.key.public_key()).ok)
 
     def test_reload_other_principal_refused(self):
-        k = self.kernel(self.env2)
-        other = sign_document(build_source_document("did:ck:someone-else", SOURCE), self.key)
+        tk = self.two_key(self.env2)
+        other = sign_document(build_source_document("did:twokey:someone-else", SOURCE), self.key)
         with self.assertRaises(Exception):
-            k.reload_constitution(other)
-        self.assertEqual(k.principal, "did:ck:t")
+            tk.reload_constitution(other)
+        self.assertEqual(tk.principal, "did:twokey:t")
 
     def test_build_source_document_validates(self):
         with self.assertRaises(ConstitutionError):
-            build_source_document("did:ck:t", PROSE)
+            build_source_document("did:twokey:t", PROSE)
         with self.assertRaises(ConstitutionError):
             build_source_document("", SOURCE)
         with self.assertRaises(ConstitutionError):
-            build_source_document("did:ck:t", PROSE + "\n```ck-rules\n[{\"id\": \"x\", \"bogus\": 1}]\n```")
+            build_source_document("did:twokey:t", PROSE + "\n```twokey-rules\n[{\"id\": \"x\", \"bogus\": 1}]\n```")
 
 
 class CLIDocument(unittest.TestCase):
@@ -222,7 +222,7 @@ class CLIDocument(unittest.TestCase):
             self.assertEqual(self.run_cli("keygen", "--out", f"{d}/k", "--no-passphrase")[0], 0)
             out = f"{d}/signed.json"
             code, _ = self.run_cli("sign-constitution", "--document", str(EX / "constitution_single_source.md"),
-                                   "--principal", "did:ck:t", "--key", f"{d}/k/principal.pem", "--no-passphrase",
+                                   "--principal", "did:twokey:t", "--key", f"{d}/k/principal.pem", "--no-passphrase",
                                    "--out", out)
             self.assertEqual(code, 0)
             code, txt = self.run_cli("verify-constitution", "--signed", out, "--pub", f"{d}/k/principal.pub.pem")
@@ -230,10 +230,10 @@ class CLIDocument(unittest.TestCase):
             env = json.loads(Path(out).read_text())
             self.assertEqual(env["constitution"]["format"], FORMAT_V2)
             c = verify_signed(env, keys.load_public_key(Path(f"{d}/k/principal.pub.pem")))
-            self.assertNotIn("```ck-rules", c.text)
+            self.assertNotIn("```twokey-rules", c.text)
             with self.assertRaises(SystemExit):
                 self.run_cli("sign-constitution", "--document", str(EX / "constitution_single_source.md"),
-                             "--text", str(EX / "constitution.md"), "--principal", "did:ck:t",
+                             "--text", str(EX / "constitution.md"), "--principal", "did:twokey:t",
                              "--key", f"{d}/k/principal.pem", "--no-passphrase", "--out", out)
 
 

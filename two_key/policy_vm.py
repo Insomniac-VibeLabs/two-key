@@ -1,5 +1,5 @@
 """
-Compact Kernel: Path A, the deterministic Policy VM
+Two-Key: Path A, the deterministic Policy VM
 ===================================================
 A tiny stack machine that evaluates the principal's hard constraints.
 The constitution's hard rules are compiled ahead of time into bytecode.

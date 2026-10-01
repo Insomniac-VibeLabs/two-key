@@ -14,14 +14,14 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from compact_kernel.capability import CapabilityIssuer, TokenError
-from compact_kernel.cli import main as cli_main
-from compact_kernel.constitution import ConstitutionSignatureError, build_document, sign_document, verify_signed
-from compact_kernel.crypto import PQUnavailableError, PrivateKeySet, PublicKeySet
-from compact_kernel.crypto.signatures import _Ed25519, public_keyset_from_encoded
-from compact_kernel.kernel import CompactKernel
-from compact_kernel.ledger import PersonalLedger
-from compact_kernel.testing import FixedJudge
+from two_key.capability import CapabilityIssuer, TokenError
+from two_key.cli import main as cli_main
+from two_key.constitution import ConstitutionSignatureError, build_document, sign_document, verify_signed
+from two_key.crypto import PQUnavailableError, PrivateKeySet, PublicKeySet
+from two_key.crypto.signatures import _Ed25519, public_keyset_from_encoded
+from two_key.core import TwoKey
+from two_key.ledger import PersonalLedger
+from two_key.testing import FixedJudge
 from crypto_helpers import PQ, decode_sig, encode_sig, flip_component
 from helpers import DEFAULT_TEXT
 
@@ -99,7 +99,7 @@ class HybridConstitutionLedgerTokens(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.d = Path(self.tmp.name)
         self.ks = PrivateKeySet.generate("hybrid-mldsa65-ed25519")
-        self.env = sign_document(build_document("did:ck:t", DEFAULT_TEXT, RULES), self.ks)
+        self.env = sign_document(build_document("did:twokey:t", DEFAULT_TEXT, RULES), self.ks)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -151,25 +151,25 @@ class HybridConstitutionLedgerTokens(unittest.TestCase):
         L.head_path.write_text(json.dumps(h))
         self.assertEqual(PersonalLedger(self.d / "l.jsonl").verify(self.ks.public()).reason, "head_suite_mismatch")
 
-    def test_kernel_end_to_end_require_pq(self):
-        k = CompactKernel(self.env, self.ks.public(), self.d / "k.jsonl", YES, ledger_signing_key=self.ks,
+    def test_two_key_end_to_end_require_pq(self):
+        tk = TwoKey(self.env, self.ks.public(), self.d / "k.jsonl", YES, ledger_signing_key=self.ks,
                           allow_test_doubles=True, require_pq=True)
-        self.assertEqual(k.crypto_profile()["pq_backend"]["backend"], "pyca-cryptography")
-        dec = k.authorize(PAY, "Pay.", PAY_ARGS)
+        self.assertEqual(tk.crypto_profile()["pq_backend"]["backend"], "pyca-cryptography")
+        dec = tk.authorize(PAY, "Pay.", PAY_ARGS)
         self.assertTrue(dec.allowed, dec.reason)
         self.assertEqual(len(dec.token_payload["args_hash"]), 96)
         self.assertEqual(len(dec.token_payload["constitution_digest"]), 96)
-        r = k.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
+        r = tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
         self.assertEqual(r.reason, "authorized_no_executor")
         self.assertEqual(PersonalLedger(self.d / "k.jsonl").verify(self.ks.public()).reason, "ok")
 
     def test_signed_capability_tokens(self):
         tk = PrivateKeySet.generate("hybrid-mldsa65-ed25519")
-        issuer = CapabilityIssuer(mode="ck1-sig", signing_key=tk)
-        verifier = CapabilityIssuer(mode="ck1-sig", verify_key=tk.public())  # gateway side: no signing key
+        issuer = CapabilityIssuer(mode="tk1-sig", signing_key=tk)
+        verifier = CapabilityIssuer(mode="tk1-sig", verify_key=tk.public())  # gateway side: no signing key
         cap = issuer.issue(principal="p", tool="t", scope={}, args_digest="h", ledger_root="r",
                            constitution_digest="c", ttl_seconds=30)
-        self.assertTrue(cap.token.startswith("ck1-sig."))
+        self.assertTrue(cap.token.startswith("tk1-sig."))
         self.assertEqual(verifier.verify(cap.token)["jti"], cap.payload["jti"])
         prefix, body, tag = cap.token.split(".")
         raw = bytearray(base64.urlsafe_b64decode(tag + "=" * (-len(tag) % 4)))
@@ -184,32 +184,32 @@ class HybridConstitutionLedgerTokens(unittest.TestCase):
             verifier.verify(mac_tok.token)
         self.assertEqual(cm.exception.reason, "unsupported_token_version")
 
-    def test_kernel_with_signed_tokens(self):
+    def test_two_key_with_signed_tokens(self):
         tk = PrivateKeySet.generate("hybrid-mldsa65-ed25519")
-        k = CompactKernel(self.env, self.ks.public(), self.d / "k.jsonl", YES, ledger_signing_key=self.ks,
-                          allow_test_doubles=True, token_mode="ck1-sig", token_signing_key=tk)
-        dec = k.authorize(PAY, "Pay.", PAY_ARGS)
-        self.assertTrue(dec.capability.startswith("ck1-sig."))
-        self.assertEqual(k.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
+        tk = TwoKey(self.env, self.ks.public(), self.d / "k.jsonl", YES, ledger_signing_key=self.ks,
+                          allow_test_doubles=True, token_mode="tk1-sig", token_signing_key=tk)
+        dec = tk.authorize(PAY, "Pay.", PAY_ARGS)
+        self.assertTrue(dec.capability.startswith("tk1-sig."))
+        self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
                          "authorized_no_executor")
 
     def test_cli_hybrid_keygen_sign_verify(self):
-        os.environ["CK_TEST_PASS"] = "test-only passphrase"
+        os.environ["TWOKEY_TEST_PASS"] = "test-only passphrase"
         try:
             ex = Path(__file__).resolve().parent.parent / "examples"
             out = io.StringIO()
             with redirect_stdout(out):
                 self.assertEqual(cli_main(["keygen", "--out", str(self.d / "k"), "--suite", "hybrid-mldsa65-p384",
-                                           "--passphrase-env", "CK_TEST_PASS"]), 0)
+                                           "--passphrase-env", "TWOKEY_TEST_PASS"]), 0)
                 self.assertEqual(cli_main(["sign-constitution", "--text", str(ex / "constitution.md"),
-                                           "--rules", str(ex / "hard_rules.json"), "--principal", "did:ck:t",
+                                           "--rules", str(ex / "hard_rules.json"), "--principal", "did:twokey:t",
                                            "--key", str(self.d / "k" / "principal.keys.json"),
-                                           "--out", str(self.d / "s.json"), "--passphrase-env", "CK_TEST_PASS"]), 0)
+                                           "--out", str(self.d / "s.json"), "--passphrase-env", "TWOKEY_TEST_PASS"]), 0)
                 self.assertEqual(cli_main(["verify-constitution", "--signed", str(self.d / "s.json"),
                                            "--pub", str(self.d / "k" / "principal.pub.json")]), 0)
             self.assertIn("digest=sha384:", out.getvalue())
         finally:
-            del os.environ["CK_TEST_PASS"]
+            del os.environ["TWOKEY_TEST_PASS"]
 
 
 @unittest.skipIf(PQ, "an ML-DSA backend is installed")

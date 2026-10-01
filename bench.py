@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compact Kernel micro-benchmarks (offline; no network).
+"""Two-Key micro-benchmarks (offline; no network).
 
     python bench.py                 # full run, prints a Markdown table
     python bench.py --quick         # fewer iterations
@@ -37,16 +37,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from compact_kernel import keys  # noqa: E402
-from compact_kernel.action import normalize_action  # noqa: E402
-from compact_kernel.capability import CapabilityIssuer, args_hash  # noqa: E402
-from compact_kernel.constitution import build_document, sign_document, verify_signed  # noqa: E402
-from compact_kernel.crypto import CryptoProvider, PrivateKeySet, openssl_fips_status  # noqa: E402
-from compact_kernel.judges.base import Ballot, Judge  # noqa: E402
-from compact_kernel.kernel import CompactKernel  # noqa: E402
-from compact_kernel.ledger import PersonalLedger  # noqa: E402
-from compact_kernel.quorum import QuorumPolicy, convene  # noqa: E402
-from compact_kernel.testing import FixedJudge  # noqa: E402
+from two_key import keys  # noqa: E402
+from two_key.action import normalize_action  # noqa: E402
+from two_key.capability import CapabilityIssuer, args_hash  # noqa: E402
+from two_key.constitution import build_document, sign_document, verify_signed  # noqa: E402
+from two_key.crypto import CryptoProvider, PrivateKeySet, openssl_fips_status  # noqa: E402
+from two_key.judges.base import Ballot, Judge  # noqa: E402
+from two_key.core import TwoKey  # noqa: E402
+from two_key.ledger import PersonalLedger  # noqa: E402
+from two_key.quorum import QuorumPolicy, convene  # noqa: E402
+from two_key.testing import FixedJudge  # noqa: E402
 
 RULES = json.loads((Path(__file__).resolve().parent / "examples" / "hard_rules.json").read_text())["hard_rules"]
 TEXT = "I am the principal. The agent is my fiduciary. No wires. No medical data off-device."
@@ -116,21 +116,21 @@ class SleepJudge(Judge):
 
 
 def rss_child(suite: str, n: int) -> int:
-    """Run in a fresh process: kernel + n authorize/invoke cycles for one suite; print peak RSS (MiB)."""
+    """Run in a fresh process: TwoKey + n authorize/invoke cycles for one suite; print peak RSS (MiB)."""
     base = rss_mb()
     with tempfile.TemporaryDirectory() as dd:
         ks = PrivateKeySet.generate(suite) if suite != "ed25519" else keys.generate_private_key()
         pub = ks.public() if suite != "ed25519" else ks.public_key()
-        env = sign_document(build_document("did:ck:bench", TEXT, RULES), ks)
-        kk = CompactKernel(env, pub, Path(dd) / "k.jsonl",
+        env = sign_document(build_document("did:twokey:bench", TEXT, RULES), ks)
+        tk = TwoKey(env, pub, Path(dd) / "k.jsonl",
                            [FixedJudge("a", "yes", "p1"), FixedJudge("b", "yes", "p2"), FixedJudge("c", "yes", "p3")],
                            ledger_signing_key=ks, allow_test_doubles=True, ledger_fsync=False)
-        gw = kk.gateway(tools={"pay_bill": lambda **a: "paid"})
+        gw = tk.gateway(tools={"pay_bill": lambda **a: "paid"})
         for _ in range(n):
-            dd_ = kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS)
+            dd_ = tk.authorize(PAY, "Pay the electric bill.", PAY_ARGS)
             gw.invoke(dd_.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
         print(json.dumps({"suite": suite, "imports_rss_mib": round(base, 1), "peak_rss_mib": round(rss_mb(), 1),
-                          "ledger_entries": len(kk.ledger.entries)}))
+                          "ledger_entries": len(tk.ledger.entries)}))
     return 0
 
 
@@ -172,23 +172,23 @@ def main() -> int:
 
     # ---- Path A ----------------------------------------------------------------
     ks0 = keys.generate_private_key()
-    env0 = sign_document(build_document("did:ck:bench", TEXT, RULES), ks0)
-    k = CompactKernel(env0, ks0.public_key(), d / "a.jsonl", [FixedJudge("a", "yes", "p1"), FixedJudge("b", "yes", "p2")],
+    env0 = sign_document(build_document("did:twokey:bench", TEXT, RULES), ks0)
+    tk = TwoKey(env0, ks0.public_key(), d / "a.jsonl", [FixedJudge("a", "yes", "p1"), FixedJudge("b", "yes", "p2")],
                       ledger_signing_key=ks0, allow_test_doubles=True, ledger_fsync=False)
     act = normalize_action(PAY)
-    add("Path A", f"PolicyVM.eval ({len(k.bytecode)} instr, {len(RULES)} rules, allow)", timeit(lambda: k.vm.eval(act), N * 5))
+    add("Path A", f"PolicyVM.eval ({len(tk.bytecode)} instr, {len(RULES)} rules, allow)", timeit(lambda: tk.vm.eval(act), N * 5))
     bad = normalize_action(dict(PAY, amount_usd=500))
-    add("Path A", "PolicyVM.eval (deny: spend-cap)", timeit(lambda: k.vm.eval(bad), N * 5))
+    add("Path A", "PolicyVM.eval (deny: spend-cap)", timeit(lambda: tk.vm.eval(bad), N * 5))
     add("Path A", "normalize_action (input validation)", timeit(lambda: normalize_action(PAY), N * 5))
 
     # ---- tokens ------------------------------------------------------------------
-    issuers = [("ck1 (HMAC-SHA-256)", CapabilityIssuer(os.urandom(32), mode="ck1")),
-               ("ck1-hs384 (HMAC-SHA-384)", CapabilityIssuer(os.urandom(48), mode="ck1-hs384"))]
+    issuers = [("tk1 (HMAC-SHA-256)", CapabilityIssuer(os.urandom(32), mode="tk1")),
+               ("tk1-hs384 (HMAC-SHA-384)", CapabilityIssuer(os.urandom(48), mode="tk1-hs384"))]
     if pq is not None:
-        issuers.append(("ck1-sig (hybrid ML-DSA-65+Ed25519)",
-                        CapabilityIssuer(mode="ck1-sig", signing_key=PrivateKeySet.generate("hybrid-mldsa65-ed25519"))))
+        issuers.append(("tk1-sig (hybrid ML-DSA-65+Ed25519)",
+                        CapabilityIssuer(mode="tk1-sig", signing_key=PrivateKeySet.generate("hybrid-mldsa65-ed25519"))))
     for name, iss in issuers:
-        issue = lambda iss=iss: iss.issue(principal="did:ck:bench", tool="pay_bill", scope=PAY_FIELDS,  # noqa: E731
+        issue = lambda iss=iss: iss.issue(principal="did:twokey:bench", tool="pay_bill", scope=PAY_FIELDS,  # noqa: E731
                                           args_digest="0" * 64, ledger_root="0" * 64, constitution_digest="0" * 64,
                                           ttl_seconds=30)
         n = NS if "sig" in name else N
@@ -229,7 +229,7 @@ def main() -> int:
     add("Ledger", "merkle_root() on a 10,000-entry ledger (incremental)", timeit(big.merkle_root, N))
     if hasattr(big, "consistency_proof"):  # §4 (i) additions (absent in older revisions)
         import random
-        from compact_kernel import merkle as _mk
+        from two_key import merkle as _mk
         rnd = random.Random(1)
         h = big.hash_fn()
         new_root = big.root_bytes()
@@ -251,71 +251,71 @@ def main() -> int:
     for s in suites:
         for fsync in (False, True):
             ks = PrivateKeySet.generate(s) if s != "ed25519" else keys.generate_private_key()
-            env = sign_document(build_document("did:ck:bench", TEXT, RULES), ks)
+            env = sign_document(build_document("did:twokey:bench", TEXT, RULES), ks)
             pub = ks.public() if s != "ed25519" else ks.public_key()
-            kk = CompactKernel(env, pub, d / f"k-{s}-{fsync}.jsonl",
+            tk = TwoKey(env, pub, d / f"k-{s}-{fsync}.jsonl",
                                [FixedJudge("a", "yes", "p1"), FixedJudge("b", "yes", "p2"), FixedJudge("c", "yes", "p3")],
                                ledger_signing_key=ks, allow_test_doubles=True, ledger_fsync=fsync)
-            gw = kk.gateway(tools={"pay_bill": lambda **a: "paid"})
+            gw = tk.gateway(tools={"pay_bill": lambda **a: "paid"})
             n = NS // 4 if fsync else NS // 2
-            decs = [kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
+            decs = [tk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
             assert all(x.allowed for x in decs)
             it = iter(decs)
             fs = "on" if fsync else "off"
             add("Gateway", f"invoke (all checks + redeem + tool + signed head), {s}, fsync={fs}",
                 timeit(lambda: gw.invoke(next(it).capability, "pay_bill", PAY_ARGS, PAY_FIELDS), n, warmup=5))
             if s == "ed25519" and not fsync:
-                gw0 = kk.gateway(tools={"pay_bill": lambda **a: "paid"}, checkpoint_every=0)
-                decs = [kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
+                gw0 = tk.gateway(tools={"pay_bill": lambda **a: "paid"}, checkpoint_every=0)
+                decs = [tk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
                 it0 = iter(decs)
                 add("Gateway", "invoke, head signing deferred (checkpoint_every=0), fsync=off",
                     timeit(lambda: gw0.invoke(next(it0).capability, "pay_bill", PAY_ARGS, PAY_FIELDS), n, warmup=5))
-                kk.ledger.checkpoint()
-                decs = [kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
+                tk.ledger.checkpoint()
+                decs = [tk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
                 it1 = iter(decs)
                 a_ = act
 
                 def checks_only():
                     tok = next(it1).capability
-                    p_ = kk.issuer.verify(tok)
+                    p_ = tk.issuer.verify(tok)
                     args_hash("pay_bill", PAY_ARGS) == p_["args_hash"] and normalize_action(
-                        {"tool": "pay_bill", **PAY_FIELDS}) and kk.ledger.index_of(p_["ledger_root"])
+                        {"tool": "pay_bill", **PAY_FIELDS}) and tk.ledger.index_of(p_["ledger_root"])
                 add("Gateway", "checks only: token verify + args hash + field normalize + root lookup",
                     timeit(checks_only, n, warmup=5))
                 if hasattr(gw0, "_check_ledger_binding"):
-                    decs = [kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
+                    decs = [tk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
                     it2 = iter(decs)
 
                     def binding_only():
                         # each token is newer than the view by one decision (8 entries), as in real use
-                        p_ = kk.issuer.verify(next(it2).capability)
+                        p_ = tk.issuer.verify(next(it2).capability)
                         assert gw0._view_intact() and gw0._check_ledger_binding(p_)[0] is None
                     add("Gateway", "§4 (i) binding checks only: token verify + view check + 1 consistency proof "
                         "+ hash/revocation lookups", timeit(binding_only, n, warmup=5))
-                    kk.ledger.checkpoint()
+                    tk.ledger.checkpoint()
             add("Authorize", f"authorize (A + B[3 local judges] + token + ledger), {s}, fsync={fs}",
-                timeit(lambda: kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS), n, warmup=5))
+                timeit(lambda: tk.authorize(PAY, "Pay the electric bill.", PAY_ARGS), n, warmup=5))
             if s == "ed25519" and not fsync:
                 for _ in range(10_000):  # long ledger: the §4 (i) proofs are O(log^2 n)
-                    kk.ledger.append("filler", {"i": 1})
-                kk.ledger.checkpoint()
-                gwl = kk.gateway(tools={"pay_bill": lambda **a: "paid"})
-                decs = [kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
+                    tk.ledger.append("filler", {"i": 1})
+                tk.ledger.checkpoint()
+                gwl = tk.gateway(tools={"pay_bill": lambda **a: "paid"})
+                decs = [tk.authorize(PAY, "Pay the electric bill.", PAY_ARGS) for _ in range(n + 5)]
                 itl = iter(decs)
-                add("Gateway", f"invoke on a ledger with >10,000 entries ({len(kk.ledger.entries)}), {s}, fsync=off",
+                add("Gateway", f"invoke on a ledger with >10,000 entries ({len(tk.ledger.entries)}), {s}, fsync=off",
                     timeit(lambda: gwl.invoke(next(itl).capability, "pay_bill", PAY_ARGS, PAY_FIELDS), n, warmup=5))
                 add("Authorize", f"authorize on a ledger with >10,000 entries, {s}, fsync=off",
-                    timeit(lambda: kk.authorize(PAY, "Pay the electric bill.", PAY_ARGS), n, warmup=5))
+                    timeit(lambda: tk.authorize(PAY, "Pay the electric bill.", PAY_ARGS), n, warmup=5))
             if not fsync:
-                mem.append((f"kernel construction incl. self-test, {s} (tracemalloc)",
-                            f"{traced_peak_kib(lambda: CompactKernel(env, pub, d / f'm-{s}.jsonl', [FixedJudge('a', 'yes')], ledger_signing_key=ks, allow_test_doubles=True, quorum_policy=QuorumPolicy(required_yes=1), crypto=CryptoProvider())):.1f} KiB"))
+                mem.append((f"TwoKey construction incl. self-test, {s} (tracemalloc)",
+                            f"{traced_peak_kib(lambda: TwoKey(env, pub, d / f'm-{s}.jsonl', [FixedJudge('a', 'yes')], ledger_signing_key=ks, allow_test_doubles=True, quorum_policy=QuorumPolicy(required_yes=1), crypto=CryptoProvider())):.1f} KiB"))
 
     # ---- constitution load (not on the hot path) -------------------------------------------
     try:
-        from compact_kernel.compiler import compile_both
-        from compact_kernel.constitution import build_source_document
+        from two_key.compiler import compile_both
+        from two_key.constitution import build_source_document
         src = (Path(__file__).resolve().parent / "examples" / "constitution_single_source.md").read_text()
-        env2 = sign_document(build_source_document("did:ck:bench", src), ks0)
+        env2 = sign_document(build_source_document("did:twokey:bench", src), ks0)
         add("Constitution", "verify_signed + split (single-source /2 document, Ed25519)",
             timeit(lambda: verify_signed(env2, ks0.public_key()), N // 4))
         c2 = verify_signed(env2, ks0.public_key())

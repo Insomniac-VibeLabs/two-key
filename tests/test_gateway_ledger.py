@@ -5,14 +5,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compact_kernel import keys
-from compact_kernel.anchoring import LocalFileAnchor, NullAnchor
-from compact_kernel.capability import CapabilityIssuer, _b64u, _b64u_dec
-from compact_kernel.kernel import CompactKernel
-from compact_kernel.ledger import LedgerError, PersonalLedger
-from compact_kernel.quorum import QuorumPolicy
-from compact_kernel.testing import FixedJudge
-from helpers import KernelFixture, signed
+from two_key import keys
+from two_key.anchoring import LocalFileAnchor, NullAnchor
+from two_key.capability import CapabilityIssuer, _b64u, _b64u_dec
+from two_key.core import TwoKey
+from two_key.ledger import LedgerError, PersonalLedger
+from two_key.quorum import QuorumPolicy
+from two_key.testing import FixedJudge
+from helpers import TwoKeyFixture, signed
 
 RULES = [
     {"id": "tools", "allow_only_tools": ["email_send", "pay_bill", "search"]},
@@ -37,20 +37,20 @@ class Clock:
 class GatewayChecks(unittest.TestCase):
     def setUp(self):
         self.clock = Clock()
-        self.fx = KernelFixture(RULES, YES, quorum_policy=QuorumPolicy(required_yes=2), clock=self.clock,
+        self.fx = TwoKeyFixture(RULES, YES, quorum_policy=QuorumPolicy(required_yes=2), clock=self.clock,
                                 ttl_seconds=30)
-        self.k = self.fx.__enter__()
+        self.tk = self.fx.__enter__()
         self.calls = []
-        self.gw = self.k.gateway(tools={"pay_bill": lambda **a: self.calls.append(a) or "paid",
+        self.gw = self.tk.gateway(tools={"pay_bill": lambda **a: self.calls.append(a) or "paid",
                                         "email_send": lambda **a: "sent"})
-        self.d = self.k.authorize(PAY, "Pay the electric bill.", PAY_ARGS)
+        self.d = self.tk.authorize(PAY, "Pay the electric bill.", PAY_ARGS)
         self.assertTrue(self.d.allowed, self.d.reason)
 
     def tearDown(self):
         self.fx.__exit__(None, None, None)
 
     def test_full_token_returned_and_redeemable_once(self):
-        self.assertTrue(self.d.capability.startswith("ck1.") and self.d.capability.count(".") == 2)
+        self.assertTrue(self.d.capability.startswith("tk1.") and self.d.capability.count(".") == 2)
         r = self.gw.invoke(self.d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
         self.assertEqual((r.allowed, r.reason, r.result), (True, "executed", "paid"))
         self.assertEqual(self.calls, [PAY_ARGS])
@@ -92,12 +92,12 @@ class GatewayChecks(unittest.TestCase):
         self.assertTrue(self.gw.invoke(self.d.capability, "pay_bill", PAY_ARGS).reason.startswith("invalid_call"))
 
     def test_extractor_hook(self):
-        gw = self.k.gateway(extractors={"pay_bill": lambda a: {"amount_usd": a["amount"], "counterparty": a["payee"],
+        gw = self.tk.gateway(extractors={"pay_bill": lambda a: {"amount_usd": a["amount"], "counterparty": a["payee"],
                                                                "data_class": "financial"}})
         self.assertTrue(gw.invoke(self.d.capability, "pay_bill", PAY_ARGS).allowed)
 
     def test_extractor_disagreement_denied(self):
-        gw = self.k.gateway(extractors={"pay_bill": lambda a: {"amount_usd": a["amount"], "counterparty": a["payee"],
+        gw = self.tk.gateway(extractors={"pay_bill": lambda a: {"amount_usd": a["amount"], "counterparty": a["payee"],
                                                                "data_class": "financial"}})
         r = gw.invoke(self.d.capability, "pay_bill", PAY_ARGS, dict(PAY_FIELDS, amount_usd=1))
         self.assertTrue(r.reason.startswith("invalid_call"))
@@ -115,65 +115,65 @@ class GatewayChecks(unittest.TestCase):
 
     def test_token_from_other_issuer_rejected(self):
         other = CapabilityIssuer(clock=self.clock).issue(
-            principal=self.k.principal, tool="pay_bill", scope=self.d.token_payload["scope"],
-            args_digest=self.d.token_payload["args_hash"], ledger_root=self.k.ledger.root(),
+            principal=self.tk.principal, tool="pay_bill", scope=self.d.token_payload["scope"],
+            args_digest=self.d.token_payload["args_hash"], ledger_root=self.tk.ledger.root(),
             constitution_digest="x", ttl_seconds=30)
         self.assertEqual(self.gw.invoke(other.token, "pay_bill", PAY_ARGS, PAY_FIELDS).reason, "bad_signature")
 
     def test_ledger_root_must_be_known_ancestor(self):
-        tok = self.k.issuer.issue(principal=self.k.principal, tool="pay_bill", scope=self.d.token_payload["scope"],
+        tok = self.tk.issuer.issue(principal=self.tk.principal, tool="pay_bill", scope=self.d.token_payload["scope"],
                                   args_digest=self.d.token_payload["args_hash"], ledger_root="ab" * 32,
                                   constitution_digest="x", ttl_seconds=30)
         self.assertEqual(self.gw.invoke(tok.token, "pay_bill", PAY_ARGS, PAY_FIELDS).reason, "unknown_ledger_root")
 
     def test_ancestor_root_accepted(self):
         # Later ledger activity doesn't invalidate the token: its root is an ancestor of the current head.
-        self.k.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "look something up")
-        self.assertNotEqual(self.k.ledger.root(), self.d.token_payload["ledger_root"])
+        self.tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "look something up")
+        self.assertNotEqual(self.tk.ledger.root(), self.d.token_payload["ledger_root"])
         self.assertTrue(self.gw.invoke(self.d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).allowed)
 
     def test_wrong_principal(self):
-        gw = type(self.gw)(self.k.issuer, self.k.ledger, "did:ck:someone-else")
+        gw = type(self.gw)(self.tk.issuer, self.tk.ledger, "did:twokey:someone-else")
         self.assertEqual(gw.invoke(self.d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason, "wrong_principal")
 
     def test_constitution_reload_invalidates_old_tokens(self):
         secret = os.urandom(32)
         with tempfile.TemporaryDirectory() as d:
             env, key = signed(RULES)
-            k1 = CompactKernel(env, key.public_key(), Path(d) / "l.jsonl", YES, ledger_signing_key=key,
+            k1 = TwoKey(env, key.public_key(), Path(d) / "l.jsonl", YES, ledger_signing_key=key,
                                capability_secret=secret, allow_test_doubles=True)
             dec = k1.authorize(PAY, "Pay.", PAY_ARGS)
-            k2 = CompactKernel(env, key.public_key(), Path(d) / "l.jsonl", YES, ledger_signing_key=key,
+            k2 = TwoKey(env, key.public_key(), Path(d) / "l.jsonl", YES, ledger_signing_key=key,
                                capability_secret=secret, allow_test_doubles=True)
             r = k2.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
             self.assertEqual(r.reason, "constitution_changed_since_issue")
 
     def test_replay_protection_survives_restart(self):
         self.assertTrue(self.gw.invoke(self.d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).allowed)
-        gw2 = self.k.gateway()  # rebuilt from ledger
+        gw2 = self.tk.gateway()  # rebuilt from ledger
         self.assertEqual(gw2.invoke(self.d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason, "replayed")
 
     def test_ledger_records_full_action_token_hash_and_reasons_not_token(self):
         self.gw.invoke(self.d.capability, "email_send", PAY_ARGS, PAY_FIELDS)
-        kinds = [e.kind for e in self.k.ledger.entries]
+        kinds = [e.kind for e in self.tk.ledger.entries]
         for k in ("proposal", "action_normalized", "vm_result", "quorum_result", "capability_issued", "decision",
                   "gateway_denied"):
             self.assertIn(k, kinds)
-        norm = next(e for e in self.k.ledger.entries if e.kind == "action_normalized").body["action"]
+        norm = next(e for e in self.tk.ledger.entries if e.kind == "action_normalized").body["action"]
         self.assertEqual(norm["counterparty"], "power-co.example")
         self.assertEqual(set(norm), {"tool", "amount_usd", "currency", "counterparty", "data_class", "destination",
                                      "duration_hours", "irreversible", "tags", "raw"})
-        issued = next(e for e in self.k.ledger.entries if e.kind == "capability_issued").body
+        issued = next(e for e in self.tk.ledger.entries if e.kind == "capability_issued").body
         self.assertEqual(len(issued["token_sha256"]), 64)
-        self.assertNotIn(self.d.capability, self.k.ledger.path.read_text())
-        self.assertNotIn(self.d.capability.split(".")[2], self.k.ledger.path.read_text())
-        denied = [e for e in self.k.ledger.entries if e.kind == "gateway_denied"][-1].body
+        self.assertNotIn(self.d.capability, self.tk.ledger.path.read_text())
+        self.assertNotIn(self.d.capability.split(".")[2], self.tk.ledger.path.read_text())
+        denied = [e for e in self.tk.ledger.entries if e.kind == "gateway_denied"][-1].body
         self.assertEqual(denied["reason"], "tool_mismatch")
 
     def test_path_a_deny_reason_logged(self):
-        d = self.k.authorize(dict(PAY, amount_usd=500), "Pay a lot.", PAY_ARGS)
+        d = self.tk.authorize(dict(PAY, amount_usd=500), "Pay a lot.", PAY_ARGS)
         self.assertEqual(d.denied_by_rule, "cap")
-        last = self.k.ledger.entries[-1]
+        last = self.tk.ledger.entries[-1]
         self.assertEqual((last.kind, last.body["denied_by_rule"]), ("decision", "cap"))
 
 
@@ -252,23 +252,23 @@ class LedgerIntegrity(unittest.TestCase):
         self.assertEqual(self.L.entries[-1].kind, "anchored")
         self.assertTrue(self.reload().verify(self.key.public_key()).ok)
 
-    def test_kernel_refuses_tampered_existing_ledger(self):
+    def test_two_key_refuses_tampered_existing_ledger(self):
         env, key = signed(RULES)
         p = Path(self.tmp.name) / "k.jsonl"
-        CompactKernel(env, key.public_key(), p, YES, ledger_signing_key=key, allow_test_doubles=True)
+        TwoKey(env, key.public_key(), p, YES, ledger_signing_key=key, allow_test_doubles=True)
         p.write_text(p.read_text().replace('"bytecode_len"', '"bytecode_LEN"'))
         with self.assertRaises(LedgerError):
-            CompactKernel(env, key.public_key(), p, YES, ledger_signing_key=key, allow_test_doubles=True)
+            TwoKey(env, key.public_key(), p, YES, ledger_signing_key=key, allow_test_doubles=True)
 
     def test_ledger_append_failure_denies(self):
         env, key = signed(RULES)
         p = Path(self.tmp.name) / "k2.jsonl"
-        k = CompactKernel(env, key.public_key(), p, YES, ledger_signing_key=key, allow_test_doubles=True)
+        tk = TwoKey(env, key.public_key(), p, YES, ledger_signing_key=key, allow_test_doubles=True)
 
         def boom(*a, **kw):
             raise OSError("disk full")
-        k.ledger.append = boom
-        d = k.authorize(PAY, "Pay.", PAY_ARGS)
+        tk.ledger.append = boom
+        d = tk.authorize(PAY, "Pay.", PAY_ARGS)
         self.assertFalse(d.allowed)
         self.assertIsNone(d.capability)
         self.assertTrue(d.reason.startswith("internal_error"))
