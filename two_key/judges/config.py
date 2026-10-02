@@ -118,7 +118,7 @@ def build_judge(spec: dict, transport=None) -> Judge:
         raise JudgeConfigError(f"judge {spec.get('id')!r}: replace REPLACE_WITH_MODEL with a model name your account can use")
     key = spec.get("ballot_key")
     if isinstance(key, str) and (key.startswith("REPLACE_") or key.startswith("set-to-the-same")):
-        raise JudgeConfigError(f"judge {spec.get('id')!r}: replace {key} with the same secret as AEACUS_TOKEN")
+        raise JudgeConfigError(f"judge {spec.get('id')!r}: replace {key} with that judge's own secret")
     kw: dict[str, Any] = {
         "judge_id": spec.get("id"), "provider": spec.get("provider", DEFAULT_PROVIDER[t]), "model": model,
         "credential": build_credential(spec.get("auth")), "transport": transport,

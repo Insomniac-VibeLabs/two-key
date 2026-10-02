@@ -377,7 +377,7 @@ produce a counted ballot, the action is denied.
   local_weights: true
   echo_binding: true
   allow_insecure_http: true
-  ballot_key: REPLACE_WITH_AEACUS_TOKEN  # change this; same value as AEACUS_TOKEN
+  ballot_key: REPLACE_WITH_BALLOT_KEY  # change this; for Aeacus, the same value as AEACUS_TOKEN
   receives_proposal: true  # this judge may see the proposal
 ```
 

@@ -24,4 +24,4 @@ judges:
     local_weights: true
     echo_binding: true
     allow_insecure_http: true
-    ballot_key: REPLACE_WITH_AEACUS_TOKEN  # required: same secret as AEACUS_TOKEN; the loader refuses this placeholder
+    ballot_key: REPLACE_WITH_BALLOT_KEY  # required: replace this. For Aeacus, use the same secret as AEACUS_TOKEN
