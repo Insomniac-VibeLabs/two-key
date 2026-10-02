@@ -1,3 +1,4 @@
+# Agent credentials are read once at startup. OpenAI and xAI calls use a proposal schema; a 400 falls back.
 # A cloud agent receives the constitution text. Use a different API key than the judges.
 # Monitored agents. Several may be configured. Hosting is local or cloud.
 # A cloud agent (Grok, ChatGPT, Claude, Gemini, or any other vendor) is not
