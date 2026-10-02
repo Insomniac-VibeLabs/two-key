@@ -766,6 +766,21 @@ print("elapsed under 1s:", time.monotonic() - t < 1, "| passed:", q.passed)
 
 ## 8. Authorizing actions
 
+A monitored agent may be local or cloud-hosted. Vendor control does not put
+it inside the constitution. List the agents in `examples/agents.yaml` (xAI,
+OpenAI, Anthropic, Gemini, Ollama, or another OpenAI-compatible server) and
+call `authorize_from_agent`. That asks the named agent for one proposal and
+then authorizes it. It does not call the gateway.
+
+<!-- check: skip needs model names and a constructed TwoKey; covered by tests/test_agents.py -->
+```python
+from two_key.agents import load_agents_file
+agents = load_agents_file("examples/agents.yaml")  # after replacing model names
+# pass agents=agents to TwoKey. A cloud agent credential must differ from every judge credential.
+decision = tk.authorize_from_agent("grok", "Draft a payment of 42.50 to power-co.example")
+```
+
+
 `tk.authorize(action, proposal, tool_args)` takes the normalized action
 record, the proposing model's text, and the literal tool-call arguments.
 It returns a `Decision`:

@@ -368,6 +368,19 @@ The local parser is unchanged: a schema miss, a cache miss, or a fallback
 still abstains unless the ballot is exact.
 
 
+### Monitored agents
+
+The agent being monitored can be local or a vendor model. A vendor-hosted
+agent can exceed the constitution, so hosting is not trust. Configure several
+in `examples/agents.yaml`: xAI, OpenAI, Anthropic, Gemini, Ollama, or any
+OpenAI-compatible server. Each has its own credential. A cloud judge cannot
+reuse any of those credentials.
+
+`authorize_from_agent(agent_id, instruction)` asks that agent for one
+proposal, then runs Path A and Path B. The agent never receives tool
+credentials and this call never executes a tool. A malformed reply is a deny.
+The gateway is still the only component that runs the tool.
+
 ### Any judge, including Aeacus
 
 Path B is whoever you list in `judges.yaml`. A cloud model, a local Ollama

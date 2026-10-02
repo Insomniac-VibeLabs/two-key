@@ -1,0 +1,42 @@
+# Monitored agents. Several may be configured. Hosting is local or cloud.
+# A cloud agent (Grok, ChatGPT, Claude, Gemini, or any other vendor) is not
+# trusted: its proposal still has to pass the constitution. No secrets here.
+# Replace every REPLACE_WITH_MODEL. Use a different API key than the judges.
+
+agents:
+  - id: grok
+    type: openai_compatible
+    provider: xai
+    hosting: cloud
+    base_url: https://api.x.ai/v1
+    model: REPLACE_WITH_MODEL
+    auth: {type: env, var: XAI_AGENT_API_KEY}
+
+  - id: chatgpt
+    type: openai_compatible
+    provider: openai
+    hosting: cloud
+    base_url: https://api.openai.com/v1
+    model: REPLACE_WITH_MODEL
+    auth: {type: env, var: OPENAI_AGENT_API_KEY}
+
+  - id: claude
+    type: anthropic
+    provider: anthropic
+    hosting: cloud
+    model: REPLACE_WITH_MODEL
+    auth: {type: env, var: ANTHROPIC_AGENT_API_KEY}
+
+  - id: gemini
+    type: gemini
+    provider: google
+    hosting: cloud
+    model: REPLACE_WITH_MODEL
+    auth: {type: env, var: GEMINI_AGENT_API_KEY}
+
+  - id: local-llama
+    type: ollama
+    provider: local
+    hosting: local
+    base_url: http://localhost:11434
+    model: REPLACE_WITH_MODEL
