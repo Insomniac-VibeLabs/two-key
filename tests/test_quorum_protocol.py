@@ -266,9 +266,9 @@ class JudgeInputsAndOrdering(unittest.TestCase):
             for j in js:
                 call = j.calls[0]
                 self.assertEqual(call["proposal"], "")
-                self.assertEqual(call["action"], normalize_action(SEARCH).to_record())
+                self.assertEqual(call["action"]["raw"]["tool_args"], {"q": "tool output"})
                 self.assertEqual(call["text"], tk.constitution_text)
-                self.assertNotIn("tool output", json.dumps(call))
+                self.assertNotIn("TRANSCRIPT", json.dumps(call))
 
     def test_record_and_proposal_option(self):
         js = [Recording("a", "v1"), Recording("b", "v2")]

@@ -193,7 +193,7 @@ class ConstitutionHashesAndRevocation(Base):
     def test_reload_with_new_constitution_invalidates_old_tokens(self):
         new_rules = RULES + [{"id": "no-irrev", "deny_if": {"irreversible": True}}]
         env, _ = signed(new_rules, key=self.fx.key)
-        self.tk.reload_constitution(env)
+        self.tk.reload_constitution(env, acknowledge=True)
         self.assertEqual(self.invoke(self.d.capability).reason, "constitution_hash_mismatch")
         d2 = self.tk.authorize(PAY, "Pay the power bill.", ARGS)
         self.assertTrue(d2.allowed, d2.reason)

@@ -78,6 +78,8 @@ class QuorumPolicy:
     judge_inputs: str = "record_only"           # record_only | record_and_proposal
     ballot_binding: str = "stamp"               # stamp | echo
     require_path_a_first: bool = False
+    require_local_yes: bool = False         # a local judge in the set must itself vote yes
+
 
     def __post_init__(self):
         if isinstance(self.required_yes, bool) or not isinstance(self.required_yes, int) or self.required_yes < 1:
@@ -110,7 +112,7 @@ class QuorumPolicy:
         """Reference profile with PRIOR_ART.md §4 (iii)'s figures: >= 2 vendors, >= 1 local weight file,
         record-only judge inputs, Path A first. K and T remain the principal's choice."""
         base = {"min_vendors": 2, "min_local_judges": 1, "judge_inputs": "record_only",
-                "require_path_a_first": True}
+                "require_path_a_first": True, "require_local_yes": True}
         base.update(kw)
         return cls(required_yes=required_yes, min_responding=min_responding, **base)
 
@@ -270,6 +272,7 @@ def convene(
     proposal: str,
     policy: QuorumPolicy | None = None,
     binding: Mapping[str, str] | None = None,
+    tool_args: Mapping | None = None,
 ) -> QuorumResult:
     """Convene the judges.
 
@@ -278,11 +281,16 @@ def convene(
     policy = policy or QuorumPolicy()
     k_floor = policy.effective_min_responding
     judge_proposal = proposal if policy.judge_inputs == "record_and_proposal" else ""
+    judge_action = action
+    if tool_args:
+        raw = dict(action.raw)
+        raw["tool_args"] = dict(tool_args)
+        judge_action = replace(action, raw=raw)
     ballots: list[Ballot] = []
     selection = heterogeneity_shortfall(judges, policy) if judges else None
     if judges and selection is None:
         ballots = [_bind(b, binding, policy)
-                   for b in _collect(judges, constitution_text, action, judge_proposal, policy, binding)]
+                   for b in _collect(judges, constitution_text, judge_action, judge_proposal, policy, binding)]
     responding = [b for b in ballots if b.responded]
     abstain = len(ballots) - len(responding)
 
@@ -314,4 +322,8 @@ def convene(
     yes = sum(1 for b in responding if b.vote == "yes")
     if yes < policy.required_yes:
         return result(False, f"insufficient_yes:{yes}<{policy.required_yes}")
+    if policy.require_local_yes:
+        local_ids = {getattr(j, "judge_id", None) for j in judges if _local(j)}
+        if local_ids and not any(b.vote == "yes" and b.judge_id in local_ids for b in responding):
+            return result(False, "local_judge_required")
     return result(True, "quorum_pass")

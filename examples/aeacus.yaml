@@ -1,0 +1,26 @@
+# Aeacus as a required local judge.
+# Start Aeacus with AEACUS_TOKEN set. Two-Key sends that bearer token and
+# rejects a ballot whose MAC was not made with it. A process that binds the
+# port without the token cannot produce a ballot this profile will count.
+quorum:
+  required_yes: 2
+  min_responding: 2
+  min_vendors: 1
+  min_local_judges: 1
+  require_local_yes: true
+  judge_inputs: record_and_proposal
+  ballot_binding: echo
+  require_path_a_first: true
+judges:
+  - id: aeacus
+    type: openai
+    provider: aeacus-local
+    base_url: http://127.0.0.1:8765/v1
+    model: aeacus-micro-v1
+    auth:
+      type: bearer
+      token_env: AEACUS_TOKEN
+    local_weights: true
+    echo_binding: true
+    allow_insecure_http: true
+    ballot_key: set-to-the-same-value-as-AEACUS_TOKEN

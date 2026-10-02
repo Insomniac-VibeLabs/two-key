@@ -71,6 +71,7 @@ from .canonical import DOMAIN_ACTION_RECORD, ENCODING, digest_hex, freeze_call, 
 from .capability import CapabilityIssuer, args_hash
 from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, verify_signed
+from .scope import disagreement
 from .crypto.provider import CryptoProvider, default_provider
 from .crypto.signatures import as_public_keyset
 from . import deployment as _deployment
@@ -366,16 +367,21 @@ class TwoKey:
             **extra,
         })
 
-    def reload_constitution(self, signed_constitution: dict) -> None:
+    def reload_constitution(self, signed_constitution: dict, *, acknowledge: bool = False) -> None:
         """Load a new constitution. Only a document signed by the principal's trusted key is accepted.
 
-        A refused reload is recorded as ``constitution_reload_refused`` and re-raised. On success a new
-        constitution_loaded entry is appended; tokens issued before it are refused by the gateway.
+        A change to the text or the hard rules is refused unless ``acknowledge`` is true. That is a
+        separate principal action from the agent's request. A refused reload is recorded as
+        ``constitution_reload_refused`` and re-raised. On success a new constitution_loaded entry is
+        appended; tokens issued before it are refused by the gateway.
         """
         try:
             c = verify_signed(signed_constitution, self.trusted_keyset, self.crypto)
             if c.principal != self.principal:
                 raise TwoKeyConfigError("reloaded constitution names a different principal")
+            changed = c.text != self.constitution.text or c.hard_rules != self.constitution.hard_rules
+            if changed and not acknowledge:
+                raise TwoKeyConfigError("constitution change requires a separate principal acknowledgement")
             prev = self.constitution, self.compiled
             self._install(c)
         except Exception as e:
@@ -489,6 +495,9 @@ class TwoKey:
         except (ActionValidationError, TypeError, ValueError) as e:
             return self._deny(f"invalid_action:{e}")
         rec = action.to_record()
+        mismatch = disagreement(rec, frozen.args())
+        if mismatch:
+            return self._deny(f"record_args_mismatch:{mismatch}", rec)
         binding = self.ballot_binding(rec)
         self.ledger.append("action_normalized", {"action": rec, "action_digest": binding["action_hash"],
                                                  "args_hash": a_hash})
@@ -503,7 +512,7 @@ class TwoKey:
             self.ledger.append("quorum_skipped", {"reason": "path_a_denied", "short_circuit_path_b": True})
             return self._deny(f"path_a_denied:{vm_res.reason}", rec, vm_allowed=False, vm_reason=vm_res.reason,
                               denied_by_rule=vm_res.denied_by, quorum_passed=None, quorum=None)
-        q = convene(self.judges, self.constitution_text, action, proposal, self.quorum_policy, binding)
+        q = convene(self.judges, self.constitution_text, action, proposal, self.quorum_policy, binding, frozen.args())
         self.ledger.append("quorum_result", q.to_record())
         qsum = {"yes": q.yes, "no": q.no, "abstain": q.abstain, "reason": q.reason}
 

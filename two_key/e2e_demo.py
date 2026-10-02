@@ -245,9 +245,9 @@ def run(work: Path, out=print) -> Checks:
     def token(a):
         return tk.authorize(DRAFT, "Draft the note.", a).capability
     medical = {"to": "clinic.example", "body": "Diagnosis: example condition"}
-    r = tk.gateway(tools=tools, scanners=[dlp]).invoke(token(medical), "email_draft", medical, FIELDS)
-    c("outbound DLP: medical content in a call labelled public is blocked",
-      r.reason == "scan_data_class_mismatch", r.reason)
+    denied = tk.authorize(DRAFT, "Draft the note.", medical)
+    c("outbound DLP: medical content labelled public is blocked before a token",
+      (not denied.allowed) and "sensitive_labeled_public" in denied.reason, denied.reason)
     mail = {"to": "clinic.example", "body": "see attached", "attachment_b64": base64.b64encode(EICAR).decode()}
     gwa = tk.gateway(tools={"email_draft": lambda **a: "drafted"}, scanners=[av],
                      file_extractors={"email_draft": lambda a: [("att", base64.b64decode(a["attachment_b64"]),

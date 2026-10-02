@@ -83,14 +83,11 @@ class ScanningGateway(unittest.TestCase):
     # -- Entries 6 (b) and 7: any conviction denies ------------------------------------
     def test_dlp_class_other_than_the_token_denies(self):
         gw = self.tk.gateway(tools=self.tools, scanners=[PatternScanner("dlp", rules=[DX], kind="dlp")])
-        d = self.token("public", MED_ARGS)                # mislabeled: medical content declared public
-        r = gw.invoke(d.capability, "email_send", MED_ARGS, fields("public"))
-        self.assertEqual((r.allowed, r.reason), (False, "scan_data_class_mismatch"))
+        d = self.tk.authorize({"tool": "email_send", "data_class": "public", "irreversible": False},
+                              "send", MED_ARGS)
+        self.assertFalse(d.allowed)
+        self.assertIn("sensitive_labeled_public", d.reason)
         self.assertEqual(self.sent, [])
-        denied = self.last("gateway_denied")
-        self.assertEqual((denied["scan_data_classes"], denied["content_scans"][0]["outcome"]),
-                         (["public", "medical"], "allow"))
-        self.assertFalse(self.tk.ledger.is_redeemed(d.token_payload["jti"]))
 
     def test_dlp_class_the_token_does_not_permit_denies_even_if_less_sensitive(self):
         # Entry 7: no ranking. A personal token doesn't permit content the DLP labels public.

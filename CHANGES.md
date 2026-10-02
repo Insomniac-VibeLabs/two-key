@@ -136,3 +136,7 @@ The author's decision. Repository visibility was not changed.
 ## v0.1.2
 
 | 104 | Default capability token is `tk1-sig`, signed by the principal key unless `token_signing_key` is set. The gateway holds only the public key. HMAC modes remain opt-in. Vulnerability reports point at a private issue template; this repository has no GitHub Security Advisories. | capability, core, SECURITY.md | Maintainer | v0.1.2 |
+
+## Argument binding
+
+Authorize denies when the frozen tool arguments contradict the action record (quieter amount, public label on sensitive text, a search tool hiding a payment). Judges receive those frozen arguments. A constitution text or rule change requires reload_constitution(..., acknowledge=True). QuorumPolicy.section4 requires a local yes. examples/aeacus.yaml is the Aeacus profile.

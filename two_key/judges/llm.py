@@ -94,8 +94,11 @@ def parse_ballot_strict(text: Any, *, echo: bool = False) -> tuple[bool, float, 
     except json.JSONDecodeError as e:
         raise MalformedBallot(f"not valid JSON: {e.msg}") from None
     keys = BALLOT_KEYS | set(BINDING_KEYS) if echo else BALLOT_KEYS
-    if not isinstance(obj, dict) or set(obj) != keys:
+    if not isinstance(obj, dict) or set(obj) - {"ballot_mac"} != keys:
         raise MalformedBallot(f"expected exactly keys {sorted(keys)}")
+    mac = obj.get("ballot_mac")
+    if mac is not None and not isinstance(mac, str):
+        raise MalformedBallot("ballot_mac must be a string")
     if echo and any(not isinstance(obj[k], str) for k in BINDING_KEYS):
         raise MalformedBallot("echoed hashes must be strings")
     c, conf, why = obj["consistent"], obj["confidence"], obj["rationale"]
@@ -130,7 +133,7 @@ class LLMJudge(Judge):
                  transport: Transport | None = None, auth_header: str | None = None,
                  allow_insecure_http: bool = False, vendor: str | None = None,
                  local_weights: bool | None = None, weights_sha256: str | None = None,
-                 echo_binding: bool = False):
+                 echo_binding: bool = False, ballot_key: str | None = None):
         if not judge_id or not model or not base_url:
             raise ValueError("judge_id, model and base_url are required")
         u = urlparse(base_url)
@@ -150,6 +153,7 @@ class LLMJudge(Judge):
             self.local_weights = bool(local_weights)
         self.weights_sha256 = weights_sha256
         self.echo_binding = bool(echo_binding)
+        self.ballot_key = ballot_key
 
     # -- hooks -------------------------------------------------------------
     def _request(self, system: str, user: str) -> tuple[str, dict]:
@@ -198,6 +202,15 @@ class LLMJudge(Judge):
             return self.abstain(f"malformed_ballot: {e}")
         except Exception as e:
             return self.abstain(f"malformed_response: {type(e).__name__}")
+        if getattr(self, "ballot_key", None):
+            from hashlib import sha256
+            import hmac
+            raw = text.strip()
+            body, _, mac = raw.rpartition(',"ballot_mac":"')
+            good = mac.endswith('"}') and hmac.compare_digest(
+                mac[:-2], hmac.new(self.ballot_key.encode(), (body + "}").encode(), sha256).hexdigest())
+            if not good:
+                return self.abstain("ballot_mac_mismatch")
         if echo:
             consistent, conf, why, echoed = parsed
             return Ballot(self.judge_id, self.provider, "yes" if consistent else "no", conf, why,

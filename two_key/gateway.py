@@ -107,6 +107,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import merkle
 from .action import ActionValidationError, normalize_action
+from .scope import disagreement
 from .canonical import (DOMAIN_TOOL_RESULT, ENCODING, canonical_hash, freeze_call, typed_bytes, typed_hash,
                         typed_loads)
 from .capability import CapabilityIssuer, TokenError, token_digest
@@ -352,7 +353,12 @@ class ToolGateway:
         if unknown:
             raise ActionValidationError(f"unknown call fields {sorted(unknown)}")
         # Missing fields take the conservative defaults (data_class=classified).
-        return normalize_action({"tool": tool, **src}).to_record()
+        record = normalize_action({"tool": tool, **src}).to_record()
+        # Caller-supplied scope cannot be quieter than the frozen arguments.
+        mismatch = disagreement(record, args)
+        if mismatch:
+            raise ActionValidationError(f"call fields disagree with frozen arguments: {mismatch}")
+        return record
 
     def invoke(self, token: Any, tool: str, args: Mapping[str, Any],
                call_fields: Mapping[str, Any] | None = None) -> GatewayResult:
