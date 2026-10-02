@@ -381,6 +381,8 @@ proposal, then runs Path A and Path B. The agent never receives tool
 credentials and this call never executes a tool. A malformed reply is a deny.
 The gateway is still the only component that runs the tool.
 
+Agent endpoints follow the judge rule: HTTPS, except loopback. A vendor host labeled `local` is still cloud. The agent call reuses the judge transport (connection reuse, no redirects, transient retries). It does not send a strict schema or an Anthropic cache breakpoint; the local parser and both paths remain the check.
+
 ### Any judge, including Aeacus
 
 Path B is whoever you list in `judges.yaml`. A cloud model, a local Ollama

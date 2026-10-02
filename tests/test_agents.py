@@ -29,6 +29,11 @@ def chat(text):
 
 
 class Agents(unittest.TestCase):
+    def test_plain_http_agent_is_refused(self):
+        with self.assertRaises(AgentConfigError):
+            load_agents({"agents": [{"id": "x", "type": "openai_compatible", "base_url": "http://api.x.ai/v1",
+                                     "model": "m", "auth": {"type": "env", "var": "X"}}]})
+
     def test_vendor_host_cannot_be_labeled_local(self):
         self.assertEqual(hosting_of("https://api.x.ai/v1", "local"), "cloud")
         self.assertEqual(hosting_of("https://api.anthropic.com", None), "cloud")

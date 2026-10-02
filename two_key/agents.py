@@ -92,6 +92,11 @@ class MonitoredAgent:
     def __init__(self, agent_id: str, provider: str, model: str, base_url: str, hosting: str,
                  credential: CredentialProvider | None = None, *, kind: str, timeout: float = 60.0,
                  max_tokens: int = 800, transport: Transport | None = None):
+        u = urlparse(base_url)
+        if u.scheme not in ("https", "http") or not u.hostname:
+            raise AgentConfigError(f"invalid base_url {base_url!r}")
+        if u.scheme == "http" and u.hostname not in LOOPBACK:
+            raise AgentConfigError(f"refusing plain-HTTP agent endpoint {base_url!r}")
         self.agent_id, self.provider, self.model = agent_id, provider, model
         self.base_url = base_url.rstrip("/")
         self.hosting = hosting
