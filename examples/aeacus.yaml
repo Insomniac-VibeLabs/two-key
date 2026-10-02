@@ -1,4 +1,5 @@
-# Aeacus as a required local judge.
+# Optional profile. Two-Key does not require Aeacus.
+# Use this only if you want this local judge to be a required yes.
 # Start Aeacus with AEACUS_TOKEN set. Two-Key sends that bearer token and
 # rejects a ballot whose MAC was not made with it. A process that binds the
 # port without the token cannot produce a ballot this profile will count.

@@ -354,6 +354,36 @@ print(f"min_vendors={p.min_vendors} min_local_judges={p.min_local_judges}", p.ju
 Every key is listed in the [configuration reference](#judgesyaml-quorum-section-quorumpolicy).
 Per-provider walkthroughs are in [HOWTO §5–7](docs/HOWTO.md).
 
+### Any judge, including Aeacus
+
+Path B is whoever you list in `judges.yaml`. A cloud model, a local Ollama
+model, another OpenAI-compatible server, and [Aeacus](https://github.com/sbusch305/Aeacus)
+are the same kind of entry. Aeacus is optional. Leave it out and Two-Key
+does not call it. Add it, alone or next to other judges, if you want a
+local ballot that does not send the constitution to a vendor.
+
+Both Path A and Path B still have to answer. Path B's answer is the quorum
+you configured, not a particular model. If the judges you listed do not
+produce a counted ballot, the action is denied.
+
+```yaml
+# optional; copy into judges.yaml or use examples/aeacus.yaml
+- id: aeacus
+  type: openai
+  provider: aeacus-local
+  base_url: http://127.0.0.1:8765/v1
+  model: aeacus-micro-v1
+  auth: {type: bearer, token_env: AEACUS_TOKEN}
+  local_weights: true
+  echo_binding: true
+  allow_insecure_http: true
+  ballot_key: set-to-the-same-value-as-AEACUS_TOKEN
+```
+
+Start Aeacus with `python -m aeacus serve` and the same `AEACUS_TOKEN`.
+`examples/aeacus.yaml` is one profile that requires this local yes. It is
+not the default. The default remains any local or cloud judge you choose.
+
 ## Content scanners (DLP and antivirus)
 
 Pass `scanners=[...]` to `tk.gateway()` to send outbound content (the
