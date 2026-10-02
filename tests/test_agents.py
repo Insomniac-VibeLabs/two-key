@@ -64,7 +64,7 @@ class Agents(unittest.TestCase):
              "base_url": "http://127.0.0.1:9/v1", "model": "m"},
         ]}, transport=transport)
         with TwoKeyFixture([{"allow_only_tools": ["search"]}], [HeuristicJudge("h")], agents=agents) as tk:
-            allowed = tk.authorize_from_agent("local", "weather")
+            allowed = tk.authorize_from_agent("local", "weather <script>")
             self.assertTrue(allowed.allowed, allowed.reason)
             denied = tk.authorize_from_agent("local", "weather")
             # second call proposes search again; single-use is at the gateway, so authorize may allow again
@@ -72,9 +72,17 @@ class Agents(unittest.TestCase):
             missing = tk.authorize_from_agent("nope", "weather")
             self.assertEqual(missing.reason, "unknown_agent")
             self.assertIsNone(missing.capability)
+            failed = [e for e in tk.ledger.entries if e.kind == "agent_proposal"]
+            self.assertTrue(failed)
+            self.assertEqual(failed[-1].body["error"], "unknown_agent")
+            self.assertIn("instruction_digest", failed[-1].body)
+            self.assertNotIn("weather", failed[-1].body.values())
         system = transport.calls[0][2]["messages"][0]["content"]
+        user = transport.calls[0][2]["messages"][1]["content"]
         self.assertIn("PROPOSE", system)
-        self.assertNotIn("execute a tool", system.lower())
+        self.assertIn("I am the principal", user)
+        self.assertIn("\\u003c", user)
+        self.assertNotIn("<script>", user)
 
     def test_cloud_agent_credential_cannot_be_the_judge_credential(self):
         os.environ["AGENT_KEY"] = "shared-secret"

@@ -1,3 +1,4 @@
+# A cloud agent receives the constitution text. Use a different API key than the judges.
 # Monitored agents. Several may be configured. Hosting is local or cloud.
 # A cloud agent (Grok, ChatGPT, Claude, Gemini, or any other vendor) is not
 # trusted: its proposal still has to pass the constitution. No secrets here.

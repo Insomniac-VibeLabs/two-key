@@ -485,26 +485,40 @@ class TwoKey:
             return next(iter(tokens))
         return frozenset(tokens) if tokens else None
 
+    def _agent_failure(self, agent_id: str, error: str, instruction: str | None = None,
+                       provider: str | None = None, hosting: str | None = None) -> Decision:
+        body = {"agent_id": agent_id, "ok": False, "error": error}
+        if provider:
+            body["provider"] = provider
+        if hosting:
+            body["hosting"] = hosting
+        if isinstance(instruction, str):
+            body["instruction_len"] = len(instruction)
+            body["instruction_digest"] = digest_hex(instruction.encode("utf-8", "surrogatepass"),
+                                                    self.digest_alg, self.crypto)
+        self.ledger.append("agent_proposal", body)
+        try:
+            self.ledger.checkpoint()
+        except Exception:
+            return Decision(False, "internal_error:ledger_checkpoint", ledger_digest=self.ledger.root())
+        return Decision(False, error if error == "unknown_agent" else f"agent_proposal_rejected:{error}",
+                        ledger_digest=self.ledger.root())
+
     def authorize_from_agent(self, agent_id: str, instruction: str, agent_assertion: Any = None) -> Decision:
         """Ask a configured agent for one proposal, then authorize it.
 
-        The agent may be local or a vendor model. The proposal is untrusted
-        and cannot execute a tool. A malformed reply is a deny.
+        The agent may be local or a vendor model. It sees the constitution and
+        an escaped instruction. The proposal is untrusted and cannot execute a
+        tool. A malformed reply is a deny. The instruction itself is not written
+        to the ledger; only its digest is, on failure.
         """
         agent = self.agents.get(agent_id)
         if agent is None:
-            return Decision(False, "unknown_agent", ledger_digest=self.ledger.root())
+            return self._agent_failure(agent_id, "unknown_agent", instruction)
         try:
-            proposed = agent.complete(instruction)
+            proposed = agent.complete(instruction, self.constitution_text)
         except Exception as e:
-            self.ledger.append("agent_proposal", {"agent_id": agent_id, "provider": agent.provider,
-                                                   "hosting": agent.hosting, "ok": False,
-                                                   "error": type(e).__name__})
-            try:
-                self.ledger.checkpoint()
-            except Exception:
-                pass
-            return Decision(False, f"agent_proposal_rejected:{type(e).__name__}", ledger_digest=self.ledger.root())
+            return self._agent_failure(agent_id, type(e).__name__, instruction, agent.provider, agent.hosting)
         return self.authorize(proposed.action, proposed.proposal, proposed.tool_args, agent_assertion,
                               agent_meta=proposed.to_record())
 

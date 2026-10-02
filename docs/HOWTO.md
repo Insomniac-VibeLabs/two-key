@@ -837,8 +837,11 @@ print("elapsed under 1s:", time.monotonic() - t < 1, "| passed:", q.passed)
 A monitored agent may be local or cloud-hosted. Vendor control does not put
 it inside the constitution. List the agents in `examples/agents.yaml` (xAI,
 OpenAI, Anthropic, Gemini, Ollama, or another OpenAI-compatible server) and
-call `authorize_from_agent`. That asks the named agent for one proposal and
-then authorizes it. It does not call the gateway.
+call `authorize_from_agent`. That sends the constitution and one fenced
+instruction to the named agent, then authorizes the reply. It does not call
+the gateway. A cloud agent receives the constitution text. The instruction
+is not written to the ledger; a failed call records its digest and length.
+Plain HTTP is refused except on loopback.
 
 <!-- check: skip needs model names and a constructed TwoKey; covered by tests/test_agents.py -->
 ```python

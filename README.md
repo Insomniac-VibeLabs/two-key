@@ -423,12 +423,9 @@ in `examples/agents.yaml`: xAI, OpenAI, Anthropic, Gemini, Ollama, or any
 OpenAI-compatible server. Each has its own credential. A cloud judge cannot
 reuse any of those credentials.
 
-`authorize_from_agent(agent_id, instruction)` asks that agent for one
-proposal, then runs Path A and Path B. The agent never receives tool
-credentials and this call never executes a tool. A malformed reply is a deny.
-The gateway is still the only component that runs the tool.
+`authorize_from_agent(agent_id, instruction)` sends that agent the constitution and the instruction, then runs Path A and Path B on the reply. The instruction is fenced and `<`, `>`, and `&` inside it are escaped, so it cannot close the constitution section. A cloud agent therefore sees the constitution text, the same disclosure as a cloud judge. The agent never receives tool credentials, and this call never executes a tool. A malformed reply is a deny. The gateway is still the only component that runs the tool.
 
-Agent endpoints follow the judge rule: HTTPS, except loopback. A vendor host labeled `local` is still cloud. The agent call reuses the judge transport (connection reuse, no redirects, transient retries). It does not send a strict schema or an Anthropic cache breakpoint; the local parser and both paths remain the check.
+An unknown agent id, an empty instruction, or a transport failure is a deny and a ledger `agent_proposal` row. The row stores a digest and length of the instruction, not the instruction. Agent endpoints follow the judge rule: HTTPS, except loopback. A vendor host labeled `local` is still cloud. The call reuses the judge transport (connection reuse, no redirects, transient retries). Anthropic caches the system prompt and the constitution only, not the instruction. OpenAI-compatible agent calls use JSON-object mode, not the judge ballot schema. Both paths remain the check.
 
 ### Any judge, including Aeacus
 
