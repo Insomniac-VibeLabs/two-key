@@ -8,20 +8,15 @@ money, mail, or production tools.
 
 Please do not put exploit detail in a public place.
 
-This repository does not have GitHub Security Advisories. The old advisory
-URL does not exist. Report here instead, in a private issue on this
-repository (it is private to the organization):
+Report it through a private GitHub security advisory:
 
-https://github.com/Insomniac-VibeLabs/two-key/issues/new?template=security_report.yml
+https://github.com/Insomniac-VibeLabs/two-key/security/advisories/new
 
-Title it "security report" and leave the exploit out of the title. Include
-the version or commit, the path (policy VM, quorum, token, gateway, ledger,
-scanners, PKI), and a minimal reproduction that does not require a live
-vendor key. We will acknowledge receipt and say whether the report is in
-scope.
-
-If this repository is later made public, do not use a public issue. Ask a
-maintainer for a private channel first.
+Do not open a public issue and do not post the details in Discussions.
+Include the version or commit, the path (policy VM, quorum, token, gateway,
+ledger, scanners, PKI), and a minimal reproduction that does not require a
+live vendor key. We will acknowledge receipt and say whether the report is
+in scope.
 
 ## In scope
 
