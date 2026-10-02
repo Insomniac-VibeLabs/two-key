@@ -2,6 +2,8 @@
 # No secrets go in this file. API keys are read from environment variables
 # (or the OS keyring) at call time.
 # Replace every REPLACE_WITH_MODEL with a model name your account can use.
+# The local judge is already set to the recommended model, qwen2.5:7b
+# (Qwen2.5-7B-Instruct). The weights are not in this repository.
 # A ballot key, if used, is ballot_key_env: the name of an environment variable. Do not write the secret here.
 # The loader refuses both placeholders.
 # receives_proposal: true sends that judge the proposal. Recommended: a different model than the monitored agent.
@@ -41,13 +43,18 @@ judges:
     model: REPLACE_WITH_MODEL
     auth: {type: env, var: GEMINI_API_KEY}
 
-  - id: local-llama
+  # Recommended local judge. Weights are not in this repo.
+  # Qwen2.5-7B-Instruct, Apache-2.0, Copyright 2024 Alibaba Cloud.
+  # https://huggingface.co/Qwen/Qwen2.5-7B-Instruct
+  # Setup: docs/HOWTO.md#recommended-local-judge-qwen25-7b-instruct
+  - id: local-qwen
     type: ollama                     # local weights via Ollama, no key needed
     provider: local
+    vendor: alibaba
     base_url: http://localhost:11434
-    model: REPLACE_WITH_MODEL
+    model: qwen2.5:7b
     # local_weights: true            # the default for ollama; counts toward min_local_judges
-    # weights_sha256: <hash of the weight file>   # optional, recorded in ballots
+    # weights_sha256: <hash of the GGUF>   # optional, recorded in ballots, not verified
 
 # Optional per-judge keys: vendor (defaults to provider), local_weights, weights_sha256, echo_binding.
 

@@ -159,3 +159,4 @@ A cloud judge requires agent_session_env. Two-Key reads that environment variabl
 ## v0.1.3
 
 | 105 | Action records must match the frozen tool arguments. Both Path A and Path B must answer. A cloud judge requires agent_session_env, read once at startup. ballot_key in the file is refused; use ballot_key_env. Aeacus is an optional judge. | scope, core, quorum, judges | Maintainer | v0.1.3 |
+| 106 | Document Qwen2.5-7B-Instruct (`qwen2.5:7b`) as the recommended local Path B judge. Weights are not vendored; README, HOWTO, and `examples/judges.yaml` point at the Hugging Face repo and the Ollama tag. Apache-2.0, Copyright 2024 Alibaba Cloud. No authorization behavior changed. | `README.md`, `docs/HOWTO.md`, `examples/judges.yaml` | Maintainer | (this commit) |

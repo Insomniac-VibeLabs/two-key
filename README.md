@@ -171,7 +171,11 @@ python -m two_key verify-constitution \
 
 **3. Configure your judges.** `judges.yaml` names the environment
 variables that hold your API keys; the keys never go in the file. Replace
-each `<…>` with a model your account can use.
+each `<…>` with a model your account can use. For the local judge, the
+recommended model is Qwen2.5-7B-Instruct (`qwen2.5:7b` in Ollama). The
+weights are not in this repository. Setup is in
+[Connecting judges](#recommended-local-judge-qwen25-7b-instruct) and
+[HOWTO §5](docs/HOWTO.md#recommended-local-judge-qwen25-7b-instruct).
 
 <!-- check: file=judges.yaml -->
 ```yaml
@@ -194,7 +198,8 @@ judges:
   - id: local
     type: ollama               # local weights via Ollama at http://localhost:11434, no key
     provider: local
-    model: <ollama-model-name>
+    vendor: alibaba            # weight maker, for min_vendors; distinct from xAI and Anthropic
+    model: qwen2.5:7b          # Qwen2.5-7B-Instruct; weights not in this repo
 ```
 
 <!-- check: expect=^OK: 3 judges -->
@@ -282,8 +287,8 @@ gateway: executed paid 42.5 to power-co.example
 OK: ok (entries=9)
 ```
 
-If Ollama isn't running, the local judge abstains, and the other two still
-meet K = 2 and T = 2. A wire transfer, a payment over the $200 cap, or a
+If Ollama isn't running, or `qwen2.5:7b` has not been pulled, the local
+judge abstains, and the other two still meet K = 2 and T = 2. A wire transfer, a payment over the $200 cap, or a
 blocked counterparty is denied by Path A with the rule's id in
 `decision.reason`, and the judges are never asked.
 
@@ -340,6 +345,48 @@ written in the file is refused. The `username_password` and
 `oauth_device_code` modes are hook points that need your login function;
 no vendor login is built in.
 
+### Recommended local judge: Qwen2.5-7B-Instruct
+
+The recommended local Path B judge is
+[Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
+(Apache-2.0, Copyright 2024 Alibaba Cloud). It is a suggestion, not a
+requirement. Any model that returns the strict ballot works. This one is
+the best fit for the ballot parser: Ollama's `format: json` plus
+temperature 0, a system prompt it will hold when the action record tries
+to override it, and a vendor other than xAI, Anthropic, or Google. A
+malformed ballot abstains, so a model that misses the schema can fail a
+quorum even when its judgment would have been right.
+
+The weights are not in this repository. Point at them; do not commit them.
+Q4 is about 4.7 GB. `qwen2.5:3b` is the smaller fallback. Below that, JSON
+compliance drops and the judge mostly abstains. Skip Qwen3 thinking
+variants here: a reasoning trace is extra text, and extra text is an
+abstain.
+
+<!-- check: skip needs a local Ollama install and a weight download; not part of the network-free check -->
+```bash
+# Install Ollama from https://ollama.com, then:
+ollama pull qwen2.5:7b
+ollama show qwen2.5:7b --modelfile    # optional: hash the GGUF and set weights_sha256
+```
+
+<!-- check: skip example only; the quickstart judges.yaml above is the checked copy -->
+```yaml
+- id: local-qwen
+  type: ollama
+  provider: local
+  vendor: alibaba
+  base_url: http://localhost:11434
+  model: qwen2.5:7b
+  local_weights: true          # default for ollama; counts toward min_local_judges
+  # weights_sha256: <sha256 of the GGUF>   # recorded on the ballot, not verified
+```
+
+`examples/judges.yaml` uses the same model name. Full setup, including the
+OpenAI-compatible path if you serve the Hugging Face weights with vLLM or
+llama.cpp, is in
+[HOWTO §5](docs/HOWTO.md#recommended-local-judge-qwen25-7b-instruct).
+
 For a sturdier quorum, use at least three judges from at least two
 vendors, one on local weights, and the stricter profile in Python:
 
@@ -366,6 +413,7 @@ Both Path A and Path B still have to answer. Path B's answer is the quorum
 you configured, not a particular model. If the judges you listed do not
 produce a counted ballot, the action is denied.
 
+<!-- check: skip optional Aeacus example; not loaded by the checker -->
 ```yaml
 # optional; copy into judges.yaml or use examples/aeacus.yaml
 - id: aeacus
@@ -753,6 +801,8 @@ script `two-key` is the same program.
 **Judge diversity**
 - Use different vendors, plus at least one local model, so one vendor's
   outage, policy change, or compromise can't pass or block everything.
+  The recommended local model is Qwen2.5-7B-Instruct (`qwen2.5:7b`); the
+  weights stay outside this repository.
 - Set K (`min_responding`) above T only if you accept more denials during
   outages. K = T is the fail-closed minimum.
 - `vendor` and `local_weights` are self-declared. Label them honestly;
