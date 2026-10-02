@@ -154,3 +154,8 @@ A cloud judge requires `authorize(..., agent_session=...)`. The action is denied
 ## Agent session is frozen at startup
 
 A cloud judge requires agent_session_env. Two-Key reads that environment variable once at startup. authorize has no session argument. A missing variable refuses to start. A value equal to a cloud judge credential denies the action. Changing the variable after startup does not change the frozen value.
+
+
+## v0.1.3
+
+| 105 | Action records must match the frozen tool arguments. Both Path A and Path B must answer. A cloud judge requires agent_session_env, read once at startup. ballot_key in the file is refused; use ballot_key_env. Aeacus is an optional judge. | scope, core, quorum, judges | Maintainer | v0.1.3 |
