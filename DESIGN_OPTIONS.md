@@ -105,7 +105,7 @@ literal tool-call args), ledger root, and constitution digest; TTL 30 s.
 ## 4. Ordering of Path A and Path B
 
 **Current prototype default** (per the author's 2026-09-30 instructions, for
-privacy): `short_circuit_path_b=True`, so Path B is skipped if Path A denies.
+privacy was the old default). Path B is no longer skipped if Path A denies. Both paths must answer, and either a deny or a missing answer denies.
 Set `False` to run both. §4 (iii), which the author selected, says "Path B
 invoked only after Path A returns true". `require_path_a_first=True` (set
 by `QuorumPolicy.section4()`) makes Two-Key refuse `False`; see §7.21.

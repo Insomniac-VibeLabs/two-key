@@ -1068,34 +1068,20 @@ string. The inbound scan blocks it, so the agent gets
 `result_withheld:scan_blocked:example-av` instead of the result. The
 `tool_executed` entry records `result_scans` and `result_withheld`.
 
-## 10. Ordering and short-circuit
+## 10. Both paths must answer
 
-By default (`short_circuit_path_b=True`) Two-Key doesn't convene
-Path B when Path A denies, so a forbidden proposal is never sent to any
-external judge. The ledger records `quorum_skipped`. With
-`short_circuit_path_b=False` both paths always run, which is useful for
-auditing how the judges would have voted, but either path can still deny.
-`require_path_a_first: true` makes that option an error.
+Path A runs, then Path B. Both always answer. A deny from either path denies the action. A missing answer denies it too: Path A raising is `path_a_no_response`, and a Path B quorum that was not counted is `path_b_no_response`. `short_circuit_path_b` is ignored. The ledger records `vm_result` and `quorum_result` on every proposal.
 
-<!-- check: expect=^default: path_a_denied:rule_denied:tool-allowlist quorum=None -->
-<!-- check: expect=^both paths: path_a_denied:rule_denied:tool-allowlist quorum=\{'yes': 0, 'no': 3 -->
-<!-- check: expect=^refused: quorum policy requires Path B only after Path A passes -->
+<!-- check: expect=^both paths: path_a_denied:rule_denied:tool-allowlist quorum={'yes': -->
 ```python
-from two_key.core import TwoKeyConfigError
-from two_key.quorum import QuorumPolicy
 from my_two_key import make_two_key
 
 wire = {"tool": "wire_transfer", "amount_usd": 10, "counterparty": "bank.example", "data_class": "financial"}
 d = make_two_key("howto-10a.jsonl").authorize(wire, "Wire $10.", {})
-print("default:", d.reason, "quorum=" + str(d.quorum))
-d = make_two_key("howto-10b.jsonl", short_circuit_path_b=False).authorize(wire, "Wire $10.", {})
 print("both paths:", d.reason, "quorum=" + str(d.quorum))
-try:
-    make_two_key("howto-10c.jsonl", short_circuit_path_b=False,
-                quorum_policy=QuorumPolicy(required_yes=2, require_path_a_first=True))
-except TwoKeyConfigError as e:
-    print("refused:", e)
 ```
+
+A Path B quorum that is not counted (`no_judges`, too few responses, a timeout before a counted ballot) is `path_b_no_response`. A Path A exception is `path_a_no_response`. Neither is an allow.
 
 ## 11. Revocation
 

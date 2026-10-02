@@ -140,3 +140,8 @@ The author's decision. Repository visibility was not changed.
 ## Argument binding
 
 Authorize denies when the frozen tool arguments contradict the action record (quieter amount, public label on sensitive text, a search tool hiding a payment). Judges receive those frozen arguments. A constitution text or rule change requires reload_constitution(..., acknowledge=True). QuorumPolicy.section4 requires a local yes. examples/aeacus.yaml is the Aeacus profile.
+
+
+## Both paths must answer
+
+Path A and Path B both run on every proposal. A deny from either path denies the action. A missing answer does too: a Path A exception is `path_a_no_response`, and a Path B quorum that was not counted is `path_b_no_response`. `short_circuit_path_b` is ignored.

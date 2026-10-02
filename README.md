@@ -524,7 +524,7 @@ with every other key at its default.
 | `heterogeneity_scope` | `selection` | `selection`, `responding` | `responding` also applies the two floors above to the judges that returned valid ballots |
 | `judge_inputs` | `record_only` | `record_only`, `record_and_proposal` | What judges see besides the prose: only the normalized action record, or also the proposal text |
 | `ballot_binding` | `stamp` | `stamp`, `echo` | `echo`: every judge must echo H(action record) and H(constitution) (needs `echo_binding: true` on LLM judges) |
-| `require_path_a_first` | `false` | boolean | Two-Key refuses `short_circuit_path_b=False` |
+| `require_path_a_first` | `false` | boolean | Path A still runs first. It no longer skips Path B. |
 | `timeout_seconds` | `45` | number > 0, or `null` (no deadline) | Overall deadline for all judges; late judges abstain |
 | `parallel` | `true` | boolean | Run judges in parallel threads (sequential still honors the deadline) |
 
@@ -583,7 +583,7 @@ the file is loaded.
 | `digest_alg` | `sha384` (every suite) | `sha384`; `sha256` only to keep appending to a ledger written with the earlier default; `sha512`, `sha3-384`, `sha3-512` are approved and self-tested but untested end to end | Ledger, Merkle, args, ballots, and constitution hashes. Old SHA-256 ledgers still verify (`docs/CRYPTO.md` §3.1) |
 | `head_signing` | `decision` | `decision`, `append` | Sign the ledger head once per decision, or after every append |
 | `ledger_fsync` | `True` | bool | fsync every ledger write |
-| `short_circuit_path_b` | `True` | bool | Skip Path B when Path A denies |
+| `short_circuit_path_b` | ignored | bool | Both paths always answer. A deny or a missing answer from either path denies. |
 | `crypto` | process default provider | `CryptoProvider` | Algorithm policy, FIPS mode, PQ backend |
 | `require_pq` | `False` | bool | Refuse to start without a hybrid ML-DSA key and a working backend |
 | `allow_test_doubles` | `False` | bool | Permit `two_key.testing` judges (demos and tests only) |
@@ -684,7 +684,7 @@ script `two-key` is the same program.
   least three judges from at least two vendors, at least one of them on local
   weights, `heterogeneity_scope="responding"`, and `ballot_binding="echo"`
   with `echo_binding: true` on every LLM judge.
-- TwoKey: `short_circuit_path_b=True` (the default), `head_signing="decision"`,
+- TwoKey: both paths always answer, `head_signing="decision"`,
   `ledger_fsync=True`, and `ttl_seconds` as short as your tools allow.
 - Gateway: from `tk.gateway()` (any number; they share single use), in
   the same process as Two-Key, with extractors for every money-moving tool

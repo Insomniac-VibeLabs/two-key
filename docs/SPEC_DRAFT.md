@@ -188,7 +188,7 @@ If the VM faults, deny. If the quorum isn't met, deny. If the issuer can't sign,
 
 ### 5.10a Ordering of the paths
 
-[IMPL] By default Path B is not convened when Path A denies (`short_circuit_path_b=True`), so forbidden proposals aren't sent to external judges. It can be configured to run both. Both must pass for an allow either way. The author's §4 (iii) selection includes "Path B invoked only after Path A returns true" [CN-2 (iii)]; `require_path_a_first=True` enforces it (§5.7). *Open question: DESIGN_OPTIONS.md §4, §7.21.*
+[IMPL] Path A and Path B both always answer. A deny from either path denies. A missing answer from either path denies. `short_circuit_path_b` is ignored. The author's §4 (iii) selection includes "Path B invoked only after Path A returns true" [CN-2 (iii)]; `require_path_a_first=True` enforces it (§5.7). *Open question: DESIGN_OPTIONS.md §4, §7.21.*
 
 ### 5.11 Model-swap invariance [D §5.8]
 

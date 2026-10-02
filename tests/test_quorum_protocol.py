@@ -154,7 +154,7 @@ class AvailabilityFloor(unittest.TestCase):
         js = [FixedJudge("a", "yes", "p1"), RaisingJudge("b", "p2")]
         with TwoKeyFixture(RULES, js, quorum_policy=QuorumPolicy(required_yes=1, min_responding=2)) as tk:
             d = tk.authorize(SEARCH, "look")
-            self.assertEqual(d.reason, "path_b_denied:insufficient_responses:1<2")
+            self.assertEqual(d.reason, "path_b_no_response:insufficient_responses:1<2")
             qr = next(e for e in tk.ledger.entries if e.kind == "quorum_result").body
             self.assertEqual((qr["counted"], qr["yes"], qr["no"]), (False, None, None))
             self.assertIsNone(d.quorum["yes"])
@@ -277,18 +277,15 @@ class JudgeInputsAndOrdering(unittest.TestCase):
             tk.authorize(SEARCH, "please look this up")
             self.assertEqual(js[0].calls[0]["proposal"], "please look this up")
 
-    def test_path_b_only_after_path_a(self):
+    def test_both_paths_answer_on_path_a_deny(self):
         js = [Recording("a", "v1"), Recording("b", "v2", local=True)]
         with TwoKeyFixture(RULES, js, quorum_policy=QuorumPolicy.section4()) as tk:
             d = tk.authorize({"tool": "wire_transfer", "amount_usd": 10, "data_class": "financial"}, "wire it")
             self.assertEqual(d.reason, "path_a_denied:rule_denied:tools")
-            self.assertEqual([len(j.calls) for j in js], [0, 0])
-            self.assertTrue(tk.authorize(SEARCH, "look").allowed)
             self.assertEqual([len(j.calls) for j in js], [1, 1])
-        with self.assertRaisesRegex(TwoKeyConfigError, "Path A"), \
-                TwoKeyFixture(RULES, js, quorum_policy=QuorumPolicy.section4(), short_circuit_path_b=False):
+            self.assertTrue(tk.authorize(SEARCH, "look").allowed)
+            self.assertEqual([len(j.calls) for j in js], [2, 2])
+        with TwoKeyFixture(RULES, js, quorum_policy=QuorumPolicy.section4(), short_circuit_path_b=False):
             pass
-
-
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -27,12 +27,13 @@ class Ordering(unittest.TestCase):
             kinds = [e.kind for e in tk.ledger.entries]
         return d, j.calls, kinds
 
-    def test_default_short_circuits_after_path_a_deny(self):
+    def test_both_paths_answer_even_if_skip_requested(self):
         d, calls, kinds = self.run_case(True)
         self.assertFalse(d.allowed)
-        self.assertEqual(calls, 0)
-        self.assertIsNone(d.quorum_passed)
-        self.assertIn("quorum_skipped", kinds)
+        self.assertEqual(calls, 1)
+        self.assertTrue(d.quorum_passed)
+        self.assertIn("quorum_result", kinds)
+        self.assertTrue(d.reason.startswith("path_a_denied"))
 
     def test_run_both_option(self):
         d, calls, kinds = self.run_case(False)

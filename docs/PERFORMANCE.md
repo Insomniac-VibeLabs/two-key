@@ -193,7 +193,7 @@ How Two-Key bounds it:
 * Each LLM judge also has its own HTTP timeout (`timeout`, default 30 s).
   A hung judge's thread ends when that timeout fires; being a daemon thread,
   it does not block process exit.
-* With the default `short_circuit_path_b=True`, a Path A deny returns
+* Both paths always answer. A Path A deny still returns
   without calling any judge, in microseconds plus the ledger write.
 
 End-to-end estimate: `authorize` ≈ local cost from the table (about 1–3 ms)

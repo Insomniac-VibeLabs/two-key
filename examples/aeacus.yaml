@@ -10,7 +10,7 @@ quorum:
   require_local_yes: true
   judge_inputs: record_and_proposal
   ballot_binding: echo
-  require_path_a_first: true
+  require_path_a_first: true  # Path A runs first; Path B still must answer
 judges:
   - id: aeacus
     type: openai
