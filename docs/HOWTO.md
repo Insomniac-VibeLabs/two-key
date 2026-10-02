@@ -311,7 +311,7 @@ judges:
      model: "<xai-model-name>", auth: {type: env, var: XAI_API_KEY}}
   - {id: claude, type: anthropic, provider: anthropic, model: "<anthropic-model-name>",
      auth: {type: env, var: ANTHROPIC_API_KEY}}
-  - {id: local, type: ollama, provider: local, model: "<ollama-model-name>"}
+  - {id: local, type: ollama, provider: local, vendor: alibaba, model: "qwen2.5:7b"}
 ```
 
 <!-- check: expect=^loaded two-key-constitution/2 -->
@@ -438,7 +438,33 @@ Notes per provider:
 - **gemini** sends `x-goog-api-key` and asks for a JSON response.
 - **ollama** sends no credential by default and is marked
   `local_weights: true`. Set `local_weights: false` if your Ollama serves
-  a remote or cloud model.
+  a remote or cloud model. The recommended model name is `qwen2.5:7b`
+  (see below).
+
+Call shape, without a vendor SDK. Streaming is not used: the ballot is one
+short JSON object, and a partial stream is not a ballot. The default
+transport reuses a connection per thread and origin, does not follow
+redirects, and retries a dropped connection or HTTP 429/502/503/504 at most
+twice inside the judge timeout. A 401 is not retried.
+
+- **openai_compatible** on `api.openai.com` and `api.x.ai` sends
+  `response_format: json_schema` (strict ballot schema, no extra keys) when
+  `response_format` is omitted or `auto`. xAI also gets `reasoning_effort: low`
+  unless you set `reasoning_effort`. OpenAI gets `store: false`. A 400 falls
+  back once to `json_object` with those knobs removed. Any other host stays
+  on `json_object`, so llama.cpp, vLLM, and LM Studio are unchanged. Set
+  `response_format: json_schema` to force the schema, or `json_object` to
+  force the old mode. A ballot key (`ballot_key_env`) keeps `json_object`,
+  because the optional MAC is outside the closed schema.
+- **anthropic** marks the system prompt and the constitution with
+  `cache_control: {type: ephemeral}`. The action record and proposal are
+  after that breakpoint, so they are not part of the cached prefix. No
+  `anthropic-beta` header. A short constitution misses the cache and still
+  runs. A 400 strips the breakpoints and retries once.
+- **gemini** sends `responseSchema` for the ballot. A 400 drops it and
+  retries once with JSON mime type only.
+- **ollama** sends `keep_alive: 10m` and `stream: false`, so the weights
+  stay loaded between ballots.
 - `https://` is required except for loopback hosts (`localhost`,
   `127.0.0.1`, `::1`). For a LAN server over plain HTTP, set
   `allow_insecure_http: true`; that sends prompts unencrypted.
@@ -451,6 +477,74 @@ untrusted data. It must answer with exactly `{"consistent": bool,
 "confidence": 0..1, "rationale": str}`. Anything else (prose, code fences,
 extra keys, wrong types) is an abstention, and so are HTTP errors,
 credential errors, and timeouts.
+
+### Recommended local judge: Qwen2.5-7B-Instruct
+
+This is a recommendation, not a dependency. Two-Key does not download or
+ship the weights. [Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
+(Apache-2.0, Copyright 2024 Alibaba Cloud) is the local model that best
+matches the ballot parser: Ollama asks for JSON at temperature 0, the
+model is trained to emit JSON and to keep the system role when untrusted
+text tries to override it, and Alibaba is a different vendor from the
+cloud judges in the example. A ballot that is not exactly the three keys
+above abstains, so a specialist judge that emits `<feedback>` and
+`<score>` tags will not count. Qwen3 thinking models have the same
+problem if a reasoning trace leaks into the reply.
+
+`qwen2.5:3b` is the smaller fallback (about 2 GB at Q4). Below 3B, expect
+more abstentions. Record `weights_sha256` if you want the ballot to name
+the file you pulled; Two-Key stores the hash and does not check it.
+
+These commands need Ollama and a weight download, so the doc checker
+skips them. *Not run:* no network, and no Ollama in the sandbox.
+
+<!-- check: skip needs Ollama and a weight download; not run by doccheck -->
+```bash
+# Install Ollama from https://ollama.com, then pull the recommended model.
+ollama pull qwen2.5:7b
+ollama show qwen2.5:7b --modelfile
+```
+
+<!-- check: file=judges-qwen.yaml -->
+```yaml
+quorum:
+  required_yes: 2
+  min_responding: 2
+  min_vendors: 2
+  min_local_judges: 1
+judges:
+  - id: grok
+    type: openai_compatible
+    provider: xai
+    base_url: https://api.x.ai/v1
+    model: <xai-model-name>
+    auth: {type: env, var: XAI_API_KEY}
+  - id: claude
+    type: anthropic
+    provider: anthropic
+    model: <anthropic-model-name>
+    auth: {type: env, var: ANTHROPIC_API_KEY}
+  - id: local-qwen
+    type: ollama
+    provider: local
+    vendor: alibaba
+    base_url: http://localhost:11434
+    model: qwen2.5:7b
+    local_weights: true
+    # weights_sha256: <sha256 of the GGUF>   # optional; recorded, not verified
+```
+
+<!-- check: expect=^OK: 3 judges; required_yes=2 min_responding=2 -->
+```bash
+python -m two_key check-judges --config judges-qwen.yaml
+```
+
+To serve the same Hugging Face weights yourself, use `openai_compatible`
+against a loopback vLLM or llama.cpp server instead of `ollama`. Set
+`local_weights: true` and `vendor: alibaba`. The model id is whatever that
+server reports, often `Qwen/Qwen2.5-7B-Instruct`. Keep the license file
+next to any copy of the weights you redistribute. Do not commit the
+weights to this repository.
 
 **Writing your own judge.** Subclass `Judge` and return a `Ballot`. A
 judge that raises is recorded as an abstention.
@@ -739,6 +833,23 @@ print("elapsed under 1s:", time.monotonic() - t < 1, "| passed:", q.passed)
 ```
 
 ## 8. Authorizing actions
+
+A monitored agent may be local or cloud-hosted. Vendor control does not put
+it inside the constitution. List the agents in `examples/agents.yaml` (xAI,
+OpenAI, Anthropic, Gemini, Ollama, or another OpenAI-compatible server) and
+call `authorize_from_agent`. That sends the constitution and one instruction, both fenced and escaped, to the named agent, then authorizes the reply. It does not call
+the gateway. A cloud agent receives the constitution text. The instruction
+is not written to the ledger; a failed call records its digest and length.
+Plain HTTP is refused except on loopback. OpenAI and xAI get a proposal schema and xAI gets `reasoning_effort: low`; a 400 falls back once. Credentials are read once at startup so a later environment change cannot hide reuse.
+
+<!-- check: skip needs model names and a constructed TwoKey; covered by tests/test_agents.py -->
+```python
+from two_key.agents import load_agents_file
+agents = load_agents_file("examples/agents.yaml")  # after replacing model names
+# pass agents=agents to TwoKey. A cloud agent credential must differ from every judge credential.
+decision = tk.authorize_from_agent("grok", "Draft a payment of 42.50 to power-co.example")
+```
+
 
 `tk.authorize(action, proposal, tool_args)` takes the normalized action
 record, the proposing model's text, and the literal tool-call arguments.

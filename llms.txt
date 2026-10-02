@@ -15,3 +15,4 @@ Tests: python -m unittest discover -s tests (413 tests, no network).
 
 There is no MCP server in this release. capability-tokens are the tool-binding
 mechanism. Do not treat GitHub topics as the API.
+Monitored agents are optional and configured in examples/agents.yaml. They may be local or vendor-hosted (xAI, OpenAI, Anthropic, Gemini, Ollama). authorize_from_agent sends the constitution, then both paths still decide. The agent cannot execute a tool.

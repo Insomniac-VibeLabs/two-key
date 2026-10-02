@@ -58,7 +58,7 @@ DEFAULT_PROVIDER = {"openai_compatible": "openai-compatible", "anthropic": "anth
                     "gemini": "google", "ollama": "ollama-local"}
 JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", "json_mode",
               "max_tokens", "auth_header", "allow_insecure_http", "vendor", "local_weights", "weights_sha256",
-              "echo_binding", "ballot_key_env", "receives_proposal"}
+              "echo_binding", "ballot_key_env", "receives_proposal", "response_format", "reasoning_effort"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
                "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
                "require_path_a_first", "require_local_yes"}
@@ -126,7 +126,8 @@ def build_judge(spec: dict, transport=None) -> Judge:
         "credential": build_credential(spec.get("auth")), "transport": transport,
     }
     for k in ("base_url", "timeout", "auth_header", "allow_insecure_http", "json_mode", "max_tokens",
-              "vendor", "local_weights", "weights_sha256", "echo_binding", "ballot_key_env", "receives_proposal"):
+              "vendor", "local_weights", "weights_sha256", "echo_binding", "ballot_key_env", "receives_proposal",
+              "response_format", "reasoning_effort"):
         if k in spec:
             kw[k] = spec[k]
     if t == "openai_compatible" and "base_url" not in kw:

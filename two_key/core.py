@@ -131,6 +131,7 @@ class TwoKey:
         deployment_mode: str | None = None,
         deployment_config: Path | str | None = None,
         agent_session_env: str | None = None,
+        agents: Sequence | None = None,
         anchor: Any = None,
         pki: Any = None,
         principal_credential: Any = None,
@@ -242,6 +243,9 @@ class TwoKey:
         self.ttl_seconds = ttl_seconds
         # Both paths always answer. The old skip flag is accepted and ignored.
         self.short_circuit_path_b = False
+        self.agents = {a.agent_id: a for a in (agents or [])}
+        if len(self.agents) != len(agents or []):
+            raise TwoKeyConfigError("agent ids must be unique")
         self._agent_session = self._freeze_agent_session(agent_session_env)
 
         self._append_loaded()
@@ -454,23 +458,76 @@ class TwoKey:
             pass
 
 
-    def _freeze_agent_session(self, env_name: str | None) -> str | None:
-        """Read the monitored agent's cloud credential once. The caller cannot supply it."""
+    def _freeze_agent_session(self, env_name: str | None):
+        """Read monitored-agent credentials once. The caller cannot supply them.
+
+        A cloud judge must not reuse any configured agent credential. Hosting
+        is not trust: a vendor agent is still untrusted. The legacy env var
+        remains for one external agent.
+        """
+        tokens = set()
+        if env_name:
+            value = os.environ.get(env_name)
+            if not value:
+                raise TwoKeyConfigError(f"agent_session_env {env_name} is not set")
+            tokens.add(value)
+        for agent in self.agents.values():
+            if not agent.is_cloud():
+                continue
+            token = agent.credential_token()
+            if not token:
+                raise TwoKeyConfigError(f"cloud agent {agent.agent_id} has no credential")
+            tokens.add(token)
         cloud = any(getattr(j, "is_cloud", lambda: False)() for j in self.judges)
-        if not cloud:
-            return None
-        if not env_name:
-            raise TwoKeyConfigError("a cloud judge requires agent_session_env, the environment variable holding the monitored agent's credential")
-        value = os.environ.get(env_name)
-        if not value:
-            raise TwoKeyConfigError(f"agent_session_env {env_name} is not set")
-        return value
+        if cloud and not tokens:
+            raise TwoKeyConfigError("a cloud judge requires agent_session_env, or a configured cloud agent credential")
+        if len(tokens) == 1 and not self.agents:
+            return next(iter(tokens))
+        return frozenset(tokens) if tokens else None
+
+    def _agent_failure(self, agent_id: str, error: str, instruction: str | None = None,
+                       provider: str | None = None, hosting: str | None = None) -> Decision:
+        body = {"agent_id": agent_id, "ok": False, "error": error}
+        if provider:
+            body["provider"] = provider
+        if hosting:
+            body["hosting"] = hosting
+        if isinstance(instruction, str):
+            body["instruction_len"] = len(instruction)
+            body["instruction_digest"] = digest_hex(instruction.encode("utf-8", "surrogatepass"),
+                                                    self.digest_alg, self.crypto)
+        self.ledger.append("agent_proposal", body)
+        try:
+            self.ledger.checkpoint()
+        except Exception:
+            return Decision(False, "internal_error:ledger_checkpoint", ledger_digest=self.ledger.root())
+        return Decision(False, error if error == "unknown_agent" else f"agent_proposal_rejected:{error}",
+                        ledger_digest=self.ledger.root())
+
+    def authorize_from_agent(self, agent_id: str, instruction: str, agent_assertion: Any = None) -> Decision:
+        """Ask a configured agent for one proposal, then authorize it.
+
+        The agent may be local or a vendor model. It sees the constitution and
+        an escaped instruction. The proposal is untrusted and cannot execute a
+        tool. A malformed reply is a deny. The instruction itself is not written
+        to the ledger; only its digest is, on failure.
+        """
+        agent = self.agents.get(agent_id)
+        if agent is None:
+            return self._agent_failure(agent_id, "unknown_agent", instruction)
+        try:
+            proposed = agent.complete(instruction, self.constitution_text)
+        except Exception as e:
+            return self._agent_failure(agent_id, type(e).__name__, instruction, agent.provider, agent.hosting)
+        return self.authorize(proposed.action, proposed.proposal, proposed.tool_args, agent_assertion,
+                              agent_meta=proposed.to_record())
 
     def authorize(self, proposed: Action | Mapping[str, Any], proposal: str,
-                  tool_args: Mapping[str, Any] | None = None, agent_assertion: Any = None) -> Decision:
+                  tool_args: Mapping[str, Any] | None = None, agent_assertion: Any = None,
+                  *, agent_meta: Mapping[str, Any] | None = None) -> Decision:
         """``agent_assertion``: from ``pki.sign_agent_request`` (required in enterprise mode by default)."""
         try:
-            d = self._authorize(proposed, proposal, {} if tool_args is None else tool_args, agent_assertion)
+            d = self._authorize(proposed, proposal, {} if tool_args is None else tool_args, agent_assertion, agent_meta)
         except Exception as e:  # spec 5.7: no best-effort allow; the ledger or any component failing means deny
             d = Decision(False, f"internal_error:{type(e).__name__}", ledger_digest=self.ledger.root())
         try:
@@ -485,7 +542,8 @@ class TwoKey:
         """H(action record) for ballots and decisions: two-key-enc/2 under the action-record label."""
         return typed_hash(action_record, DOMAIN_ACTION_RECORD, self.digest_alg, self.crypto)
 
-    def _authorize(self, proposed, proposal: str, tool_args: Mapping[str, Any], agent_assertion: Any = None) -> Decision:
+    def _authorize(self, proposed, proposal: str, tool_args: Mapping[str, Any], agent_assertion: Any = None,
+                   agent_meta: Mapping[str, Any] | None = None) -> Decision:
         if not isinstance(proposal, str):
             proposal = str(proposal)
         # Read the tool args once (F_REVIEW finding 1): the logged args and args_hash come from the same bytes.
@@ -494,11 +552,14 @@ class TwoKey:
             logged_args = _safe_record(frozen.args())
         except (TypeError, ValueError) as e:
             frozen, frozen_error, logged_args = None, e, _safe_record(tool_args)
-        self.ledger.append("proposal", {"action_input": _safe_record(proposed), "proposal": proposal,
-                                        "proposal_digest": digest_hex(proposal.encode("utf-8", "surrogatepass"),
-                                                                      self.digest_alg, self.crypto),
-                                        "proposal_digest_alg": self.digest_alg,
-                                        "tool_args": logged_args})
+        proposal_entry = {"action_input": _safe_record(proposed), "proposal": proposal,
+                          "proposal_digest": digest_hex(proposal.encode("utf-8", "surrogatepass"),
+                                                        self.digest_alg, self.crypto),
+                          "proposal_digest_alg": self.digest_alg,
+                          "tool_args": logged_args}
+        if agent_meta:
+            proposal_entry["agent"] = {k: agent_meta.get(k) for k in ("agent_id", "provider", "hosting", "model")}
+        self.ledger.append("proposal", proposal_entry)
         try:
             action = normalize_action(proposed)
             if frozen_error is not None:

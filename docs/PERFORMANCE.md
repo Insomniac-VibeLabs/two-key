@@ -193,6 +193,13 @@ How Two-Key bounds it:
 * Each LLM judge also has its own HTTP timeout (`timeout`, default 30 s).
   A hung judge's thread ends when that timeout fires; being a daemon thread,
   it does not block process exit.
+* The default judge transport reuses one connection per thread and origin
+  and retries a dropped connection or HTTP 429/502/503/504 at most twice
+  inside that timeout. Redirects are not followed. Streaming and vendor SDKs
+  are not used. OpenAI and xAI are asked for a strict ballot schema (xAI also
+  `reasoning_effort: low`); Anthropic caches only the system prompt and the
+  constitution. A 400 on those knobs falls back once. None of this changes
+  the local ballot parser.
 * Both paths always answer. A Path A deny still returns
   without calling any judge, in microseconds plus the ledger write.
 

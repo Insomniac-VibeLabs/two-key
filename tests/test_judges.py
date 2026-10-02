@@ -200,7 +200,7 @@ class Config(unittest.TestCase):
         for j in data["judges"]:
             j["model"] = "m"
         judges, pol = load_config(data)
-        self.assertEqual([j.judge_id for j in judges], ["grok", "claude", "gemini", "local-llama"])
+        self.assertEqual([j.judge_id for j in judges], ["grok", "claude", "gemini", "local-qwen"])
         self.assertEqual(pol.required_yes, 2)
 
     def test_inline_secret_rejected(self):
