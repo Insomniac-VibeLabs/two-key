@@ -58,7 +58,7 @@ DEFAULT_PROVIDER = {"openai_compatible": "openai-compatible", "anthropic": "anth
                     "gemini": "google", "ollama": "ollama-local"}
 JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", "json_mode",
               "max_tokens", "auth_header", "allow_insecure_http", "vendor", "local_weights", "weights_sha256",
-              "echo_binding", "ballot_key", "receives_proposal"}
+              "echo_binding", "ballot_key_env", "receives_proposal"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
                "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
                "require_path_a_first", "require_local_yes"}
@@ -116,15 +116,17 @@ def build_judge(spec: dict, transport=None) -> Judge:
     model = spec.get("model")
     if not isinstance(model, str) or not model or model.startswith("REPLACE_"):
         raise JudgeConfigError(f"judge {spec.get('id')!r}: replace REPLACE_WITH_MODEL with a model name your account can use")
-    key = spec.get("ballot_key")
-    if isinstance(key, str) and (key.startswith("REPLACE_") or key.startswith("set-to-the-same")):
-        raise JudgeConfigError(f"judge {spec.get('id')!r}: replace {key} with that judge's own secret")
+    if "ballot_key" in spec:
+        raise JudgeConfigError(f"judge {spec.get('id')!r}: do not write ballot_key in the file; set ballot_key_env to an environment variable")
+    env_name = spec.get("ballot_key_env")
+    if env_name is not None and (not isinstance(env_name, str) or not env_name or env_name.startswith("REPLACE_")):
+        raise JudgeConfigError(f"judge {spec.get('id')!r}: ballot_key_env must name an environment variable")
     kw: dict[str, Any] = {
         "judge_id": spec.get("id"), "provider": spec.get("provider", DEFAULT_PROVIDER[t]), "model": model,
         "credential": build_credential(spec.get("auth")), "transport": transport,
     }
     for k in ("base_url", "timeout", "auth_header", "allow_insecure_http", "json_mode", "max_tokens",
-              "vendor", "local_weights", "weights_sha256", "echo_binding", "ballot_key", "receives_proposal"):
+              "vendor", "local_weights", "weights_sha256", "echo_binding", "ballot_key_env", "receives_proposal"):
         if k in spec:
             kw[k] = spec[k]
     if t == "openai_compatible" and "base_url" not in kw:

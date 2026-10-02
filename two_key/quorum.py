@@ -335,6 +335,10 @@ def convene(
     if len(providers) < policy.min_distinct_providers:
         return result(False, f"insufficient_distinct_providers:{len(providers)}<{policy.min_distinct_providers}")
     yes = sum(1 for b in responding if b.vote == "yes")
+    if any(getattr(j, "is_cloud", lambda: False)() for j in judges) and not agent_session:
+        return result(False, "cloud_judge_session_required")
+    if any((b.error or "").startswith("cloud_judge_") for b in ballots):
+        return result(False, next(b.error for b in ballots if (b.error or "").startswith("cloud_judge_")))
     if yes < policy.required_yes:
         return result(False, f"insufficient_yes:{yes}<{policy.required_yes}")
     if policy.require_local_yes:

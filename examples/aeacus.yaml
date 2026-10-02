@@ -1,8 +1,7 @@
 # Optional profile. Two-Key does not require Aeacus.
 # Use this only if you want this local judge to be a required yes.
-# Start Aeacus with AEACUS_TOKEN set. Two-Key sends that bearer token and
-# rejects a ballot whose MAC was not made with it. A process that binds the
-# port without the token cannot produce a ballot this profile will count.
+# AEACUS_TOKEN is Aeacus's own server secret. ballot_key_env names that variable.
+# Do not write the secret in this file.
 quorum:
   required_yes: 2
   min_responding: 2
@@ -14,14 +13,13 @@ quorum:
   require_path_a_first: true  # Path A runs first; Path B still must answer
 judges:
   - id: aeacus
-    type: openai
+    type: openai_compatible
     provider: aeacus-local
     base_url: http://127.0.0.1:8765/v1
     model: aeacus-micro-v1
-    auth:
-      type: bearer
-      token_env: AEACUS_TOKEN
+    auth: {type: env, var: AEACUS_TOKEN}
     local_weights: true
     echo_binding: true
     allow_insecure_http: true
-    ballot_key: REPLACE_WITH_BALLOT_KEY  # required: replace this. For Aeacus, use the same secret as AEACUS_TOKEN
+    ballot_key_env: AEACUS_TOKEN
+    receives_proposal: true

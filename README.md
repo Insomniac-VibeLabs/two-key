@@ -369,23 +369,25 @@ produce a counted ballot, the action is denied.
 ```yaml
 # optional; copy into judges.yaml or use examples/aeacus.yaml
 - id: aeacus
-  type: openai
+  type: openai_compatible
   provider: aeacus-local
   base_url: http://127.0.0.1:8765/v1
   model: aeacus-micro-v1
-  auth: {type: bearer, token_env: AEACUS_TOKEN}
+  auth: {type: env, var: AEACUS_TOKEN}
   local_weights: true
   echo_binding: true
   allow_insecure_http: true
-  ballot_key: REPLACE_WITH_BALLOT_KEY  # change this; for Aeacus, the same value as AEACUS_TOKEN
-  receives_proposal: true  # this judge may see the proposal
+  ballot_key_env: AEACUS_TOKEN
+  receives_proposal: true
 ```
 
 Start Aeacus with `python -m aeacus serve` and the same `AEACUS_TOKEN`.
 `examples/aeacus.yaml` is one profile that requires this local yes. It is
 not the default. The default remains any local or cloud judge you choose.
 
-A judge sees the proposal only if you annotate it with `receives_proposal: true`, or if the quorum uses `judge_inputs: record_and_proposal`. Any judge you annotate may receive it, local or cloud. Use a different model than the monitored agent. A cloud judge is mandatory a separate session: Two-Key mints a new session header and refuses the call if that judge's credential is the agent's session.
+A judge sees the proposal only if you annotate it with `receives_proposal: true`, or if the quorum uses `judge_inputs: record_and_proposal`. Any judge you annotate may receive it, local or cloud. A different model from the monitored agent is recommended, not required.
+
+A cloud judge must not use the monitored agent's session. Pass that session to `authorize(..., agent_session=...)`. Two-Key denies the action if it is missing, or if it is the same value as the cloud judge's credential. `X-Two-Key-Judge-Session` is Two-Key's own call id. It does not open a session at the provider. Do not write `ballot_key` in the file. Set `ballot_key_env` to an environment variable, the same way as an API key.
 
 ## Content scanners (DLP and antivirus)
 

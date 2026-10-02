@@ -230,7 +230,7 @@ class LLMEcho(unittest.TestCase):
         good = {"consistent": True, "confidence": 0.9, "rationale": "ok",
                 "action_hash": BIND["action_hash"], "constitution_hash": BIND["constitution_hash"]}
         j, t = self.judge(good)
-        q = convene([j], "CONST", A, "", QuorumPolicy(required_yes=1, ballot_binding="echo"), BIND)
+        q = convene([j], "CONST", A, "", QuorumPolicy(required_yes=1, ballot_binding="echo"), BIND, agent_session="agent")
         self.assertTrue(q.passed, q.reason)
         self.assertEqual(q.ballots[0].binding, "echo")
         blob = json.dumps(t.calls[0])
@@ -245,14 +245,14 @@ class LLMEcho(unittest.TestCase):
         for obj, err in ((no_echo, "malformed_ballot"), (wrong, "binding_mismatch"), (bad_type, "malformed_ballot")):
             with self.subTest(err):
                 j, _ = self.judge(obj)
-                q = convene([j], "CONST", A, "", QuorumPolicy(required_yes=1), BIND)
+                q = convene([j], "CONST", A, "", QuorumPolicy(required_yes=1), BIND, agent_session="agent")
                 self.assertEqual(q.ballots[0].vote, "abstain")
                 self.assertTrue(q.ballots[0].error.startswith(err), q.ballots[0].error)
                 self.assertFalse(q.passed)
 
     def test_no_echo_keeps_three_key_schema(self):
         j, t = self.judge({"consistent": True, "confidence": 0.9, "rationale": "ok"}, echo=False)
-        q = convene([j], "CONST", A, "", QuorumPolicy(required_yes=1), BIND)
+        q = convene([j], "CONST", A, "", QuorumPolicy(required_yes=1), BIND, agent_session="agent")
         self.assertTrue(q.passed)
         self.assertEqual(q.ballots[0].binding, "stamp")
         self.assertNotIn("ballot_binding", json.dumps(t.calls[0]))

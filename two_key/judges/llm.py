@@ -134,7 +134,8 @@ class LLMJudge(Judge):
                  transport: Transport | None = None, auth_header: str | None = None,
                  allow_insecure_http: bool = False, vendor: str | None = None,
                  local_weights: bool | None = None, weights_sha256: str | None = None,
-                 echo_binding: bool = False, ballot_key: str | None = None, receives_proposal: bool = False):
+                 echo_binding: bool = False, ballot_key: str | None = None, ballot_key_env: str | None = None,
+                 receives_proposal: bool = False):
         if not judge_id or not model or not base_url:
             raise ValueError("judge_id, model and base_url are required")
         u = urlparse(base_url)
@@ -155,6 +156,7 @@ class LLMJudge(Judge):
         self.weights_sha256 = weights_sha256
         self.echo_binding = bool(echo_binding)
         self.ballot_key = ballot_key
+        self.ballot_key_env = ballot_key_env
         self.receives_proposal = bool(receives_proposal)
 
     # -- hooks -------------------------------------------------------------
@@ -194,9 +196,12 @@ class LLMJudge(Judge):
         except (CredentialError, NotImplementedError, ValueError) as e:
             return self.abstain(f"credential: {e}")
         if self.is_cloud():
+            if not agent_session:
+                return self.abstain("cloud_judge_session_required")
             token = headers.get("Authorization", "").removeprefix("Bearer ").strip()
-            if agent_session and token and token == agent_session:
+            if token and token == agent_session:
                 return self.abstain("cloud_judge_reused_agent_session")
+            # Two-Key's own call id. It is not a session at the provider.
             headers["X-Two-Key-Judge-Session"] = str(uuid.uuid4())
         system = SYSTEM_PROMPT + (ECHO_INSTRUCTION if echo else "")
         url, body = self._request(system, build_user_prompt(constitution_text, action, proposal,
@@ -214,13 +219,19 @@ class LLMJudge(Judge):
             return self.abstain(f"malformed_ballot: {e}")
         except Exception as e:
             return self.abstain(f"malformed_response: {type(e).__name__}")
-        if getattr(self, "ballot_key", None):
+        ballot_key = self.ballot_key
+        if self.ballot_key_env:
+            import os
+            ballot_key = os.environ.get(self.ballot_key_env)
+            if not ballot_key:
+                return self.abstain(f"ballot_key_env {self.ballot_key_env} is not set")
+        if ballot_key:
             from hashlib import sha256
             import hmac
             raw = text.strip()
             body, _, mac = raw.rpartition(',"ballot_mac":"')
             good = mac.endswith('"}') and hmac.compare_digest(
-                mac[:-2], hmac.new(self.ballot_key.encode(), (body + "}").encode(), sha256).hexdigest())
+                mac[:-2], hmac.new(ballot_key.encode(), (body + "}").encode(), sha256).hexdigest())
             if not good:
                 return self.abstain("ballot_mac_mismatch")
         if echo:

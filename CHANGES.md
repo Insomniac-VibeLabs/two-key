@@ -145,3 +145,8 @@ Authorize denies when the frozen tool arguments contradict the action record (qu
 ## Both paths must answer
 
 Path A and Path B both run on every proposal. A deny from either path denies the action. A missing answer does too: a Path A exception is `path_a_no_response`, and a Path B quorum that was not counted is `path_b_no_response`. `short_circuit_path_b` is ignored.
+
+
+## Cloud session and ballot key
+
+A cloud judge requires `authorize(..., agent_session=...)`. The action is denied if that value is missing or equal to the judge credential. `X-Two-Key-Judge-Session` is Two-Key's call id, not a provider session. `ballot_key` in the config file is refused. Use `ballot_key_env`.

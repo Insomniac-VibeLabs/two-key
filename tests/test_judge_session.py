@@ -14,12 +14,17 @@ class Token:
 
 
 class Session(unittest.TestCase):
-    def test_placeholder_ballot_key_is_refused(self):
-        spec = {"id": "aeacus", "type": "openai_compatible", "provider": "aeacus-local",
-                "base_url": "http://127.0.0.1:8765/v1", "model": "aeacus-micro-v1",
-                "ballot_key": "REPLACE_WITH_BALLOT_KEY", "allow_insecure_http": True}
-        with self.assertRaisesRegex(JudgeConfigError, "REPLACE_WITH_BALLOT_KEY"):
+    def test_ballot_key_in_the_file_is_refused(self):
+        spec = {"id": "cloud", "type": "openai_compatible", "provider": "openai",
+                "base_url": "https://api.openai.com/v1", "model": "m", "ballot_key": "secret"}
+        with self.assertRaisesRegex(JudgeConfigError, "ballot_key"):
             build_judge(spec)
+
+    def test_cloud_judge_requires_an_agent_session(self):
+        judge = OpenAICompatibleJudge("cloud", "openai", "m", "https://api.openai.com/v1", Token("judge-key"))
+        ballot = judge.score_bound("constitution", _action(), "", None)
+        self.assertEqual(ballot.vote, "abstain")
+        self.assertIn("cloud_judge_session_required", ballot.error)
 
     def test_cloud_judge_refuses_the_agent_session(self):
         judge = OpenAICompatibleJudge("cloud", "openai", "m", "https://api.openai.com/v1", Token("agent-session"))
