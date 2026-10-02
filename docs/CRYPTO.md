@@ -48,7 +48,7 @@ OpenSSL 3.5.7; the pyca `cryptography` 50.0.1 wheel bundles its own OpenSSL
 | `require_fips_module=True` | provider | Refuses to start unless **both** OpenSSL instances report FIPS mode (`_hashlib.get_fips_mode()` and pyca `backend._fips_enabled`). This is the switch to turn on in a real FIPS deployment. |
 | RNG | provider `random_bytes` → `os.urandom`; token ids use `secrets` | No other randomness source is used. |
 | Startup self-test | `two_key/crypto/selftest.py` | Runs once per provider before Two-Key accepts a constitution. Any failure raises `SelfTestError` and Two-Key refuses to start. See section 5. |
-| Key sizes | provider, `capability.py`, `scanning.py` | HMAC keys shorter than 256 bits are refused (tokens and the scan-verdict webhook). Default token keys are 384 bits (`tk1-hs384`). |
+| Key sizes | provider, `capability.py`, `scanning.py` | HMAC keys shorter than 256 bits are refused (tokens and the scan-verdict webhook). The default token is signed (`tk1-sig`). HMAC-SHA-384 (`tk1-hs384`) is 384 bits and only if chosen. |
 
 The application-level self-test is extra. It does not replace the module's
 own mandatory FIPS 140-3 self-tests.
@@ -83,7 +83,7 @@ profiles already used SHA-384 and HMAC-SHA-384.
 | Ledger hash chain (entry digests; the algorithm is bound into each digest) | SHA-384 | SHA-256 | FIPS 180-4 |
 | Ledger Merkle tree (RFC 6962 structure), consistency and inclusion proofs (RFC 9162), the gateway's ancestor check (PRIOR_ART.md §4 (i)) | SHA-384 | SHA-256 | FIPS 180-4 |
 | Ledger chain-head signature | same suite as the principal key | unchanged | FIPS 186-5, FIPS 204 |
-| Capability token tag | HMAC-SHA-384 (`tk1-hs384`), 384-bit key by default, ≥ 256 bits required; optional `tk1-sig` (hybrid ML-DSA-65) | HMAC-SHA-256 (`tk1`); still selectable explicitly | FIPS 198-1 + FIPS 180-4; FIPS 204 |
+| Capability token tag | Signature (`tk1-sig`) by the principal key, the default. HMAC-SHA-384 (`tk1-hs384`) only if chosen | HMAC-SHA-256 (`tk1`); still selectable explicitly | FIPS 186-5 / FIPS 204; FIPS 198-1 |
 | Tool-call argument binding (`args_hash`): H(two-key-enc/2 of {tool, args}), also what the gateway scans and executes | SHA-384 over the typed encoding | SHA-256 over canonical JSON (not injective) | FIPS 180-4 |
 | `bytecode_hash`, `nl_hash` (§4 (ii)); bound into ballots and tokens | SHA-384 | SHA-256 | FIPS 180-4 |
 | Ballot binding H(action record) (§4 (iii)), decision `action_digest` | SHA-384 over two-key-enc/2 (`two-key/action-record` label) | SHA-256 over canonical JSON | FIPS 180-4 |
@@ -165,7 +165,7 @@ mapping that answers differently on a second read) can't change what runs.
 |---|---|---|
 | Ed25519, ECDSA P-384 | Broken by Shor's algorithm on a large fault-tolerant quantum computer | Hybrid suites add **ML-DSA-65** (FIPS 204, NIST security category 3) to constitution signing and the ledger chain head, and optionally to capability tokens (`tk1-sig`). |
 | SHA-256 / SHA-384 | Grover roughly halves preimage security; quantum collision search gives a smaller speed-up | **SHA-384** by default for all security-relevant digests in every profile (ledger chain, Merkle tree, constitution digest, args binding, ballots, anchors). SHA-512 and SHA3-384/512 are approved and self-tested alternatives (`digest_alg=`). |
-| HMAC tokens and the webhook MAC | Grover at most halves the effective key strength | **HMAC-SHA-384** by default; keys below 256 bits are refused; `tk1-hs384` uses 384-bit keys. |
+| HMAC tokens and the webhook MAC | Grover at most halves the effective key strength | Tokens are signed by default. HMAC-SHA-384 is only if chosen; keys below 256 bits are refused. |
 | AES-256-GCM (key bundles) | Grover halves the effective key strength (to about 128 bits) | Adequate. The key comes from PBKDF2-HMAC-SHA-384; its strength is bounded by the passphrase. |
 
 **Signatures are quantum-resistant only with a hybrid suite.** The default

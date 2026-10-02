@@ -301,16 +301,16 @@ class CryptoDefaultsAndLegacy(unittest.TestCase):
 
     def test_defaults_are_sha384_and_hmac_sha384_for_ed25519(self):
         tk = self.make(self.tmp / "l.jsonl")
-        self.assertEqual((tk.digest_alg, tk.token_mode), ("sha384", "tk1-hs384"))
+        self.assertEqual((tk.digest_alg, tk.token_mode), ("sha384", "tk1-sig"))
         self.assertTrue(all(e.alg == "sha384" for e in tk.ledger.entries))
         d = tk.authorize(PAY, "Pay.", HONEST)
-        self.assertTrue(d.capability.startswith("tk1-hs384."))
+        self.assertTrue(d.capability.startswith("tk1-sig."))
         prop = [e for e in tk.ledger.entries if e.kind == "proposal"][-1].body
         self.assertEqual((len(prop["proposal_digest"]), prop["proposal_digest_alg"]), (96, "sha384"))
         self.assertNotIn("proposal_sha256", prop)
         self.assertEqual(tk.constitution.digest_alg, "sha384")
         self.assertIn("constitution_text_sha384", tk.constitution.document)
-        self.assertEqual(CapabilityIssuer().mode, "tk1-hs384")
+        self.assertEqual(CapabilityIssuer(mode="tk1-hs384", secret=b"k"*48).mode, "tk1-hs384")
 
     def test_selftest_covers_the_algorithms_in_use(self):
         tk = self.make(self.tmp / "l.jsonl")

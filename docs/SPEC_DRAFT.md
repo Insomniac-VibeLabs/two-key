@@ -151,7 +151,7 @@ Payload [D §5.5]: principal, tool, scope, issued_at, expires_at, ledger_root. D
 
 [IMPL]
 - The token also carries a single-use `jti`, `args_hash`, and the constitution digest.
-- Its tag is HMAC-SHA-384 (`tk1-hs384`, the default for every key suite since the F_REVIEW fixes) or, if chosen explicitly, HMAC-SHA-256 (`tk1`, legacy). The payload carries `args_enc` (`two-key-enc/2`); tokens without it are refused. A signed mode (`tk1-sig`, e.g. hybrid ML-DSA-65 + Ed25519) is optional. Production would use a hardware-backed key [D §5.1 item 6].
+- Its tag is a signature (`tk1-sig`, the default; the principal key unless a separate token key is set). HMAC-SHA-384 (`tk1-hs384`) and HMAC-SHA-256 (`tk1`) are only if chosen. The payload carries `args_enc` (`two-key-enc/2`); tokens without it are refused. Production would use a hardware-backed key [D §5.1 item 6].
 - The gateway additionally checks the principal, data class, `args_hash` (the canonical hash of the literal tool-call arguments), that no constitution has been loaded since the token's root, and single use. The used-jti record is kept by the ledger itself, so every gateway on one TwoKey instance and its ledger shares it and a token is accepted exactly once however many gateways or threads present it (checks and redemption run under the ledger's lock; on POSIX the redemption also holds an `flock` on the ledger file and refuses, fail closed, if another writer has changed the file: `replayed` / `ledger_concurrent_writer`). The record is rebuilt from the ledger's `capability_redeemed` entries on restart [IMPL; engineering fix on the author's instruction, 2026-09-30].
 - The full token goes back to the caller; only its digest (`token_digest`, SHA-384 by default) is logged.
 

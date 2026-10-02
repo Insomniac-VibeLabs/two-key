@@ -150,7 +150,7 @@ class SelfTest(unittest.TestCase):
                               allow_test_doubles=True)
             prof = tk.ledger.entries[0].body["crypto"]
             self.assertEqual((prof["signature_suite"], prof["digest_alg"], prof["token_mode"]),
-                             ("ed25519", "sha384", "tk1-hs384"))  # every suite since F_REVIEW
+                             ("ed25519", "sha384", "tk1-sig"))
             self.assertTrue(prof["selftest"]["ok"])
 
     def test_cli_selftest(self):
@@ -227,7 +227,7 @@ class MissingPQLibrary(unittest.TestCase):
                               allow_test_doubles=True, crypto=p, require_pq=True)
             dec = tk.authorize(PAY, "Pay.", PAY_ARGS)
             self.assertTrue(dec.allowed, dec.reason)
-            self.assertTrue(dec.capability.startswith("tk1-hs384."))
+            self.assertTrue(dec.capability.startswith("tk1-sig."))
             self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
                              "authorized_no_executor")
             self.assertEqual(tk.ledger.verify(ks.public()).reason, "ok")
@@ -246,7 +246,7 @@ class ClassicSuites(unittest.TestCase):
             tk = TwoKey(env, ks.public(), Path(d) / "l.jsonl", YES, ledger_signing_key=ks,
                               allow_test_doubles=True)
             dec = tk.authorize(PAY, "Pay.", PAY_ARGS)
-            self.assertTrue(dec.allowed and dec.capability.startswith("tk1-hs384."))
+            self.assertTrue(dec.allowed and dec.capability.startswith("tk1-sig."))
             self.assertEqual(len(tk.ledger.tip()), 96)
             self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
                              "authorized_no_executor")

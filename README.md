@@ -65,7 +65,7 @@ a valid token for exactly the arguments that were approved.
 | **Path A: policy VM** | Compiled hard rules (`allow_only_tools`, `deny_if`, spend caps, blocked counterparties, …) run on a stack VM over fields such as `tool`, `amount_usd`, `counterparty`, `data_class`, `irreversible`. Any fault is a deny | [Rules](#constitution-rules-and-action-fields) |
 | **Path B: judge quorum** | N judges (xAI, OpenAI-compatible, Anthropic, Gemini, Ollama, or any local server) return strict JSON ballots. Approval needs **T** yes votes after an availability floor **K**, with optional vendor-diversity and local-model floors. Malformed, late, or failed ballots abstain. They never count as yes | [Connecting judges](#connecting-judges) |
 | **Both must agree** | A token is issued only when Path A **and** Path B pass. By default Path B isn't consulted after a Path A deny, so forbidden proposals never leave the machine | |
-| **Capability token** | Short-lived (30 s default) and single-use. Bound to the tool, the exact argument bytes, the scope (amount, counterparty, data class), the ledger's Merkle root, and the constitution hashes. HMAC-SHA-384 by default, or signed (`tk1-sig`) | |
+| **Capability token** | Short-lived (30 s default) and single-use. Bound to the tool, the exact argument bytes, the scope (amount, counterparty, data class), the ledger's Merkle root, and the constitution hashes. Signed by the principal key (`tk1-sig`) by default. HMAC (`tk1-hs384`) is only if chosen, and that verifier can also mint | |
 | **Tool gateway (frozen bytes)** | The only component that runs tools. The call is serialized once into immutable bytes. Those bytes are hashed, checked against the token, scanned, and passed to the tool, so arguments can't change between check and use. It also checks scope, expiry, revocation, constitution reloads, single use (shared by every gateway on a ledger), and, via a Merkle consistency proof, that the token's ledger root is an ancestor of the current ledger | [HOWTO §9](docs/HOWTO.md) |
 | **Signed Merkle ledger** | Every proposal, VM result, ballot, token, scan, and execution is appended to a JSONL hash chain with an RFC 9162 Merkle tree. The head is signed with your key, so rewriting, truncating, or unsigned appends are detected. Inclusion and consistency proofs are available | [HOWTO §12](docs/HOWTO.md) |
 | **Anchoring and `deployment_mode`** | `personal` (default): the ledger stays local, optionally anchored to a local file. `enterprise`: every signed head is anchored to a permissioned chain (Hyperledger Fabric or a REST adapter), failing closed, PKI identities are required, and each decision is sent to a SIEM over syslog TLS (RFC 5424, port 6514). A down SIEM is recorded and does not change the decision. The mode is fixed once per ledger | [DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) |
@@ -578,7 +578,7 @@ the file is loaded.
 | `ttl_seconds` | `30` | positive int | Token lifetime |
 | `max_steps` | `4096` | int ≥ 1 | Path A step limit, checked at compile time |
 | `capability_secret` | random per process (48 bytes) | bytes, ≥ 32 | HMAC key for tokens |
-| `token_mode` | `tk1-hs384` (every suite) | `tk1-hs384`, `tk1-sig`; `tk1` (HMAC-SHA-256, legacy, only if chosen) | HMAC-SHA-384, signed tokens, or HMAC-SHA-256 |
+| `token_mode` | `tk1-sig` | `tk1-sig`, `tk1-hs384`; `tk1` (HMAC-SHA-256, legacy, only if chosen) | Signed by the principal key unless `token_signing_key` is set. HMAC is opt-in; that verifier can also mint |
 | `token_signing_key` | none | a `PrivateKeySet` | Required for `tk1-sig` |
 | `digest_alg` | `sha384` (every suite) | `sha384`; `sha256` only to keep appending to a ledger written with the earlier default; `sha512`, `sha3-384`, `sha3-512` are approved and self-tested but untested end to end | Ledger, Merkle, args, ballots, and constitution hashes. Old SHA-256 ledgers still verify (`docs/CRYPTO.md` §3.1) |
 | `head_signing` | `decision` | `decision`, `append` | Sign the ledger head once per decision, or after every append |
@@ -911,7 +911,7 @@ python -m unittest discover -s tests 2>&1 | tail -1
 ## Contributing
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
-Report vulnerabilities in private: [SECURITY.md](SECURITY.md).
+Report vulnerabilities in a private issue. This repository has no GitHub Security Advisories. See [SECURITY.md](SECURITY.md).
 
 ## Further documentation
 

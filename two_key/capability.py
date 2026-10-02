@@ -9,15 +9,14 @@ Token modes (the issuer and the gateway must agree; a token of any other mode
 is refused as ``unsupported_token_version``, so there is no downgrade):
 
   tk1        HMAC-SHA-256, >= 256-bit key (legacy; only when chosen explicitly)
-  tk1-hs384  HMAC-SHA-384, 384-bit key by default (the default for every
-             profile since F_REVIEW / CONCEPTION_NOTES Entry 10)
-  tk1-sig    signed with a separate token key set (PrivateKeySet), e.g. hybrid
-             ML-DSA-65 + Ed25519. Optional: about 4.6 KB per token, and slower.
+  tk1-hs384  HMAC-SHA-384, 384-bit key. Only if chosen. The verifier holds the
+             same secret that mints tokens.
+  tk1-sig    signature by the principal key, or by token_signing_key if set.
+             This is the default. The gateway holds only the public key.
 
-HMAC with a >= 256-bit key is already considered quantum-resistant (Grover's
-algorithm at most halves the effective key strength), so the HMAC modes are
-the recommended default; tk1-sig exists for deployments where the verifier
-must not hold a secret that can also mint tokens.
+HMAC remains available, and a 256-bit HMAC key is quantum-resistant in the
+Grover sense, but it is not the default: a verifier that can check an HMAC
+token can also mint one.
 
 Payload fields: v, jti (unique id for single-use), principal, tool,
 scope{amount_usd, counterparty, data_class}, args_hash, args_enc, issued_at,

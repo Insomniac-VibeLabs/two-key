@@ -7,7 +7,7 @@ immediately before; see "§4 (i)–(iii) phase: what changed". The numbers below
 your own hardware before relying on them.
 
 **Defaults changed after these measurements** (F_REVIEW fixes,
-CONCEPTION_NOTES Entry 10): every profile now uses SHA-384 and `tk1-hs384`,
+CONCEPTION_NOTES Entry 10): every profile now uses SHA-384. Tokens are signed (`tk1-sig`) by default; the HMAC numbers below are the opt-in `tk1-hs384` path,
 and `args_hash` is computed over the typed two-key-enc/2 encoding. The
 `tk1` and SHA-256 rows below measure options that still exist but are no
 longer the default. The numbers were not re-measured for this change.

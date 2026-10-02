@@ -50,7 +50,7 @@ class GatewayChecks(unittest.TestCase):
         self.fx.__exit__(None, None, None)
 
     def test_full_token_returned_and_redeemable_once(self):
-        self.assertTrue(self.d.capability.startswith("tk1-hs384.") and self.d.capability.count(".") == 2)
+        self.assertTrue(self.d.capability.startswith("tk1-sig.") and self.d.capability.count(".") == 2)
         r = self.gw.invoke(self.d.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
         self.assertEqual((r.allowed, r.reason, r.result), (True, "executed", "paid"))
         self.assertEqual(self.calls, [PAY_ARGS])
@@ -114,7 +114,7 @@ class GatewayChecks(unittest.TestCase):
         self.assertEqual(self.gw.invoke(None, "pay_bill", PAY_ARGS, PAY_FIELDS).reason, "malformed_token")
 
     def test_token_from_other_issuer_rejected(self):
-        other = CapabilityIssuer(clock=self.clock).issue(
+        other = CapabilityIssuer(mode="tk1-sig", signing_key=keys.generate_private_key(), clock=self.clock).issue(
             principal=self.tk.principal, tool="pay_bill", scope=self.d.token_payload["scope"],
             args_digest=self.d.token_payload["args_hash"], ledger_root=self.tk.ledger.root(),
             constitution_digest="x", ttl_seconds=30)

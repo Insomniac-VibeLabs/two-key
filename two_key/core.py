@@ -179,7 +179,7 @@ class TwoKey:
         # SHA-384 / HMAC-SHA-384 for every suite (F_REVIEW; Entry 10). SHA-256 and tk1 only when chosen.
         self.digest_alg = digest_alg or "sha384"
         self.crypto.check("hash", self.digest_alg)
-        self.token_mode = token_mode or "tk1-hs384"
+        self.token_mode = token_mode or "tk1-sig"
         self._setup_pki(pki, principal_credential, judge_credentials or {}, deployment_config, trusted, judges)
 
         # Refuse unsigned, modified, or foreign-signed constitutions (spec 5.1 item 2).
@@ -217,8 +217,17 @@ class TwoKey:
                 raise LedgerError("existing ledger hash chain is broken")
 
         issuer_kw = {"clock": clock} if clock else {}
+        # Signed tokens are the default. The gateway gets only the public key, so checking a token cannot mint one.
+        if self.token_mode == "tk1-sig" and token_signing_key is None:
+            token_signing_key = ledger_signing_key
+        if self.token_mode == "tk1-sig" and token_signing_key is None:
+            raise TwoKeyConfigError("tk1-sig requires ledger_signing_key or token_signing_key")
         self.issuer = CapabilityIssuer(capability_secret, mode=self.token_mode, signing_key=token_signing_key,
                                        crypto=self.crypto, **issuer_kw)
+        self._gateway_issuer = self.issuer
+        if self.token_mode == "tk1-sig":
+            self._gateway_issuer = CapabilityIssuer(mode="tk1-sig", verify_key=self.issuer._verifier,
+                                                    crypto=self.crypto, **issuer_kw)
         self.judges = list(judges)
         self.quorum_policy = quorum_policy or QuorumPolicy(required_yes=min(2, len(self.judges)))
         if self.quorum_policy.required_yes > len(self.judges):
@@ -410,7 +419,7 @@ class TwoKey:
         """A tool gateway on this instance's token key and ledger. ``scanners``, ``scan_settings``,
         ``file_extractors``, and ``result_file_extractors`` configure optional content scanning
         (scanning.py); there is none by default."""
-        return ToolGateway(self.issuer, self.ledger, self.principal, tools, extractors, digest_alg=self.digest_alg,
+        return ToolGateway(self._gateway_issuer, self.ledger, self.principal, tools, extractors, digest_alg=self.digest_alg,
                            checkpoint_every=checkpoint_every, view_refresh=view_refresh, scanners=scanners,
                            scan_settings=scan_settings, file_extractors=file_extractors,
                            result_file_extractors=result_file_extractors)

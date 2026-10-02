@@ -1,0 +1,30 @@
+name: Security report
+description: Private report of a vulnerability. No exploit detail in the title.
+title: "security report"
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository has no GitHub Security Advisories. This issue is private
+        while the repository is private. Do not include a working exploit in the title.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: path
+    attributes:
+      label: Component
+      description: policy VM, quorum, token, gateway, ledger, scanners, or PKI
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Minimal steps. No live vendor key required.
+    validations:
+      required: true

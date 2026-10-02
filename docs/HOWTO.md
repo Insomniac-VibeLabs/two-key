@@ -1417,7 +1417,7 @@ or set it process-wide with
 
 ### Hybrid post-quantum key and `require_pq`
 
-Two-Key uses SHA-384 digests and HMAC-SHA-384 tokens (`tk1-hs384`) by
+Two-Key uses SHA-384 digests and signed tokens (`tk1-sig`) by
 default with every key suite, including a hybrid key. Both signature halves must verify, and nothing falls
 back to classical-only. `require_pq=True` refuses to start without a
 hybrid key and a working ML-DSA backend.
@@ -1429,7 +1429,7 @@ python -m two_key sign-constitution --document my-constitution.md --principal di
 python -m two_key verify-constitution --signed pq-constitution.signed.json --pub ~/.two-key-pq/principal.pub.json
 ```
 
-<!-- check: expect='signature_suite': 'hybrid-mldsa65-ed25519', 'digest_alg': 'sha384', 'token_mode': 'tk1-hs384' -->
+<!-- check: expect='signature_suite': 'hybrid-mldsa65-ed25519', 'digest_alg': 'sha384', 'token_mode': 'tk1-sig' -->
 <!-- check: expect=^ed25519 key with require_pq: refused -->
 <!-- check: expect=^invoke: executed -->
 ```python
@@ -1486,12 +1486,11 @@ python -m two_key --fips verify-constitution --signed p384.signed.json --pub ~/.
 
 | `token_mode` | Tag | Notes |
 |---|---|---|
-| `tk1-hs384` | HMAC-SHA-384, 384-bit key by default (≥ 256 bits) | Default for every suite |
+| `tk1-sig` | Signature by the principal key, or `token_signing_key` | Default. The gateway holds only the public key |
 | `tk1` | HMAC-SHA-256, key ≥ 256 bits | Legacy (the Ed25519 default before the F_REVIEW fixes); only if chosen |
-| `tk1-sig` | Signature by a separate token key (`token_signing_key`, e.g. a hybrid `PrivateKeySet`) | The verifier needs no secret that could also mint tokens. About 7 KB per hybrid token, and slower |
+| `tk1-hs384` | HMAC-SHA-384, 384-bit key (≥ 256 bits) | Only if chosen. The verifier holds the minting secret |
 
-HMAC with a key of 256 bits or more is considered quantum-resistant, so the
-HMAC modes are the recommended default. A token of any other mode than Two-Key's is refused (`unsupported_token_version`), so there's no downgrade.
+HMAC with a key of 256 bits or more is quantum-resistant in the Grover sense, but it is not the default: a verifier that can check an HMAC token can also mint one. A token of any other mode than Two-Key's is refused (`unsupported_token_version`), so there's no downgrade.
 
 <!-- check: expect=^tk1-sig executed token length \d{4} -->
 ```python

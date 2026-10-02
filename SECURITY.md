@@ -6,19 +6,22 @@ money, mail, or production tools.
 
 ## Reporting a vulnerability
 
-Please do not open a public GitHub issue for a vulnerability.
+Please do not put exploit detail in a public place.
 
-Use a private GitHub security advisory on this repository:
+This repository does not have GitHub Security Advisories. The old advisory
+URL does not exist. Report here instead, in a private issue on this
+repository (it is private to the organization):
 
-https://github.com/Insomniac-VibeLabs/two-key/security/advisories/new
+https://github.com/Insomniac-VibeLabs/two-key/issues/new?template=security_report.yml
 
-If that page is unavailable, open an issue titled "security report" with no
-exploit detail and ask the maintainers for a private channel.
+Title it "security report" and leave the exploit out of the title. Include
+the version or commit, the path (policy VM, quorum, token, gateway, ledger,
+scanners, PKI), and a minimal reproduction that does not require a live
+vendor key. We will acknowledge receipt and say whether the report is in
+scope.
 
-Include the version or commit, the path (policy VM, quorum, token, gateway,
-ledger, scanners, PKI), and a minimal reproduction that does not require a
-live vendor key. We will acknowledge receipt and say whether the report is
-in scope.
+If this repository is later made public, do not use a public issue. Ask a
+maintainer for a private channel first.
 
 ## In scope
 

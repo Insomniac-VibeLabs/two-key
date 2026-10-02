@@ -132,3 +132,7 @@ The author's decision. Repository visibility was not changed.
 ## v0.1.1
 
 | 103 | Filing wording removed from the tree. Ledger records and the signed head are AES-256-GCM in both modes; the data key is wrapped by the principal key; a missing or wrong key fails closed. Enterprise mode requires a SIEM syslog target (RFC 5424 over TLS, port 6514); a down SIEM is recorded and does not change the decision. FIPS 140-3 topic removed; the README states the algorithms are chosen for a later validated module and this release is not validated. | ledger, core, docs | Maintainer (approved A1, C2, D2, D5) | v0.1.1 |
+
+## v0.1.2
+
+| 104 | Default capability token is `tk1-sig`, signed by the principal key unless `token_signing_key` is set. The gateway holds only the public key. HMAC modes remain opt-in. Vulnerability reports point at a private issue template; this repository has no GitHub Security Advisories. | capability, core, SECURITY.md | Maintainer | v0.1.2 |
