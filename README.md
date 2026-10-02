@@ -387,7 +387,7 @@ not the default. The default remains any local or cloud judge you choose.
 
 A judge sees the proposal only if you annotate it with `receives_proposal: true`, or if the quorum uses `judge_inputs: record_and_proposal`. Any judge you annotate may receive it, local or cloud. A different model from the monitored agent is recommended, not required.
 
-A cloud judge must not use the monitored agent's session. Pass that session to `authorize(..., agent_session=...)`. Two-Key denies the action if it is missing, or if it is the same value as the cloud judge's credential. `X-Two-Key-Judge-Session` is Two-Key's own call id. It does not open a session at the provider. Do not write `ballot_key` in the file. Set `ballot_key_env` to an environment variable, the same way as an API key.
+A cloud judge must not use the monitored agent's credential. Set `agent_session_env` to the environment variable that holds that credential. Two-Key reads it once at startup and denies the action if it equals a cloud judge's credential. There is no session argument on `authorize`. `X-Two-Key-Judge-Session` is Two-Key's own call id. It does not open a session at the provider. Do not write `ballot_key` in the file. Set `ballot_key_env` to an environment variable, the same way as an API key.
 
 ## Content scanners (DLP and antivirus)
 

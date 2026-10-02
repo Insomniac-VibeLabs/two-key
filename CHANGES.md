@@ -150,3 +150,7 @@ Path A and Path B both run on every proposal. A deny from either path denies the
 ## Cloud session and ballot key
 
 A cloud judge requires `authorize(..., agent_session=...)`. The action is denied if that value is missing or equal to the judge credential. `X-Two-Key-Judge-Session` is Two-Key's call id, not a provider session. `ballot_key` in the config file is refused. Use `ballot_key_env`.
+
+## Agent session is frozen at startup
+
+A cloud judge requires agent_session_env. Two-Key reads that environment variable once at startup. authorize has no session argument. A missing variable refuses to start. A value equal to a cloud judge credential denies the action. Changing the variable after startup does not change the frozen value.

@@ -69,7 +69,7 @@ class Adapters(unittest.TestCase):
         for cls, extra, resp_fn, url, header in ADAPTERS:
             with self.subTest(cls.__name__):
                 j, t = self.make(cls, extra, resp_fn, GOOD)
-                b = j.score(CONST, ACTION, "Draft a note to my sister.")
+                b = j.score_bound(CONST, ACTION, "Draft a note to my sister.", None, agent_session="agent-credential")
                 self.assertEqual(b.vote, "yes", b.error)
                 u, h, body = t.calls[0]
                 self.assertEqual(u, url)
@@ -83,7 +83,7 @@ class Adapters(unittest.TestCase):
     def test_no_vote(self):
         for cls, extra, resp_fn, *_ in ADAPTERS:
             j, _ = self.make(cls, extra, resp_fn, NO)
-            self.assertEqual(j.score(CONST, ACTION, "p").vote, "no")
+            self.assertEqual(j.score_bound(CONST, ACTION, "p", None, agent_session="agent-credential").vote, "no")
 
     def test_malformed_outputs_abstain(self):
         bad = ["Sure! consistent: true", "```json\n" + GOOD + "\n```", '{"consistent": "true", "confidence": 1, "rationale": ""}',
@@ -94,20 +94,20 @@ class Adapters(unittest.TestCase):
             for text in bad:
                 with self.subTest(cls=cls.__name__, text=text):
                     j, _ = self.make(cls, extra, resp_fn, text)
-                    b = j.score(CONST, ACTION, "p")
+                    b = j.score_bound(CONST, ACTION, "p", None, agent_session="agent-credential")
                     self.assertEqual(b.vote, "abstain")
                     self.assertFalse(b.consistent)
 
     def test_unexpected_response_structure_abstains(self):
         for cls, extra, _, *_ in ADAPTERS:
             j, _ = self.make(cls, extra, lambda t: {"weird": True}, GOOD)
-            self.assertEqual(j.score(CONST, ACTION, "p").vote, "abstain")
+            self.assertEqual(j.score_bound(CONST, ACTION, "p", None, agent_session="agent-credential").vote, "abstain")
 
     def test_transport_errors_abstain(self):
         for exc in (urllib.error.HTTPError("u", 401, "no", {}, None), TimeoutError(), ConnectionError()):
             j = OpenAICompatibleJudge(judge_id="j", provider="p", model="m", base_url="https://x.example/v1",
                                       credential=StaticToken(SECRET), transport=Recorder(exc))
-            b = j.score(CONST, ACTION, "p")
+            b = j.score_bound(CONST, ACTION, "p", None, agent_session="agent-credential")
             self.assertEqual(b.vote, "abstain")
             self.assertNotIn(SECRET, b.error or "")
 
@@ -121,7 +121,7 @@ class Adapters(unittest.TestCase):
 
     def test_empty_constitution_abstains(self):
         j, t = self.make(OllamaJudge, {"provider": "l"}, ollama_resp, GOOD)
-        self.assertEqual(j.score("  ", ACTION, "p").vote, "abstain")
+        self.assertEqual(j.score_bound("  ", ACTION, "p", None, agent_session="agent-credential").vote, "abstain")
         self.assertEqual(t.calls, [])
 
     def test_https_enforced(self):
@@ -134,7 +134,7 @@ class Adapters(unittest.TestCase):
     def test_json_mode_flag(self):
         t = Recorder(openai_resp(GOOD))
         OpenAICompatibleJudge(judge_id="j", provider="p", model="m", base_url="https://x.example/v1",
-                              transport=t, json_mode=False).score(CONST, ACTION, "p")
+                              transport=t, json_mode=False).score_bound(CONST, ACTION, "p", None, agent_session="agent-credential")
         self.assertNotIn("response_format", t.calls[0][2])
 
 
@@ -159,7 +159,7 @@ class Credentials(unittest.TestCase):
             t = Recorder(openai_resp(GOOD))
             j = OpenAICompatibleJudge(judge_id="j", provider="p", model="m", base_url="https://x.example/v1",
                                       credential=EnvApiKey("TWOKEY_MISSING"), transport=t)
-            b = j.score(CONST, ACTION, "p")
+            b = j.score_bound(CONST, ACTION, "p", None, agent_session="agent-credential")
             self.assertEqual(b.vote, "abstain")
             self.assertEqual(t.calls, [])
 
@@ -177,7 +177,7 @@ class Credentials(unittest.TestCase):
             stub.get_token()
         j = OpenAICompatibleJudge(judge_id="j", provider="p", model="m", base_url="https://x.example/v1",
                                   credential=stub, transport=Recorder(openai_resp(GOOD)))
-        self.assertEqual(j.score(CONST, ACTION, "p").vote, "abstain")
+        self.assertEqual(j.score_bound(CONST, ACTION, "p", None, agent_session="agent-credential").vote, "abstain")
         hooked = OAuthDeviceCodeProvider("cid", "d", "t", fetch_token=lambda self: "access-123")
         self.assertEqual(hooked.get_token(), "access-123")
 
@@ -185,7 +185,7 @@ class Credentials(unittest.TestCase):
         t = Recorder(openai_resp(GOOD))
         j = OpenAICompatibleJudge(judge_id="j", provider="p", model="m", base_url="https://x.example/v1",
                                   credential=CallbackTokenProvider(lambda: "sso-token"), transport=t)
-        j.score(CONST, ACTION, "p")
+        j.score_bound(CONST, ACTION, "p", None, agent_session="agent-credential")
         self.assertEqual(t.calls[0][1]["Authorization"], "Bearer sso-token")
 
 

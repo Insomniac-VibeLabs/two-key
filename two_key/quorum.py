@@ -322,6 +322,10 @@ def convene(
         return result(False, f"judge_set_not_heterogeneous:{selection}", counted=False)
     if len(judges) < policy.required_yes:
         return result(False, f"too_few_judges_configured:{len(judges)}<{policy.required_yes}", counted=False)
+    if any(getattr(j, "is_cloud", lambda: False)() for j in judges) and not agent_session:
+        return result(False, "cloud_judge_session_required")
+    if any((b.error or "").startswith("cloud_judge_") for b in ballots):
+        return result(False, next(b.error for b in ballots if (b.error or "").startswith("cloud_judge_")))
     # Availability floor K: below it, deny WITHOUT counting (§4 (iii)).
     if len(responding) < k_floor:
         return result(False, f"insufficient_responses:{len(responding)}<{k_floor}", counted=False)
@@ -335,10 +339,6 @@ def convene(
     if len(providers) < policy.min_distinct_providers:
         return result(False, f"insufficient_distinct_providers:{len(providers)}<{policy.min_distinct_providers}")
     yes = sum(1 for b in responding if b.vote == "yes")
-    if any(getattr(j, "is_cloud", lambda: False)() for j in judges) and not agent_session:
-        return result(False, "cloud_judge_session_required")
-    if any((b.error or "").startswith("cloud_judge_") for b in ballots):
-        return result(False, next(b.error for b in ballots if (b.error or "").startswith("cloud_judge_")))
     if yes < policy.required_yes:
         return result(False, f"insufficient_yes:{yes}<{policy.required_yes}")
     if policy.require_local_yes:

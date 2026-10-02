@@ -280,7 +280,7 @@ class JudgePromptDelimiters(unittest.TestCase):
 
         j = OpenAICompatibleJudge(judge_id="j", provider="p", model="m", base_url="https://x.example/v1",
                                   transport=transport)
-        j.score("C", normalize_action({"tool": "pay_bill", "counterparty": self.INJECT}), self.INJECT)
+        j.score_bound("C", normalize_action({"tool": "pay_bill", "counterparty": self.INJECT}), self.INJECT, None, agent_session="agent-credential")
         user = [m["content"] for m in sent[0]["messages"] if m["role"] == "user"][0]
         for tag in self.TAGS[:6]:
             self.assertEqual(user.count(tag), 1, tag)

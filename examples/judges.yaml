@@ -5,7 +5,7 @@
 # A ballot key, if used, is ballot_key_env: the name of an environment variable. Do not write the secret here.
 # The loader refuses both placeholders.
 # receives_proposal: true sends that judge the proposal. Recommended: a different model than the monitored agent.
-# A cloud judge requires authorize(..., agent_session=...). Two-Key denies the action if that is missing or equal to the judge credential.
+# A cloud judge requires agent_session_env on TwoKey: the environment variable holding the monitored agent's credential. Two-Key reads it at startup.
 
 quorum:
   required_yes: 2            # k-of-n: how many judges must say "consistent"

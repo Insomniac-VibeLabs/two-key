@@ -199,8 +199,8 @@ def run(work: Path, out=print) -> Checks:
     ok = tk.authorize(DRAFT, "Draft a note to the clinic.", {"to": "clinic.example", "body": "See you Tuesday"})
     c("both paths pass -> capability token issued", ok.allowed and ok.capability, ok.reason)
     d = tk.authorize(WIRE, "Wire $50.", {"to": "offshore.example", "amount": 50})
-    c("Path A denies a wire; Path B is not consulted", not d.allowed and d.reason.startswith("path_a_denied")
-      and d.quorum_passed is None, d.reason)
+    c("Path A denies a wire; Path B still answers", not d.allowed and d.reason.startswith("path_a_denied")
+      and d.quorum_passed is not None, d.reason)
     d = tk.authorize(CONTRACT, "Sign the vendor contract.", {"contract": "vendor-2026.pdf"})
     c("Path A passes but the judges object (irreversible contract) -> denied", not d.allowed and d.vm_allowed
       and d.reason.startswith("path_b_denied"), f"{d.reason}; votes {d.quorum and d.quorum['yes']} yes")

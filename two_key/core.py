@@ -62,6 +62,7 @@ two-key-enc/2 encoding (canonical.py).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -129,6 +130,7 @@ class TwoKey:
         ledger_fsync: bool = True,
         deployment_mode: str | None = None,
         deployment_config: Path | str | None = None,
+        agent_session_env: str | None = None,
         anchor: Any = None,
         pki: Any = None,
         principal_credential: Any = None,
@@ -240,6 +242,7 @@ class TwoKey:
         self.ttl_seconds = ttl_seconds
         # Both paths always answer. The old skip flag is accepted and ignored.
         self.short_circuit_path_b = False
+        self._agent_session = self._freeze_agent_session(agent_session_env)
 
         self._append_loaded()
         self.ledger.checkpoint()
@@ -450,12 +453,24 @@ class TwoKey:
         except Exception:
             pass
 
+
+    def _freeze_agent_session(self, env_name: str | None) -> str | None:
+        """Read the monitored agent's cloud credential once. The caller cannot supply it."""
+        cloud = any(getattr(j, "is_cloud", lambda: False)() for j in self.judges)
+        if not cloud:
+            return None
+        if not env_name:
+            raise TwoKeyConfigError("a cloud judge requires agent_session_env, the environment variable holding the monitored agent's credential")
+        value = os.environ.get(env_name)
+        if not value:
+            raise TwoKeyConfigError(f"agent_session_env {env_name} is not set")
+        return value
+
     def authorize(self, proposed: Action | Mapping[str, Any], proposal: str,
-                  tool_args: Mapping[str, Any] | None = None, agent_assertion: Any = None,
-                  agent_session: str | None = None) -> Decision:
+                  tool_args: Mapping[str, Any] | None = None, agent_assertion: Any = None) -> Decision:
         """``agent_assertion``: from ``pki.sign_agent_request`` (required in enterprise mode by default)."""
         try:
-            d = self._authorize(proposed, proposal, {} if tool_args is None else tool_args, agent_assertion, agent_session)
+            d = self._authorize(proposed, proposal, {} if tool_args is None else tool_args, agent_assertion)
         except Exception as e:  # spec 5.7: no best-effort allow; the ledger or any component failing means deny
             d = Decision(False, f"internal_error:{type(e).__name__}", ledger_digest=self.ledger.root())
         try:
@@ -470,8 +485,7 @@ class TwoKey:
         """H(action record) for ballots and decisions: two-key-enc/2 under the action-record label."""
         return typed_hash(action_record, DOMAIN_ACTION_RECORD, self.digest_alg, self.crypto)
 
-    def _authorize(self, proposed, proposal: str, tool_args: Mapping[str, Any], agent_assertion: Any = None,
-                    agent_session: str | None = None) -> Decision:
+    def _authorize(self, proposed, proposal: str, tool_args: Mapping[str, Any], agent_assertion: Any = None) -> Decision:
         if not isinstance(proposal, str):
             proposal = str(proposal)
         # Read the tool args once (F_REVIEW finding 1): the logged args and args_hash come from the same bytes.
@@ -512,7 +526,7 @@ class TwoKey:
         except Exception as e:
             vm_res = None
             self.ledger.append("vm_result", {"allowed": None, "reason": f"no_response:{type(e).__name__}"})
-        q = convene(self.judges, self.constitution_text, action, proposal, self.quorum_policy, binding, frozen.args(), agent_session)
+        q = convene(self.judges, self.constitution_text, action, proposal, self.quorum_policy, binding, frozen.args(), self._agent_session)
         self.ledger.append("quorum_result", q.to_record())
         qsum = {"yes": q.yes, "no": q.no, "abstain": q.abstain, "reason": q.reason}
         path_b_responded = bool(q.counted)

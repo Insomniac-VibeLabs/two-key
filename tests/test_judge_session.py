@@ -42,3 +42,41 @@ class Session(unittest.TestCase):
 def _action():
     from two_key.action import normalize_action
     return normalize_action({"tool": "search", "data_class": "public", "irreversible": False})
+
+
+class FrozenSession(unittest.TestCase):
+    def test_caller_cannot_supply_the_session(self):
+        import os
+        from helpers import TwoKeyFixture
+        os.environ["AGENT_SESSION"] = "agent-credential"
+        try:
+            judge = OpenAICompatibleJudge("cloud", "openai", "m", "https://api.openai.com/v1", Token("judge-key"))
+            with TwoKeyFixture([{"allow_only_tools": ["search"]}], [judge], agent_session_env="AGENT_SESSION") as tk:
+                self.assertEqual(tk._agent_session, "agent-credential")
+                os.environ["AGENT_SESSION"] = "dummy"
+                self.assertEqual(tk._agent_session, "agent-credential")
+                with self.assertRaises(TypeError):
+                    tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "search", agent_session="dummy")
+        finally:
+            os.environ.pop("AGENT_SESSION", None)
+
+    def test_matching_credential_denies_before_the_call(self):
+        import os
+        from helpers import TwoKeyFixture
+        os.environ["AGENT_SESSION"] = "same-key"
+        try:
+            judge = OpenAICompatibleJudge("cloud", "openai", "m", "https://api.openai.com/v1", Token("same-key"))
+            with TwoKeyFixture([{"allow_only_tools": ["search"]}], [judge], agent_session_env="AGENT_SESSION") as tk:
+                d = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "search")
+            self.assertFalse(d.allowed)
+            self.assertIn("cloud_judge_reused_agent_session", d.reason)
+        finally:
+            os.environ.pop("AGENT_SESSION", None)
+
+    def test_cloud_judge_without_the_env_refuses_to_start(self):
+        from two_key.core import TwoKeyConfigError
+        from helpers import TwoKeyFixture
+        judge = OpenAICompatibleJudge("cloud", "openai", "m", "https://api.openai.com/v1", Token("judge-key"))
+        with self.assertRaisesRegex(TwoKeyConfigError, "agent_session_env"):
+            with TwoKeyFixture([{"allow_only_tools": ["search"]}], [judge]):
+                pass
