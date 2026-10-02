@@ -911,7 +911,7 @@ python -m unittest discover -s tests 2>&1 | tail -1
 ## Contributing
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
-Report vulnerabilities in a private issue. This repository has no GitHub Security Advisories. See [SECURITY.md](SECURITY.md).
+Report vulnerabilities through a private advisory. Do not open a public issue. See [SECURITY.md](SECURITY.md).
 
 ## Further documentation
 
