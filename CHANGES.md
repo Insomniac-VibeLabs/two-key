@@ -159,3 +159,7 @@ A cloud judge requires agent_session_env. Two-Key reads that environment variabl
 ## v0.1.3
 
 | 105 | Action records must match the frozen tool arguments. Both Path A and Path B must answer. A cloud judge requires agent_session_env, read once at startup. ballot_key in the file is refused; use ballot_key_env. Aeacus is an optional judge. | scope, core, quorum, judges | Maintainer | v0.1.3 |
+
+## 10.2.2026 judge transport
+
+| 106 | Judge calls: stdlib connection reuse, no redirects, at most two retries on connection loss or 429/502/503/504 inside the judge timeout. OpenAI and xAI get a strict ballot schema (xAI also reasoning_effort low; OpenAI store false) with one 400 fallback to json_object. Other OpenAI-compatible hosts stay on json_object. Anthropic caches the system prompt and constitution only, not the action record. Gemini sends responseSchema with the same 400 fallback. Ollama keep_alive 10m. No vendor SDK and no streaming. Local ballot parser unchanged. | judges/transport.py, judges/llm.py, judges/openai_compat.py, judges/anthropic.py, judges/gemini.py, judges/ollama.py, judges/config.py, tests/test_judge_transport.py, README.md, docs/HOWTO.md, docs/PERFORMANCE.md | Maintainer (instruction) / Engineering | (this commit) |

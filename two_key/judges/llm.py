@@ -25,11 +25,13 @@ Every connector:
 from __future__ import annotations
 
 import json
+import time
 import uuid
 import urllib.error
-import urllib.request
 from typing import Any, Callable
 from urllib.parse import urlparse
+
+from .transport import pooled_transport
 
 from ..action import Action
 from ..canonical import canonical_bytes
@@ -115,10 +117,8 @@ def parse_ballot_strict(text: Any, *, echo: bool = False) -> tuple[bool, float, 
 
 
 def urllib_transport(url: str, headers: dict, body: dict, timeout: float) -> dict:
-    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
-                                 headers={"Content-Type": "application/json", **headers})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (scheme checked in LLMJudge)
-        return json.loads(r.read().decode("utf-8"))
+    """Compatibility name. Production calls go through the pooled transport."""
+    return pooled_transport(url, headers, body, timeout)
 
 
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
@@ -147,7 +147,7 @@ class LLMJudge(Judge):
         self.base_url = base_url.rstrip("/")
         self.credential = credential or NoCredential()
         self.timeout = timeout
-        self.transport = transport or urllib_transport
+        self.transport = transport or pooled_transport
         self.auth_header = auth_header or self.default_auth_header
         if vendor:
             self.vendor = vendor
@@ -165,6 +165,10 @@ class LLMJudge(Judge):
 
     def _extract_text(self, resp: dict) -> str:
         raise NotImplementedError
+
+    def _deoptimize(self, body: dict) -> dict | None:
+        """Optional one-shot 400 fallback. Must not weaken the local ballot parser."""
+        return None
 
     # -- common ------------------------------------------------------------
     def _auth_headers(self) -> dict:
@@ -206,10 +210,20 @@ class LLMJudge(Judge):
         system = SYSTEM_PROMPT + (ECHO_INSTRUCTION if echo else "")
         url, body = self._request(system, build_user_prompt(constitution_text, action, proposal,
                                                             dict(binding) if echo else None))
+        started = time.monotonic()
         try:
             resp = self.transport(url, headers, body, self.timeout)
         except urllib.error.HTTPError as e:
-            return self.abstain(f"http {e.code}")
+            relaxed = self._deoptimize(body) if e.code == 400 else None
+            remaining = self.timeout - (time.monotonic() - started)
+            if relaxed is None or relaxed == body or remaining <= 0:
+                return self.abstain(f"http {e.code}")
+            try:
+                resp = self.transport(url, headers, relaxed, remaining)
+            except urllib.error.HTTPError as e2:
+                return self.abstain(f"http {e2.code}")
+            except Exception as e2:
+                return self.abstain(f"transport: {type(e2).__name__}")
         except Exception as e:
             return self.abstain(f"transport: {type(e).__name__}")
         try:

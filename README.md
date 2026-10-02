@@ -354,6 +354,20 @@ print(f"min_vendors={p.min_vendors} min_local_judges={p.min_local_judges}", p.ju
 Every key is listed in the [configuration reference](#judgesyaml-quorum-section-quorumpolicy).
 Per-provider walkthroughs are in [HOWTO §5–7](docs/HOWTO.md).
 
+Judge calls stay on the provider's chat API. No vendor SDK is imported, and
+responses are not streamed: a ballot is one short JSON object, and a partial
+stream would have to be parsed before it is complete. The default transport
+reuses one connection per thread and origin, refuses redirects, and retries a
+dropped connection or a 429/502/503/504 inside the judge timeout, at most
+twice. OpenAI (`api.openai.com`) and xAI (`api.x.ai`) are asked for a strict
+ballot schema; xAI is also asked for `reasoning_effort: low`. A 400 falls
+back once to JSON-object mode. Other OpenAI-compatible servers stay on
+JSON-object mode so a local server is not broken. Anthropic caches the system
+prompt and the constitution only; the action record is after that breakpoint.
+The local parser is unchanged: a schema miss, a cache miss, or a fallback
+still abstains unless the ballot is exact.
+
+
 ### Any judge, including Aeacus
 
 Path B is whoever you list in `judges.yaml`. A cloud model, a local Ollama
@@ -581,7 +595,9 @@ those four keys explicitly.
 | `timeout` | `30` | seconds | Per-request HTTP timeout |
 | `auth_header` | per type: `bearer`, `x-api-key`, `x-goog-api-key`, `none` (ollama) | `bearer`, `x-api-key`, `x-goog-api-key`, `none` | How the credential is sent |
 | `allow_insecure_http` | `false` | boolean | Allow `http://` to a LAN host |
-| `json_mode` | `true` | boolean (`openai_compatible` only) | Send `response_format: json_object` |
+| `json_mode` | `true` | boolean (`openai_compatible` only) | `false` omits `response_format` |
+| `response_format` | `auto` | `auto`, `json_object`, `json_schema`, `none` (`openai_compatible`) | `auto`: strict schema on api.openai.com and api.x.ai, JSON object elsewhere. A 400 falls back once. A ballot key forces JSON object |
+| `reasoning_effort` | `low` on api.x.ai, omitted elsewhere | `low`, `medium`, `high`, `xhigh` | xAI only unless you set it. A 400 drops it |
 | `max_tokens` | `300` | integer (`openai_compatible`, `anthropic`) | Response token cap |
 | `vendor` | = `provider` | string | Vendor used by `min_vendors` |
 | `local_weights` | `false` (`true` for `ollama`) | boolean | Counts toward `min_local_judges`. A declaration, not an attestation |

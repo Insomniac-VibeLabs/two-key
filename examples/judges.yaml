@@ -1,3 +1,7 @@
+# Cloud OpenAI and xAI use a strict ballot schema by default (response_format: auto).
+# A local OpenAI-compatible server stays on json_object. Set response_format: json_schema
+# or json_object to force one. xAI defaults to reasoning_effort: low; set reasoning_effort to override.
+# Anthropic caches the constitution, not the action record. No secrets in this file.
 # Path B judges: pick whichever AIs you want, local or vendor.
 # No secrets go in this file. API keys are read from environment variables
 # (or the OS keyring) at call time.

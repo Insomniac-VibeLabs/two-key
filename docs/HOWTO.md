@@ -439,6 +439,32 @@ Notes per provider:
 - **ollama** sends no credential by default and is marked
   `local_weights: true`. Set `local_weights: false` if your Ollama serves
   a remote or cloud model.
+
+Call shape, without a vendor SDK. Streaming is not used: the ballot is one
+short JSON object, and a partial stream is not a ballot. The default
+transport reuses a connection per thread and origin, does not follow
+redirects, and retries a dropped connection or HTTP 429/502/503/504 at most
+twice inside the judge timeout. A 401 is not retried.
+
+- **openai_compatible** on `api.openai.com` and `api.x.ai` sends
+  `response_format: json_schema` (strict ballot schema, no extra keys) when
+  `response_format` is omitted or `auto`. xAI also gets `reasoning_effort: low`
+  unless you set `reasoning_effort`. OpenAI gets `store: false`. A 400 falls
+  back once to `json_object` with those knobs removed. Any other host stays
+  on `json_object`, so llama.cpp, vLLM, and LM Studio are unchanged. Set
+  `response_format: json_schema` to force the schema, or `json_object` to
+  force the old mode. A ballot key (`ballot_key_env`) keeps `json_object`,
+  because the optional MAC is outside the closed schema.
+- **anthropic** marks the system prompt and the constitution with
+  `cache_control: {type: ephemeral}`. The action record and proposal are
+  after that breakpoint, so they are not part of the cached prefix. No
+  `anthropic-beta` header. A short constitution misses the cache and still
+  runs. A 400 strips the breakpoints and retries once.
+- **gemini** sends `responseSchema` for the ballot. A 400 drops it and
+  retries once with JSON mime type only.
+- **ollama** sends `keep_alive: 10m` and `stream: false`, so the weights
+  stay loaded between ballots.
+
 - `https://` is required except for loopback hosts (`localhost`,
   `127.0.0.1`, `::1`). For a LAN server over plain HTTP, set
   `allow_insecure_http: true`; that sends prompts unencrypted.

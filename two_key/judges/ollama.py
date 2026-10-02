@@ -4,6 +4,9 @@
 weight file (PRIOR_ART.md §4 (iii), "at least one local weight file"). This is a
 declaration, not an attestation; set ``local_weights: false`` for remote or
 cloud-hosted Ollama models. See DESIGN_OPTIONS.md §7.
+
+``keep_alive`` asks Ollama not to unload the weights between ballots. It does
+not change the ballot.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ class OllamaJudge(LLMJudge):
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "stream": False,
             "format": "json",
+            "keep_alive": "10m",
             "options": {"temperature": 0},
         }
         return f"{self.base_url}/api/chat", body
