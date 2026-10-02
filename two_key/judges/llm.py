@@ -25,6 +25,7 @@ Every connector:
 from __future__ import annotations
 
 import json
+import uuid
 import urllib.error
 import urllib.request
 from typing import Any, Callable
@@ -133,7 +134,7 @@ class LLMJudge(Judge):
                  transport: Transport | None = None, auth_header: str | None = None,
                  allow_insecure_http: bool = False, vendor: str | None = None,
                  local_weights: bool | None = None, weights_sha256: str | None = None,
-                 echo_binding: bool = False, ballot_key: str | None = None):
+                 echo_binding: bool = False, ballot_key: str | None = None, receives_proposal: bool = False):
         if not judge_id or not model or not base_url:
             raise ValueError("judge_id, model and base_url are required")
         u = urlparse(base_url)
@@ -154,6 +155,7 @@ class LLMJudge(Judge):
         self.weights_sha256 = weights_sha256
         self.echo_binding = bool(echo_binding)
         self.ballot_key = ballot_key
+        self.receives_proposal = bool(receives_proposal)
 
     # -- hooks -------------------------------------------------------------
     def _request(self, system: str, user: str) -> tuple[str, dict]:
@@ -178,7 +180,12 @@ class LLMJudge(Judge):
     def score(self, constitution_text: str, action: Action, proposal: str) -> Ballot:
         return self.score_bound(constitution_text, action, proposal, None)
 
-    def score_bound(self, constitution_text: str, action: Action, proposal: str, binding) -> Ballot:
+    def is_cloud(self) -> bool:
+        host = urlparse(self.base_url).hostname
+        return not bool(self.local_weights) and host not in LOOPBACK
+
+    def score_bound(self, constitution_text: str, action: Action, proposal: str, binding,
+                    agent_session: str | None = None) -> Ballot:
         echo = self.echo_binding and binding is not None
         if not isinstance(constitution_text, str) or not constitution_text.strip():
             return self.abstain("empty constitution text")
@@ -186,6 +193,11 @@ class LLMJudge(Judge):
             headers = self._auth_headers()
         except (CredentialError, NotImplementedError, ValueError) as e:
             return self.abstain(f"credential: {e}")
+        if self.is_cloud():
+            token = headers.get("Authorization", "").removeprefix("Bearer ").strip()
+            if agent_session and token and token == agent_session:
+                return self.abstain("cloud_judge_reused_agent_session")
+            headers["X-Two-Key-Judge-Session"] = str(uuid.uuid4())
         system = SYSTEM_PROMPT + (ECHO_INSTRUCTION if echo else "")
         url, body = self._request(system, build_user_prompt(constitution_text, action, proposal,
                                                             dict(binding) if echo else None))

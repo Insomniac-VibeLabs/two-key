@@ -451,10 +451,11 @@ class TwoKey:
             pass
 
     def authorize(self, proposed: Action | Mapping[str, Any], proposal: str,
-                  tool_args: Mapping[str, Any] | None = None, agent_assertion: Any = None) -> Decision:
+                  tool_args: Mapping[str, Any] | None = None, agent_assertion: Any = None,
+                  agent_session: str | None = None) -> Decision:
         """``agent_assertion``: from ``pki.sign_agent_request`` (required in enterprise mode by default)."""
         try:
-            d = self._authorize(proposed, proposal, {} if tool_args is None else tool_args, agent_assertion)
+            d = self._authorize(proposed, proposal, {} if tool_args is None else tool_args, agent_assertion, agent_session)
         except Exception as e:  # spec 5.7: no best-effort allow; the ledger or any component failing means deny
             d = Decision(False, f"internal_error:{type(e).__name__}", ledger_digest=self.ledger.root())
         try:
@@ -469,7 +470,8 @@ class TwoKey:
         """H(action record) for ballots and decisions: two-key-enc/2 under the action-record label."""
         return typed_hash(action_record, DOMAIN_ACTION_RECORD, self.digest_alg, self.crypto)
 
-    def _authorize(self, proposed, proposal: str, tool_args: Mapping[str, Any], agent_assertion: Any = None) -> Decision:
+    def _authorize(self, proposed, proposal: str, tool_args: Mapping[str, Any], agent_assertion: Any = None,
+                    agent_session: str | None = None) -> Decision:
         if not isinstance(proposal, str):
             proposal = str(proposal)
         # Read the tool args once (F_REVIEW finding 1): the logged args and args_hash come from the same bytes.
@@ -510,7 +512,7 @@ class TwoKey:
         except Exception as e:
             vm_res = None
             self.ledger.append("vm_result", {"allowed": None, "reason": f"no_response:{type(e).__name__}"})
-        q = convene(self.judges, self.constitution_text, action, proposal, self.quorum_policy, binding, frozen.args())
+        q = convene(self.judges, self.constitution_text, action, proposal, self.quorum_policy, binding, frozen.args(), agent_session)
         self.ledger.append("quorum_result", q.to_record())
         qsum = {"yes": q.yes, "no": q.no, "abstain": q.abstain, "reason": q.reason}
         path_b_responded = bool(q.counted)

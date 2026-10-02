@@ -215,12 +215,24 @@ def _bind(b: Ballot, binding: Mapping[str, str] | None, policy: QuorumPolicy) ->
                   "echo" if echoed else "stamp")
 
 
+def _proposal_for(j: Judge, proposal: str, policy: QuorumPolicy) -> str:
+    """The user annotates a judge with receives_proposal to send it the proposal."""
+    if policy.judge_inputs == "record_and_proposal" or getattr(j, "receives_proposal", False):
+        return proposal
+    return ""
+
+
 def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
-               binding: Mapping[str, str] | None = None) -> Ballot:
+               binding: Mapping[str, str] | None = None, agent_session: str | None = None) -> Ballot:
     try:
         sb = getattr(j, "score_bound", None)
-        b = sb(constitution_text, action, proposal, binding) if sb is not None else \
-            j.score(constitution_text, action, proposal)
+        if sb is not None:
+            try:
+                b = sb(constitution_text, action, proposal, binding, agent_session=agent_session)
+            except TypeError:
+                b = sb(constitution_text, action, proposal, binding)
+        else:
+            b = j.score(constitution_text, action, proposal)
         if not isinstance(b, Ballot) or b.vote not in ("yes", "no", "abstain"):
             b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
                        None, "", error="judge returned an invalid ballot object")
@@ -231,18 +243,20 @@ def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
 
 
 def _collect(judges: Sequence[Judge], constitution_text: str, action: Action, proposal: str,
-             policy: QuorumPolicy, binding: Mapping[str, str] | None = None) -> list[Ballot]:
+             policy: QuorumPolicy, binding: Mapping[str, str] | None = None,
+             agent_session: str | None = None) -> list[Ballot]:
     if not judges:
         return []
     if not policy.parallel and policy.timeout_seconds is None:
-        return [_score_one(j, constitution_text, action, proposal, binding) for j in judges]
+        return [_score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding, agent_session)
+                for j in judges]
     # One daemon thread per judge: a hung judge can neither delay the decision past the deadline
     # nor keep the process alive at exit (its HTTP timeout ends the thread eventually).
     results: list[Ballot | None] = [None] * len(judges)
     done = [threading.Event() for _ in judges]
 
     def run(i: int, j: Judge) -> None:
-        results[i] = _score_one(j, constitution_text, action, proposal, binding)
+        results[i] = _score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding, agent_session)
         done[i].set()
 
     deadline = None if policy.timeout_seconds is None else time.monotonic() + policy.timeout_seconds
@@ -273,6 +287,7 @@ def convene(
     policy: QuorumPolicy | None = None,
     binding: Mapping[str, str] | None = None,
     tool_args: Mapping | None = None,
+    agent_session: str | None = None,
 ) -> QuorumResult:
     """Convene the judges.
 
@@ -290,7 +305,7 @@ def convene(
     selection = heterogeneity_shortfall(judges, policy) if judges else None
     if judges and selection is None:
         ballots = [_bind(b, binding, policy)
-                   for b in _collect(judges, constitution_text, judge_action, judge_proposal, policy, binding)]
+                   for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding, agent_session)]
     responding = [b for b in ballots if b.responded]
     abstain = len(ballots) - len(responding)
 

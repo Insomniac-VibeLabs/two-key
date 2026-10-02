@@ -58,7 +58,7 @@ DEFAULT_PROVIDER = {"openai_compatible": "openai-compatible", "anthropic": "anth
                     "gemini": "google", "ollama": "ollama-local"}
 JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", "json_mode",
               "max_tokens", "auth_header", "allow_insecure_http", "vendor", "local_weights", "weights_sha256",
-              "echo_binding", "ballot_key"}
+              "echo_binding", "ballot_key", "receives_proposal"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
                "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
                "require_path_a_first", "require_local_yes"}
@@ -115,13 +115,16 @@ def build_judge(spec: dict, transport=None) -> Judge:
         raise JudgeConfigError(f"judge {spec.get('id')!r}: type must be one of {sorted(ADAPTERS)}")
     model = spec.get("model")
     if not isinstance(model, str) or not model or model.startswith("REPLACE_"):
-        raise JudgeConfigError(f"judge {spec.get('id')!r}: set 'model' to a model you have access to")
+        raise JudgeConfigError(f"judge {spec.get('id')!r}: replace REPLACE_WITH_MODEL with a model name your account can use")
+    key = spec.get("ballot_key")
+    if isinstance(key, str) and (key.startswith("REPLACE_") or key.startswith("set-to-the-same")):
+        raise JudgeConfigError(f"judge {spec.get('id')!r}: replace {key} with the same secret as AEACUS_TOKEN")
     kw: dict[str, Any] = {
         "judge_id": spec.get("id"), "provider": spec.get("provider", DEFAULT_PROVIDER[t]), "model": model,
         "credential": build_credential(spec.get("auth")), "transport": transport,
     }
     for k in ("base_url", "timeout", "auth_header", "allow_insecure_http", "json_mode", "max_tokens",
-              "vendor", "local_weights", "weights_sha256", "echo_binding", "ballot_key"):
+              "vendor", "local_weights", "weights_sha256", "echo_binding", "ballot_key", "receives_proposal"):
         if k in spec:
             kw[k] = spec[k]
     if t == "openai_compatible" and "base_url" not in kw:

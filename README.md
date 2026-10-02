@@ -377,12 +377,15 @@ produce a counted ballot, the action is denied.
   local_weights: true
   echo_binding: true
   allow_insecure_http: true
-  ballot_key: set-to-the-same-value-as-AEACUS_TOKEN
+  ballot_key: REPLACE_WITH_AEACUS_TOKEN  # change this; same value as AEACUS_TOKEN
+  receives_proposal: true  # this judge may see the proposal
 ```
 
 Start Aeacus with `python -m aeacus serve` and the same `AEACUS_TOKEN`.
 `examples/aeacus.yaml` is one profile that requires this local yes. It is
 not the default. The default remains any local or cloud judge you choose.
+
+A judge sees the proposal only if you annotate it with `receives_proposal: true`, or if the quorum uses `judge_inputs: record_and_proposal`. Any judge you annotate may receive it, local or cloud. Use a different model than the monitored agent. A cloud judge is mandatory a separate session: Two-Key mints a new session header and refuses the call if that judge's credential is the agent's session.
 
 ## Content scanners (DLP and antivirus)
 

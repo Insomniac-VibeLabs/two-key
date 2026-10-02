@@ -1,8 +1,11 @@
 # Path B judges: pick whichever AIs you want, local or vendor.
 # No secrets go in this file. API keys are read from environment variables
 # (or the OS keyring) at call time.
-# Replace every REPLACE_WITH_MODEL with a model name your account can use;
-# the loader refuses placeholders.
+# Replace every REPLACE_WITH_MODEL with a model name your account can use.
+# Replace REPLACE_WITH_AEACUS_TOKEN with the same secret as AEACUS_TOKEN.
+# The loader refuses both placeholders.
+# receives_proposal: true sends that judge the proposal. Recommended: a different model than the monitored agent.
+# A cloud judge is called in a new session and must not reuse the agent's credential.
 
 quorum:
   required_yes: 2            # k-of-n: how many judges must say "consistent"
