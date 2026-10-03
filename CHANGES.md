@@ -182,3 +182,7 @@ A cloud judge requires agent_session_env. Two-Key reads that environment variabl
 ## v0.1.5
 
 | 120 | README architecture diagram replaced. The old drawing returned the capability token to the proposing model. A monitored agent only returns a JSON proposal. The caller holds the token. Judges are a separate quorum and must not reuse an agent credential. Path B still runs when Path A denies. No behavior change. Package version is 0.1.5. The v0.1.4 tag remains the earlier tree. | README.md, pyproject.toml, two_key/__init__.py, llms.txt, CHANGES.md | Maintainer (instruction) / Engineering | (this commit) |
+
+## 10.3.2026 docs
+
+| 121 | Fit, comparison, and threat-model pages for this package. README, how-to, llms.txt, and SECURITY.md point at them. No behavior change. `main` was not updated. Package version stays 0.1.5. | docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, README.md, docs/HOWTO.md, llms.txt, SECURITY.md, CONTRIBUTING.md, CHANGES.md | Maintainer (instruction) | (this commit) |

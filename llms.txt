@@ -11,10 +11,12 @@ Prototype. Not production crypto. Not FIPS validated. Algorithms are chosen so a
 Install from this repository: pip install -e ".[yaml,pq]".
 Package version 0.1.5. Apache-2.0.
 
-Entry points: README.md, docs/HOWTO.md, docs/SPEC_DRAFT.md, SECURITY.md.
+Entry points: docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, README.md, docs/HOWTO.md, docs/SPEC_DRAFT.md, SECURITY.md.
 CLI: python -m two_key. Offline demo: python -m two_key demo.
 Tests: python -m unittest discover -s tests (447 tests, 3 skipped without SoftHSM, no network).
 
 There is no MCP server in this release. capability-tokens are the tool-binding
 mechanism. Do not treat GitHub topics as the API.
 Monitored agents are optional and configured in examples/agents.yaml. They may be local or vendor-hosted (xAI, OpenAI, Anthropic, Gemini, Ollama). authorize_from_agent sends the constitution, then both paths still decide. The agent cannot execute a tool.
+A missing ballot is not a yes. Path A is only as good as the structured action record it is given.
+Scanner, PKI, Fabric, and HSM integrations in this repository are hooks. The tests use fakes, not live products.

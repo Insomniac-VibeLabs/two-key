@@ -12,8 +12,9 @@ decision is written to a tamper-evident ledger signed with your key.
 > **Status: prototype.** It has not had an independent security review and
 > has not been deployed in production. Algorithms were chosen so a later
 > build can run on a FIPS 140-3 validated module. **This release is not
-> validated.** Read [Security model and
-> limitations](#security-model-and-limitations) before relying on it.
+> validated.** Read [docs/FIT.md](docs/FIT.md) first, then
+> [docs/COMPARISON.md](docs/COMPARISON.md) and
+> [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), before relying on it.
 
 ## Contents
 
@@ -1120,6 +1121,9 @@ Report vulnerabilities through a private advisory. Do not open a public issue. S
 | Path | What |
 |---|---|
 | [docs/HOWTO.md](docs/HOWTO.md) | Step-by-step guide: keys, constitution, every judge provider, auth, quorum, gateway, scanning, revocation, ledger, anchoring, PKI, crypto, performance |
+| [docs/FIT.md](docs/FIT.md) | Whether this package is the right control |
+| [docs/COMPARISON.md](docs/COMPARISON.md) | What this package is not a substitute for |
+| [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Boundaries and residual risk |
 | [docs/KEYS_AND_PKI.md](docs/KEYS_AND_PKI.md) | Seed-phrase backup (personal) and PKI identities (enterprise) |
 | [docs/DEPLOYMENT_MODES.md](docs/DEPLOYMENT_MODES.md) | Personal vs enterprise mode, permissioned-ledger anchoring (Fabric, REST) |
 | [docs/SCANNING_HOOKS.md](docs/SCANNING_HOOKS.md) | DLP and antivirus hook types, outbound and inbound, pros and cons |

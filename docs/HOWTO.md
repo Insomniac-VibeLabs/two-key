@@ -1,8 +1,11 @@
 # Two-Key how-to
 
-A step-by-step guide to every part of the prototype. For the short
-version, see the [README](../README.md#quickstart); for every option in one
-place, see the [configuration reference](../README.md#configuration-reference).
+A step-by-step guide to every part of the prototype. Whether this package
+is the right control is [FIT.md](FIT.md). What it is not a substitute for
+is [COMPARISON.md](COMPARISON.md). Boundaries and residual risk are
+[THREAT_MODEL.md](THREAT_MODEL.md). For the short version, see the
+[README](../README.md#quickstart); for every option in one place, see the
+[configuration reference](../README.md#configuration-reference).
 
 Every command and code block in this file was run, top to bottom, by
 `tools/doccheck.py` in a copy of the repository with a fresh virtualenv and
