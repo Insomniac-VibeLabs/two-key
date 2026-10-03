@@ -109,8 +109,13 @@ class GatewayChecks(unittest.TestCase):
         p["scope"]["amount_usd"] = 1e6
         forged = f"{prefix}.{_b64u(json.dumps(p).encode())}.{mac}"
         self.assertEqual(self.gw.invoke(forged, "pay_bill", PAY_ARGS, PAY_FIELDS).reason, "bad_signature")
-        self.assertEqual(self.gw.invoke(self.d.capability[:-2] + "AA", "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
-                         "bad_signature")
+        # Flip a middle tag character. The last character of a signature can
+        # be padding, so changing only the tail sometimes leaves the tag valid.
+        chars = list(mac)
+        i = len(chars) // 2
+        chars[i] = "B" if chars[i] != "B" else "C"
+        flipped = f"{prefix}.{body}.{''.join(chars)}"
+        self.assertEqual(self.gw.invoke(flipped, "pay_bill", PAY_ARGS, PAY_FIELDS).reason, "bad_signature")
         self.assertEqual(self.gw.invoke("garbage", "pay_bill", PAY_ARGS, PAY_FIELDS).reason, "malformed_token")
         self.assertEqual(self.gw.invoke(None, "pay_bill", PAY_ARGS, PAY_FIELDS).reason, "malformed_token")
 

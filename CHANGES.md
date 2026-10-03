@@ -149,7 +149,7 @@ Path A and Path B both run on every proposal. A deny from either path denies the
 
 ## Cloud session and ballot key
 
-A cloud judge requires `authorize(..., agent_session=...)`. The action is denied if that value is missing or equal to the judge credential. `X-Two-Key-Judge-Session` is Two-Key's call id, not a provider session. `ballot_key` in the config file is refused. Use `ballot_key_env`.
+A cloud judge requires `agent_session_env`. Two-Key reads that variable once at startup. `authorize` has no session argument. A missing variable refuses to start. A value equal to a cloud judge credential denies the action. `X-Two-Key-Judge-Session` is Two-Key's call id, not a provider session. `ballot_key` in the config file is refused. Use `ballot_key_env`.
 
 ## Agent session is frozen at startup
 
@@ -172,3 +172,7 @@ A cloud judge requires agent_session_env. Two-Key reads that environment variabl
 | 114 | New ledgers no longer wrap the data key with the principal key, and the head is signed by a witness key as well. Both live in two-key-secrets/ next to the ledger files. A stolen principal key cannot decrypt those ledgers or sign a new head. Older ledgers still unwrap with the principal key. An explicit ledger_key argument still overrides this for a non-exportable principal. | ledger.py, ledger_at_rest.py, tests/test_ledger_encryption.py, README.md, docs/HOWTO.md | Maintainer (instruction) / Engineering | (this commit) |
 | 115 | Core rules aligned with two-key-concept main. The ledger key and witness key now live outside the ledger directory, and a missing ledger key is not unwrapped with the principal key. username_password and oauth_device_code auth are rejected. A tool with no executor does not spend the token (tool_not_registered). A tool exception returns allowed false and leaves the token usable. Scanning, PKI, seed phrases, anchoring, and hybrid signatures are unchanged. | ledger.py, gateway.py, judges, tests, README.md, docs/HOWTO.md | Maintainer (instruction) / Engineering | (this commit) |
 | 116 | Docs that still said the ledger was plaintext now describe AES-256-GCM, the outside ledger key, and the witness signature. The seed-phrase CLI test no longer treats one unlucky word swap as a checksum failure. Suite count is 446. | docs, llms.txt, README.md, tests/test_seedphrase.py | Maintainer (instruction) / Engineering | (this commit) |
+
+## v0.1.4
+
+| 117 | Conceptual release. The how-to and README set `TWOKEY_AGENT_SESSION` before starting cloud judges, and a constitution reload in the how-to passes `acknowledge=True`. `verify-ledger` reads the key passphrase again. A capability-tag test no longer depends on the last characters of the signature. The doc checker turns its fake judge transport off while the unit suite runs. `bench.py` opens its 10,000-entry ledger with a signing key, which encrypted ledgers require. Package version is 0.1.4. The v0.1.3 tag remains the earlier tree. | README.md, docs/HOWTO.md, docs/CRYPTO.md, tools/doccheck.py, two_key/cli.py, two_key/core.py, bench.py, tests, pyproject.toml, llms.txt, CHANGES.md | Maintainer (instruction) / Engineering | (this commit) |

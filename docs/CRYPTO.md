@@ -122,7 +122,7 @@ before is reinterpreted.
 
 | Artifact | How it is versioned | Old artifacts |
 |---|---|---|
-| Ledger entries | Each entry carries `alg` (entries without it are SHA-256) | Verify as before (`PersonalLedger(path).verify(key)`, `python -m two_key verify-ledger`). `TwoKey` refuses to *append* to a SHA-256 ledger unless `digest_alg="sha256"` is passed explicitly. The error says so. |
+| Ledger entries | Each entry carries `alg` (entries without it are SHA-256) | Open with the principal key, then verify (`PersonalLedger(path, signing_key=key).verify(key.public_key())`, `python -m two_key verify-ledger --key`). An encrypted ledger does not open without that key or `ledger_key`. `TwoKey` refuses to *append* to a SHA-256 ledger unless `digest_alg="sha256"` is passed explicitly. The error says so. |
 | Signed constitutions | Field name says the hash: `constitution_text_sha384` / `source_sha384` (new) or `..._sha256` (old) | Verify as before; every digest field present must match |
 | Key bundles | `encryption.kdf` names the KDF | `pbkdf2-hmac-sha256` bundles still load |
 | Capability tokens | Payload `args_enc: "two-key-enc/2"` | Refused (`unsupported_args_encoding`). Tokens live `ttl_seconds` (30 s by default) and are single-use, so only tokens in flight during an upgrade are affected |

@@ -217,7 +217,7 @@ def cmd_verify_ledger(args) -> int:
     try:
         signing = None
         if getattr(args, "key", None):
-            signing = keys.load_private_any(Path(args.key), keys.passphrase_from_args(args))
+            signing = keys.load_private_any(Path(args.key), _passphrase(args))
         rep = PersonalLedger(Path(args.ledger), signing_key=signing).verify(keys.load_public_any(Path(args.pub)))
     except (LedgerError, ValueError, RuntimeError) as e:
         print(f"REJECTED: {e}")

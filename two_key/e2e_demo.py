@@ -155,9 +155,17 @@ def run(work: Path, out=print) -> Checks:
       as_public_keyset(rebuilt).encoded == as_public_keyset(key).encoded)
     c("a different seed passphrase gives a different key", not seedphrase.matches(phrase, key, "other"))
     words = phrase.reveal().split()
-    words[0], words[1] = words[1], words[0]
+    bad = list(words)
+    for i in range(1, len(words)):
+        trial = list(words)
+        trial[0], trial[i] = trial[i], trial[0]
+        try:
+            seedphrase.validate(" ".join(trial))
+        except seedphrase.SeedPhraseError:
+            bad = trial
+            break
     c.raises("a wrong word order fails the checksum", seedphrase.SeedPhraseError,
-             lambda: seedphrase.validate(" ".join(words)), "checksum")
+             lambda: seedphrase.validate(" ".join(bad)), "checksum")
     c.raises("refused in fips_mode", seedphrase.SeedPhrasePolicyError,
              lambda: seedphrase.new_phrase(CryptoProvider(fips_mode=True)), "fips_mode")
     c.raises("refused in enterprise mode", seedphrase.SeedPhrasePolicyError,

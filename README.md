@@ -176,6 +176,9 @@ recommended model is Qwen2.5-7B-Instruct (`qwen2.5:7b` in Ollama). The
 weights are not in this repository. Setup is in
 [Connecting judges](#recommended-local-judge-qwen25-7b-instruct) and
 [HOWTO §5](docs/HOWTO.md#recommended-local-judge-qwen25-7b-instruct).
+The two cloud judges also need `TWOKEY_AGENT_SESSION`: the monitored
+agent's own credential, which must not be either judge key. The setup
+module below reads it once at startup.
 
 <!-- check: file=judges.yaml -->
 ```yaml
@@ -207,6 +210,7 @@ judges:
 python -m two_key check-judges --config judges.yaml    # validates only; no API calls
 read -rsp "xAI API key: " XAI_API_KEY; echo; export XAI_API_KEY
 read -rsp "Anthropic API key: " ANTHROPIC_API_KEY; echo; export ANTHROPIC_API_KEY
+export TWOKEY_AGENT_SESSION=monitored-agent-not-a-judge-key
 ```
 
 **4. Try the small offline demo** (test-double judges, temporary files, no
@@ -241,6 +245,8 @@ def load_key():
 def make_two_key(ledger="ledger.jsonl", **options):
     judges, quorum = load_config_file(Path("judges.yaml"))
     options.setdefault("quorum_policy", quorum)
+    if any(getattr(j, "is_cloud", lambda: False)() for j in judges):
+        options.setdefault("agent_session_env", "TWOKEY_AGENT_SESSION")
     return TwoKey(load_envelope(Path("my-constitution.signed.json")),
                   keys.load_public_any(HOME / "principal.pub.pem"),
                   HOME / ledger, judges, ledger_signing_key=load_key(), **options)
@@ -271,7 +277,7 @@ if decision.allowed:
 
 <!-- check: expect=^decision: True dual_path_pass -->
 <!-- check: expect=^gateway: executed paid 42.5 to power-co.example -->
-<!-- check: expect=^OK: ok \(entries=9\) -->
+<!-- check: expect=^OK: ok \(entries=10\) -->
 ```bash
 python my_agent.py
 python -m two_key verify-ledger --ledger ~/.two-key/ledger.jsonl \
@@ -284,7 +290,7 @@ Expected output with working judges (the quorum counts will vary):
 ```text
 decision: True dual_path_pass {'yes': 3, 'no': 0, 'abstain': 0, 'reason': 'quorum_pass'}
 gateway: executed paid 42.5 to power-co.example
-OK: ok (entries=9)
+OK: ok (entries=10)
 ```
 
 If Ollama isn't running, or `qwen2.5:7b` has not been pulled, the local
@@ -467,7 +473,10 @@ A cloud judge must not use the monitored agent's credential. Set `agent_session_
 Pass `scanners=[...]` to `tk.gateway()` to send outbound content (the
 exact argument bytes, decoded strings, and attachments you extract) and
 inbound content (tool results, returned files) to DLP or antivirus
-software. With no scanners, the gateway behaves as before.
+software. With no scanners, the gateway behaves as before. A body that
+says "diagnosis" and is labelled `public` is refused before a token
+(`record_args_mismatch:sensitive_labeled_public`). A scanner can still
+catch a pattern that word list does not know.
 
 | Hook type | Class | Use for |
 |---|---|---|
@@ -490,7 +499,7 @@ from tk_setup import make_two_key
 
 tk = make_two_key("scan-demo.jsonl")
 dlp = PatternScanner("example-dlp", kind="dlp",
-                     rules=[PatternRule("dx", rb"(?i)diagnosis", label="health", data_class="medical")])
+                     rules=[PatternRule("mrn", rb"(?i)mrn-[0-9]+", label="health", data_class="medical")])
 av = PatternScanner("example-av", kind="av", rules=PatternScanner.example_rules())
 fields = {"counterparty": "clinic.example", "data_class": "public"}
 
@@ -500,7 +509,7 @@ def token(args):
                          "irreversible": False}, "Draft the note.", args).capability
 
 
-note = {"to": "clinic.example", "body": "Diagnosis: example condition"}
+note = {"to": "clinic.example", "body": "chart mrn-100200"}
 gw = tk.gateway(tools={"email_draft": lambda to, body: "drafted"}, scanners=[dlp])
 print("dlp, labelled public:", gw.invoke(token(note), "email_draft", note, fields).reason)
 
@@ -528,7 +537,8 @@ any one machine and identities from their own PKI. It needs:
 
 1. `deployment_mode="enterprise"` (argument, the `TWOKEY_DEPLOYMENT_MODE`
    environment variable, or `deployment_mode:` in a config file; all
-   sources that are set must agree);
+   sources that are set must agree). It also needs `siem_host`: a syslog
+   target for RFC 5424 over TLS, port 6514;
 2. a **permissioned-chain anchor**: `FabricAnchor` (Hyperledger Fabric,
    through your gateway client or `FabricAnchor.from_fabric_sdk_py(...)`),
    `RestPermissionedAnchor` (any chain behind a JSON API), or your own
@@ -585,11 +595,13 @@ cert, _ = ca.issue("Alice", email="alice@example.com", key=load_key())
 anchor = FabricAnchor(InMemoryFabric(), channel="audit", chaincode="twokey-anchor")
 
 try:
-    make_two_key("enterprise.jsonl", deployment_mode="enterprise", anchor=anchor)
+    make_two_key("enterprise.jsonl", deployment_mode="enterprise", anchor=anchor,
+                 siem_host="127.0.0.1")
 except TwoKeyConfigError as e:
     print("refused:", e)
 
 tk = make_two_key("enterprise.jsonl", deployment_mode="enterprise", anchor=anchor,
+                  siem_host="127.0.0.1",
                   pki=ca.config(roles, ocsp=True), principal_credential=ca.credential(cert))
 token = SoftwareToken()                                   # stands in for an HSM or smart card
 agent, agent_key = ca.identity("Ops Agent", uri="spiffe://example.com/agent/ops", key=token.generate("ops"))
@@ -1006,7 +1018,7 @@ Stubs and open questions are listed in this section and in
 python -m unittest discover -s tests 2>&1 | tail -1
 ```
 
-- **Unit and integration tests**: 446 tests under `tests/`, 3 skipped without SoftHSM, no network.
+- **Unit and integration tests**: 447 tests under `tests/`, 3 skipped without SoftHSM, no network.
   Without ML-DSA (`cryptography` < 50) the hybrid tests skip, and the
   SoftHSM test skips without `python-pkcs11` and SoftHSM.
 - **End-to-end**: `python -m two_key e2e-demo` (run by

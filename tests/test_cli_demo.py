@@ -2,11 +2,14 @@
 import contextlib
 import io
 import json
+import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
-from two_key import cli
+from two_key import cli, keys
+from two_key.ledger import PersonalLedger
 
 EX = Path(__file__).parent.parent / "examples"
 
@@ -36,6 +39,26 @@ class CLI(unittest.TestCase):
                 code, txt = run("verify-constitution", "--signed", out, "--pub", f"{d}/k/principal.pub.pem")
                 self.assertEqual(code, 1)
                 self.assertIn("REJECTED", txt)
+
+    def test_verify_ledger_uses_passphrase_env(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.environ["TWOK_TEST_PW"] = "secret"
+            try:
+                self.assertEqual(run("keygen", "--out", f"{d}/k", "--passphrase-env", "TWOK_TEST_PW")[0], 0)
+                key = keys.load_private_any(Path(d) / "k" / "principal.pem", b"secret")
+                led = PersonalLedger(Path(d) / "ledger.jsonl", signing_key=key)
+                led.append("note", {"n": 1})
+                led.checkpoint()
+                code, txt = run("verify-ledger", "--ledger", f"{d}/ledger.jsonl",
+                                "--pub", f"{d}/k/principal.pub.pem", "--key", f"{d}/k/principal.pem",
+                                "--passphrase-env", "TWOK_TEST_PW")
+                self.assertEqual(code, 0, txt)
+                self.assertIn("OK: ok", txt)
+            finally:
+                os.environ.pop("TWOK_TEST_PW", None)
+                parent, name = Path(d).parent, Path(d).name
+                for suffix in (".ledger-key", ".witness"):
+                    shutil.rmtree(parent / f"{name}{suffix}", ignore_errors=True)
 
     def test_keygen_refuses_overwrite(self):
         with tempfile.TemporaryDirectory() as d:

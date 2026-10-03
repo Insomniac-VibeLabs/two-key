@@ -232,7 +232,7 @@ The author's direction [CN-11]: a seed-phrase backup for personal use and PKI fo
 
 ## 6. Reduction to practice (as of 2026-09-30)
 
-[IMPL] The Python 3 prototype is in `two_key/`. The test suite (`python -m unittest discover -s tests`, 446 tests, 3 skipped without SoftHSM) covers:
+[IMPL] The Python 3 prototype is in `two_key/`. The test suite (`python -m unittest discover -s tests`, 447 tests, 3 skipped without SoftHSM) covers:
 - the defects found in the 2026-09-30 review: the negative-amount wire, permissive missing-field defaults, silently ignored typo rules, case variants such as "Medical", 2-of-3 quorums, and zero judges;
 - every gateway check, including replay across tools, expiry, scope, and ledger-root ancestry;
 - single use across several gateways on one TwoKey instance, concurrent threads, forked processes, a second ledger instance, and restart (`tests/test_shared_redemption.py`);

@@ -223,7 +223,8 @@ def main() -> int:
                            fsync=fsync)
         add("Ledger", f"append only (head signed later by checkpoint), fsync={'on' if fsync else 'off'}",
             timeit(lambda L=L: L.append("event", {"i": 1, "note": "bench"}), N // (4 if fsync else 1), warmup=5))
-    big = PersonalLedger(d / "big.jsonl", fsync=False)
+    bench_key = keys.generate_private_key()
+    big = PersonalLedger(d / "big.jsonl", signing_key=bench_key, auto_sign_every=0, fsync=False)
     for i in range(10_000):
         big.append("e", {"i": i})
     add("Ledger", "merkle_root() on a 10,000-entry ledger (incremental)", timeit(big.merkle_root, N))
@@ -245,7 +246,7 @@ def main() -> int:
             timeit(lambda: big.root_bytes(rnd.randrange(1, 10_000)), N))
     add("Ledger", "inclusion_proof() on a 10,000-entry ledger", timeit(lambda: big.inclusion_proof(4321), N // 10))
     mem.append(("10,000-entry ledger in memory (tracemalloc)",
-                f"{traced_peak_kib(lambda: PersonalLedger(d / 'big.jsonl')) / 1024:.2f} MiB"))
+                f"{traced_peak_kib(lambda: PersonalLedger(d / 'big.jsonl', signing_key=bench_key, auto_sign_every=0)) / 1024:.2f} MiB"))
 
     # ---- full gateway check + full authorize --------------------------------------------
     for s in suites:
