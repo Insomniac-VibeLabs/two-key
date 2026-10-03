@@ -46,10 +46,13 @@ any tool runs, it checks everything spec 5.5 lists, plus single-use:
      not in the gateway, so every gateway on one TwoKey instance shares it:
      a token is accepted once no matter how many gateways or threads try.
      Checks 9-11 and the redemption run under the ledger's lock. Across
-     processes on POSIX, a redemption that finds another writer has changed
-     the ledger file is refused: ``replayed`` if that writer redeemed this
-     token, otherwise ``ledger_concurrent_writer``. Neither is written to this
-     (now stale) ledger instance, because appending would fork the chain.
+     processes on POSIX, every append and checkpoint holds an ``flock`` on
+     ``<ledger-directory>.lock``, beside the ledger directory. A write that
+     finds another writer has changed the ledger file is refused:
+     ``replayed`` if that writer redeemed this token, otherwise
+     ``already_attempted`` or ``ledger_concurrent_writer``. The refusal is
+     not written to this (now stale) ledger instance, because appending
+     would fork the chain.
 
 Optional content scanning (scanning.py; CONCEPTION_NOTES.md Entries 5-7):
 only when ``scanners`` are configured, after checks 1-8 pass the gateway
@@ -74,9 +77,8 @@ strings). If the scan denies, the result is withheld: GatewayResult(False,
 entry records the result scans. ``scan_inbound()`` scans content that
 arrives outside a tool call (content_scan_inbound entries). Post-send
 verdicts (a non-default async mode) arrive later as content_scan_async
-entries. With no scanners the gateway does none of this: the original path,
-including its separate hash and execute reads of ``args`` (F_REVIEW.md §8
-finding 1), is unchanged.
+entries. With no scanners the gateway does not scan. The call is still
+one snapshot: the same bytes are hashed and executed.
 
 On success the gateway first checkpoints ``redemption_started``, then runs
 the tool, then logs ``capability_redeemed``. A crash after the intent does

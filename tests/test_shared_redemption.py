@@ -3,8 +3,9 @@
 
 Before this fix each ToolGateway kept its own used-token set, rebuilt from the ledger only when the gateway
 was created, so two live gateways on one TwoKey instance would each accept the same token once. The used-token
-record now lives in PersonalLedger (``redeem``), under the ledger's lock, and on POSIX also under an flock on
-the ledger file. These tests cover: two gateways, concurrent threads, restart persistence, and a second ledger
+record now lives in PersonalLedger (``redeem``), under the ledger's lock, and on POSIX also under an flock
+beside the ledger directory (``<ledger-directory>.lock``, not the ledger file). Every append and checkpoint
+takes that lock and refuses if another writer changed the file. These tests cover: two gateways, concurrent threads, restart persistence, and a second ledger
 instance / second process on the same file.
 """
 import multiprocessing
@@ -73,6 +74,9 @@ class TwoGateways(Base):
         self.assertEqual(self.tk.ledger.entries[-1].kind, "gateway_denied")
         self.assertEqual(self.tk.ledger.entries[-1].body["reason"], "replayed")
         self.assertTrue(self.tk.ledger.verify(self.fx.key.public_key()).ok)
+        lock = self.tk.ledger.lock_path()
+        self.assertTrue(lock.is_file())
+        self.assertFalse(lock.resolve().is_relative_to(self.tk.ledger.ledger_directory()))
 
     def test_order_does_not_matter_and_new_gateway_sees_it(self):
         d, args = self.token()
@@ -236,6 +240,8 @@ class OtherWriter(Base):
         d, args = self.token()
         other = PersonalLedger(self.tk.ledger.path, self.fx.key)
         self.tk.ledger.append("note", {"by": "owner"})  # the owner writes something else
+        with self.assertRaises(LedgerError):
+            other.append("note", {"by": "stale"})  # an ordinary append also refuses
         r = ToolGateway(self.tk.issuer, other, self.tk.principal, {"pay_bill": self.tool}).invoke(
             d.capability, "pay_bill", args, FIELDS)
         self.assertEqual((r.allowed, r.reason), (False, "ledger_concurrent_writer"))

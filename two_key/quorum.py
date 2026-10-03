@@ -294,7 +294,6 @@ def convene(
     """
     policy = policy or QuorumPolicy()
     k_floor = policy.effective_min_responding
-    judge_proposal = proposal if policy.judge_inputs == "record_and_proposal" else ""
     judge_action = action
     if tool_args:
         raw = dict(action.raw)

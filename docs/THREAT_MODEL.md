@@ -49,10 +49,11 @@ be corrected.
   and checked against the token. If scanners are configured, they see those
   same bytes. `redemption_started` is checkpointed, and then the tool
   receives a decode of those bytes.
-- Process to the ledger. One process should own a ledger. Appends in that
-  process share one lock. On POSIX, redemption writes also take an advisory
-  lock and refuse if another writer changed the file. There is no flock on
-  Windows.
+- Process to the ledger. One process should own a ledger. Appends,
+  checkpoints, and redemption writes in that process share one lock. On
+  POSIX they also take an advisory lock on `<ledger-directory>.lock`,
+  beside the ledger directory and not on the ledger file, and refuse if
+  another writer changed the file. There is no flock on Windows.
 
 ## What this design is meant to stop
 
