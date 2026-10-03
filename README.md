@@ -340,10 +340,9 @@ as untrusted data, and accepts only a strict JSON ballot.
 | `ollama` | Local Ollama | `http://localhost:11434` | `none` |
 
 Credentials (`auth:`) come from an environment variable (`env`), the OS
-keyring (`keyring`), or your own SSO/OAuth code (`callback`). A secret
-written in the file is refused. `username_password` and `oauth_device_code`
-are accepted only when the file names a real `login` or `fetch_token` hook.
-A config with no hook is rejected. No vendor login is built in.
+keyring (`keyring`), or your own SSO code (`callback`). A secret written
+in the file is refused. `username_password` and `oauth_device_code` are
+rejected. A real login is a callback hook.
 
 ### Recommended local judge: Qwen2.5-7B-Instruct
 
@@ -675,9 +674,7 @@ the file is loaded.
 | `none` | | No credential (the default) |
 | `env` | `var` | API key from an environment variable at call time. Working |
 | `keyring` | `service`, `username` | API key from the OS keyring (`pip install keyring`). Working |
-| `callback` | `callback` | `fn() -> token`; your SSO/OAuth/session code. Working hook |
-| `username_password` | `username`, `password_env`, `login` | Working only with `login`; a missing hook is rejected. No vendor login is built in |
-| `oauth_device_code` | `client_id`, `device_authorization_endpoint`, `token_endpoint`, `scope`, `fetch_token` | Working only with `fetch_token`; a missing hook is rejected (RFC 8628) |
+| `callback` | `callback` | `fn() -> token`; your SSO or session code. Working hook |
 
 ### `TwoKey(signed_constitution, trusted_public_key, ledger_path, judges, **options)`
 
@@ -716,7 +713,7 @@ extractors=None, checkpoint_every=1, view_refresh="token")`,
 
 | Option | Default | Allowed values | What it does |
 |---|---|---|---|
-| `gateway(tools=)` | `{}` | `{name: callable(**args)}` | Executors. A tool with no executor returns `authorized_no_executor` |
+| `gateway(tools=)` | `{}` | `{name: callable(**args)}` | Executors. A tool with no executor returns `tool_not_registered` |
 | `gateway(extractors=)` | `{}` | `{name: fn(args) -> fields}` | Derive `amount_usd`/`counterparty`/`data_class` from the literal args |
 | `gateway(checkpoint_every=)` | `1` | int ≥ 0 | Sign the ledger head every N calls; `0` = you call `tk.ledger.checkpoint()` |
 | `gateway(view_refresh=)` | `token` | `token`, `every_call` | Advance the gateway's ledger view from verified tokens, or also on every call |
@@ -968,8 +965,7 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
 **Stubs and placeholders**
 - Public anchoring (to a public transparency log or blockchain) is an
   interface only. `LocalFileAnchor` writes a local file.
-- `username_password` and `oauth_device_code` have no built-in vendor login.
-  The config loader rejects them unless a hook is named.
+- `username_password` and `oauth_device_code` are rejected. Use a callback hook.
 - The real Hyperledger Fabric client bridge (`fabric-sdk-py`) and the PKI
   HTTP transport for CRL/OCSP (`network_revocation: true`) have not been
   run against real networks.
@@ -995,10 +991,10 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
   OpenSSL 4.0.2, which is not a validated module. No FIPS provider was
   active during development.
 
-**Other limits**: one process must own the ledger. New ledgers are AES-256-GCM,
-with the decryption key and a witness key in `two-key-secrets/` rather than
-under the principal key. Ledgers created before that split still unwrap with
-the principal key. Seed-phrase backup is personal-mode only and off in `fips_mode`.
+**Other limits**: one process must own the ledger. The ledger is AES-256-GCM.
+The decryption key and the witness key live outside the ledger directory.
+The principal key cannot unwrap the log. Seed-phrase backup is personal-mode
+only and off in `fips_mode`.
 
 Stubs and open questions are listed in this section and in
 [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md).

@@ -189,7 +189,7 @@ class OneDocumentTwoCompilations(unittest.TestCase):
         self.assertEqual(kinds.count("constitution_reload_refused"), 2)
         self.assertEqual(kinds.count("constitution_loaded"), 1)
         self.assertEqual(tk.gateway().invoke(tok.capability, "search", {}, {"data_class": "public"}).reason,
-                         "authorized_no_executor")
+                         "tool_not_registered")
         with self.assertRaises(ConstitutionSignatureError):  # also refused at construction
             self.two_key(vendor_env, name="other.jsonl")
         self.assertTrue(tk.ledger.verify(self.key.public_key()).ok)

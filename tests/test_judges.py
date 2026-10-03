@@ -9,8 +9,7 @@ from unittest import mock
 from two_key.action import normalize_action
 from two_key.judges import AnthropicJudge, GeminiJudge, OllamaJudge, OpenAICompatibleJudge
 from two_key.judges.config import JudgeConfigError, load_config, load_config_file
-from two_key.judges.credentials import (CallbackTokenProvider, EnvApiKey, OAuthDeviceCodeProvider,
-                                               StaticToken, UsernamePasswordProvider)
+from two_key.judges.credentials import CallbackTokenProvider, EnvApiKey, StaticToken
 from two_key.judges.llm import MalformedBallot, parse_ballot_strict
 from two_key.quorum import QuorumPolicy, convene
 
@@ -163,30 +162,16 @@ class Credentials(unittest.TestCase):
             self.assertEqual(b.vote, "abstain")
             self.assertEqual(t.calls, [])
 
-    def test_username_password_stub_and_hook(self):
+    def test_password_and_device_code_auth_are_rejected(self):
         from two_key.judges.config import JudgeConfigError, build_credential
-        stub = UsernamePasswordProvider("me", "TWOKEY_PW")
-        with self.assertRaises(NotImplementedError):
-            stub.get_token()
         with self.assertRaises(JudgeConfigError):
-            build_credential({"type": "username_password", "username": "me", "password_env": "TWOKEY_PW"})
+            build_credential({"type": "username_password", "username": "me", "password_env": "TWOKEY_PW",
+                              "login": "two_key.testing:not_a_hook"})
         with self.assertRaises(JudgeConfigError):
             build_credential({"type": "oauth_device_code", "client_id": "c",
                               "device_authorization_endpoint": "https://idp.example/device",
-                              "token_endpoint": "https://idp.example/token"})
-        with mock.patch.dict(os.environ, {"TWOKEY_PW": "pw"}):
-            p = UsernamePasswordProvider("me", "TWOKEY_PW", login=lambda u, pw: f"session-for-{u}")
-            self.assertEqual(p.get_token(), "session-for-me")
-
-    def test_oauth_device_code_stub_abstains(self):
-        stub = OAuthDeviceCodeProvider("cid", "https://idp.example/device", "https://idp.example/token")
-        with self.assertRaises(NotImplementedError):
-            stub.get_token()
-        j = OpenAICompatibleJudge(judge_id="j", provider="p", model="m", base_url="https://x.example/v1",
-                                  credential=stub, transport=Recorder(openai_resp(GOOD)))
-        self.assertEqual(j.score_bound(CONST, ACTION, "p", None, agent_session="agent-credential").vote, "abstain")
-        hooked = OAuthDeviceCodeProvider("cid", "d", "t", fetch_token=lambda self: "access-123")
-        self.assertEqual(hooked.get_token(), "access-123")
+                              "token_endpoint": "https://idp.example/token",
+                              "fetch_token": "two_key.testing:not_a_hook"})
 
     def test_callback_sso(self):
         t = Recorder(openai_resp(GOOD))

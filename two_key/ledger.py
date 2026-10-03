@@ -38,12 +38,12 @@ An append-only JSONL hash chain owned by the principal (spec 5.6), plus:
   changed the file.
 
 The ledger file and head file are created with mode 0600. Every record and
-the signed head are AES-256-GCM ciphertext. A new ledger wraps the data key
-with a ledger key stored in ``two-key-secrets/`` next to the ledger, not with
-the principal key. The head is signed by the principal and by a witness key
-in that same secrets directory. A stolen principal key cannot decrypt the
-log or sign a new head. A ledger created before this split still unwraps
-with the principal key and has no witness signature.
+the signed head are AES-256-GCM ciphertext. The data key is wrapped by a
+ledger key that is not the principal key. The head is also signed by a
+witness key. Both files live outside the ledger directory. A stolen
+principal key cannot decrypt the log or sign a new head. There is no
+principal-wrapped fallback. An explicit ``ledger_key`` is only for a
+non-exportable principal and is never derived from that key.
 """
 
 from __future__ import annotations
@@ -176,27 +176,36 @@ class PersonalLedger:
         self._ensure_witness()
         self._assert_principal()
 
-    def secrets_dir(self) -> Path:
-        """Key material that must not sit in the ledger file set. Copying the ``.jsonl`` files does not copy this."""
-        return self.path.parent / "two-key-secrets"
+    def ledger_directory(self) -> Path:
+        directory = self.path.parent.resolve()
+        if directory == directory.parent:
+            raise LedgerError("ledger path must not be a filesystem root")
+        return directory
+
+    def _outside(self, suffix: str) -> Path:
+        directory = self.ledger_directory()
+        path = directory.parent / f"{directory.name}{suffix}"
+        if path.resolve().is_relative_to(directory):
+            raise LedgerError(f"{suffix} must live outside the ledger directory")
+        return path
 
     def ledger_key_path(self) -> Path:
-        return self.secrets_dir() / (self.path.name + ".ledger-key")
+        return self._outside(".ledger-key") / "ledger.key"
 
     def witness_path(self) -> Path:
-        return self.secrets_dir() / (self.path.name + ".witness.pem")
+        return self._outside(".witness") / "witness.pem"
 
     def witness_pub_path(self) -> Path:
-        return self.secrets_dir() / (self.path.name + ".witness.pub.pem")
+        return self._outside(".witness") / "witness.pub.pem"
 
     # -- storage -------------------------------------------------------------
     def _open_data_key(self) -> None:
         """Unwrap the data key, or create one. Missing and wrong keys fail closed.
 
-        New ledgers wrap with a ledger key file under ``two-key-secrets/``. An
-        explicit ``ledger_key`` argument (a non-exportable principal) still wins.
-        A ledger whose wrap file already exists and has no ledger key file is
-        the older principal-wrapped form and still opens with that key.
+        New ledgers wrap with a ledger key file outside the ledger directory.
+        An explicit ``ledger_key`` argument (a non-exportable principal) still
+        wins, and is not derived from that key. A wrap file with no ledger key
+        file is refused. The principal key is never a decryption key.
         """
         if self._ledger_key is not None:
             if not isinstance(self._ledger_key, bytes) or len(self._ledger_key) != 32:
@@ -207,16 +216,14 @@ class PersonalLedger:
             if len(kek) != 32:
                 raise LedgerError("ledger key must be 32 bytes")
         elif self.signing_key is not None and self.key_path.exists():
-            try:
-                kek = ledger_at_rest.wrap_key_from_principal(self.signing_key)
-            except ledger_at_rest.LedgerCryptoError as e:
-                raise LedgerError(str(e)) from e
+            raise LedgerError("ledger key missing; refusing to open ciphertext with the principal key")
         elif self.signing_key is not None:
             kek = os.urandom(32)
-            self.secrets_dir().mkdir(parents=True, exist_ok=True)
-            os.chmod(self.secrets_dir(), 0o700)
-            self.ledger_key_path().write_bytes(kek)
-            os.chmod(self.ledger_key_path(), 0o600)
+            key_path = self.ledger_key_path()
+            key_path.parent.mkdir(parents=True, exist_ok=True)
+            os.chmod(key_path.parent, 0o700)
+            key_path.write_bytes(kek)
+            os.chmod(key_path, 0o600)
         else:
             kek = None
         if self.key_path.exists():
@@ -247,8 +254,9 @@ class PersonalLedger:
         self._witness = None
         if self.signing_key is None or self.head_path.exists():
             return
-        self.secrets_dir().mkdir(parents=True, exist_ok=True)
-        os.chmod(self.secrets_dir(), 0o700)
+        witness = self.witness_path()
+        witness.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(witness.parent, 0o700)
         key = keyio.generate_private_key()
         keyio.save_private_key(self.witness_path(), key)
         keyio.save_public_key(self.witness_pub_path(), key.public_key())

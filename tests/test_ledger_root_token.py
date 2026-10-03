@@ -100,6 +100,14 @@ class AncestorCheck(Base):
                          "token_missing_ledger_binding")
         self.assertEqual(self.invoke(self.issue(ledger_size=True)).reason, "token_missing_ledger_binding")
 
+    def _copy_external_keys(self, src, dst):
+        for suffix in (".ledger-key", ".witness"):
+            source = src.parent.parent / f"{src.parent.name}{suffix}"
+            dest = dst.parent.parent / f"{dst.parent.name}{suffix}"
+            if source.is_dir():
+                shutil.copytree(source, dest)
+                self.addCleanup(shutil.rmtree, dest, True)
+
     def _rewritten_ledger(self, mutate_seq):
         """Copy the ledger file and rewrite history from ``mutate_seq`` on with a consistent hash chain."""
         src = self.tk.ledger.path
@@ -109,13 +117,7 @@ class AncestorCheck(Base):
         from two_key import ledger_at_rest
         shutil.copy(src, dst)
         shutil.copy(src.with_name(src.name + ".key.json"), dst.with_name(dst.name + ".key.json"))
-        secrets = src.parent / "two-key-secrets"
-        if secrets.exists():
-            dest_secrets = dst.parent / "two-key-secrets"
-            dest_secrets.mkdir(exist_ok=True)
-            for item in secrets.iterdir():
-                name = item.name.replace(src.name, dst.name, 1)
-                shutil.copy(item, dest_secrets / name)
+        self._copy_external_keys(src, dst)
         data_key = self.tk.ledger._data_key
         rows = [json.loads(ledger_at_rest.open_record(data_key, x)) for x in dst.read_text().splitlines()]
         rows[mutate_seq]["body"] = {"rewritten": True}
@@ -163,13 +165,7 @@ class AncestorCheck(Base):
         lines = src.read_text().splitlines()[: n - 2]
         (tmp / "l.jsonl").write_text("\n".join(lines) + "\n")
         shutil.copy(src.with_name(src.name + ".key.json"), tmp / "l.jsonl.key.json")
-        secrets = src.parent / "two-key-secrets"
-        if secrets.exists():
-            dest_secrets = tmp / "two-key-secrets"
-            dest_secrets.mkdir(exist_ok=True)
-            for item in secrets.iterdir():
-                name = item.name.replace(src.name, "l.jsonl", 1)
-                shutil.copy(item, dest_secrets / name)
+        self._copy_external_keys(src, tmp / "l.jsonl")
         self.gw.ledger = PersonalLedger(tmp / "l.jsonl", self.tk.ledger.signing_key, fsync=False)
         self.assertEqual(self.invoke(self.d.capability).reason, "ledger_fork_detected")
         self.assertEqual(self.gw.view, before)          # the view never moves to a non-extension
@@ -191,7 +187,7 @@ class AncestorCheck(Base):
     def test_every_call_refresh_mode(self):
         gw = self.tk.gateway(view_refresh="every_call")
         self.tk.authorize(SEARCH, "look")
-        self.assertEqual(gw.invoke(self.d.capability, "pay_bill", ARGS, FIELDS).reason, "authorized_no_executor")
+        self.assertEqual(gw.invoke(self.d.capability, "pay_bill", ARGS, FIELDS).reason, "tool_not_registered")
         self.assertGreater(gw.view[0], self.d.token_payload["ledger_size"])
         with self.assertRaises(ValueError):
             self.tk.gateway(view_refresh="sometimes")
@@ -330,7 +326,7 @@ class NonLegacyProfile(unittest.TestCase):
             self.assertEqual((len(p["ledger_merkle_root"]), len(p["bytecode_hash"]), len(p["nl_hash"])), (96, 96, 96))
             tk.authorize(SEARCH, "look")
             self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", ARGS, FIELDS).reason,
-                             "authorized_no_executor")
+                             "tool_not_registered")
             self.assertTrue(tk.ledger.verify(ks.public()).ok)
 
     def test_fips_mode_end_to_end(self):
@@ -345,7 +341,7 @@ class NonLegacyProfile(unittest.TestCase):
             dec = tk.authorize(PAY, "Pay.", ARGS)
             tk.authorize(SEARCH, "look")
             self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", ARGS, FIELDS).reason,
-                             "authorized_no_executor")
+                             "tool_not_registered")
             tk.revoke()
             self.assertEqual(tk.ledger.latest_constitution().body["crypto"]["digest_alg"], "sha384")
 

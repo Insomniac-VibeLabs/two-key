@@ -82,6 +82,8 @@ On success the gateway first checkpoints ``redemption_started``, then runs
 the tool, then logs ``capability_redeemed``. A crash after the intent does
 not run the tool again (``already_attempted``). A tool exception logs
 ``redemption_aborted`` and ``tool_error`` and leaves the token usable.
+The tool error is not allowed. A tool with no registered executor does not
+spend the token (``tool_not_registered``).
 ``tool_executed`` stores a hash of the result (the result itself is not stored)
 and links to the token's capability_issued entry. Scanning, when configured,
 still runs on the frozen argument bytes before the intent, and on the tool
@@ -445,10 +447,7 @@ class ToolGateway:
                     "args_hash": call_args_hash, "args_enc": ENCODING, **link, **scan_rec}
             fn = self.tools.get(call_tool)
             if fn is None:
-                redeemed, why = self.ledger.redeem(jti, body)
-                if redeemed is None:
-                    return GatewayResult(False, why)
-                return GatewayResult(True, "authorized_no_executor")
+                return GatewayResult(False, "tool_not_registered")
             if self.ledger.redemption_started(jti):
                 return self._deny("already_attempted", token, tool)
             started, why = self.ledger.begin_attempt(jti, body)
@@ -466,7 +465,7 @@ class ToolGateway:
                 self.ledger.append("tool_error", {"jti": jti, "error": type(e).__name__, **link})
             except LedgerError as le:
                 return GatewayResult(False, f"ledger_failed:{le}")
-            return GatewayResult(True, f"tool_error:{type(e).__name__}")
+            return GatewayResult(False, f"tool_error:{type(e).__name__}")
         redeemed, why = self.ledger.redeem(jti, body)
         if redeemed is None:
             return GatewayResult(False, why, result)

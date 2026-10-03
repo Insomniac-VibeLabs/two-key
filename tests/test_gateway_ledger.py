@@ -92,7 +92,8 @@ class GatewayChecks(unittest.TestCase):
         self.assertTrue(self.gw.invoke(self.d.capability, "pay_bill", PAY_ARGS).reason.startswith("invalid_call"))
 
     def test_extractor_hook(self):
-        gw = self.tk.gateway(extractors={"pay_bill": lambda a: {"amount_usd": a["amount"], "counterparty": a["payee"],
+        gw = self.tk.gateway(tools={"pay_bill": lambda **a: {"paid": True}},
+                             extractors={"pay_bill": lambda a: {"amount_usd": a["amount"], "counterparty": a["payee"],
                                                                "data_class": "financial"}})
         self.assertTrue(gw.invoke(self.d.capability, "pay_bill", PAY_ARGS).allowed)
 

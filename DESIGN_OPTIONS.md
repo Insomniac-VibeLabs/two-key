@@ -125,9 +125,8 @@ username/password or single sign on login".
 
 **Implemented:** API key from an environment variable; API key from the OS
 keyring (optional `keyring` package); a generic callback token hook.
-**Interfaces with documented stubs:** `UsernamePasswordProvider` (needs a login
-hook) and `OAuthDeviceCodeProvider` (RFC 8628 steps documented; needs a
-`fetch_token` hook). No vendor login is imitated.
+**Rejected:** username/password and OAuth device-code as judge auth. A real
+login is the callback hook. No vendor login is imitated.
 
 | Option | Pros | Cons |
 |---|---|---|

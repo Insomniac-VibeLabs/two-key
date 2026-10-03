@@ -62,10 +62,7 @@ judges:
 
 # Optional per-judge keys: vendor (defaults to provider), local_weights, weights_sha256, echo_binding.
 
-# Other auth modes (interfaces; see two_key/judges/credentials.py):
+# Other auth modes (see two_key/judges/credentials.py):
 #   auth: {type: keyring, service: two-key, username: openai}
-#   auth: {type: username_password, username: me, password_env: MY_GATEWAY_PASSWORD,
-#          login: "my_hooks:login"}                  # you supply the login hook
-#   auth: {type: oauth_device_code, client_id: ..., device_authorization_endpoint: ...,
-#          token_endpoint: ..., fetch_token: "my_hooks:device_flow"}   # rejected without the hook
-#   auth: {type: callback, callback: "my_hooks:get_sso_token"}         # any SSO/OAuth token source
+#   auth: {type: callback, callback: "my_hooks:get_sso_token"}
+# username_password and oauth_device_code are rejected.

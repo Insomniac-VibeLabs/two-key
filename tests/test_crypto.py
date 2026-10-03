@@ -229,7 +229,7 @@ class MissingPQLibrary(unittest.TestCase):
             self.assertTrue(dec.allowed, dec.reason)
             self.assertTrue(dec.capability.startswith("tk1-sig."))
             self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
-                             "authorized_no_executor")
+                             "tool_not_registered")
             self.assertEqual(tk.ledger.verify(ks.public()).reason, "ok")
 
 
@@ -249,7 +249,7 @@ class ClassicSuites(unittest.TestCase):
             self.assertTrue(dec.allowed and dec.capability.startswith("tk1-sig."))
             self.assertEqual(len(tk.ledger.tip()), 96)
             self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
-                             "authorized_no_executor")
+                             "tool_not_registered")
             self.assertEqual(PersonalLedger(Path(d) / "l.jsonl", signing_key=ks).verify(ks.public()).reason, "ok")
 
     def test_legacy_signature_refused_for_p384_trusted_key(self):

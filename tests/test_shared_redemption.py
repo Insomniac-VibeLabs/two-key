@@ -82,13 +82,13 @@ class TwoGateways(Base):
             self.assertEqual(g.invoke(d.capability, "pay_bill", args, FIELDS).reason, "replayed")
         self.assertEqual(len(self.calls), 1)
 
-    def test_gateway_without_executor_also_consumes_token(self):
+    def test_gateway_without_executor_does_not_consume_token(self):
         d, args = self.token()
         self.assertEqual(self.tk.gateway().invoke(d.capability, "pay_bill", args, FIELDS).reason,
-                         "authorized_no_executor")
+                         "tool_not_registered")
         self.assertEqual(self.tk.gateway(tools={"pay_bill": self.tool}).invoke(
-            d.capability, "pay_bill", args, FIELDS).reason, "replayed")
-        self.assertEqual(self.calls, [])
+            d.capability, "pay_bill", args, FIELDS).reason, "executed")
+        self.assertEqual(len(self.calls), 1)
 
     def test_ledger_redeem_api(self):
         led = self.tk.ledger

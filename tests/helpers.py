@@ -1,5 +1,6 @@
 """Shared test fixtures. Keys are generated per test and never written to the repo."""
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -45,7 +46,7 @@ class TwoKeyFixture:
             self.two_key = TwoKey(env, key.public_key(), Path(self.tmp.name) / "ledger.jsonl",
                                         self.judges, **self._extra(key, kw))
         except Exception:
-            self.tmp.cleanup()
+            self._clean()
             raise
         return self.two_key
 
@@ -61,5 +62,11 @@ class TwoKeyFixture:
             kw.update(extra)
         return kw
 
-    def __exit__(self, *exc):
+    def _clean(self):
+        ledger_dir = Path(self.tmp.name)
+        for suffix in (".ledger-key", ".witness"):
+            shutil.rmtree(ledger_dir.parent / f"{ledger_dir.name}{suffix}", ignore_errors=True)
         self.tmp.cleanup()
+
+    def __exit__(self, *exc):
+        self._clean()

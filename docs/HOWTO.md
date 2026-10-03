@@ -583,15 +583,9 @@ import os
 
 
 def get_sso_token():
-    """callback hook: return a current bearer token from your SSO/OAuth client.
+    """callback hook: return a current bearer token from your SSO client.
     Replace this with a call to your identity provider's SDK or token cache."""
     return os.environ["MY_SSO_TOKEN"]
-
-
-def gateway_login(username, password):
-    """username_password hook: log in to YOUR model gateway and return its session token.
-    Model vendors don't offer password logins for their APIs, so nothing is built in."""
-    raise NotImplementedError("implement the login for your gateway here")
 ```
 
 <!-- check: file=judges-auth.yaml -->
@@ -612,22 +606,9 @@ judges:
     base_url: https://llm-gateway.example.com/v1
     model: <model-name>
     auth: {type: callback, callback: "my_hooks:get_sso_token"}
-  - id: password           # STUB unless the login hook implements your gateway's login
-    type: openai_compatible
-    base_url: https://llm-gateway.example.com/v1
-    model: <model-name>
-    auth: {type: username_password, username: me, password_env: MY_GATEWAY_PASSWORD,
-           login: "my_hooks:gateway_login"}
-  - id: device-code        # STUB: OAuth 2.0 device authorization grant (RFC 8628) needs fetch_token
-    type: openai_compatible
-    base_url: https://llm-gateway.example.com/v1
-    model: <model-name>
-    auth: {type: oauth_device_code, client_id: my-client,
-           device_authorization_endpoint: https://idp.example.com/device,
-           token_endpoint: https://idp.example.com/token}
 ```
 
-<!-- check: expect=^OK: 5 judges -->
+<!-- check: expect=^OK: 3 judges -->
 ```bash
 python -m two_key check-judges --config judges-auth.yaml
 ```
@@ -644,8 +625,6 @@ The stubs fail closed. A judge whose credential can't be obtained
 abstains, and the reason is recorded:
 
 <!-- check: expect=^sso: yes -->
-<!-- check: expect=^password: abstain credential: login failed -->
-<!-- check: expect=^device-code: abstain credential: OAuthDeviceCodeProvider is an interface stub -->
 <!-- check: expect=^keyring-key: abstain credential: -->
 ```bash
 MY_SSO_TOKEN=example-token MY_GATEWAY_PASSWORD=example-password python - <<'PY'
@@ -661,13 +640,8 @@ for j in judges:
 PY
 ```
 
-The username/password provider reads the password from `password_env` when
-it's needed and calls your `login(username, password)` hook; a hook that
-raises is reported as `login failed`. The device-code provider calls
-`fetch_token(provider)`, which should run the RFC 8628 flow (steps in
-`two_key/judges/credentials.py`) and return an access token. In
-Python you can pass hooks directly:
-`OAuthDeviceCodeProvider(..., fetch_token=my_flow, prompt_user=show_code)`.
+The username/password and device-code auth types are rejected. A real login
+is a `callback` hook.
 
 ## 7. Quorum settings
 
@@ -989,9 +963,9 @@ On success the gateway checkpoints `redemption_started` before the tool
 runs, then logs `capability_redeemed` and `tool_executed` (a hash of the
 result, not the result). A crash after that intent does not run the tool
 again. A tool that raises logs `redemption_aborted` and
-`allowed=True, reason="tool_error:<Type>"`, and the same token can be
-tried again. A tool with no registered executor still redeems immediately
-and returns `authorized_no_executor`. Every one of those entries links to
+`allowed=False, reason="tool_error:<Type>"`, and the same token can be
+tried again. A tool with no registered executor does not spend the token
+and returns `tool_not_registered`. Every recorded entry links to
 the token's `capability_issued` entry. Outbound scanning, when configured,
 still happens on the frozen arguments before the intent. Inbound scanning
 still happens on the tool result before the caller receives it.
@@ -1239,12 +1213,11 @@ include:
 - `redemption_started`, `redemption_aborted`, `capability_redeemed`, `tool_executed`, `tool_error`, `gateway_denied`
 - `revocation`, `anchored`
 
-The ledger file and the signed head are AES-256-GCM. A new ledger keeps its
-decryption key and a witness key in `two-key-secrets/` beside the ledger
-files, not wrapped by the principal key. The head needs both signatures.
-Copying only the `.jsonl` files does not copy those keys. A ledger created
-before this split still unwraps with the principal key. A missing or wrong
-key fails closed.
+The ledger file and the signed head are AES-256-GCM. The decryption key and
+the witness key live outside the ledger directory, as siblings named
+`<ledger-directory>.ledger-key` and `<ledger-directory>.witness`. Copying
+the ledger directory does not copy them. The principal key cannot unwrap
+the log or sign a head by itself. A missing or wrong key fails closed.
 
 ### Verify
 

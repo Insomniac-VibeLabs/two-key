@@ -14,13 +14,8 @@ What is implemented:
   a bearer token. This is the generic hook for any SSO/OAuth/session flow
   the user wires up.
 
-Interfaces with documented stubs (no vendor login is faked):
-- ``UsernamePasswordProvider``: needs a user-supplied ``login(username,
-  password) -> token`` hook. Model vendors generally do not offer a
-  password-based API login, so no default is provided.
-- ``OAuthDeviceCodeProvider``: the OAuth 2.0 Device Authorization Grant
-  (RFC 8628) hook points. ``get_token`` raises NotImplementedError unless
-  hooks are supplied.
+Username/password and OAuth device-code auth are not implemented. A config
+that asks for them is rejected. Use ``callback`` for a real login hook.
 
 Secrets are never hardcoded, logged, or written to the ledger, and
 ``repr()`` output is redacted.
@@ -117,83 +112,4 @@ class CallbackTokenProvider(CredentialProvider):
             raise CredentialError(f"token callback failed: {type(e).__name__}") from e
         if not t or not isinstance(t, str):
             raise CredentialError("token callback returned no token")
-        return t
-
-
-class UsernamePasswordProvider(CredentialProvider):
-    """Username/password login. INTERFACE ONLY: supply a ``login`` hook.
-
-    ``login(username, password) -> token`` must perform the provider's real
-    login flow. For example, a self-hosted model gateway that issues session
-    tokens. The password is read from an environment variable at call time
-    and is not stored on the object.
-    """
-
-    kind = "username_password"
-
-    def __init__(self, username: str, password_env: str,
-                 login: Callable[[str, str], str] | None = None):
-        self.username, self.password_env, self._login = username, password_env, login
-        self._cached: str | None = None
-
-    def get_token(self) -> str:
-        if self._login is None:
-            raise NotImplementedError(
-                "UsernamePasswordProvider needs a login(username, password) -> token hook for your "
-                "provider; none is built in because model vendors do not offer password API logins.")
-        if self._cached:
-            return self._cached
-        pw = os.environ.get(self.password_env)
-        if not pw:
-            raise CredentialError(f"environment variable {self.password_env} is not set")
-        try:
-            self._cached = self._login(self.username, pw)
-        except Exception as e:
-            raise CredentialError(f"login failed: {type(e).__name__}") from e
-        return self._cached
-
-
-class OAuthDeviceCodeProvider(CredentialProvider):
-    """OAuth 2.0 Device Authorization Grant (RFC 8628). DOCUMENTED STUB.
-
-    Intended flow, to be implemented for a specific identity provider:
-      1. POST ``device_authorization_endpoint`` with client_id and scope, which
-         returns device_code, user_code, verification_uri, and interval.
-      2. Show the user ``verification_uri`` and ``user_code`` (hook ``prompt_user``).
-      3. Poll ``token_endpoint`` with grant_type=
-         urn:ietf:params:oauth:grant-type:device_code until an access_token
-         arrives. Honor ``slow_down`` and ``authorization_pending``.
-      4. Cache the access/refresh tokens in the OS secret store, never on disk
-         in plaintext, and refresh before expiry.
-
-    Supply ``fetch_token`` (a callable that performs steps 1-4 and returns an
-    access token) to make this provider work. Without it, ``get_token``
-    raises NotImplementedError. No vendor endpoints are preconfigured.
-    """
-
-    kind = "oauth_device_code"
-
-    def __init__(self, client_id: str, device_authorization_endpoint: str, token_endpoint: str,
-                 scope: str = "", fetch_token: Callable[["OAuthDeviceCodeProvider"], str] | None = None,
-                 prompt_user: Callable[[str, str], None] | None = None):
-        self.client_id = client_id
-        self.device_authorization_endpoint = device_authorization_endpoint
-        self.token_endpoint = token_endpoint
-        self.scope = scope
-        self._fetch = fetch_token
-        self.prompt_user = prompt_user
-
-    def get_token(self) -> str:
-        if self._fetch is None:
-            raise NotImplementedError(
-                "OAuthDeviceCodeProvider is an interface stub: supply fetch_token= implementing RFC 8628 "
-                "for your identity provider (see class docstring).")
-        try:
-            t = self._fetch(self)
-        except NotImplementedError:
-            raise
-        except Exception as e:
-            raise CredentialError(f"device-code flow failed: {type(e).__name__}") from e
-        if not t:
-            raise CredentialError("device-code flow returned no token")
         return t

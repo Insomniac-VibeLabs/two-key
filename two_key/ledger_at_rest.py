@@ -1,9 +1,8 @@
 """Ledger at rest: AES-256-GCM records and a wrapped data key.
 
-New ledgers wrap the data key with a ledger key file, not the principal key
-(see PersonalLedger). ``wrap_key_from_principal`` remains for ledgers created
-before that split, and for a caller-supplied ``ledger_key`` on a non-exportable
-principal. A missing or wrong key fails closed.
+The data key is wrapped by a ledger key that lives outside the ledger
+directory. It is never derived from the principal key. A missing or wrong
+key fails closed. A non-exportable principal passes ``ledger_key`` explicitly.
 """
 
 from __future__ import annotations
@@ -12,8 +11,6 @@ import json
 import os
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.hashes import SHA384
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 WRAP_FORMAT = "two-key-ledger-wrap/1"
 RECORD_FORMAT = "two-key-ledger-enc/1"
@@ -23,19 +20,6 @@ _RECORD_AAD = b"two-key-ledger-enc/1"
 
 class LedgerCryptoError(RuntimeError):
     pass
-
-
-def wrap_key_from_principal(signing_key) -> bytes:
-    """32-byte key-encryption key from the principal's exportable private material."""
-    privs = getattr(signing_key, "_privs", None)
-    if privs and any(getattr(p, "external", False) for p in privs):
-        raise LedgerCryptoError("principal key is not exportable; pass ledger_key to open the encrypted ledger")
-    export = getattr(signing_key, "export_components", None)
-    if not callable(export):
-        raise LedgerCryptoError("principal key cannot wrap the ledger data key")
-    material = json.dumps({"suite": signing_key.suite, "components": export()},
-                          sort_keys=True, separators=(",", ":")).encode()
-    return HKDF(SHA384(), 32, salt=b"two-key-ledger", info=_WRAP_INFO).derive(material)
 
 
 def wrap_data_key(kek: bytes, data_key: bytes) -> dict:
@@ -50,7 +34,7 @@ def unwrap_data_key(kek: bytes, blob: dict) -> bytes:
     try:
         return AESGCM(kek).decrypt(bytes.fromhex(blob["nonce"]), bytes.fromhex(blob["wrapped"]), _WRAP_INFO)
     except Exception as e:
-        raise LedgerCryptoError("ledger data key rejected (wrong principal key)") from e
+        raise LedgerCryptoError("ledger data key rejected (wrong ledger key)") from e
 
 
 def seal(data_key: bytes, plaintext: str) -> str:

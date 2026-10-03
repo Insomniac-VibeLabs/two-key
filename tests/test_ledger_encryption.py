@@ -27,13 +27,14 @@ class EncryptedLedger(unittest.TestCase):
                 PersonalLedger(path, signing_key=other)
             blob = json.loads((Path(str(path) + ".key.json")).read_text())
             self.assertEqual(blob["format"], "two-key-ledger-wrap/1")
-            self.assertTrue((Path(d) / "two-key-secrets" / "l.jsonl.ledger-key").exists())
-            self.assertTrue((Path(d) / "two-key-secrets" / "l.jsonl.witness.pem").exists())
-            (Path(d) / "two-key-secrets" / "l.jsonl.ledger-key").unlink()
+            self.assertTrue(led.ledger_key_path().exists())
+            self.assertFalse(led.ledger_key_path().resolve().is_relative_to(Path(d).resolve()))
+            self.assertFalse(led.witness_path().resolve().is_relative_to(Path(d).resolve()))
+            led.ledger_key_path().unlink()
             with self.assertRaises(LedgerError):
                 PersonalLedger(path, signing_key=key)
-            (Path(d) / "two-key-secrets" / "l.jsonl.witness.pem").unlink()
-            (Path(d) / "two-key-secrets" / "l.jsonl.witness.pub.pem").unlink()
+            led.witness_path().unlink()
+            led.witness_pub_path().unlink()
             # The wrap file is still there, but the witness is gone and the data key is not recoverable.
             with self.assertRaises(LedgerError):
                 PersonalLedger(path, signing_key=key)

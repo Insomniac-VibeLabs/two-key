@@ -163,7 +163,7 @@ class HybridConstitutionLedgerTokens(unittest.TestCase):
         self.assertEqual(len(dec.token_payload["args_hash"]), 96)
         self.assertEqual(len(dec.token_payload["constitution_digest"]), 96)
         r = tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS)
-        self.assertEqual(r.reason, "authorized_no_executor")
+        self.assertEqual(r.reason, "tool_not_registered")
         self.assertEqual(PersonalLedger(self.d / "k.jsonl", signing_key=self.ks).verify(self.ks.public()).reason, "ok")
 
     def test_signed_capability_tokens(self):
@@ -194,7 +194,7 @@ class HybridConstitutionLedgerTokens(unittest.TestCase):
         dec = tk.authorize(PAY, "Pay.", PAY_ARGS)
         self.assertTrue(dec.capability.startswith("tk1-sig."))
         self.assertEqual(tk.gateway().invoke(dec.capability, "pay_bill", PAY_ARGS, PAY_FIELDS).reason,
-                         "authorized_no_executor")
+                         "tool_not_registered")
 
     def test_cli_hybrid_keygen_sign_verify(self):
         os.environ["TWOKEY_TEST_PASS"] = "test-only passphrase"
