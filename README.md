@@ -995,9 +995,10 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
   OpenSSL 4.0.2, which is not a validated module. No FIPS provider was
   active during development.
 
-**Other limits**: the ledger is AES-256-GCM at rest, and one process must own it.
-A stolen principal key can still unwrap the data key unless you pass a separate
-`ledger_key`. Seed-phrase backup is personal-mode only and off in `fips_mode`.
+**Other limits**: one process must own the ledger. New ledgers are AES-256-GCM,
+with the decryption key and a witness key in `two-key-secrets/` rather than
+under the principal key. Ledgers created before that split still unwrap with
+the principal key. Seed-phrase backup is personal-mode only and off in `fips_mode`.
 
 Stubs and open questions are listed in this section and in
 [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md).

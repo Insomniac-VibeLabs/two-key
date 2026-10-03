@@ -38,8 +38,12 @@ An append-only JSONL hash chain owned by the principal (spec 5.6), plus:
   changed the file.
 
 The ledger file and head file are created with mode 0600. Every record and
-the signed head are AES-256-GCM ciphertext. The data key is wrapped by the
-principal key (two_key.ledger_at_rest). A missing or wrong key fails closed.
+the signed head are AES-256-GCM ciphertext. A new ledger wraps the data key
+with a ledger key stored in ``two-key-secrets/`` next to the ledger, not with
+the principal key. The head is signed by the principal and by a witness key
+in that same secrets directory. A stolen principal key cannot decrypt the
+log or sign a new head. A ledger created before this split still unwraps
+with the principal key and has no witness signature.
 """
 
 from __future__ import annotations
@@ -59,6 +63,7 @@ from .canonical import canonical_bytes, digest_hex
 from .crypto.provider import DIGEST_SIZE, CryptoProvider, default_provider
 from .crypto.signatures import LEGACY_SUITE, as_private_keyset, as_public_keyset
 from . import ledger_at_rest
+from . import keys as keyio
 
 try:  # POSIX advisory file locks for cross-process redemption; absent on Windows
     import fcntl
@@ -151,6 +156,7 @@ class PersonalLedger:
         self._unsigned = 0
         self.head_anchor = head_anchor              # publish every signed head here (None: local only)
         self._anchoring = False
+        self._witness = None
         self._open_data_key()
         if self.path.exists():
             self._load()
@@ -167,19 +173,50 @@ class PersonalLedger:
         self._tree = merkle.MerkleTree(self._h)
         for e in self.entries:
             self._tree.append(bytes.fromhex(e.digest))
+        self._ensure_witness()
+        self._assert_principal()
+
+    def secrets_dir(self) -> Path:
+        """Key material that must not sit in the ledger file set. Copying the ``.jsonl`` files does not copy this."""
+        return self.path.parent / "two-key-secrets"
+
+    def ledger_key_path(self) -> Path:
+        return self.secrets_dir() / (self.path.name + ".ledger-key")
+
+    def witness_path(self) -> Path:
+        return self.secrets_dir() / (self.path.name + ".witness.pem")
+
+    def witness_pub_path(self) -> Path:
+        return self.secrets_dir() / (self.path.name + ".witness.pub.pem")
 
     # -- storage -------------------------------------------------------------
     def _open_data_key(self) -> None:
-        """Unwrap the data key, or create one. Missing and wrong keys fail closed."""
+        """Unwrap the data key, or create one. Missing and wrong keys fail closed.
+
+        New ledgers wrap with a ledger key file under ``two-key-secrets/``. An
+        explicit ``ledger_key`` argument (a non-exportable principal) still wins.
+        A ledger whose wrap file already exists and has no ledger key file is
+        the older principal-wrapped form and still opens with that key.
+        """
         if self._ledger_key is not None:
             if not isinstance(self._ledger_key, bytes) or len(self._ledger_key) != 32:
                 raise LedgerError("ledger_key must be 32 bytes")
             kek = self._ledger_key
-        elif self.signing_key is not None:
+        elif self.signing_key is not None and self.ledger_key_path().exists():
+            kek = self.ledger_key_path().read_bytes()
+            if len(kek) != 32:
+                raise LedgerError("ledger key must be 32 bytes")
+        elif self.signing_key is not None and self.key_path.exists():
             try:
                 kek = ledger_at_rest.wrap_key_from_principal(self.signing_key)
             except ledger_at_rest.LedgerCryptoError as e:
                 raise LedgerError(str(e)) from e
+        elif self.signing_key is not None:
+            kek = os.urandom(32)
+            self.secrets_dir().mkdir(parents=True, exist_ok=True)
+            os.chmod(self.secrets_dir(), 0o700)
+            self.ledger_key_path().write_bytes(kek)
+            os.chmod(self.ledger_key_path(), 0o600)
         else:
             kek = None
         if self.key_path.exists():
@@ -190,6 +227,8 @@ class PersonalLedger:
                 self._data_key = ledger_at_rest.unwrap_data_key(kek, blob)
             except (OSError, ValueError, ledger_at_rest.LedgerCryptoError) as e:
                 raise LedgerError(f"ledger key rejected: {e}") from e
+            if not (self.path.exists() and self.path.stat().st_size):
+                raise LedgerError("ledger file missing; refusing to reuse an existing wrapped data key")
             return
         if self.path.exists() and self.path.stat().st_size:
             raise LedgerError("ledger is not encrypted; refusing to open a plaintext ledger")
@@ -200,6 +239,40 @@ class PersonalLedger:
         _write_private(self.key_path, json.dumps(ledger_at_rest.wrap_data_key(kek, data_key)) + "\n",
                        append=False, fsync=self.fsync)
         self._data_key = data_key
+
+    def _ensure_witness(self) -> None:
+        if self.witness_path().exists():
+            self._witness = keyio.load_private_key(self.witness_path())
+            return
+        self._witness = None
+        if self.signing_key is None or self.head_path.exists():
+            return
+        self.secrets_dir().mkdir(parents=True, exist_ok=True)
+        os.chmod(self.secrets_dir(), 0o700)
+        key = keyio.generate_private_key()
+        keyio.save_private_key(self.witness_path(), key)
+        keyio.save_public_key(self.witness_pub_path(), key.public_key())
+        self._witness = key
+
+    def _load_witness_public(self):
+        if self.witness_pub_path().exists():
+            return keyio.load_public_key(self.witness_pub_path())
+        if self._witness is not None:
+            return self._witness.public_key()
+        if self.witness_path().exists():
+            return keyio.load_private_key(self.witness_path()).public_key()
+        raise LedgerError("witness key missing")
+
+    def _assert_principal(self) -> None:
+        if self.signing_key is None or not self.head_path.exists() or self._data_key is None:
+            return
+        try:
+            sh = json.loads(self._open_line(self.head_path.read_text(encoding="utf-8").strip()))
+            pub = sh["head"].get("public_key")
+        except (OSError, ValueError, KeyError, LedgerError) as e:
+            raise LedgerError(f"ledger head rejected: {e}") from e
+        if pub != self.signing_key.public().encoded:
+            raise LedgerError("head principal key does not match the signing key")
 
     def _seal(self, plaintext: str) -> str:
         if self._data_key is None:
@@ -510,7 +583,24 @@ class PersonalLedger:
             body["suite"] = pub.suite
         if self.digest_alg != "sha256":
             body["digest_alg"] = self.digest_alg
-        return {"head": body, "sig": self.signing_key.sign(canonical_bytes(body))}
+        if self._witness is None and self._head_requires_witness():
+            raise LedgerError("witness key missing; refusing to sign a head the principal key alone could forge")
+        if self._witness is not None:
+            body["witness_public_key"] = keyio.public_key_raw(self._witness).hex()
+        signed = {"head": body, "sig": self.signing_key.sign(canonical_bytes(body))}
+        if self._witness is not None:
+            signed["witness_sig"] = self._witness.sign(canonical_bytes(body)).hex()
+        return signed
+
+    def _head_requires_witness(self) -> bool:
+        if not self.head_path.exists() or self._data_key is None:
+            return False
+        try:
+            sh = json.loads(self._open_line(self.head_path.read_text(encoding="utf-8").strip()))
+        except (OSError, ValueError, LedgerError):
+            return False
+        head = sh.get("head") if isinstance(sh, dict) else None
+        return isinstance(head, dict) and bool(head.get("witness_public_key"))
 
     def _write_head(self) -> None:
         with self._lock:
@@ -572,6 +662,20 @@ class PersonalLedger:
             return VerifyReport(False, "digest_alg_mismatch", n)
         if not trusted.verify(canonical_bytes(body), sig):
             return VerifyReport(False, "head_signature_invalid", n)
+        wpub = body.get("witness_public_key")
+        if wpub or self.witness_path().exists():
+            if not wpub or "witness_sig" not in sh:
+                return VerifyReport(False, "witness_signature_missing", n)
+            try:
+                witness_pub = self._load_witness_public()
+            except (LedgerError, ValueError, OSError):
+                return VerifyReport(False, "witness_key_missing", n)
+            if keyio.public_key_raw(witness_pub).hex() != wpub:
+                return VerifyReport(False, "witness_key_mismatch", n)
+            try:
+                witness_pub.verify(bytes.fromhex(sh["witness_sig"]), canonical_bytes(body))
+            except Exception:
+                return VerifyReport(False, "witness_signature_invalid", n)
         if body["size"] != n:
             return VerifyReport(False, f"size_mismatch:head={body['size']},file={n}", n)
         if body["head"] != self.tip():

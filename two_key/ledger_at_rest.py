@@ -1,8 +1,9 @@
-"""Ledger at rest: AES-256-GCM records, data key wrapped by the principal key.
+"""Ledger at rest: AES-256-GCM records and a wrapped data key.
 
-The hash chain is over the plaintext entry. The file holds ciphertext only.
-A missing or wrong principal key fails closed. A non-exportable key (a PKCS#11
-key) cannot wrap the data key; pass ledger_key explicitly or this fails closed.
+New ledgers wrap the data key with a ledger key file, not the principal key
+(see PersonalLedger). ``wrap_key_from_principal`` remains for ledgers created
+before that split, and for a caller-supplied ``ledger_key`` on a non-exportable
+principal. A missing or wrong key fails closed.
 """
 
 from __future__ import annotations

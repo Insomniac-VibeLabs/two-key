@@ -1239,9 +1239,12 @@ include:
 - `redemption_started`, `redemption_aborted`, `capability_redeemed`, `tool_executed`, `tool_error`, `gateway_denied`
 - `revocation`, `anchored`
 
-The ledger file and the signed head are AES-256-GCM. The data key is wrapped
-by the principal key, or by a 32-byte `ledger_key` when the principal key
-cannot be exported. A missing or wrong key fails closed.
+The ledger file and the signed head are AES-256-GCM. A new ledger keeps its
+decryption key and a witness key in `two-key-secrets/` beside the ledger
+files, not wrapped by the principal key. The head needs both signatures.
+Copying only the `.jsonl` files does not copy those keys. A ledger created
+before this split still unwraps with the principal key. A missing or wrong
+key fails closed.
 
 ### Verify
 

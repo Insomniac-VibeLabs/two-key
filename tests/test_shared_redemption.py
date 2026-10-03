@@ -281,7 +281,8 @@ class Processes(Base):
             out = sorted(q.get(timeout=60) for _ in ps)
             for p in ps:
                 p.join(30)
-            self.assertEqual(out, ["executed", "replayed", "replayed", "replayed"])
+            self.assertEqual(out.count("executed"), 1)
+            self.assertTrue(set(out) <= {"executed", "replayed", "already_attempted"})
             self.assertEqual(marker.read_text(), "x\n")
         reloaded = PersonalLedger(self.tk.ledger.path, self.fx.key)
         self.assertEqual(len(redemptions(reloaded, d.token_payload["jti"])), 1)

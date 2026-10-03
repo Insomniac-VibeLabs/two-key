@@ -109,6 +109,13 @@ class AncestorCheck(Base):
         from two_key import ledger_at_rest
         shutil.copy(src, dst)
         shutil.copy(src.with_name(src.name + ".key.json"), dst.with_name(dst.name + ".key.json"))
+        secrets = src.parent / "two-key-secrets"
+        if secrets.exists():
+            dest_secrets = dst.parent / "two-key-secrets"
+            dest_secrets.mkdir(exist_ok=True)
+            for item in secrets.iterdir():
+                name = item.name.replace(src.name, dst.name, 1)
+                shutil.copy(item, dest_secrets / name)
         data_key = self.tk.ledger._data_key
         rows = [json.loads(ledger_at_rest.open_record(data_key, x)) for x in dst.read_text().splitlines()]
         rows[mutate_seq]["body"] = {"rewritten": True}
@@ -156,6 +163,13 @@ class AncestorCheck(Base):
         lines = src.read_text().splitlines()[: n - 2]
         (tmp / "l.jsonl").write_text("\n".join(lines) + "\n")
         shutil.copy(src.with_name(src.name + ".key.json"), tmp / "l.jsonl.key.json")
+        secrets = src.parent / "two-key-secrets"
+        if secrets.exists():
+            dest_secrets = tmp / "two-key-secrets"
+            dest_secrets.mkdir(exist_ok=True)
+            for item in secrets.iterdir():
+                name = item.name.replace(src.name, "l.jsonl", 1)
+                shutil.copy(item, dest_secrets / name)
         self.gw.ledger = PersonalLedger(tmp / "l.jsonl", self.tk.ledger.signing_key, fsync=False)
         self.assertEqual(self.invoke(self.d.capability).reason, "ledger_fork_detected")
         self.assertEqual(self.gw.view, before)          # the view never moves to a non-extension
