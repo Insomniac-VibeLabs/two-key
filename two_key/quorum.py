@@ -43,9 +43,8 @@ Quorum protocol specifics (PRIOR_ART.md §4 (iii), selected by the author on
   normalized action record and the constitution, never the agent's proposal
   text (transcript) or tool outputs. "record_and_proposal" restores the
   earlier behaviour.
-- Path B only after Path A returns true: Two-Key's default
-  (short_circuit_path_b=True). ``require_path_a_first=True`` makes Two-Key
-  refuse to run otherwise.
+- Both paths always answer. ``short_circuit_path_b`` is ignored.
+  ``require_path_a_first`` is recorded and does not skip Path B.
 """
 
 from __future__ import annotations

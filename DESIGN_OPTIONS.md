@@ -104,19 +104,21 @@ literal tool-call args), ledger root, and constitution digest; TTL 30 s.
 
 ## 4. Ordering of Path A and Path B
 
-**Current prototype default** (per the author's 2026-09-30 instructions, for
-privacy was the old default). Path B is no longer skipped if Path A denies. Both paths must answer, and either a deny or a missing answer denies.
-Set `False` to run both. §4 (iii), which the author selected, says "Path B
-invoked only after Path A returns true". `require_path_a_first=True` (set
-by `QuorumPolicy.section4()`) makes Two-Key refuse `False`; see §7.21.
+**Current prototype default.** Both paths always answer. Path A runs first,
+then Path B. A deny or a missing answer from either path denies.
+`short_circuit_path_b` is accepted and ignored, so a Path A deny still asks
+the judges and both results are written to the ledger.
+`require_path_a_first` is recorded and does not skip Path B. The author's
+§4 (iii) selection said "Path B invoked only after Path A returns true".
+That skip is not what this code does.
 
 | Option | Pros | Cons |
 |---|---|---|
-| **A. Short-circuit after an A deny** (current) | Forbidden proposals, which may contain sensitive data, never reach external judges; lower cost and latency | Less audit data about how judges would have voted |
-| **B. Always run both** (option available) | Full audit trail; can calibrate judges against Path A | Sends denied content to vendors; cost |
-| **C. Path B first** | Judges see everything first | Worst for privacy; Path A's cheap deny comes last |
-| **D. Parallel, cancel on first deny** | Lowest latency | Content already sent to judges before the cancel |
-| **E. After an A deny, run only local judges** | Audit value without sending data off-device | Requires a local judge |
+| A. Short-circuit after an A deny | Forbidden proposals, which may contain sensitive data, never reach external judges; lower cost and latency | Less audit data about how judges would have voted |
+| **B. Always run both** (current) | Full audit trail; can calibrate judges against Path A | Sends denied content to vendors; cost |
+| C. Path B first | Judges see everything first | Worst for privacy; Path A's cheap deny comes last |
+| D. Parallel, cancel on first deny | Lowest latency | Content already sent to judges before the cancel |
+| E. After an A deny, run only local judges | Audit value without sending data off-device | Requires a local judge |
 
 ## 5. Credential, username/password, and SSO handling for judges
 
@@ -188,7 +190,7 @@ behaviour listed here. **These are engineering placeholders, not decisions.**
 | 7.18 | How much of a round below the floor K is logged | Not counted: `counted=false`, and `yes`/`no` are null. The individual ballots, including their votes, are still logged | Log only abstention reasons; log ballot hashes only |
 | 7.19 | What exactly judges receive | `judge_inputs="record_only"` (default): constitution prose + normalized action record (+ binding). The proposal text is not sent (it is still logged in the ledger, §6). `"record_and_proposal"` restores the earlier behaviour. The record's free-form `raw` field is still part of the record (§1 / F) | Drop `raw`; send a redacted record; per-judge input policies |
 | 7.20 | Values of K and T | The principal's choice; K (`min_responding`) defaults to T (`required_yes`) | Require K > T; derive K from n |
-| 7.21 | Whether "Path B only after Path A" is mandatory | Default behaviour (`short_circuit_path_b=True`), enforced only with `require_path_a_first=True` | Remove the option to run both (§4 option B) |
+| 7.21 | Whether "Path B only after Path A" is mandatory | Both paths always answer. `short_circuit_path_b` is ignored. `require_path_a_first` is recorded and does not skip Path B | Restore a real skip, or run only local judges after a Path A deny (§4 options A and E) |
 
 ### Not built
 
