@@ -1,7 +1,7 @@
 # Is this for you
 
 Prototype. Not a FIPS 140-3 validated module. Not on PyPI. There is no MCP
-server in this release. Package version 0.1.5. Apache-2.0.
+server in this release. Package version 0.1.6. Apache-2.0.
 
 This is [two-key](https://github.com/Insomniac-VibeLabs/two-key). The smaller
 package, without scanning, PKI, or anchoring, is

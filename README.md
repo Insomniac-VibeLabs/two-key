@@ -191,6 +191,7 @@ More diagrams: [architecture](docs/figures/architecture.svg),
 ## Install
 
 Requires Python ≥ 3.10. Two-Key is not on PyPI yet; install from a clone.
+The release tag for this tree is `v0.1.6`. `v0.1.5` is the previous tree.
 Every command in this README is run from the repository root and is
 checked automatically by `tools/doccheck.py` (see [Testing](#testing)).
 
@@ -777,9 +778,9 @@ the file is loaded.
 | `quorum_policy` | `QuorumPolicy(required_yes=min(2, n))` | `QuorumPolicy` | Path B rules (table above) |
 | `ttl_seconds` | `30` | positive int | Token lifetime |
 | `max_steps` | `4096` | int ≥ 1 | Path A step limit, checked at compile time |
-| `capability_secret` | random per process (48 bytes) | bytes, ≥ 32 | HMAC key for tokens |
+| `capability_secret` | random per process (48 bytes) | bytes, ≥ 32 | HMAC key only if `token_mode` is `tk1` or `tk1-hs384`. Ignored by the default `tk1-sig` |
 | `token_mode` | `tk1-sig` | `tk1-sig`, `tk1-hs384`; `tk1` (HMAC-SHA-256, legacy, only if chosen) | Signed by the principal key unless `token_signing_key` is set. HMAC is opt-in; that verifier can also mint |
-| `token_signing_key` | none | a `PrivateKeySet` | Required for `tk1-sig` |
+| `token_signing_key` | the principal key | a `PrivateKeySet` | Optional separate signer for `tk1-sig`. If omitted, `ledger_signing_key` signs |
 | `digest_alg` | `sha384` (every suite) | `sha384`; `sha256` only to keep appending to a ledger written with the earlier default; `sha512`, `sha3-384`, `sha3-512` are approved and self-tested but untested end to end | Ledger, Merkle, args, ballots, and constitution hashes. Old SHA-256 ledgers still verify (`docs/CRYPTO.md` §3.1) |
 | `head_signing` | `decision` | `decision`, `append` | Sign the ledger head once per decision, or after every append |
 | `ledger_fsync` | `True` | bool | fsync every ledger write |

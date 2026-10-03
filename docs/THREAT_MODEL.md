@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key` 0.1.5. It is not a penetration test
+This is the design model for `two-key` 0.1.6. It is not a penetration test
 and it is not an independent review. The package is a prototype. It is not
 a FIPS 140-3 validated module. Algorithms were chosen so a later build can
 run on a validated module. This release is not that build.
