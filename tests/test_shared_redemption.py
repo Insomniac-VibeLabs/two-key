@@ -116,7 +116,7 @@ class TwoGateways(Base):
         self.assertTrue(self.tk.ledger.is_redeemed(d.token_payload["jti"]))
         self.assertIsNone(self.tk.ledger.redemption_for(d.token_payload["jti"]))
         self.assertEqual(g.invoke(d.capability, "pay_bill", args, FIELDS).reason, "replayed")
-        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.calls), 1)
 
 
 class Concurrent(Base):
@@ -143,7 +143,8 @@ class Concurrent(Base):
     def test_concurrent_attempts_many_gateways(self):
         d, args = self.token()
         out = self._race([self.tk.gateway(tools={"pay_bill": self.tool}) for _ in range(self.N)], d, args)
-        self.assertEqual(sorted(out), ["executed"] + ["replayed"] * (self.N - 1))
+        self.assertEqual(out.count("executed"), 1)
+        self.assertTrue(set(out) <= {"executed", "replayed", "already_attempted"})
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(len(redemptions(self.tk.ledger, d.token_payload["jti"])), 1)
         self.tk.ledger.checkpoint()
@@ -153,7 +154,8 @@ class Concurrent(Base):
         d, args = self.token()
         g = self.tk.gateway(tools={"pay_bill": self.tool})
         out = self._race([g] * self.N, d, args)
-        self.assertEqual(sorted(out), ["executed"] + ["replayed"] * (self.N - 1))
+        self.assertEqual(out.count("executed"), 1)
+        self.assertTrue(set(out) <= {"executed", "replayed", "already_attempted"})
         self.assertEqual(len(self.calls), 1)
 
     def test_many_tokens_many_threads_chain_stays_valid(self):
@@ -176,7 +178,9 @@ class Concurrent(Base):
         self.assertEqual(errs, [])
         for d, _ in toks:
             jti = d.token_payload["jti"]
-            self.assertEqual(sorted(r for j, r in out if j == jti), ["executed"] + ["replayed"] * (len(gws) - 1))
+            reasons = [r for j, r in out if j == jti]
+            self.assertEqual(reasons.count("executed"), 1)
+            self.assertTrue(set(reasons) <= {"executed", "replayed", "already_attempted"})
             self.assertEqual(len(redemptions(self.tk.ledger, jti)), 1)
         self.assertEqual(len(self.calls), len(toks))
         self.tk.ledger.checkpoint()

@@ -24,7 +24,9 @@ Format (see examples/judges.yaml):
         local_weights: false      # optional; ollama defaults to true
         echo_binding: false       # optional; required true when ballot_binding: echo
 
-Auth types: none | env | keyring | username_password | oauth_device_code | callback.
+Auth types: none | env | keyring | callback. username_password and
+oauth_device_code are accepted only with a login or fetch_token hook
+(``module:function``). A stub with no hook is rejected.
 Hooks (``login``, ``fetch_token``, ``callback``) are "module:function" strings
 that are imported at load time. The config file is authored by the principal
 and is trusted to the same degree as code.
@@ -93,12 +95,14 @@ def build_credential(auth: Any) -> CredentialProvider:
     if t == "keyring":
         return KeyringApiKey(auth["service"], auth["username"])
     if t == "username_password":
-        return UsernamePasswordProvider(auth["username"], auth["password_env"],
-                                        _hook(auth["login"]) if "login" in auth else None)
+        if "login" not in auth:
+            raise JudgeConfigError("username_password auth requires a login hook; the stub is rejected")
+        return UsernamePasswordProvider(auth["username"], auth["password_env"], _hook(auth["login"]))
     if t == "oauth_device_code":
+        if "fetch_token" not in auth:
+            raise JudgeConfigError("oauth_device_code auth requires a fetch_token hook; the stub is rejected")
         return OAuthDeviceCodeProvider(auth["client_id"], auth["device_authorization_endpoint"],
-                                       auth["token_endpoint"], auth.get("scope", ""),
-                                       _hook(auth["fetch_token"]) if "fetch_token" in auth else None)
+                                       auth["token_endpoint"], auth.get("scope", ""), _hook(auth["fetch_token"]))
     if t == "callback":
         return CallbackTokenProvider(_hook(auth["callback"]))
     raise JudgeConfigError(f"unknown auth type {t!r}")

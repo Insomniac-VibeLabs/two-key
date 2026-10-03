@@ -341,9 +341,9 @@ as untrusted data, and accepts only a strict JSON ballot.
 
 Credentials (`auth:`) come from an environment variable (`env`), the OS
 keyring (`keyring`), or your own SSO/OAuth code (`callback`). A secret
-written in the file is refused. The `username_password` and
-`oauth_device_code` modes are hook points that need your login function;
-no vendor login is built in.
+written in the file is refused. `username_password` and `oauth_device_code`
+are accepted only when the file names a real `login` or `fetch_token` hook.
+A config with no hook is rejected. No vendor login is built in.
 
 ### Recommended local judge: Qwen2.5-7B-Instruct
 
@@ -676,8 +676,8 @@ the file is loaded.
 | `env` | `var` | API key from an environment variable at call time. Working |
 | `keyring` | `service`, `username` | API key from the OS keyring (`pip install keyring`). Working |
 | `callback` | `callback` | `fn() -> token`; your SSO/OAuth/session code. Working hook |
-| `username_password` | `username`, `password_env`, `login` | **Stub** unless you supply `login(username, password) -> token`; no vendor login is built in |
-| `oauth_device_code` | `client_id`, `device_authorization_endpoint`, `token_endpoint`, `scope`, `fetch_token` | **Stub** unless you supply `fetch_token(provider) -> token` (RFC 8628) |
+| `username_password` | `username`, `password_env`, `login` | Working only with `login`; a missing hook is rejected. No vendor login is built in |
+| `oauth_device_code` | `client_id`, `device_authorization_endpoint`, `token_endpoint`, `scope`, `fetch_token` | Working only with `fetch_token`; a missing hook is rejected (RFC 8628) |
 
 ### `TwoKey(signed_constitution, trusted_public_key, ledger_path, judges, **options)`
 
@@ -968,8 +968,8 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
 **Stubs and placeholders**
 - Public anchoring (to a public transparency log or blockchain) is an
   interface only. `LocalFileAnchor` writes a local file.
-- The `username_password` and `oauth_device_code` judge auth modes are
-  hook points with no built-in vendor login.
+- `username_password` and `oauth_device_code` have no built-in vendor login.
+  The config loader rejects them unless a hook is named.
 - The real Hyperledger Fabric client bridge (`fabric-sdk-py`) and the PKI
   HTTP transport for CRL/OCSP (`network_revocation: true`) have not been
   run against real networks.
@@ -995,8 +995,9 @@ default. Signatures are quantum-resistant only with a hybrid ML-DSA-65 key
   OpenSSL 4.0.2, which is not a validated module. No FIPS provider was
   active during development.
 
-**Other limits**: the ledger isn't encrypted and one process must own it.
-Seed-phrase backup is personal-mode only and off in `fips_mode`.
+**Other limits**: the ledger is AES-256-GCM at rest, and one process must own it.
+A stolen principal key can still unwrap the data key unless you pass a separate
+`ledger_key`. Seed-phrase backup is personal-mode only and off in `fips_mode`.
 
 Stubs and open questions are listed in this section and in
 [docs/SPEC_DRAFT.md](docs/SPEC_DRAFT.md).

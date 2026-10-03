@@ -268,6 +268,34 @@ class ExecutionLinkedToTokenEntry(Base):
         self.assertEqual(gw.invoke(self.d.capability, "pay_bill", ARGS, FIELDS).reason, "tool_error:ZeroDivisionError")
         err = [e for e in self.tk.ledger.entries if e.kind == "tool_error"][-1].body
         self.assertEqual(err["capability_entry_seq"], self.tk.ledger.capability_entry(self.d.token_payload["jti"]).seq)
+        self.assertFalse(self.tk.ledger.is_redeemed(self.d.token_payload["jti"]))
+
+    def test_tool_error_can_be_retried(self):
+        calls = {"n": 0}
+
+        def flaky(**_a):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("down")
+            return {"paid": 1}
+
+        gw = self.tk.gateway({"pay_bill": flaky})
+        first = gw.invoke(self.d.capability, "pay_bill", ARGS, FIELDS)
+        second = gw.invoke(self.d.capability, "pay_bill", ARGS, FIELDS)
+        self.assertEqual(first.reason, "tool_error:RuntimeError")
+        self.assertEqual(second.reason, "executed")
+        self.assertEqual(calls["n"], 2)
+
+    def test_open_intent_does_not_run_the_tool_again(self):
+        jti = self.d.token_payload["jti"]
+        started, why = self.tk.ledger.begin_attempt(jti, {"tool": "pay_bill"})
+        self.assertEqual(why, "ok")
+        self.assertIsNotNone(started)
+        calls = {"n": 0}
+        gw = self.tk.gateway({"pay_bill": lambda **a: calls.__setitem__("n", 1)})
+        result = gw.invoke(self.d.capability, "pay_bill", ARGS, FIELDS)
+        self.assertEqual(result.reason, "already_attempted")
+        self.assertEqual(calls["n"], 0)
 
     def test_non_json_result_is_hashed(self):
         gw = self.tk.gateway({"pay_bill": lambda **a: object()})

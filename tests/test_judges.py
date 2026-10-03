@@ -164,9 +164,16 @@ class Credentials(unittest.TestCase):
             self.assertEqual(t.calls, [])
 
     def test_username_password_stub_and_hook(self):
+        from two_key.judges.config import JudgeConfigError, build_credential
         stub = UsernamePasswordProvider("me", "TWOKEY_PW")
         with self.assertRaises(NotImplementedError):
             stub.get_token()
+        with self.assertRaises(JudgeConfigError):
+            build_credential({"type": "username_password", "username": "me", "password_env": "TWOKEY_PW"})
+        with self.assertRaises(JudgeConfigError):
+            build_credential({"type": "oauth_device_code", "client_id": "c",
+                              "device_authorization_endpoint": "https://idp.example/device",
+                              "token_endpoint": "https://idp.example/token"})
         with mock.patch.dict(os.environ, {"TWOKEY_PW": "pw"}):
             p = UsernamePasswordProvider("me", "TWOKEY_PW", login=lambda u, pw: f"session-for-{u}")
             self.assertEqual(p.get_token(), "session-for-me")

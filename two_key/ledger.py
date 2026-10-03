@@ -29,13 +29,13 @@ An append-only JSONL hash chain owned by the principal (spec 5.6), plus:
   on this ledger (every ``tk.gateway()`` of one TwoKey instance) consults the
   same record, so a token is accepted once however many gateways exist.
   It is rebuilt from the capability_redeemed entries on load, so it
-  survives restarts. ``append``, ``checkpoint``, and ``redeem`` share one
-  re-entrant lock (thread safety). On POSIX, ``redeem`` also holds an
-  advisory ``flock`` on the ledger file and first checks that no other
-  writer (another process, or another PersonalLedger on the same file) has
-  appended since this instance last wrote; if one has, it refuses the
-  redemption (fail closed) instead of accepting the token a second time,
-  and this instance then refuses further writes (it is stale; reopen it).
+  survives restarts. ``append``, ``checkpoint``, ``begin_attempt``, and ``redeem``
+  share one re-entrant lock. A gateway writes ``redemption_started`` before
+  the tool runs. A tool exception writes ``redemption_aborted`` and leaves
+  the token usable. Success writes ``capability_redeemed``. A later call
+  that still sees ``redemption_started`` does not run the tool. On POSIX,
+  those writes hold an advisory ``flock`` and refuse if another writer
+  changed the file.
 
 The ledger file and head file are created with mode 0600. Every record and
 the signed head are AES-256-GCM ciphertext. The data key is wrapped by the
@@ -143,6 +143,7 @@ class PersonalLedger:
         self._revoke_all_seq = -1                   # seq of the latest "revoke all" entry
         self._revoked_jti: dict[str, int] = {}
         self._redeemed: dict[str, int] = {}         # jti -> seq of its capability_redeemed entry
+        self._started: dict[str, int] = {}          # jti -> seq of an open redemption_started entry
         self._lock = threading.RLock()              # append / checkpoint / redeem (shared by all gateways)
         self._file_size = 0                         # bytes of the ledger file this instance has read or written
         self._lock_fd: int | None = None            # fd for the cross-process redemption flock (lazy)
@@ -245,6 +246,15 @@ class PersonalLedger:
             jti = e.body.get("jti")
             if isinstance(jti, str):
                 self._redeemed.setdefault(jti, e.seq)
+                self._started.pop(jti, None)
+        elif e.kind == "redemption_started":
+            jti = e.body.get("jti")
+            if isinstance(jti, str) and jti not in self._redeemed:
+                self._started.setdefault(jti, e.seq)
+        elif e.kind == "redemption_aborted":
+            jti = e.body.get("jti")
+            if isinstance(jti, str):
+                self._started.pop(jti, None)
 
     def append(self, kind: str, body: dict) -> Entry:
         with self._lock:
@@ -285,9 +295,48 @@ class PersonalLedger:
     def is_redeemed(self, jti: str) -> bool:
         return jti in self._redeemed
 
+    def redemption_started(self, jti: str) -> bool:
+        return jti in self._started and jti not in self._redeemed
+
     def redemption_for(self, jti: str) -> Entry | None:
         seq = self._redeemed.get(jti)
         return None if seq is None or seq < 0 else self.entries[seq]
+
+    def begin_attempt(self, jti: str, body: dict) -> tuple[Entry | None, str]:
+        """Checkpoint ``redemption_started`` before a tool runs. A second call returns
+        ``already_attempted`` and does not append. ``replayed`` if the token is already spent."""
+        if not isinstance(jti, str) or not jti:
+            return None, "replayed"
+        with self._lock:
+            if jti in self._redeemed:
+                return None, "replayed"
+            if jti in self._started:
+                return None, "already_attempted"
+            fd = self._redeem_lock_fd()
+            if fd is not None:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                other = self._other_writer_state(jti)
+                if other is not None:
+                    self._stale = "ledger file changed by another writer; reopen the ledger"
+                    return None, other
+                try:
+                    return self.append("redemption_started", {"jti": jti, **body}), "ok"
+                except BaseException:
+                    self._started.setdefault(jti, -1)
+                    raise
+            finally:
+                if fd is not None:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+
+    def abort_attempt(self, jti: str, body: dict) -> Entry | None:
+        """Clear an open attempt so a tool exception can be retried. No-op if it is not open."""
+        if not isinstance(jti, str) or not jti:
+            return None
+        with self._lock:
+            if jti not in self._started or jti in self._redeemed:
+                return None
+            return self.append("redemption_aborted", {"jti": jti, **body})
 
     def redeem(self, jti: str, body: dict) -> tuple[Entry | None, str]:
         """Record the single use of ``jti`` atomically. Returns (capability_redeemed entry, "ok") exactly
@@ -340,14 +389,20 @@ class PersonalLedger:
         with open(self.path, "rb") as f:
             f.seek(self._file_size)
             tail = f.read(size - self._file_size)
+        found_started = False
         for line in tail.splitlines():
             try:
                 rec = json.loads(self._open_line(line.decode("utf-8")))
             except (ValueError, LedgerError, UnicodeError):
                 continue  # an entry another writer is still writing; never the redemption (written under flock)
-            if isinstance(rec, dict) and rec.get("kind") == "capability_redeemed" and \
-                    isinstance(rec.get("body"), dict) and rec["body"].get("jti") == jti:
+            if not isinstance(rec, dict) or not isinstance(rec.get("body"), dict) or rec["body"].get("jti") != jti:
+                continue
+            if rec.get("kind") == "capability_redeemed":
                 return "replayed"
+            if rec.get("kind") == "redemption_started":
+                found_started = True
+        if found_started:
+            return "already_attempted"
         return "ledger_concurrent_writer"
 
     @property

@@ -983,16 +983,18 @@ amount must not exceed it.
 | the token's constitution hashes match the latest `constitution_loaded` entry | `constitution_hash_mismatch` |
 | no reload or revocation since issuance | `constitution_changed_since_issue`, `revoked` |
 | the token's own `capability_issued` entry exists and matches | `capability_not_recorded` |
-| single use, shared by every gateway on the ledger | `replayed`; across processes also `ledger_concurrent_writer` |
+| single use, shared by every gateway on the ledger | `replayed`; an open attempt is `already_attempted`; across processes also `ledger_concurrent_writer` |
 
-On success the gateway logs `capability_redeemed` before the tool runs, so
-a crashing tool can't be retried with the same token. It then logs
-`tool_executed` with a hash of the result (the result itself isn't stored),
-or `tool_error`. Both entries link to the token's `capability_issued`
-entry. A tool that raises gives `allowed=True, reason="tool_error:<Type>"`,
-meaning authorized but failed. A tool with no registered executor gives
-`authorized_no_executor`, for when your own code performs the call after
-the gateway approves it.
+On success the gateway checkpoints `redemption_started` before the tool
+runs, then logs `capability_redeemed` and `tool_executed` (a hash of the
+result, not the result). A crash after that intent does not run the tool
+again. A tool that raises logs `redemption_aborted` and
+`allowed=True, reason="tool_error:<Type>"`, and the same token can be
+tried again. A tool with no registered executor still redeems immediately
+and returns `authorized_no_executor`. Every one of those entries links to
+the token's `capability_issued` entry. Outbound scanning, when configured,
+still happens on the frozen arguments before the intent. Inbound scanning
+still happens on the tool result before the caller receives it.
 
 **Options.**
 - `checkpoint_every` (default 1) signs the ledger head after every N
@@ -1034,7 +1036,8 @@ print("after checkpoint:", tk.ledger.verify(pub).reason)
   the same file) still can't redeem a token twice: on POSIX the redemption
   holds an `flock` on the ledger file and first checks that nobody else has
   appended since this instance last wrote. If someone has, it refuses with
-  `replayed` (the other writer already redeemed this token) or
+  `replayed` (the other writer already redeemed this token),
+  `already_attempted` (an intent is already open), or
   `ledger_concurrent_writer` (the file changed in some other way). The
   refusal isn't logged, because that instance's view is stale and
   appending would fork the chain. That instance then refuses all further
@@ -1044,8 +1047,8 @@ print("after checkpoint:", tk.ledger.verify(pub).reason)
   `invoke`; don't log or store them.
 - A restarted TwoKey instance gets a new random HMAC key (`capability_secret`), so
   tokens from before the restart stop working. Replay protection survives
-  restarts: the ledger rebuilds its used-token record from its
-  `capability_redeemed` entries when it's opened.
+  restarts: the ledger rebuilds spent tokens from `capability_redeemed`
+  and open attempts from `redemption_started` (an abort clears the attempt).
 
 Two gateways on one TwoKey instance, same token:
 
@@ -1233,10 +1236,12 @@ include:
 - `proposal`, `action_normalized`, `vm_result`
 - `quorum_result` (every ballot and the round's binding), `quorum_skipped`
 - `capability_issued`, `decision`
-- `capability_redeemed`, `tool_executed`, `tool_error`, `gateway_denied`
+- `redemption_started`, `redemption_aborted`, `capability_redeemed`, `tool_executed`, `tool_error`, `gateway_denied`
 - `revocation`, `anchored`
 
-The ledger isn't encrypted; see [Limitations](../README.md#security-model-and-limitations).
+The ledger file and the signed head are AES-256-GCM. The data key is wrapped
+by the principal key, or by a 32-byte `ledger_key` when the principal key
+cannot be exported. A missing or wrong key fails closed.
 
 ### Verify
 

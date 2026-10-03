@@ -78,9 +78,14 @@ entries. With no scanners the gateway does none of this: the original path,
 including its separate hash and execute reads of ``args`` (F_REVIEW.md §8
 finding 1), is unchanged.
 
-On success, capability_redeemed and tool_executed/tool_error entries link to
-the token's capability_issued entry (seq and digest). tool_executed also
-records H(result); the result itself is not stored (DESIGN_OPTIONS.md §7).
+On success the gateway first checkpoints ``redemption_started``, then runs
+the tool, then logs ``capability_redeemed``. A crash after the intent does
+not run the tool again (``already_attempted``). A tool exception logs
+``redemption_aborted`` and ``tool_error`` and leaves the token usable.
+``tool_executed`` stores a hash of the result (the result itself is not stored)
+and links to the token's capability_issued entry. Scanning, when configured,
+still runs on the frozen argument bytes before the intent, and on the tool
+result before the caller receives it.
 
 Call fields (amount, counterparty, data class) come from ``call_fields``
 supplied by the caller or from a per-tool extractor. Who derives these fields
@@ -111,7 +116,7 @@ from .scope import disagreement
 from .canonical import (DOMAIN_TOOL_RESULT, ENCODING, canonical_hash, freeze_call, typed_bytes, typed_hash,
                         typed_loads)
 from .capability import CapabilityIssuer, TokenError, token_digest
-from .ledger import PersonalLedger
+from .ledger import LedgerError, PersonalLedger
 from .scanning import AsyncCallbackScanner, ContentScanner, ScanEngine, ScanSettings, ScanVerdict
 
 Extractor = Callable[[Mapping[str, Any]], Mapping[str, Any]]
@@ -436,20 +441,35 @@ class ToolGateway:
                 return self._deny("replayed", token, tool)
 
             link = {"capability_entry_seq": cap.seq, "capability_entry_digest": cap.digest}
-            redeemed, why = self.ledger.redeem(jti, {"token_digest": tok_hash, "tool": call_tool,
-                                                     "args_hash": call_args_hash, "args_enc": ENCODING,
-                                                     **link, **scan_rec})
-            if redeemed is None:
-                # Another writer changed the ledger file: this instance is stale, so nothing is appended.
+            body = {"token_digest": tok_hash, "tool": call_tool,
+                    "args_hash": call_args_hash, "args_enc": ENCODING, **link, **scan_rec}
+            fn = self.tools.get(call_tool)
+            if fn is None:
+                redeemed, why = self.ledger.redeem(jti, body)
+                if redeemed is None:
+                    return GatewayResult(False, why)
+                return GatewayResult(True, "authorized_no_executor")
+            if self.ledger.redemption_started(jti):
+                return self._deny("already_attempted", token, tool)
+            started, why = self.ledger.begin_attempt(jti, body)
+            if started is None:
+                if self.ledger._stale:
+                    return GatewayResult(False, why)
+                if why in ("replayed", "already_attempted"):
+                    return self._deny(why, token, tool)
                 return GatewayResult(False, why)
-        fn = self.tools.get(call_tool)
-        if fn is None:
-            return GatewayResult(True, "authorized_no_executor")
         try:
             result = fn(**frozen.args())  # decoded from the same bytes that were hashed and scanned
         except Exception as e:
-            self.ledger.append("tool_error", {"jti": jti, "error": type(e).__name__, **link})
+            try:
+                self.ledger.abort_attempt(jti, {"tool": call_tool, "error": type(e).__name__, **link})
+                self.ledger.append("tool_error", {"jti": jti, "error": type(e).__name__, **link})
+            except LedgerError as le:
+                return GatewayResult(False, f"ledger_failed:{le}")
             return GatewayResult(True, f"tool_error:{type(e).__name__}")
+        redeemed, why = self.ledger.redeem(jti, body)
+        if redeemed is None:
+            return GatewayResult(False, why, result)
         executed = {"jti": jti, "tool": call_tool, **link,
                     "result_hash": _result_hash(result, self.digest_alg, self.ledger)}
         if eng is None:

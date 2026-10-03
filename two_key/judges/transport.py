@@ -35,9 +35,12 @@ class TransientHTTPError(Exception):
 
 
 def urllib_transport(url: str, headers: dict, body: dict, timeout: float) -> dict:
+    parts = urlsplit(url)
+    if parts.scheme not in ("https", "http") or not parts.hostname:
+        raise ValueError(f"invalid judge url {url!r}")
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
                                  headers={"Content-Type": "application/json", **headers})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (scheme checked in LLMJudge)
+    with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec B310
         return json.loads(r.read(_MAX_BODY + 1).decode("utf-8"))
 
 
