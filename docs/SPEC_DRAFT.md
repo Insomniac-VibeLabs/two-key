@@ -134,14 +134,14 @@ Each judge receives the constitution text and the proposal and returns a structu
 
 ### 5.7 Quorum protocol specifics (Figure 7: `docs/figures/quorum_protocol.svg`) [CN-2 (iii)]
 
-Judge-set selection enforces vendor heterogeneity, with at least two vendors including at least one local weight file [CN-2 (iii); cf. D the two-vendor rule, "at least two distinct model vendors or local weight files"]. An availability floor K, distinct from the approval threshold T, means fewer than K valid ballots is a deny without counting [CN-2 (iii); K itself is D §5.4]. Ballots are schema-constrained Booleans bound to H(action record) and H(constitution), and a malformed ballot is an abstention, which counts as deny [CN-2 (iii)]. Judge inputs are restricted to the normalized record and the constitution, never the agent transcript or tool outputs [CN-2 (iii)]. Path B is invoked only after Path A returns true [CN-2 (iii); previously a configurable default, §5.10a].
+Judge-set selection enforces vendor heterogeneity, with at least two vendors including at least one local weight file [CN-2 (iii); cf. D the two-vendor rule, "at least two distinct model vendors or local weight files"]. An availability floor K, distinct from the approval threshold T, means fewer than K valid ballots is a deny without counting [CN-2 (iii); K itself is D §5.4]. Ballots are schema-constrained Booleans bound to H(action record) and H(constitution), and a malformed ballot is an abstention, which counts as deny [CN-2 (iii)]. Judge inputs are restricted to the normalized record and the constitution, never the agent transcript or tool outputs [CN-2 (iii)]. The author's selection says Path B is invoked only after Path A returns true [CN-2 (iii)]. The running code does not skip Path B (§5.10a).
 
 [IMPL]
 - Each judge has `vendor` (defaulting to its provider label) and `local_weights` (true by default for Ollama judges; configurable), plus an optional recorded `weights_sha256`. `QuorumPolicy.min_vendors` and `min_local_judges` are checked when Two-Key starts, and it refuses to start below the floor. The convenor checks again (`judge_set_not_heterogeneous`). With `heterogeneity_scope="responding"`, the floor must also hold among the judges that returned valid ballots. `QuorumPolicy.section4()` applies §4's figures (2 vendors, 1 local). The general default is still permissive (open point).
 - Floor K: below `min_responding` valid ballots, the result is `counted=false` with no yes/no tally (`insufficient_responses:x<K`). Otherwise yes votes are compared with T (`required_yes`).
 - Binding: for each round Two-Key computes {H(normalized action record), constitution digest, nl_hash, bytecode_hash}. Every ballot is bound to it: stamped by the convenor (`ballot_binding="stamp"`, the default), or echoed by the judge (`"echo"`: LLM judges with `echo_binding` get the hashes in the prompt and must return them as two extra JSON keys). A ballot reporting a different binding abstains (`binding_mismatch`). In echo mode an unechoed yes/no abstains (`unbound_ballot`). The binding is written once per `quorum_result` entry.
 - Judge inputs: `judge_inputs="record_only"` (default) sends the constitution prose and the normalized action record; the proposal text is not sent (it is still logged). `"record_and_proposal"` is available.
-- `require_path_a_first=True` makes Two-Key refuse `short_circuit_path_b=False`.
+- `require_path_a_first` is recorded. It does not skip Path B. See §5.10a.
 
 *Open points: DESIGN_OPTIONS.md §7.14–7.21.*
 
@@ -188,7 +188,7 @@ If the VM faults, deny. If the quorum isn't met, deny. If the issuer can't sign,
 
 ### 5.10a Ordering of the paths
 
-[IMPL] Path A and Path B both always answer. A deny from either path denies. A missing answer from either path denies. `short_circuit_path_b` is ignored. The author's §4 (iii) selection includes "Path B invoked only after Path A returns true" [CN-2 (iii)]; `require_path_a_first=True` enforces it (§5.7). *Open question: DESIGN_OPTIONS.md §4, §7.21.*
+[IMPL] Path A and Path B both always answer. A deny from either path denies. A missing answer from either path denies. `short_circuit_path_b` is ignored. `require_path_a_first` is recorded and does not skip Path B. The author's §4 (iii) selection includes "Path B invoked only after Path A returns true" [CN-2 (iii)]; that skip is not what this code does. *Open question: DESIGN_OPTIONS.md §4, §7.21.*
 
 ### 5.11 Model-swap invariance [D §5.8]
 
