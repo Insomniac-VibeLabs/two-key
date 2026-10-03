@@ -55,7 +55,8 @@ python -c "import two_key, cryptography, yaml; print('ok')"
 
 ## 2. Keys
 
-The principal key signs your constitution and your ledger head. Choose a
+The principal key signs your constitution and your ledger head. A separate
+witness key also signs the head. Choose a
 suite:
 
 | Suite | Files | Use when |

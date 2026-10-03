@@ -82,7 +82,8 @@ profiles already used SHA-384 and HMAC-SHA-384.
 | Constitution text / source hash inside the signed document | SHA-384 (`constitution_text_sha384`, `source_sha384`) | SHA-256 (`..._sha256`; still accepted) | FIPS 180-4 |
 | Ledger hash chain (entry digests; the algorithm is bound into each digest) | SHA-384 | SHA-256 | FIPS 180-4 |
 | Ledger Merkle tree (RFC 6962 structure), consistency and inclusion proofs (RFC 9162), the gateway's ancestor check (PRIOR_ART.md §4 (i)) | SHA-384 | SHA-256 | FIPS 180-4 |
-| Ledger chain-head signature | same suite as the principal key | unchanged | FIPS 186-5, FIPS 204 |
+| Ledger chain-head signature | same suite as the principal key, plus an Ed25519 witness signature | principal signature only | FIPS 186-5, FIPS 204 |
+| Ledger at rest | AES-256-GCM records and head. The data key is wrapped by a 32-byte ledger key stored outside the ledger directory, not derived from the principal key | (new) | SP 800-38D, FIPS 197 |
 | Capability token tag | Signature (`tk1-sig`) by the principal key, the default. HMAC-SHA-384 (`tk1-hs384`) only if chosen | HMAC-SHA-256 (`tk1`); still selectable explicitly | FIPS 186-5 / FIPS 204; FIPS 198-1 |
 | Tool-call argument binding (`args_hash`): H(two-key-enc/2 of {tool, args}), also what the gateway scans and executes | SHA-384 over the typed encoding | SHA-256 over canonical JSON (not injective) | FIPS 180-4 |
 | `bytecode_hash`, `nl_hash` (§4 (ii)); bound into ballots and tokens | SHA-384 | SHA-256 | FIPS 180-4 |

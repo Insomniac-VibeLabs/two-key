@@ -1006,7 +1006,7 @@ Stubs and open questions are listed in this section and in
 python -m unittest discover -s tests 2>&1 | tail -1
 ```
 
-- **Unit and integration tests**: 413 tests under `tests/`, no network.
+- **Unit and integration tests**: 446 tests under `tests/`, 3 skipped without SoftHSM, no network.
   Without ML-DSA (`cryptography` < 50) the hybrid tests skip, and the
   SoftHSM test skips without `python-pkcs11` and SoftHSM.
 - **End-to-end**: `python -m two_key e2e-demo` (run by

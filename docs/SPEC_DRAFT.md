@@ -175,10 +175,10 @@ Hash chain: `digest_i = H(canonical(seq, ts, kind, body, prev))`. Verification w
 
 [IMPL]
 - The ledger logs the full canonical action record, the args hash, the ballots, the token hash, and the deny reason or rule.
-- The principal's key signs the chain head {size, head digest, RFC 6962/9162 Merkle root}, by default once per decision (`head_signing="decision"`; `"append"` signs every append). A full rewrite, truncation, or an unsigned append is then detected. Digests are SHA-256 (legacy) or SHA-384 (post-quantum profile, with the algorithm bound into each digest). The head signature uses the principal's suite, including hybrid ML-DSA-65.
+- The principal's key signs the chain head {size, head digest, RFC 6962/9162 Merkle root}, and a separate witness key signs it too. By default this happens once per decision (`head_signing="decision"`; `"append"` signs every append). A full rewrite, truncation, or an unsigned append is then detected. Digests are SHA-256 (legacy) or SHA-384 (post-quantum profile, with the algorithm bound into each digest). The head signature uses the principal's suite, including hybrid ML-DSA-65. The witness signature is Ed25519.
 - Merkle inclusion proofs and RFC 9162 consistency proofs between any two sizes are available (`inclusion_proof`, `consistency_proof`, `verify_consistency_proof`).
 - Public anchoring is an interface with local stubs only; nothing is published to a public log. In enterprise mode every signed head is anchored to a permissioned chain (Hyperledger Fabric or a REST adapter; `docs/DEPLOYMENT_MODES.md`, Entry 9), tested with in-memory fakes only.
-- Files are created with mode 0600. The ledger is not encrypted.
+- Files are created with mode 0600. Records and the signed head are AES-256-GCM. The data key is wrapped by a ledger key that is not the principal key. That key and the witness key live outside the ledger directory. A missing key fails closed.
 
 ### 5.10 Fail-closed defaults [D §5.7]
 
@@ -232,7 +232,7 @@ The author's direction [CN-11]: a seed-phrase backup for personal use and PKI fo
 
 ## 6. Reduction to practice (as of 2026-09-30)
 
-[IMPL] The Python 3 prototype is in `two_key/`. The test suite (`python -m unittest discover -s tests`, 249 tests) covers:
+[IMPL] The Python 3 prototype is in `two_key/`. The test suite (`python -m unittest discover -s tests`, 446 tests, 3 skipped without SoftHSM) covers:
 - the defects found in the 2026-09-30 review: the negative-amount wire, permissive missing-field defaults, silently ignored typo rules, case variants such as "Medical", 2-of-3 quorums, and zero judges;
 - every gateway check, including replay across tools, expiry, scope, and ledger-root ancestry;
 - single use across several gateways on one TwoKey instance, concurrent threads, forked processes, a second ledger instance, and restart (`tests/test_shared_redemption.py`);

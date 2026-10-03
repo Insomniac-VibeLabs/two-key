@@ -179,7 +179,17 @@ class TestCli(unittest.TestCase):
             for w in words:
                 if w not in fixed_message:
                     self.assertNotIn(w, out.split())
-            words2 = list(words); words2[0], words2[1] = words2[1], words2[0]
+            words2 = list(words)
+            for i in range(1, len(words)):
+                trial = list(words)
+                trial[0], trial[i] = trial[i], trial[0]
+                try:
+                    sp.validate(" ".join(trial))
+                except sp.SeedPhraseError:
+                    words2 = trial
+                    break
+            else:
+                self.fail("expected a swapped phrase to fail the BIP-39 checksum")
             rc, out = self.run_cli(["verify-seed-phrase"], " ".join(words2) + "\n")
             self.assertEqual(rc, 1)
             rc, out = self.run_cli(["recover-key", "--out", f"{d}/b", "--no-passphrase", "--expect-pub", pub],

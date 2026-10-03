@@ -132,8 +132,8 @@ login is the callback hook. No vendor login is imitated.
 |---|---|---|
 | **A. API keys via env** (implemented) | Universal for vendor APIs | Keys in the process environment; rotation is manual |
 | **B. OS keyring / secret store** (implemented, optional) | Keys encrypted at rest by the OS | Platform differences; headless servers |
-| **C. Username/password via a user-supplied login hook** (interface) | Fits self-hosted gateways that issue sessions | **Most vendor APIs don't offer password login.** Automating a consumer chat login may violate vendor terms; check each vendor's terms. Storing passwords is risky |
-| **D. OAuth device-code flow (RFC 8628)** (stub) | Good UX on headless or CLI devices; no password handling | Only where the identity provider supports it for model access |
+| **C. Username/password via a user-supplied login hook** (rejected) | Fits self-hosted gateways that issue sessions | **Most vendor APIs don't offer password login.** Not implemented. A real login is the callback hook |
+| **D. OAuth device-code flow (RFC 8628)** (rejected) | Good UX on headless or CLI devices; no password handling | Not implemented. Use a callback hook for a real device flow |
 | **E. OAuth authorization code + PKCE in a browser** | Standard SSO for desktop and mobile | Needs a redirect handler; per-IdP setup |
 | **F. Enterprise SSO through an internal model gateway/proxy** | One login fronts many models; central audit | The proxy becomes a single point that can undermine judge independence (see section 2) |
 | **G. Hardware-backed secrets (TPM, Secure Enclave, HSM)** | Strongest at rest | Platform-specific work |
@@ -141,8 +141,8 @@ login is the callback hook. No vendor login is imitated.
 ## 6. Other open items (not decided, not implemented beyond noted defaults)
 
 - **Allow-list requirement:** the compiler requires an `allow_only_tools` rule by default (fail-closed reading of spec section 4). Should this be mandatory, a default, or optional?
-- **Ledger confidentiality:** the ledger is plaintext JSONL with 0600 permissions, not encrypted. Options: file encryption with a key derived from the principal key; per-entry encryption; OS-level encryption only.
-- **Anchoring target and schedule** (spec 5.6): a public transparency log, blockchain, notary, or none. What to anchor (the Merkle root only?), and how often. Only a stub interface exists.
+- **Ledger confidentiality:** implemented. Records and the signed head are AES-256-GCM. The data key is wrapped by a ledger key that lives outside the ledger directory, not by the principal key. A witness key outside that directory also signs the head.
+- **Anchoring target and schedule** (spec 5.6): a public transparency log is not implemented. Enterprise mode can anchor each signed head to a permissioned chain (see `docs/DEPLOYMENT_MODES.md`). What a public log should anchor, and how often, is still open.
 - **Capability secret management:** it is currently random per process unless supplied. Options: a derived key, an HSM, asymmetric keys (section 3).
 - **Constitution lifecycle:** versioning, rollback, multi-device sync, key loss or recovery, and key rotation.
 - **Proposal logging:** the full proposal text is logged in the principal's ledger. Should it be hash-only, truncated, or full (current)?
