@@ -1621,11 +1621,11 @@ python bench.py --quick > bench.txt          # about 15 s; prints latency and me
 grep -E "PolicyVM\.eval|authorize \(A \+ B|invoke \(all checks" bench.txt
 ```
 
-The full run (`python bench.py`, about 40 s) prints the tables in
-[PERFORMANCE.md](PERFORMANCE.md); `--json results.json` saves them. On the
-development VM, Path A takes about 7–12 µs, a full `authorize` with local
-test judges about 1.1 ms (Ed25519) or 2.1 ms (hybrid), and a gateway
-`invoke` about 0.3 ms (Ed25519) or 1.0 ms (hybrid). Real judge latency
+The full run (`python bench.py`, about 40 s) prints latency and memory
+tables for the machine you run it on; `--json results.json` saves them.
+[PERFORMANCE.md](PERFORMANCE.md) is one older run (2026-09-30), taken before
+ledger entries were sealed with AES-256-GCM, so treat those microseconds as
+a snapshot and rerun `bench.py` before relying on them. Real judge latency
 dominates all of these.
 
 The end-to-end demo exercises every capability offline, one check per
