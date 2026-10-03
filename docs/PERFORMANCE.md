@@ -91,6 +91,9 @@ on Two-Key, instead of a per-gateway set. On each invoke the gateway holds
 the ledger's lock across its ledger checks and the redemption. The redemption
 also takes an `flock` on the ledger file and `stat`s it to detect another
 writer, and every `append` takes the lock and counts the bytes it wrote.
+The lock later moved off the ledger file onto `<ledger-directory>.lock` and
+now covers every append and checkpoint. The timings below are from before
+that move.
 
 **Interleaved A/B (the reliable figure).** Previous code (5b43f41) and the new
 code ran in alternating processes, 6 rounds each, 1,450 timed invokes per

@@ -4,6 +4,9 @@ Two-Key is a prototype. It has not had an independent security review and it
 is not a validated cryptographic module. Do not put it in front of real
 money, mail, or production tools.
 
+The threat model is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). This file
+is how to report a vulnerability. It is not the model.
+
 ## Reporting a vulnerability
 
 Please do not put exploit detail in a public place.

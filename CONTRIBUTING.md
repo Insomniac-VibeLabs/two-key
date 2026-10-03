@@ -10,7 +10,8 @@ keep the fail-closed behavior and the network-free test suite.
    approved-algorithm list and `fips_mode`.
 4. Run `python -m unittest discover -s tests` and
    `python tools/doccheck.py README.md docs/HOWTO.md`. If a doc example
-   shows the behavior you changed, update the example.
+   shows the behavior you changed, update the example. If the claim changed,
+   update `docs/FIT.md`, `docs/COMPARISON.md`, and `docs/THREAT_MODEL.md` too.
 5. Add a row to `CHANGES.md`. Open design questions belong in
    `DESIGN_OPTIONS.md`. Do not settle them silently in code.
 6. Never commit keys, ledgers, or credentials. `.gitignore` covers the

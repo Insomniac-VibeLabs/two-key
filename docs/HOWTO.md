@@ -1,8 +1,11 @@
 # Two-Key how-to
 
-A step-by-step guide to every part of the prototype. For the short
-version, see the [README](../README.md#quickstart); for every option in one
-place, see the [configuration reference](../README.md#configuration-reference).
+A step-by-step guide to every part of the prototype. Whether this package
+is the right control is [FIT.md](FIT.md). What it is not a substitute for
+is [COMPARISON.md](COMPARISON.md). Boundaries and residual risk are
+[THREAT_MODEL.md](THREAT_MODEL.md). For the short version, see the
+[README](../README.md#quickstart); for every option in one place, see the
+[configuration reference](../README.md#configuration-reference).
 
 Every command and code block in this file was run, top to bottom, by
 `tools/doccheck.py` in a copy of the repository with a fresh virtualenv and
@@ -1023,15 +1026,17 @@ print("after checkpoint:", tk.ledger.verify(pub).reason)
   threads present it. The checks and the redemption run under the ledger's
   lock. See the example below.
 - A gateway in a **second process** (or a second `PersonalLedger` opened on
-  the same file) still can't redeem a token twice: on POSIX the redemption
-  holds an `flock` on the ledger file and first checks that nobody else has
-  appended since this instance last wrote. If someone has, it refuses with
-  `replayed` (the other writer already redeemed this token),
-  `already_attempted` (an intent is already open), or
-  `ledger_concurrent_writer` (the file changed in some other way). The
-  refusal isn't logged, because that instance's view is stale and
-  appending would fork the chain. That instance then refuses all further
-  writes until it's reopened. This is a fail-closed guard, not
+  the same file) still can't redeem a token twice, and it can't append
+  either. On POSIX every append and checkpoint holds an `flock` on
+  `<ledger-directory>.lock`, beside the ledger directory, and first checks
+  that nobody else has appended since this instance last read or wrote. If
+  someone has, a redemption refuses with `replayed` (the other writer
+  already redeemed this token), `already_attempted` (an intent is already
+  open), or `ledger_concurrent_writer` (the file changed in some other
+  way). An ordinary append raises instead of writing. The refusal isn't
+  logged, because that instance's view is stale and appending would fork
+  the chain. That instance then refuses all further writes until it's
+  reopened. This is a fail-closed guard, not
   multi-process support: the ledger still has one owning process.
 - Tokens are bearer secrets. Pass them straight from `authorize` to
   `invoke`; don't log or store them.

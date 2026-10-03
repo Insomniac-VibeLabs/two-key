@@ -37,8 +37,10 @@ to ``args_hash``, the hash (SHA-384 by default) of the two-key-enc/2 encoding
 injective, and domain-separated (canonical.py; F_REVIEW finding 2). A token
 without ``args_enc`` (issued before that change) is refused; tokens live
 ``ttl_seconds`` (30 s by default), so only tokens in flight at an upgrade are
-affected. Alternatives are listed in DESIGN_OPTIONS.md section 3. The prototype uses HMAC with a secret shared between issuer and
-gateway. Production is expected to use a hardware-backed key (spec 5.1 item 6).
+affected. Alternatives are listed in DESIGN_OPTIONS.md section 3. The default
+mode is ``tk1-sig``. HMAC modes remain available only when chosen. A verifier
+that can check an HMAC token can also mint one. Production is expected to use
+a hardware-backed key (spec 5.1 item 6).
 """
 
 from __future__ import annotations

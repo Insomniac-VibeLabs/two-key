@@ -34,8 +34,9 @@ An append-only JSONL hash chain owned by the principal (spec 5.6), plus:
   the tool runs. A tool exception writes ``redemption_aborted`` and leaves
   the token usable. Success writes ``capability_redeemed``. A later call
   that still sees ``redemption_started`` does not run the tool. On POSIX,
-  those writes hold an advisory ``flock`` and refuse if another writer
-  changed the file.
+  every append and checkpoint also holds an advisory ``flock`` on
+  ``<ledger-directory>.lock``, beside the ledger directory and not on the
+  ledger file. A write is refused if another writer changed the file.
 
 The ledger file and head file are created with mode 0600. Every record and
 the signed head are AES-256-GCM ciphertext. The data key is wrapped by a
@@ -151,8 +152,9 @@ class PersonalLedger:
         self._started: dict[str, int] = {}          # jti -> seq of an open redemption_started entry
         self._lock = threading.RLock()              # append / checkpoint / redeem (shared by all gateways)
         self._file_size = 0                         # bytes of the ledger file this instance has read or written
-        self._lock_fd: int | None = None            # fd for the cross-process redemption flock (lazy)
-        self._stale: str | None = None              # set once redeem() finds another writer on the file
+        self._lock_fd: int | None = None            # fd for the cross-process writer flock (lazy)
+        self._flock_depth = 0
+        self._stale: str | None = None              # set once a write finds another writer on the file
         self._unsigned = 0
         self.head_anchor = head_anchor              # publish every signed head here (None: local only)
         self._anchoring = False
@@ -197,6 +199,42 @@ class PersonalLedger:
 
     def witness_pub_path(self) -> Path:
         return self._outside(".witness") / "witness.pub.pem"
+
+    def lock_path(self) -> Path:
+        """Cross-process writer lock. A file beside the ledger directory, not the ledger file."""
+        return self._outside(".lock")
+
+    def _disk_diverged(self) -> bool:
+        try:
+            size = os.stat(self.path).st_size
+        except OSError:
+            return self._file_size != 0
+        return size != self._file_size
+
+    def _mark_stale(self) -> str:
+        self._stale = "ledger file changed by another writer; reopen the ledger"
+        return self._stale
+
+    def _acquire_writer_lock(self) -> None:
+        if fcntl is None:
+            return
+        if self._flock_depth == 0:
+            if self._lock_fd is None:
+                path = self.lock_path()
+                path.parent.mkdir(parents=True, exist_ok=True)
+                fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+                os.chmod(path, 0o600)
+                self._lock_fd = fd
+                weakref.finalize(self, os.close, fd)
+            fcntl.flock(self._lock_fd, fcntl.LOCK_EX)
+        self._flock_depth += 1
+
+    def _release_writer_lock(self) -> None:
+        if fcntl is None or self._flock_depth == 0:
+            return
+        self._flock_depth -= 1
+        if self._flock_depth == 0 and self._lock_fd is not None:
+            fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
 
     # -- storage -------------------------------------------------------------
     def _open_data_key(self) -> None:
@@ -339,33 +377,47 @@ class PersonalLedger:
 
     def append(self, kind: str, body: dict) -> Entry:
         with self._lock:
-            if self._stale:
-                raise LedgerError(self._stale)
-            prev = self.tip()
-            seq = len(self.entries)
-            ts = time.time()
-            digest = _entry_digest(seq, ts, kind, body, prev, self.digest_alg, self.crypto)  # raises on bad body
-            entry = Entry(seq, ts, kind, body, prev, digest, self.digest_alg)
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            line = self._seal(entry.to_json()) + "\n"
-            _write_private(self.path, line, append=True, fsync=self.fsync)
-            self._file_size += len(line.encode("utf-8"))
-            self.entries.append(entry)
-            self._index[digest] = seq
-            self._track(entry)
-            self._tree.append(bytes.fromhex(digest))
-            self._unsigned += 1
-            if self.signing_key is not None and self.auto_sign_every and self._unsigned >= self.auto_sign_every:
-                self._write_head()
-            return entry
+            self._acquire_writer_lock()
+            try:
+                if self._stale:
+                    raise LedgerError(self._stale)
+                if self._disk_diverged():
+                    raise LedgerError(self._mark_stale())
+                prev = self.tip()
+                seq = len(self.entries)
+                ts = time.time()
+                digest = _entry_digest(seq, ts, kind, body, prev, self.digest_alg, self.crypto)  # raises on bad body
+                entry = Entry(seq, ts, kind, body, prev, digest, self.digest_alg)
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                line = self._seal(entry.to_json()) + "\n"
+                _write_private(self.path, line, append=True, fsync=self.fsync)
+                self._file_size += len(line.encode("utf-8"))
+                self.entries.append(entry)
+                self._index[digest] = seq
+                self._track(entry)
+                self._tree.append(bytes.fromhex(digest))
+                self._unsigned += 1
+                if self.signing_key is not None and self.auto_sign_every and self._unsigned >= self.auto_sign_every:
+                    self._write_head()
+                return entry
+            finally:
+                self._release_writer_lock()
 
     def checkpoint(self) -> bool:
         """Sign the current head if any entries are not yet covered. Returns True if a head was written."""
         with self._lock:
+            if self._stale:
+                raise LedgerError(self._stale)
             if self.signing_key is None or (self._unsigned == 0 and self.head_path.exists()):
                 return False
-            self._write_head()
-            return True
+            self._acquire_writer_lock()
+            try:
+                if self._disk_diverged():
+                    raise LedgerError(self._mark_stale())
+                self._write_head()
+                return True
+            finally:
+                self._release_writer_lock()
 
     # -- single use (shared by every gateway on this ledger) -----------------------
     @property
@@ -393,13 +445,11 @@ class PersonalLedger:
                 return None, "replayed"
             if jti in self._started:
                 return None, "already_attempted"
-            fd = self._redeem_lock_fd()
-            if fd is not None:
-                fcntl.flock(fd, fcntl.LOCK_EX)
+            self._acquire_writer_lock()
             try:
                 other = self._other_writer_state(jti)
                 if other is not None:
-                    self._stale = "ledger file changed by another writer; reopen the ledger"
+                    self._mark_stale()
                     return None, other
                 try:
                     return self.append("redemption_started", {"jti": jti, **body}), "ok"
@@ -407,8 +457,7 @@ class PersonalLedger:
                     self._started.setdefault(jti, -1)
                     raise
             finally:
-                if fd is not None:
-                    fcntl.flock(fd, fcntl.LOCK_UN)
+                self._release_writer_lock()
 
     def abort_attempt(self, jti: str, body: dict) -> Entry | None:
         """Clear an open attempt so a tool exception can be retried. No-op if it is not open."""
@@ -430,13 +479,11 @@ class PersonalLedger:
         with self._lock:
             if jti in self._redeemed:
                 return None, "replayed"
-            fd = self._redeem_lock_fd()
-            if fd is not None:
-                fcntl.flock(fd, fcntl.LOCK_EX)
+            self._acquire_writer_lock()
             try:
                 other = self._other_writer_state(jti)
                 if other is not None:
-                    self._stale = "ledger file changed by another writer; reopen the ledger"
+                    self._mark_stale()
                     return None, other
                 try:
                     return self.append("capability_redeemed", {"jti": jti, **body}), "ok"
@@ -444,18 +491,7 @@ class PersonalLedger:
                     self._redeemed.setdefault(jti, -1)  # burned in memory even if the write failed (as before)
                     raise
             finally:
-                if fd is not None:
-                    fcntl.flock(fd, fcntl.LOCK_UN)
-
-    def _redeem_lock_fd(self) -> int | None:
-        if fcntl is None:
-            return None
-        if self._lock_fd is None:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(self.path, os.O_RDONLY | os.O_CREAT, 0o600)
-            self._lock_fd = fd
-            weakref.finalize(self, os.close, fd)
-        return self._lock_fd
+                self._release_writer_lock()
 
     def _other_writer_state(self, jti: str) -> str | None:
         """None if the file is exactly what this instance wrote; otherwise the reason to refuse."""
