@@ -20,10 +20,12 @@ package, without scanning, PKI, or anchoring, is
 - You want a signed Merkle ledger. Records are AES-256-GCM. The ledger key
   and the witness key live outside the ledger directory. The principal key
   cannot unwrap the log.
-- You may also want the optional pieces, and you will read the threat model
-  before treating them as live products: DLP and antivirus hooks, enterprise
-  X.509 identities, permissioned-chain anchoring, hybrid ML-DSA-65, and a
-  personal-mode seed phrase.
+- You may also want the pieces that are off in personal mode, and you will
+  read the threat model before treating them as live products: DLP and
+  antivirus hooks, enterprise X.509 identities, permissioned-chain
+  anchoring, hybrid ML-DSA-65, and a personal-mode seed phrase. Enterprise
+  mode will not start without PKI, a permissioned-chain anchor, and a SIEM
+  syslog target.
 
 ## Do not use this if
 

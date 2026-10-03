@@ -45,11 +45,14 @@ be corrected.
   record-only.
 - Both paths always run. `require_path_a_first` is recorded and does not skip
   Path B. `short_circuit_path_b` is ignored.
-- Gateway to the tool. The call is serialized once. Those bytes are hashed,
-  checked against the token, and, if scanners are configured, scanned.
-  Then the same bytes are what the tool receives.
-- Process to the ledger. One process must own a ledger. Writes take an
-  advisory lock and refuse if another writer changed the file.
+- Gateway to the tool. The call is serialized once. Those bytes are hashed
+  and checked against the token. If scanners are configured, they see those
+  same bytes. `redemption_started` is checkpointed, and then the tool
+  receives a decode of those bytes.
+- Process to the ledger. One process should own a ledger. Appends in that
+  process share one lock. On POSIX, redemption writes also take an advisory
+  lock and refuse if another writer changed the file. There is no flock on
+  Windows.
 
 ## What this design is meant to stop
 
@@ -65,10 +68,14 @@ be corrected.
   A tool exception writes `redemption_aborted` and leaves the token usable.
 - A silent edit of a ledger record that still verifies, and opening the log
   with only the principal key. New ledgers have no principal-wrapped
-  fallback. The head needs the witness signature as well.
-- In enterprise mode: a start without PKI and a permissioned anchor, and an
-  unidentified or revoked identity when those checks are required. An
-  anchoring failure denies the action.
+  fallback. A new head carries a witness signature. A head that already
+  exists without one can still be signed by the principal key alone.
+- In enterprise mode: a start without PKI, a permissioned anchor, and a SIEM
+  syslog target. An unidentified or revoked principal identity. An agent
+  assertion, unless `require_agent_identity` is off. Judge certificates,
+  only when `require_judge_identities` is on (it is off by default). An
+  anchoring failure on the decision checkpoint does not release a token. A
+  later checkpoint failure does not undo a tool that already ran.
 
 ## Assumptions
 
@@ -106,8 +113,9 @@ claims to close.
   There is no public transparency log.
 - Stealing the ledger key decrypts the log. Stealing the principal key does
   not. Stealing the witness key as well as the principal key can forge a
-  head. There is no external anchor in personal mode, so those keys are
-  enough to rewrite a ledger that never leaves the machine.
+  head. There is no external anchor in personal mode, so those two keys
+  plus the ledger key are enough to rewrite a ledger that never leaves the
+  machine.
 - HMAC token mode (`tk1-hs384`) is off unless chosen. In that mode the
   verifier can also mint. The default is a signature (`tk1-sig`).
 - A crash after `redemption_started` and before the tool runs refuses a
@@ -118,8 +126,11 @@ claims to close.
   OpenSSL, which is not a validated module. `fips_mode` refuses algorithms
   outside the approved list. It does not make this process a validated
   module.
-- A down SIEM does not change the decision. Enterprise mode still fails
-  closed if the permissioned anchor fails.
+- `ScanSettings.on_timeout` defaults to block. Setting it to `allow` lets a
+  scanner timeout or error through. A conviction still denies.
+- A down SIEM does not change the decision. Enterprise mode still will not
+  start without a SIEM target, and an anchoring failure on the decision
+  checkpoint does not release a token.
 
 ## Out of scope
 
