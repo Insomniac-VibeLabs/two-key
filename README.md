@@ -76,28 +76,107 @@ a valid token for exactly the arguments that were approved.
 
 ## Architecture
 
+A monitored agent and a Path B judge do not call each other. The agent only
+proposes. The caller holds the token. Only the gateway runs a tool.
+
 <!-- check: skip diagram, rendered by GitHub -->
 ```mermaid
 flowchart TB
-  Agent["AI agent (any LLM)"] -- "1. proposal + action record<br/>(+ agent assertion, enterprise)" --> TK
-  C["Signed constitution<br/>prose + twokey-rules block"] --> A
-  C --> B
-  subgraph TK["Two-Key"]
-    A["Path A: policy VM<br/>compiled hard rules, no English"]
-    B["Path B: judge quorum<br/>models you choose read the prose"]
-    I["Token issuer<br/>allow only if A and B pass"]
-    A --> I
-    B --> I
-  end
-  I -- "2. single-use capability token" --> Agent
-  Agent -- "3. token + literal tool args" --> G["Tool gateway<br/>frozen bytes, scope, ledger root, single use"]
-  G <-- "outbound and inbound" --> S["DLP / antivirus scanners<br/>(optional hooks)"]
-  G -- "4. executes" --> T["Real tools"]
-  TK --> L[("Signed ledger<br/>hash chain + Merkle tree")]
-  G --> L
-  L --> X["Anchor<br/>personal: local file<br/>enterprise: permissioned chain"]
-  P["Enterprise PKI<br/>X.509, CRL/OCSP, roles, PKCS#11"] -.-> TK
+  constitution["Signed constitution<br/>prose plus twokey-rules"] --> compile["Compiled twice"]
+  compile --> bytecode["Path A bytecode"]
+  compile --> prose["Path B judge text"]
+
+  caller["Caller"] -->|"authorize_from_agent"| fromAgent["MonitoredAgent.complete"]
+  instruction["Untrusted instruction"] --> fromAgent
+  prose --> fromAgent
+  fromAgent --> cloudA["Cloud agent<br/>Grok, ChatGPT, Claude, Gemini"]
+  fromAgent --> localA["Local agent<br/>Ollama or loopback"]
+  fromAgent -->|"JSON proposal only"| authorize["TwoKey.authorize"]
+  caller -->|"or an action record, no model call"| authorize
+  assertion["Enterprise agent assertion<br/>signed by the caller, not the model"] -.-> authorize
+
+  bytecode --> pathA["Path A policy VM<br/>structured fields only"]
+  authorize --> pathA
+  authorize -->|"runs even if Path A denies"| pathB["Path B convene"]
+  prose --> pathB
+  session["Frozen agent credentials<br/>must not equal a judge key"] -.-> pathB
+  pathB -->|"action record and tool args<br/>proposal text only if configured"| cloudJ["Cloud judges<br/>separate API keys"]
+  pathB --> localJ["Local judges<br/>own weights"]
+  cloudJ -->|"yes, no, or abstain"| pathB
+  localJ -->|"yes, no, or abstain"| pathB
+
+  pathA --> gate{"both allow?"}
+  pathB --> gate
+  pathA --> ledger[("Signed ledger")]
+  pathB --> ledger
+  gate -->|no| ledger
+  gate -->|yes| token["Single-use token<br/>returned to the caller, not the agent"]
+  token --> gateway["Tool gateway<br/>frozen bytes, scope, ledger root, single use"]
+  gateway <-->|"optional scan<br/>outbound, then result"| scanners["DLP / antivirus hooks<br/>none unless configured"]
+  gateway -->|"redemption_started, then the tool"| tools["Registered tools"]
+  gateway --> ledger
+  ledger --> anchor["Anchor<br/>personal: local file<br/>enterprise: permissioned chain"]
+  pki["Enterprise PKI<br/>X.509, CRL/OCSP, roles, PKCS#11"] -.-> authorize
 ```
+
+`authorize_from_agent` loads a configured agent (`examples/agents.yaml`),
+sends it the constitution prose and the instruction, and accepts only a JSON
+proposal. Hosting may be local or cloud. That is recorded. It is not trust.
+A malformed reply is a deny and does not reach either path. The agent never
+sees the token, the gateway, or tool credentials. A caller can also skip the
+agent and call `authorize` with an action record, as the quickstart does.
+
+After the record validates, and after the enterprise agent assertion passes
+when that mode requires one, both paths run. A Path A deny does not skip
+Path B. Path A reads the structured fields only. Judges see the normalized
+action record. Non-empty tool arguments are attached as `tool_args`. The
+proposal string is omitted unless that judge sets `receives_proposal: true`
+or the quorum policy is `judge_inputs: record_and_proposal`. The default is
+`record_only`.
+
+Judges use their own credentials. At startup Two-Key freezes
+`agent_session_env` and each configured cloud agent's credential. It refuses
+to start if any judge is cloud and that set is empty. A cloud judge abstains,
+and the round denies, if its API key is in the set. `X-Two-Key-Judge-Session` is a call id minted here. It is
+not a session at the model host. A missing, malformed, or late ballot is an
+abstention, and an abstention is not a yes.
+
+The token is returned to the caller only when both paths allow. The caller
+passes it to `gateway.invoke`. Scanners run only if configured. The gateway
+checkpoints `redemption_started` before the tool runs.
+
+<!-- check: skip diagram, rendered by GitHub -->
+```mermaid
+sequenceDiagram
+  participant Caller
+  participant TwoKey
+  participant Agent as Monitored agent
+  participant PathA as Path A
+  participant PathB as Path B
+  participant Judge as Judges
+  participant Gateway
+  participant Tool
+
+  Caller->>TwoKey: authorize_from_agent
+  TwoKey->>Agent: constitution prose and instruction
+  Agent-->>TwoKey: JSON proposal, no tool call
+  TwoKey->>PathA: structured fields
+  PathA-->>TwoKey: allow or deny
+  TwoKey->>PathB: action record, tool args, binding
+  PathB->>Judge: parallel score, separate keys
+  Judge-->>PathB: yes, no, or abstain
+  PathB-->>TwoKey: quorum pass or deny
+  alt both allow
+    TwoKey-->>Caller: single-use token
+    Caller->>Gateway: token, tool, arguments
+    Gateway->>Tool: after redemption_started
+  else either path denies
+    TwoKey-->>Caller: no token
+  end
+```
+
+The drawings under [docs/figures/](docs/figures/README.md) are the
+2026-09-30 set. The diagrams above are the wiring on this branch.
 
 More diagrams: [architecture](docs/figures/architecture.svg),
 [authorize flow](docs/figures/authorize_flow.svg),
@@ -296,7 +375,7 @@ OK: ok (entries=10)
 If Ollama isn't running, or `qwen2.5:7b` has not been pulled, the local
 judge abstains, and the other two still meet K = 2 and T = 2. A wire transfer, a payment over the $200 cap, or a
 blocked counterparty is denied by Path A with the rule's id in
-`decision.reason`, and the judges are never asked.
+`decision.reason`, and the judges are still asked. Both results are written to the ledger.
 
 ## End-to-end demo
 
