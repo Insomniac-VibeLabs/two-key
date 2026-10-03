@@ -298,6 +298,10 @@ def make_two_key(ledger="ledger.jsonl", judges_file="judges.yaml",
                 constitution="my-constitution.signed.json", **options):
     judges, quorum = load_config_file(Path(judges_file))
     options.setdefault("quorum_policy", quorum)
+    # A cloud judge must not reuse the monitored agent's credential. Two-Key
+    # reads TWOKEY_AGENT_SESSION once, here, and refuses to start without it.
+    if any(getattr(j, "is_cloud", lambda: False)() for j in judges):
+        options.setdefault("agent_session_env", "TWOKEY_AGENT_SESSION")
     return TwoKey(load_envelope(Path(constitution)), keys.load_public_any(HOME / "principal.pub.pem"),
                          HOME / ledger, judges, ledger_signing_key=load_key(), **options)
 ```
@@ -315,10 +319,16 @@ judges:
   - {id: local, type: ollama, provider: local, vendor: alibaba, model: "qwen2.5:7b"}
 ```
 
+The xAI and Anthropic judges are cloud judges. Two-Key will not start until
+`TWOKEY_AGENT_SESSION` holds the monitored agent's own credential, and that
+value must not be one of the judge keys. The helper passes
+`agent_session_env="TWOKEY_AGENT_SESSION"` when any judge is not local.
+
 <!-- check: expect=^loaded two-key-constitution/2 -->
 ```bash
 read -rsp "xAI API key: " XAI_API_KEY; echo; export XAI_API_KEY
 read -rsp "Anthropic API key: " ANTHROPIC_API_KEY; echo; export ANTHROPIC_API_KEY
+export TWOKEY_AGENT_SESSION=monitored-agent-not-a-judge-key
 python - <<'PY'
 from my_two_key import make_two_key
 tk = make_two_key("howto-4.jsonl")
@@ -328,10 +338,11 @@ PY
 ```
 
 **Reloading.** `reload_constitution` accepts only a document signed by the
-same trusted key and naming the same principal. After a successful
-reload, tokens issued earlier are refused by the gateway. A refused reload
-leaves the active constitution in place and is logged as
-`constitution_reload_refused`.
+same trusted key and naming the same principal. A change to the text or the
+rules also needs `acknowledge=True`: that is a separate step from the
+agent's request. After a successful reload, tokens issued earlier are
+refused by the gateway. A refused reload leaves the active constitution in
+place and is logged as `constitution_reload_refused`.
 
 <!-- check: expect=^old token: constitution_hash_mismatch -->
 <!-- check: expect=^vendor reload refused: ConstitutionSignatureError -->
@@ -350,7 +361,8 @@ d = tk.authorize({"tool": "pay_bill", **fields, "irreversible": False}, "Pay the
 
 # The principal tightens the spend cap and signs the new version.
 src = Path("my-constitution.md").read_text().replace('"amount_usd_gt": 200', '"amount_usd_gt": 100')
-tk.reload_constitution(sign_document(build_source_document("did:twokey:alice", src), load_key()))
+tk.reload_constitution(sign_document(build_source_document("did:twokey:alice", src), load_key()),
+                      acknowledge=True)
 print("old token:", gw.invoke(d.capability, "pay_bill", args, fields).reason)
 
 # A vendor tries to push its own version.
@@ -628,7 +640,7 @@ abstains, and the reason is recorded:
 <!-- check: expect=^sso: yes -->
 <!-- check: expect=^keyring-key: abstain credential: -->
 ```bash
-MY_SSO_TOKEN=example-token MY_GATEWAY_PASSWORD=example-password python - <<'PY'
+MY_SSO_TOKEN=example-token python - <<'PY'
 from pathlib import Path
 from two_key.action import normalize_action
 from two_key.judges.config import load_config_file
@@ -636,7 +648,10 @@ from two_key.judges.config import load_config_file
 judges, _ = load_config_file(Path("judges-auth.yaml"))
 action = normalize_action({"tool": "search", "data_class": "public", "irreversible": False})
 for j in judges:
-    b = j.score("Searching the web is fine.", action, "")
+    # A cloud judge will not vote without the monitored agent's own credential,
+    # and that credential must not be the judge's key.
+    b = j.score_bound("Searching the web is fine.", action, "", None,
+                      agent_session="monitored-agent-not-a-judge-key")
     print(f"{j.judge_id}: {b.vote} {b.error or ''}"[:110])
 PY
 ```
@@ -1078,8 +1093,9 @@ See [SCANNING_HOOKS.md](SCANNING_HOOKS.md) for the options, their pros and
 cons, and the open questions.
 
 The example below uses the built-in `PatternScanner` (an example plugin,
-not a DLP product). The email body is medical, but the call labels it
-`public`:
+not a DLP product). Words such as "diagnosis" are refused before a token
+is issued. The scanner example uses a chart id the core word list does
+not know, labelled `public`:
 
 <!-- check: expect=^no scanners\s+executed -->
 <!-- check: expect=^dlp, labelled public\s+scan_data_class_mismatch \['medical'\] -->
@@ -1095,7 +1111,7 @@ from two_key.scanning import EICAR, ContentScanner, PatternRule, PatternScanner,
 
 tk = make_two_key("howto-9c.jsonl")
 dlp = PatternScanner("example-dlp", kind="dlp",
-                     rules=[PatternRule("dx", rb"(?i)diagnosis", label="health", data_class="medical")])
+                     rules=[PatternRule("mrn", rb"(?i)mrn-[0-9]+", label="health", data_class="medical")])
 av = PatternScanner("example-av", kind="av", rules=PatternScanner.example_rules())
 tools = {"email_draft": lambda to, body, attachment_b64="": "drafted"}
 fields = {"counterparty": "clinic.example", "data_class": "public"}
@@ -1111,10 +1127,15 @@ def last_scan():
     return e.body["content_scans"][0]
 
 
-note = {"to": "clinic.example", "body": "Diagnosis: example condition"}
-print(f"{'no scanners':<22}", tk.gateway(tools=tools).invoke(token(note), "email_draft", note, fields).reason)
+plain = {"to": "clinic.example", "body": "See you Tuesday"}
+print(f"{'no scanners':<22}", tk.gateway(tools=tools).invoke(token(plain), "email_draft", plain, fields).reason)
+said = {"to": "clinic.example", "body": "Diagnosis: example condition"}
+denied = tk.authorize({"tool": "email_draft", "counterparty": "clinic.example", "data_class": "public",
+                       "irreversible": False}, "Draft the note.", said)
+print(f"{'word list':<22}", denied.allowed, denied.reason)
+chart = {"to": "clinic.example", "body": "chart mrn-100200"}
 gw = tk.gateway(tools=tools, scanners=[dlp])
-print(f"{'dlp, labelled public':<22}", gw.invoke(token(note), "email_draft", note, fields).reason,
+print(f"{'dlp, labelled public':<22}", gw.invoke(token(chart), "email_draft", chart, fields).reason,
       last_scan()["data_classes"])
 mail = {"to": "clinic.example", "body": "see attached", "attachment_b64": base64.b64encode(EICAR).decode()}
 gw = tk.gateway(tools=tools, scanners=[av],
@@ -1139,7 +1160,9 @@ gw = tk.gateway(tools={"email_draft": lambda **a: {"reply": EICAR.decode()}}, sc
 print(f"{'inbound, EICAR result':<22}", gw.invoke(token(plain), "email_draft", plain, fields).reason)
 ```
 
-The DLP scanner finds `medical` content in a call labelled `public`. The
+The word "diagnosis" labelled `public` is refused before a token
+(`record_args_mismatch:sensitive_labeled_public`). The DLP scanner then
+finds `medical` in `mrn-100200`, which that word list does not know. The
 token permits only `public`, so the DLP convicts and the call is denied. The
 `gateway_denied` entry records the verdict: the scanner id and version, the
 digest of the scanned bytes (equal to the token's `args_hash`), the outcome,
@@ -1225,19 +1248,21 @@ the log or sign a head by itself. A missing or wrong key fails closed.
 <!-- check: expect=^OK: ok \(entries= -->
 ```bash
 python -m two_key verify-ledger --ledger ~/.two-key/howto-8.jsonl \
-    --pub ~/.two-key/principal.pub.pem
+    --pub ~/.two-key/principal.pub.pem --key ~/.two-key/principal.pem \
+    --passphrase-env TWOKEY_KEY_PASSPHRASE
 ```
 
-Changing any line breaks the chain. Rewriting the whole file fails too,
-because the head signature can't be forged without your key.
+The ledger file is ciphertext. Copying it without the outside ledger key
+is refused, even if you still have the principal key. The unit tests cover
+a rewritten chain, which `verify-ledger` reports as `hash_chain_broken`.
 
-<!-- check: expect=^REJECTED: hash_chain_broken -->
+<!-- check: expect=^REJECTED: ledger key missing -->
 <!-- check: expect-fail -->
 ```bash
 mkdir -p /tmp/two-key-tamper && cp ~/.two-key/howto-8.jsonl* /tmp/two-key-tamper/
-python -c "import pathlib; p = pathlib.Path('/tmp/two-key-tamper/howto-8.jsonl'); \
-p.write_text(p.read_text().replace('\"allowed\": false', '\"allowed\": true', 1))"   # turn a deny into an allow
-python -m two_key verify-ledger --ledger /tmp/two-key-tamper/howto-8.jsonl --pub ~/.two-key/principal.pub.pem
+python -m two_key verify-ledger --ledger /tmp/two-key-tamper/howto-8.jsonl \
+    --pub ~/.two-key/principal.pub.pem --key ~/.two-key/principal.pem \
+    --passphrase-env TWOKEY_KEY_PASSPHRASE
 ```
 
 ### Merkle proofs
@@ -1254,8 +1279,9 @@ or to prove an entry to someone else.
 ```python
 from pathlib import Path
 from two_key.ledger import PersonalLedger
+from my_two_key import load_key
 
-led = PersonalLedger(Path.home() / ".two-key" / "howto-8.jsonl")
+led = PersonalLedger(Path.home() / ".two-key" / "howto-8.jsonl", signing_key=load_key())
 p = led.inclusion_proof(3)
 print("inclusion ok:", PersonalLedger.verify_inclusion_proof(p), "| proof nodes:", len(p["proof"]))
 
@@ -1314,7 +1340,8 @@ tk.ledger.checkpoint()
 Set it with `TwoKey(deployment_mode=...)`, the `TWOKEY_DEPLOYMENT_MODE`
 environment variable, or `deployment_mode:` in a file passed as
 `deployment_config=`. If more than one is set, they must agree. The mode
-is fixed for a ledger once it is set. See
+is fixed for a ledger once it is set. Enterprise mode also needs
+`siem_host` (RFC 5424 syslog over TLS, port 6514). See
 [DEPLOYMENT_MODES.md](DEPLOYMENT_MODES.md) for the receipts, the Fabric
 chaincode contract, and the open questions.
 
@@ -1370,7 +1397,7 @@ cert, _ = test_ca.issue("Principal", email="principal@example.com", key=load_key
 identity = {"pki": test_ca.config({"email:principal@example.com": ["principal"]}, require_agent_identity=False),
             "principal_credential": test_ca.credential(cert)}
 anchor = FabricAnchor(DemoGateway(), channel="audit", chaincode="twokey-anchor", min_endorsing_orgs=2)
-tk = make_two_key("howto-12c.jsonl", deployment_mode="enterprise", anchor=anchor, **identity)
+tk = make_two_key("howto-12c.jsonl", deployment_mode="enterprise", anchor=anchor, siem_host="127.0.0.1", **identity)
 tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Search.", {})
 print("anchors:", [c.reason for c in check_anchored_entries(tk.ledger, load_key().public_key(), anchor)])
 print("mode:", tk.deployment.mode)
@@ -1417,10 +1444,10 @@ def anchor():
 
 
 try:
-    make_two_key("howto-12d.jsonl", deployment_mode="enterprise", anchor=anchor())
+    make_two_key("howto-12d.jsonl", deployment_mode="enterprise", anchor=anchor(), siem_host="127.0.0.1")
 except TwoKeyConfigError as e:
     print("refused:", e)
-tk = make_two_key("howto-12d.jsonl", deployment_mode="enterprise", anchor=anchor(),
+tk = make_two_key("howto-12d.jsonl", deployment_mode="enterprise", anchor=anchor(), siem_host="127.0.0.1",
                   pki=ca.config(roles, ocsp=True), principal_credential=ca.credential(cert))
 
 token = SoftwareToken()                                   # stands in for an HSM or smart card
@@ -1526,7 +1553,8 @@ key = keys.load_private_any(pq / "principal.keys.json", os.environ["TWOKEY_KEY_P
 judges, quorum = load_config_file(Path("judges.yaml"))
 tk = TwoKey(load_envelope(Path("pq-constitution.signed.json")), keys.load_public_any(pq / "principal.pub.json"),
                   pq / "ledger.jsonl", judges, ledger_signing_key=key, quorum_policy=quorum,
-                  crypto=CryptoProvider(fips_mode=True), require_pq=True)
+                  crypto=CryptoProvider(fips_mode=True), require_pq=True,
+                  agent_session_env="TWOKEY_AGENT_SESSION")
 print(tk.crypto_profile())
 gw = tk.gateway(tools={"search": lambda q: "ok"})
 d = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, "Search.", {"q": "x"})
@@ -1586,11 +1614,11 @@ print("tk1-sig", gw.invoke(d.capability, "search", {"q": "x"}, {"data_class": "p
 
 ## 14. Performance and tests
 
-<!-- check: expect=^\s+Path A\s+PolicyVM.eval -->
-<!-- check: expect=^\s+Authorize\s+authorize \(A \+ B -->
+<!-- check: expect=^\| Path A \| PolicyVM\.eval -->
+<!-- check: expect=^\| Authorize \| authorize \(A \+ B -->
 ```bash
 python bench.py --quick > bench.txt          # about 15 s; prints latency and memory tables
-grep -E "PolicyVM.eval|^  Authorize|invoke \(all checks" bench.txt
+grep -E "PolicyVM\.eval|authorize \(A \+ B|invoke \(all checks" bench.txt
 ```
 
 The full run (`python bench.py`, about 40 s) prints the tables in

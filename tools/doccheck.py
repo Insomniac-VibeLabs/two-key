@@ -128,6 +128,11 @@ def build_script(blocks, outdir: Path):
             continue
         body = b["body"] if lang == "bash" else \
             "python - <<'__CK_PY_EOF__'\n" + b["body"] + "\n__CK_PY_EOF__"
+        # The fake judge transport is on for snippet HTTP calls. The unit
+        # suite starts its own servers, so that fake must be off for those
+        # commands and back on before the next snippet.
+        if lang == "bash" and "unittest" in body:
+            body = "TWOKEY_DOCCHECK_FAKE_LLM=\n" + body + "\nTWOKEY_DOCCHECK_FAKE_LLM=1"
         log = outdir / f"block{n}.out"
         # A brace group runs in the current shell, so cd/export/activate persist between blocks.
         run = f"{{ {body}\n}} > '{log}' 2>&1"

@@ -204,7 +204,7 @@ class TwoKey:
             if digest_alg is None and str(e).startswith("ledger uses "):
                 raise TwoKeyConfigError(
                     f"{e}: this ledger was written with an earlier default. It still verifies "
-                    "(PersonalLedger(path).verify(key), or python -m two_key verify-ledger). To keep appending "
+                    "(PersonalLedger(path, signing_key=key).verify(public_key), or python -m two_key verify-ledger --key). To keep appending "
                     f"to it, pass digest_alg={str(e).split()[2].rstrip(',')!r} explicitly (legacy); or start a new ledger "
                     "(SHA-384 by default)") from e
             raise
