@@ -11,6 +11,10 @@ CONCEPTION_NOTES Entry 10): every profile now uses SHA-384. Tokens are signed (`
 and `args_hash` is computed over the typed two-key-enc/2 encoding. The
 `tk1` and SHA-256 rows below measure options that still exist but are no
 longer the default. The numbers were not re-measured for this change.
+Ledger records and the signed head are now AES-256-GCM, with the ledger key
+and witness outside the ledger directory. Append, `invoke`, and `authorize`
+rows below were measured before that sealing, so a current `bench.py` run
+is the one to trust for those.
 
 ```bash
 python bench.py            # full run (about 40 s); prints the tables below
