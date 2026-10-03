@@ -1040,10 +1040,13 @@ print("after checkpoint:", tk.ledger.verify(pub).reason)
   multi-process support: the ledger still has one owning process.
 - Tokens are bearer secrets. Pass them straight from `authorize` to
   `invoke`; don't log or store them.
-- A restarted TwoKey instance gets a new random HMAC key (`capability_secret`), so
-  tokens from before the restart stop working. Replay protection survives
-  restarts: the ledger rebuilds spent tokens from `capability_redeemed`
-  and open attempts from `redemption_started` (an abort clears the attempt).
+- A restarted TwoKey instance keeps the principal key, so default `tk1-sig`
+  tokens still verify until they expire. An HMAC mode (`tk1` or
+  `tk1-hs384`) uses `capability_secret`, which is random per process unless
+  you pass the same secret, so those tokens stop verifying after a restart.
+  Replay protection survives restarts: the ledger rebuilds spent tokens from
+  `capability_redeemed` and open attempts from `redemption_started` (an
+  abort clears the attempt).
 
 Two gateways on one TwoKey instance, same token:
 

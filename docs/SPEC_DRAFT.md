@@ -201,7 +201,7 @@ Added at the author's 2026-09-30 instruction (CHANGES.md rows 43–59). It is en
 - **Algorithms.**
   - Signatures: Ed25519, ECDSA P-384, and ML-DSA-65 (FIPS 186-5, FIPS 204). Hybrid suites `hybrid-mldsa65-ed25519` and `hybrid-mldsa65-p384`: both components must verify, the suite name is bound into each component, and downgrades and silent fallback are refused.
   - Digests: SHA-384 for every profile since the F_REVIEW fixes (SHA-256 ledgers from before still verify) for the ledger chain, the Merkle tree and its proofs, the constitution digest, `args_hash`, `bytecode_hash`, `nl_hash`, the ballot binding, and `result_hash`.
-  - Tokens: HMAC-SHA-384 by default (HMAC-SHA-256 only if chosen) with keys of at least 256 bits. Optional `tk1-sig` signed tokens.
+  - Tokens: a signature (`tk1-sig`) by default, using the principal key unless a separate token key is set. HMAC-SHA-384 (`tk1-hs384`) and HMAC-SHA-256 (`tk1`) only if chosen, with keys of at least 256 bits.
   - Key bundles: PBKDF2-HMAC-SHA-384 with 600,000 iterations, then AES-256-GCM (SHA-256 bundles from before still load).
   - RNG: the OS CSPRNG.
 - **Self-test** before Two-Key starts: known-answer tests for SHA-2/3 (FIPS 180-4, FIPS 202), HMAC (RFC 4231), and Ed25519 (RFC 8032); pairwise consistency tests for ECDSA and ML-DSA; and an RNG length check. Any failure stops Two-Key.
