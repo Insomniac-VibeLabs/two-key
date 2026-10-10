@@ -1,9 +1,10 @@
 # Roadmap
 
-This is the plan for taking `two-key-concept` from the 0.2.3 prototype to a
+This is the plan for taking `two-key-concept` from the 0.2.4 prototype to a
 1.0 release. It states intent, not a promise. The order may change, and
 version numbers are targets, not dates. Nothing listed here after the 0.2.x
-baseline exists in 0.2.3.
+baseline exists in 0.2.4. 0.11 may ship before the phases numbered under it;
+its number is not an order claim.
 
 Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
@@ -20,6 +21,8 @@ flowchart LR
   p6 --> p7["0.9<br/>FIPS approved<br/>mode"]
   p7 --> p8["0.10<br/>Local GUI"]
   p8 --> p9["1.0<br/>Review and release"]
+  p0 -.-> prep["0.11<br/>Optional reputation halt"]
+  prep -.-> p9
 ```
 
 ## Ground rules
@@ -103,6 +106,40 @@ old names are refused, and CHANGES gets an "Upgrading from 0.2.2" step.
 The unused `extra_secrets` argument of `AgentDeclaration.resolve`, which
 HMACs whatever it is given, goes in the same release.
 
+Item 6 above is the 0.2.3 plan. 0.2.4 adds a head anchor, described next.
+The witness pins themselves still do not detect a rollback.
+
+### 0.2.4 (this branch)
+
+On `working`, not tagged. CHANGES "0.2.4" is the record.
+
+- `two-key recover` drops an uncheckpointed tail and records the ciphertext's
+  digest. It does not run on open and it does not move a signed head
+  backwards (#49).
+- A head anchor beside the ledger key refuses a rollback or a wipe of the
+  ledger directory alone (#62). Deleting that file, or rolling it back with
+  the ledger, is still not detected. It is not an external anchor.
+- Creating a ledger at a new path warns on stderr (#60 item 2).
+- `revoke` is unchanged (#46). The optional halt is 0.11, below.
+
+## 0.11: Optional reputation halt
+
+Not a change to `revoke`. `revoke` ends tokens already issued. It does not
+stop new approvals, and it does not survive as a stop on the agent. This is
+a separate control. It does not depend on 0.3 through 0.10 and may ship
+earlier. It is numbered 0.11 so those phases keep their numbers.
+
+- Off unless configured. A deployment that does not set it behaves as today.
+- Count repeated triggers recorded in the ledger (denies, or the trigger the
+  operator names when this is built). When the count in a window exceeds the
+  configured threshold, refuse new approvals until the principal records a
+  resume. The halt survives a restart because it is a ledger entry.
+- A redemption already started stays spent (`already_attempted`). The halt
+  does not run the tool and does not clear a spent token.
+- Only the principal key can resume.
+- Tests, when it is built: under the threshold, at the threshold, resume,
+  restart, and the default (unset), which never halts.
+
 ## 0.3: Key backup and recovery
 
 Losing a key today is severe. A missing or changed capability key refuses to
@@ -117,6 +154,9 @@ start, and a lost ledger key leaves the log unreadable.
 - The ledger key and the witness key are kept in separate bundles.
 - A recovery runbook and a table of what each lost key means.
 - Tests: restore, wrong passphrase, tampered bundle.
+- A restore puts back `head.anchor` from the same moment as the ledger. An
+  older ledger left next to the current anchor does not open
+  (`ledger_rolled_back`). Deleting the anchor is not the restore procedure.
 
 Not in scope here: PKI and certificate identities (see 0.7) and
 seed-phrase backup.

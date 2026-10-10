@@ -243,7 +243,12 @@ sends included) abstains with
 `cloud_judge_reused_agent_session`, wherever it connects, and the round
 denies. This is the start-up rule again, at call time, with the session the
 agent really uses: it catches a judge holding the agent's key even when
-`monitored_agent:` names the wrong key or address.
+`monitored_agent:` names the wrong key or address. Any other non-empty
+string satisfies the presence check, including a placeholder. That does not
+fail closed: the round proceeds, and a judge who does not hold that
+placeholder still votes. The check fails closed only when the session is
+missing, or when it equals a judge's credential. It is not compared with
+the credential declared in `monitored_agent`.
 
 The in-process placeholder agent `two_key.testing.TEST_AGENT` is accepted
 only with `allow_test_doubles=True` and only when every judge is a test
@@ -602,20 +607,35 @@ that window; it does not close it. The next open refuses with `signed head does 
 last line, and only a last line, refuses with `the last record does not
 decrypt`. That can be a crash or tampering; the message names both. A record
 that does not decrypt in the middle of the file is still `wrong key or
-tampered ciphertext`. Nothing is lost or forged. Until a recovery command
-exists
-([#49](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/49)),
-recover by hand:
+tampered ciphertext`. Nothing is truncated on open.
 
-1. Stop every process that uses the ledger. Copy the ledger directory and
-   its `<ledger>.ledger-key`, `<ledger>.witness`, and `<ledger>.capability`
-   siblings somewhere safe.
+Stop every process that uses the ledger, copy the ledger directory and its
+`<ledger>.ledger-key`, `<ledger>.witness`, `<ledger>.capability`, and
+`<ledger>.recovery` siblings, then:
+
+```bash
+two-key recover --key keys/principal.pem --ledger ledger
+```
+
+`recover` keeps the prefix the signed head covers, copies the dropped
+ciphertext to `<ledger>.recovery/dropped-<digest>.bin` (mode 0600; anyone
+with the ledger key can decrypt it), and appends `ledger_recovered` with the
+byte count and digest, not the plaintext. It then checkpoints. It refuses,
+and does not change the file, when a record inside the signed prefix is bad,
+when the entries end before the head, or when the head is behind
+`head.anchor` (that is a rollback, not a crash). A clean ledger is left
+unchanged.
+
+If `recover` refuses, the hand procedure is still:
+
+1. Use the copy you just made. Do not delete `head.anchor`.
 2. Delete `head.json.tmp` in the ledger directory if it exists.
 3. Remove the last line of `entries.jsonl`, then try to open the ledger
    (`Ledger("ledger", key)`). Repeat until it opens. `authorize` writes at
    most six entries before its checkpoint, and the gateway one, so this takes
    at most six tries, or seven with a torn last line. If it still does not
-   open, restore the copy and report it.
+   open, restore the copy and report it. If the error is `ledger_rolled_back`,
+   restoring an older copy will not open while the current anchor remains.
 4. Once it opens, record what you did, for example
    `ledger.append("manual_recovery", {"removed_entries": 3, "reason": "crash before checkpoint"})`
    and then `ledger.checkpoint()`. Keep the copy: the removed lines exist only
@@ -635,6 +655,15 @@ re-read or re-hash its whole history on every call. Opening one still reads
 every entry. There is no rotation. A few thousand entries is small next to
 judge latency; tens of thousands make opening the slow part
 ([#50](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/50)).
+
+The head anchor, `<ledger>.ledger-key/head.anchor` unless you passed
+`--head-anchor`, records the newest signed head. Opening a ledger whose
+signed head is older, or a wiped ledger directory, refuses with
+`ledger_rolled_back`. The first open under 0.2.4 writes the anchor from the
+head that verifies then. Deleting the anchor makes the next open accept the
+ledger as it stands. Copy the anchor whenever you copy the ledger. Someone
+who can write the anchor file can roll it back together with the ledger.
+Pass the same `--head-anchor` on every command if you move the file.
 
 ## Pin the witness key
 
@@ -672,9 +701,10 @@ With it, a new ledger needs that witness key already in place
 | --- | --- | --- |
 | `witness.pem` replaced; chain not rewritten | Refused | Refused |
 | Head signed by another witness key; chain not rewritten | Refused | Refused |
-| Chain rewritten from its first entry with the principal key and the ledger key | Not detected | Refused |
+| Chain rewritten from its first entry with the principal key and the ledger key | Not detected once the anchor beside the ledger key is removed too | Refused |
 | Witness key swapped before the first open under 0.2.3 | Not detected | Refused, if your copy is the original key |
-| Rollback to an earlier head signed by the same keys, or a wipe (#62) | Not detected | Not detected |
+| Rollback or wipe of the ledger directory alone (#62) | Refused by `head.anchor`, which is not this pin | Refused by `head.anchor`. Deleting the anchor, or rolling it back too, is not detected |
+| Chain rewritten by someone who can also write the anchor file | Not detected | Refused, if your witness copy is unchanged |
 
 Check both pins with:
 
@@ -780,7 +810,8 @@ names the setting or declaration that controls it.
 - The runtime agent is not matched against `monitored_agent:`. The
   declaration is what is compared. At call time `agent_session` is compared
   with each judge's credential, at any address; it is not compared with the
-  declared agent credential and is not ledgered.
+  declared agent credential and is not ledgered. A placeholder satisfies the
+  presence check and the round proceeds.
 - `agents.yaml` does not accept `tenant:` or `upstream:`. For an agent
   behind a proxy, declare it with the `monitored_agent:` block or an
   `AgentDeclaration`, which do.
@@ -846,5 +877,6 @@ This ends every token issued before the call: the gateway refuses them
   and then approves calls as usual.
 
 To stop an agent, stop calling `authorize` (or stop the process), and revoke
-to end tokens already issued. A persistent halt that refuses new approvals
-until a ledgered resume is not built.
+to end tokens already issued. A halt that refuses new approvals is not part
+of `revoke`. An optional reputation halt, off unless configured, is planned
+as 0.11 in ROADMAP. It is not built.

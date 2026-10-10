@@ -6,6 +6,7 @@
                     [--agent-session-env NAME] [--ttl-seconds N] [--emit-token PATH]
                     [--witness-public-key PEM]
   two-key rotate-witness --key KEY --ledger DIR [--witness-public-key PEM] [--reason TEXT]
+  two-key recover --key KEY --ledger DIR [--witness-public-key PEM] [--head-anchor PATH]
   two-key audit --key KEY --ledger DIR [--witness-public-key PEM]
   two-key demo
 
@@ -18,9 +19,14 @@ taken on argv, where other local users and shell history can see it.
 ``--witness-public-key PEM`` is the witness pin outside the ledger: a copy of the
 witness public key kept where whoever writes the ledger directory cannot change it.
 ``rotate-witness`` changes the witness key as a ledgered ``witness_rotated`` entry;
-update that copy afterwards. ``audit`` verifies the ledger and the decision digests
-and prints both witness pins as JSON. Opening a ledger made before 0.2.3 pins its
-witness key (trust on first use), whichever command opens it.
+update that copy afterwards. ``recover`` drops only an uncheckpointed tail
+(a crash between append and checkpoint) and records it. It does not roll a
+signed head backwards, and it does not run on open. ``audit`` verifies the
+ledger and the decision digests and prints both witness pins as JSON. The
+head anchor (``<ledger>.ledger-key/head.anchor``, or ``--head-anchor``) refuses
+a rollback or a wipe of the ledger directory. Creating a ledger at a new path
+warns on stderr. Opening a ledger made before 0.2.3 pins its witness key
+(trust on first use), whichever command opens it.
 """
 
 from __future__ import annotations
@@ -116,6 +122,16 @@ def _witness_pin(args):
         raise SystemExit(f"--witness-public-key: {args.witness_public_key}: {e}") from None
 
 
+def _anchor_arg(args):
+    """``--head-anchor``, or None for ``<ledger>.ledger-key/head.anchor``. An empty value is refused."""
+    path = getattr(args, "head_anchor", None)
+    if path is None:
+        return None
+    if not str(path).strip():
+        raise SystemExit("--head-anchor: empty path; give the file, or leave the option out")
+    return path
+
+
 def _open_ledger(args, key):
     """Open an existing ledger for rotate-witness and audit; a refusal is printed, not raised. A path with no
     ledger is refused rather than created."""
@@ -124,7 +140,7 @@ def _open_ledger(args, key):
         print(json.dumps({"ok": False, "error": f"no ledger at {args.ledger}"}, indent=2))
         return None
     try:
-        return Ledger(args.ledger, key, witness_public_key=_witness_pin(args))
+        return Ledger(args.ledger, key, witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args))
     except LedgerError as e:
         print(json.dumps({"ok": False, "error": str(e)}, indent=2))
         return None
@@ -204,7 +220,7 @@ def _authorize(args) -> int:
     # The monitored agent is declared by the operator in the judges file, never by the agent.
     agent = load_monitored_agent_file(Path(args.judges))
     try:
-        ledger = Ledger(args.ledger, key, witness_public_key=_witness_pin(args))
+        ledger = Ledger(args.ledger, key, witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args))
     except LedgerError as e:
         print(f"ledger refused: {e}", file=sys.stderr)
         return 1
@@ -236,8 +252,23 @@ def _authorize(args) -> int:
     return 0 if decision.allowed else 2
 
 
+def _recover(args) -> int:
+    from .ledger import Ledger, LedgerError
+    key = load_private_key_file(args.key)
+    try:
+        result = Ledger.recover_tail(args.ledger, key, witness_public_key=_witness_pin(args),
+                                     anchor_path=_anchor_arg(args))
+    except LedgerError as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+        return 1
+    print(json.dumps({"ok": True, **result}, indent=2))
+    return 0
+
+
 _WITNESS_HELP = ("the witness public key (PEM), kept where whoever writes the ledger directory cannot change it; "
                  "a head signed by any other witness key is refused")
+_ANCHOR_HELP = ("monotonic head anchor outside the ledger directory (default <ledger>.ledger-key/head.anchor); "
+                "a signed head older than it, or a wiped ledger directory, is refused")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -276,18 +307,27 @@ def main(argv: list[str] | None = None) -> int:
     auth.add_argument("--emit-token", default=None, metavar="PATH",
                       help="write the token to a new 0600 file; it is never printed")
     auth.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    auth.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     auth.set_defaults(func=_authorize)
     rotate = sub.add_parser("rotate-witness", help="replace the ledger's witness key with a new one, ledgered")
     rotate.add_argument("--key", required=True)
     rotate.add_argument("--ledger", required=True)
     rotate.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    rotate.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     rotate.add_argument("--reason", default="", help="recorded in the witness_rotated entry (at most 200 characters)")
     rotate.set_defaults(func=_rotate_witness)
     audit = sub.add_parser("audit", help="verify the ledger and print its witness pins and digest checks")
     audit.add_argument("--key", required=True)
     audit.add_argument("--ledger", required=True)
     audit.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    audit.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     audit.set_defaults(func=_audit)
+    recover = sub.add_parser("recover", help="drop an uncheckpointed tail and record it; does not run on open")
+    recover.add_argument("--key", required=True)
+    recover.add_argument("--ledger", required=True)
+    recover.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    recover.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    recover.set_defaults(func=_recover)
     demo = sub.add_parser("demo")
     demo.set_defaults(func=_demo)
     args = parser.parse_args(argv)

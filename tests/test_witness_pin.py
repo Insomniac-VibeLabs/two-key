@@ -143,10 +143,16 @@ class ConfiguredPin(unittest.TestCase):
             Ledger(self.path, self.key, witness_public_key=generate_private_key().public_key())
 
     def test_rewritten_ledger_passes_the_in_ledger_pin_but_not_the_configured_one(self):
-        # Principal key and ledger key in hand: wipe the chain and the witness key, and start over.
+        # Wiping the ledger directory alone is refused: the head anchor sits outside it (#62).
         for name in ("entries.jsonl", "head.json"):
             (self.path / name).unlink()
+        with self.assertRaisesRegex(LedgerError, "ledger_rolled_back"):
+            Ledger(self.path, self.key)
+        # Principal key and ledger key in hand: this attacker can also remove the anchor (it sits
+        # beside the ledger key) and the witness key, then start over. The in-ledger pin is rewritten
+        # with the new chain, so it cannot tell. The configured pin can.
         shutil.rmtree(self.path.parent / "ledger.witness")
+        (self.path.parent / "ledger.ledger-key" / "head.anchor").unlink()
         forged = Ledger(self.path, self.key)          # pins a new witness key of the writer's choosing
         forged.append("note", {"n": "forged"})
         forged.checkpoint()

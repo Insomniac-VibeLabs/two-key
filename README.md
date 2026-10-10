@@ -315,9 +315,11 @@ It is a prototype. It is not a FIPS 140-3 validated module.
   ledger keys can rewrite a ledger that never leaves the machine, unless
   the witness public key is configured outside the ledger
   (`--witness-public-key`); then the witness key is needed too (#58).
-  Anyone who can write the ledger directory can roll it back to an earlier
-  signed head or wipe it, with no key, and both still open and verify,
-  with or without either witness pin (#62).
+  A head anchor outside the ledger directory
+  (`<ledger>.ledger-key/head.anchor`, or `--head-anchor`) refuses a rollback
+  or a wipe of the ledger directory alone (#62). It does not refuse them if
+  that anchor is deleted or rolled back with the ledger. Someone who can
+  write the anchor file can still do both. It is not an external anchor.
 - Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
   module is on the roadmap. It would not validate this package.
 - Signatures are Ed25519, which is not quantum resistant. Hybrid signatures
@@ -330,9 +332,9 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Roadmap
 
-The plan from the 0.2.3 prototype to a 1.0 release. It states intent, not a
+The plan from the 0.2.4 prototype to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-Nothing after 0.2.3 exists yet. The detail is in [ROADMAP.md](ROADMAP.md).
+Nothing after 0.2.4 in that plan exists yet. The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
 flowchart LR
@@ -345,12 +347,15 @@ flowchart LR
   p6 --> p7["0.9<br/>FIPS approved<br/>mode"]
   p7 --> p8["0.10<br/>Local GUI"]
   p8 --> p9["1.0<br/>Review and release"]
+  p0 -.-> prep["0.11<br/>Optional reputation halt<br/>off unless configured"]
+  prep -.-> p9
 ```
 
 | Target | What |
 | --- | --- |
-| 0.2.3 (this release) | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
-| 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys |
+| 0.2.3 | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
+| 0.2.4 (this branch, not tagged) | Head anchor against a ledger-directory rollback or wipe (#62); `two-key recover` for an uncheckpointed tail (#49) |
+| 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys. A restore includes `head.anchor` from the same moment |
 | 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
 | 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
 | 0.6 | MCP adapter: a proxy in front of the gateway, not an MCP server |
@@ -359,16 +364,19 @@ flowchart LR
 | 0.9 | FIPS approved mode: refuses to start unless running on a validated module |
 | 0.10 | Local GUI for configuration and ledger auditing |
 | 1.0 | Public community review, then release. Described as community-reviewed, not audited |
+| 0.11, any time before 1.0 | Optional reputation halt. Off unless configured. Not a change to `revoke` |
 | After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
 
-Install from git. It is not published to PyPI. Package version 0.2.3.
-Tag `v0.2.3` is on `main` and on `working`. Tag `v0.2.0` stays on commit
-`2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
+Install from git. It is not published to PyPI. Package version 0.2.4 on
+`working` (not tagged). Tag `v0.2.3` is on `main`. Tag `v0.2.0` stays on
+commit `2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
 some judges 0.2.2 accepted (one holding the agent's credential without
 sending it, or in the other form), and pins each ledger's witness key on
 its first open: read "Upgrading from 0.2.2" in
 [CHANGES.md](CHANGES.md) before upgrading (and "Upgrading from 0.2.1" and
-"Upgrading from 0.1.12" from older versions).
+"Upgrading from 0.1.12" from older versions). 0.2.4 writes a head anchor on
+the first open of an existing ledger and refuses a rolled-back ledger
+directory: read "Upgrading from 0.2.3".
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
@@ -377,6 +385,9 @@ description.
 ```bash
 pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.3"
 ```
+
+That ref is the tagged 0.2.3 release. This branch (`working`) is package
+0.2.4 and is not tagged.
 
 ## Run the offline demo
 
@@ -413,7 +424,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, judges, agents |
-| `ROADMAP.md` | Planned work from 0.2.3 to 1.0 |
+| `ROADMAP.md` | Planned work from 0.2.4 to 1.0 |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/FIT.md` | Whether this package is the right control |
 | `docs/COMPARISON.md` | What this package is not a substitute for |

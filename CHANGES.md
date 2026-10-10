@@ -1045,10 +1045,11 @@ release: #47, #48, #51, #52, #54, #56, #57, and #60 items 1 and 5. Read
   rollback or wipe of the ledger directory, which neither witness pin
   detects).
 
-## Unreleased (on `working`, not tagged; package version stays 0.2.3)
+## 0.2.4 — on `working`, not tagged
 
-Not a release. `v0.2.3` stays on `4a4352e`. These notes are only the changes
-after that tag.
+Package version 0.2.4 (`pyproject.toml`, `two_key.__version__`). Tag `v0.2.3`
+stays on `4a4352e` on `main`. This branch is not tagged and is not on `main`.
+Not published to PyPI.
 
 ### Fixed
 
@@ -1059,39 +1060,72 @@ after that tag.
   spec. An omitted `data_class` is still `classified`, then the tool floor.
   `--amount-usd`, `--counterparty`, `--data-class`, and `--irreversible` /
   `--no-irreversible` are claims, and a claim that disagrees is still a deny.
-  HOWTO and llms.txt described the old defaults as the same as a missing
-  field in `normalize_action`; that sentence was wrong for a tool with a spec.
 - **#50, the per-call re-read.** An append checks the entries file's size
   instead of reading and counting every line. The Merkle root is extended one
   leaf at a time and matches the previous full recomputation, including a
   root of a prefix. Opening a ledger still reads every entry. No rotation.
-- **#49, the head write and the torn-line message.** The head is fsynced
-  before it replaces the previous head, and the ledger directory is fsynced
-  after that. A kill between an append and the checkpoint still leaves a
-  ledger that will not open. A last record that does not decrypt now says so
-  and points at HOWTO, and says it can be a crash or tampering. A record in
-  the middle of the file still says `wrong key or tampered ciphertext`.
-  There is still no recovery command.
+  The issue stays open for that.
+- **#49.** The head is fsynced before it replaces the previous head. A last
+  record that does not decrypt says it can be a crash or tampering; a record
+  in the middle of the file still says `wrong key or tampered ciphertext`.
+  `two-key recover` (and `Ledger.recover_tail`) drops only the bytes after the
+  signed head, copies that ciphertext to `<ledger>.recovery/`, and appends a
+  `ledger_recovered` entry (byte count and digest, not plaintext). It refuses
+  a damaged signed prefix and a head that is behind the anchor. It does not
+  run on open. Manual truncation in HOWTO remains the fallback when it refuses.
+- **#62.** A head anchor outside the ledger directory, by default
+  `<ledger>.ledger-key/head.anchor`, records the newest signed head. A signed
+  head older than the anchor, or a wiped ledger directory, is refused
+  (`ledger_rolled_back`). The anchor moves only forward. A missing anchor is
+  adopted from the current head, which is how a 0.2.3 ledger starts being
+  protected, and which is why deleting the anchor undoes the check. Someone
+  who can write the anchor file can roll it back with the ledger. Pass
+  `--head-anchor` / `anchor_path=` to keep it somewhere that writer cannot
+  change. It is not an external anchor. The witness pins still do not detect
+  a rollback by themselves.
+- **#60 item 2.** `Ledger()` still creates a ledger at a new path, and now
+  warns on stderr when it does. `audit` and `rotate-witness` still refuse a
+  path with no ledger.
 
-### Not changed, waiting on a decision
+### Not a code change
 
-- **#46.** `revoke` still ends only tokens issued before the call. A
-  persistent halt was not added.
-- **#60 item 2.** `Ledger()` still creates a ledger at a new path. `audit`
-  and `rotate-witness` still refuse a path with no ledger.
+- **#46.** `revoke` still ends only tokens issued before the call. It is not
+  a halt. An optional reputation halt, off unless configured, is ROADMAP 0.11.
+  It is not built. The issue is closed as documented behavior.
 - **#60 item 3.** Any non-empty `agent_session` still satisfies the presence
-  check. It is still compared with judge credentials, not required to equal
-  the declared agent credential. Requiring that would contradict the README:
-  the session is the credential the agent is actually using, which may not be
-  the one `monitored_agent` names.
-- **#62.** A rollback or wipe of the ledger directory is still not detected.
-  README "Known limits" still says so. No monotonic record was added.
-- **#49 recovery command.** Manual truncation in HOWTO is still the recovery.
-  Nothing truncates on open.
+  check. That is not fail-closed: a placeholder lets the round proceed. The
+  check fails closed only when the session is missing, or when it equals a
+  judge's credential. It is not compared with the declared agent credential.
+  Requiring that would contradict the README: the session is the credential
+  the agent is actually using, which may not be the one `monitored_agent` names.
+
+### Upgrading from 0.2.3
+
+1. The first open of an existing ledger writes `head.anchor` beside the
+   ledger key, from the head that verifies now. A rollback done before that
+   open is not detected.
+2. Copy `head.anchor` whenever you copy the ledger. Restoring an older ledger
+   directory and leaving the current anchor in place does not open. 0.3
+   backup has to restore the anchor from the same moment as the ledger.
+3. Do not delete `head.anchor` to silence `ledger_rolled_back`. That accepts
+   the ledger as it stands.
+4. `two-key recover --key KEY --ledger DIR` replaces the hand truncation in
+   HOWTO for an uncheckpointed tail. It will not repair a rollback.
 
 ### Docs
 
-- HOWTO "Authorize from the command line", the crash section, and a short
-  note on ledger growth. llms.txt. No README change: its description of
-  omitted claims was already the behavior the CLI now has.
+- README "Known limits" now states what the anchor does and does not catch.
+  HOWTO crash section, witness table, revoke, and the `agent_session`
+  paragraph. ROADMAP 0.11. THREAT_MODEL, SECURITY, SCOPE, FIT, llms.txt,
+  AGENTS.md.
+
+### Reviews
+
+- Operator requested these ledger changes in this session (the AGENTS.md
+  security-review gate for ledger changes). The anchor and `recover` were
+  checked against the tests in `tests/test_recover_and_anchor.py`: a clean
+  ledger is unchanged, a tail is dropped, a torn last line is a tail, damage
+  inside the signed prefix is not truncated, a rollback is refused, a wipe
+  does not open as a new ledger, and deleting the anchor adopts the current
+  head.
 

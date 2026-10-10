@@ -5,12 +5,13 @@ and Path B (a judge quorum) both allow. Prototype. Apache-2.0.
 
 Package: two-key-concept
 Import: two_key
-Package version: 0.2.3. Tag v0.2.3 is on main and working.
+Package version: 0.2.4 on working, not tagged. Tag v0.2.3 is on main.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-Not on PyPI. Install from git ref v0.2.3 (two-key-concept[yaml] for YAML configs).
+Not on PyPI. Install the tagged release from git ref v0.2.3 (two-key-concept[yaml] for YAML configs).
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
 "Upgrading from 0.2.2" (then "Upgrading from 0.2.1" and "Upgrading from 0.1.12" for older).
+0.2.4 writes head.anchor on first open and refuses a rolled-back ledger directory: "Upgrading from 0.2.3".
 
 Does: signed constitution, Path A bytecode, Path B judges (xAI/Grok, OpenAI,
 Anthropic, Gemini, Ollama), monitored agents, encrypted ledger, single-use token.
@@ -18,7 +19,7 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(459 tests, no network).
+(476 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or
@@ -50,7 +51,13 @@ in the ledger (first entry witness_pinned; a ledger from 0.2.2 or earlier pins i
 first open) and optionally outside it (Ledger(witness_public_key=...), --witness-public-key).
 Another witness key is refused (witness_key_changed). It changes only by rotate_witness
 (witness_rotated, signed by the principal and the old and new witness keys). two-key audit
-prints both pins. Neither pin detects a rollback or wipe of the ledger directory.
+prints both pins. A head anchor beside the ledger key (head.anchor, or --head-anchor) refuses a
+rollback or wipe of the ledger directory alone. Deleting the anchor accepts the ledger as it stands.
+It is not an external anchor. two-key recover drops an uncheckpointed tail and does not run on open.
+Creating a ledger at a new path warns on stderr. A non-empty agent_session satisfies the cloud-judge
+presence check, including a placeholder; that does not fail closed. The check fails closed only when
+the session is missing or equals a judge credential. revoke ends earlier tokens only; an optional
+reputation halt is roadmap 0.11 and is not built.
 The token TTL default is 120 seconds, at most 300. It is signed by the capability key, not
 the principal key. The gateway verifies only. It binds the tool, the argument
 hash, the ledger root and size, the constitution hashes, spec_hash, and the
