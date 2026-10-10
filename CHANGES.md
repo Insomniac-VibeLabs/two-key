@@ -1044,3 +1044,54 @@ release: #47, #48, #51, #52, #54, #56, #57, and #60 items 1 and 5. Read
   created at a wrong path, a weak `agent_session` check), and #62 (a
   rollback or wipe of the ledger directory, which neither witness pin
   detects).
+
+## Unreleased (on `working`, not tagged; package version stays 0.2.3)
+
+Not a release. `v0.2.3` stays on `4a4352e`. These notes are only the changes
+after that tag.
+
+### Fixed
+
+- **#53.** `two-key authorize` no longer puts `amount_usd` (0.0),
+  `irreversible` (true), or `data_class` (`classified`) into the claim when
+  the operator did not pass the flag. An omitted amount or counterparty is
+  read from the argument bytes. An omitted `irreversible` follows the tool
+  spec. An omitted `data_class` is still `classified`, then the tool floor.
+  `--amount-usd`, `--counterparty`, `--data-class`, and `--irreversible` /
+  `--no-irreversible` are claims, and a claim that disagrees is still a deny.
+  HOWTO and llms.txt described the old defaults as the same as a missing
+  field in `normalize_action`; that sentence was wrong for a tool with a spec.
+- **#50, the per-call re-read.** An append checks the entries file's size
+  instead of reading and counting every line. The Merkle root is extended one
+  leaf at a time and matches the previous full recomputation, including a
+  root of a prefix. Opening a ledger still reads every entry. No rotation.
+- **#49, the head write and the torn-line message.** The head is fsynced
+  before it replaces the previous head, and the ledger directory is fsynced
+  after that. A kill between an append and the checkpoint still leaves a
+  ledger that will not open. A last record that does not decrypt now says so
+  and points at HOWTO, and says it can be a crash or tampering. A record in
+  the middle of the file still says `wrong key or tampered ciphertext`.
+  There is still no recovery command.
+
+### Not changed, waiting on a decision
+
+- **#46.** `revoke` still ends only tokens issued before the call. A
+  persistent halt was not added.
+- **#60 item 2.** `Ledger()` still creates a ledger at a new path. `audit`
+  and `rotate-witness` still refuse a path with no ledger.
+- **#60 item 3.** Any non-empty `agent_session` still satisfies the presence
+  check. It is still compared with judge credentials, not required to equal
+  the declared agent credential. Requiring that would contradict the README:
+  the session is the credential the agent is actually using, which may not be
+  the one `monitored_agent` names.
+- **#62.** A rollback or wipe of the ledger directory is still not detected.
+  README "Known limits" still says so. No monotonic record was added.
+- **#49 recovery command.** Manual truncation in HOWTO is still the recovery.
+  Nothing truncates on open.
+
+### Docs
+
+- HOWTO "Authorize from the command line", the crash section, and a short
+  note on ledger growth. llms.txt. No README change: its description of
+  omitted claims was already the behavior the CLI now has.
+

@@ -7,7 +7,9 @@ outside the ledger directory (`<ledger>.capability/capability.pem`). This
 module does not load it. The gateway must not either. A stolen principal
 key can neither decrypt the log nor sign a new head, and it does not mint
 tokens. Appends and checkpoints take `<ledger>.lock` next to the
-ledger directory. A write is refused if another writer changed the file.
+ledger directory. A write is refused if another writer changed the entries file's
+size since this ledger read or wrote it. The Merkle root is extended as
+entries are appended, not recomputed from the first leaf.
 Redemption locks live in `<ledger>.redeem-locks`, also outside the directory.
 
 The witness public key is pinned twice (#58):
@@ -136,6 +138,40 @@ def merkle_root(leaves: list[bytes]) -> bytes:
     return mth(leaves)
 
 
+def _fold_ranges(ranges: list[tuple[int, bytes]]) -> bytes:
+    """RFC 6962 root of complete subtrees, left to right. Empty is SHA-256(b"empty")."""
+    if not ranges:
+        return hashlib.sha256(b"empty").digest()
+    acc = ranges[-1][1]
+    for _, node in reversed(ranges[:-1]):
+        acc = hashlib.sha256(b"\x01" + node + acc).digest()
+    return acc
+
+
+def _merkle_push(ranges: list[tuple[int, bytes]], leaf: bytes) -> bytes:
+    """Add one leaf to an RFC 6962 tree and return the new root.
+
+    ``ranges`` is the compact range, left to right: complete subtrees whose sizes
+    are the bits of the leaf count. Equal sizes on the right are joined. The root
+    matches ``merkle_root`` of the same leaves.
+    """
+    ranges.append((1, hashlib.sha256(b"\x00" + leaf).digest()))
+    while len(ranges) >= 2 and ranges[-1][0] == ranges[-2][0]:
+        size, right = ranges.pop()
+        _, left = ranges.pop()
+        ranges.append((size * 2, hashlib.sha256(b"\x01" + left + right).digest()))
+    return _fold_ranges(ranges)
+
+
+def merkle_root_incremental(leaves: list[bytes]) -> bytes:
+    """``merkle_root`` built one leaf at a time. Tests check the two stay equal."""
+    ranges: list[tuple[int, bytes]] = []
+    root = hashlib.sha256(b"empty").digest()
+    for leaf in leaves:
+        root = _merkle_push(ranges, leaf)
+    return root
+
+
 def _kek(ledger_key: bytes) -> bytes:
     if len(ledger_key) != 32:
         raise LedgerError("ledger key must be 32 bytes")
@@ -247,6 +283,9 @@ class Ledger:
         self._configured_witness = None if witness_public_key is None else public_raw(witness_public_key)
         self._witness_pin: tuple[str, int, str] | None = None    # (raw key, seq, source) pinned in the ledger
         self._head_witness: str | None = None                   # the witness key in the verified head
+        self._merkle_ranges: list[tuple[int, bytes]] = []
+        self._merkle_roots: list[str] = []
+        self._entries_size: int | None = None                   # bytes of entries.jsonl last read or written
         self._ledger_key = self._open_ledger_key()
         self._data_key = self._open_data_key()
         self._witness = self._open_witness()
@@ -275,10 +314,15 @@ class Ledger:
         os.chmod(directory, 0o700)
         return directory / hashlib.sha256(jti.encode("utf-8")).hexdigest()
 
-    def _disk_count(self) -> int:
-        if not self.entries_path.exists():
+    def _entries_file_size(self) -> int:
+        try:
+            return self.entries_path.stat().st_size
+        except FileNotFoundError:
             return 0
-        return sum(1 for line in self.entries_path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+    def _note_entries_size(self) -> None:
+        """Remember the entries file size. The next write compares it, instead of re-reading the file (#50)."""
+        self._entries_size = self._entries_file_size()
 
     def _exclusive(self, *, check_stale: bool = True):
         ledger = self
@@ -292,7 +336,7 @@ class Ledger:
                     if fcntl is not None:
                         self.fd = os.open(ledger.lock_path(), os.O_CREAT | os.O_RDWR, 0o600)
                         fcntl.flock(self.fd, fcntl.LOCK_EX)
-                    if check_stale and ledger._disk_count() != len(ledger.entries):
+                    if check_stale and ledger._entries_size is not None and ledger._entries_file_size() != ledger._entries_size:
                         raise LedgerError("ledger file changed by another writer; reopen the ledger")
                     return self
                 except BaseException:
@@ -424,18 +468,34 @@ class Ledger:
     def _load(self) -> None:
         with self._exclusive(check_stale=False):
             lines = self.entries_path.read_text(encoding="utf-8").splitlines() if self.entries_path.exists() else []
+            last = None
+            for i, line in enumerate(lines):
+                if line.strip():
+                    last = i
             prev = "0" * 64
-            for line in lines:
+            for i, line in enumerate(lines):
                 if not line.strip():
                     continue
-                raw = json.loads(_open(self._data_key, line))
+                try:
+                    opened = _open(self._data_key, line)
+                except LedgerError:
+                    if i == last:
+                        raise LedgerError(
+                            "ledger record rejected (the last record does not decrypt). "
+                            "A torn write from a crash looks like this; see HOWTO "
+                            "\"If the ledger will not open after a crash\". It can also be tampering."
+                        ) from None
+                    raise
+                raw = json.loads(opened)
                 entry = Entry(raw["seq"], raw["prev"], raw["kind"], raw["body"], raw["entry_hash"])
                 expect = self._hash(entry.seq, entry.prev, entry.kind, entry.body)
                 if entry.entry_hash != expect or entry.prev != prev or entry.seq != len(self.entries):
                     raise LedgerError("ledger chain failed verification")
                 self._track(entry, verify=True)
                 self.entries.append(entry)
+                self._merkle_add(bytes.fromhex(entry.entry_hash))
                 prev = entry.entry_hash
+            self._note_entries_size()
             self._verify_head()
             # Read again under the lock: a rotation in another process may have finished since __init__ read it.
             self._witness = self._load_witness()
@@ -583,6 +643,8 @@ class Ledger:
             fh.flush()
             os.fsync(fh.fileno())
         self.entries.append(entry)
+        self._merkle_add(bytes.fromhex(entry.entry_hash))
+        self._note_entries_size()
         self._track(entry, verify=False)
         return entry
 
@@ -607,11 +669,40 @@ class Ledger:
         stored = dict(head)
         stored["signature"] = sign(self.private_key, signed)
         stored["witness_signature"] = sign(witness, signed)
-        tmp = self.head_path.with_suffix(".json.tmp")
-        tmp.write_text(_seal(self._data_key, json.dumps(stored)) + "\n", encoding="utf-8")
-        os.replace(tmp, self.head_path)
+        self._store_head(_seal(self._data_key, json.dumps(stored)) + "\n")
         self._head_witness = head["witness_public_key"]
         return stored
+
+    def _store_head(self, text: str) -> None:
+        """Write the head, fsync the file, replace it, then fsync the directory (#49).
+
+        ``write_text`` does not fsync, so a kill after the temporary file was created and
+        before the data reached disk could leave a stale ``head.json.tmp`` or a head that
+        does not match what was signed. The name stays ``head.json.tmp``, which HOWTO tells
+        an operator to delete after a crash.
+        """
+        tmp = self.head_path.with_suffix(".json.tmp")
+        data = text.encode("utf-8")
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+        try:
+            view = memoryview(data)
+            while view:
+                wrote = os.write(fd, view)
+                if wrote <= 0:
+                    raise LedgerError("could not write the signed head")
+                view = view[wrote:]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(tmp, self.head_path)
+        dirfd = os.open(self.path, os.O_RDONLY)
+        try:
+            os.fsync(dirfd)
+        finally:
+            os.close(dirfd)
+
+    def _merkle_add(self, leaf: bytes) -> None:
+        self._merkle_roots.append(_merkle_push(self._merkle_ranges, leaf).hex())
 
     def rotate_witness(self, new_witness: Ed25519PrivateKey | None = None, *, reason: str = "") -> dict:
         """Replace the witness key with ``new_witness`` (a new key when omitted), as a ledgered change.
@@ -710,9 +801,12 @@ class Ledger:
         self._head_witness = body["witness_public_key"]
 
     def merkle_root(self, size: int | None = None) -> str:
-        entries = self.entries if size is None else self.entries[:size]
-        leaves = [bytes.fromhex(e.entry_hash) for e in entries]
-        return merkle_root(leaves).hex()
+        n = len(self.entries) if size is None else size
+        if n == 0:
+            return hashlib.sha256(b"empty").hexdigest()
+        if not isinstance(n, int) or isinstance(n, bool) or n < 0 or n > len(self._merkle_roots):
+            raise LedgerError("merkle size is outside this ledger")
+        return self._merkle_roots[n - 1]
 
     def size(self) -> int:
         return len(self.entries)

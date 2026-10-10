@@ -211,8 +211,15 @@ def _authorize(args) -> int:
     tk = TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
                      private_key=key, quorum=policy, monitored_agent=agent,
                      ttl_seconds=args.ttl_seconds)
-    action = {"tool": args.tool, "amount_usd": args.amount_usd, "data_class": args.data_class,
-              "irreversible": args.irreversible}
+    action = {"tool": args.tool}
+    # Omitted claims are not lies: derive fills amount and counterparty from the
+    # bytes, irreversible from the spec, and a missing data_class from normalize_action (#53).
+    if args.amount_usd is not None:
+        action["amount_usd"] = args.amount_usd
+    if args.data_class is not None:
+        action["data_class"] = args.data_class
+    if args.irreversible is not None:
+        action["irreversible"] = args.irreversible
     if args.counterparty:
         action["counterparty"] = args.counterparty
     decision = tk.authorize(action, arguments, args.proposal, agent_session=agent_session, origin="cli")
@@ -253,12 +260,14 @@ def main(argv: list[str] | None = None) -> int:
     auth.add_argument("--tool", required=True)
     auth.add_argument("--args", default="{}")
     auth.add_argument("--proposal", required=True)
-    auth.add_argument("--amount-usd", type=float, default=0.0)
-    auth.add_argument("--data-class", default="classified",
-                      help="defaults to classified, matching normalize_action")
-    auth.add_argument("--irreversible", action=argparse.BooleanOptionalAction, default=True,
-                      help="defaults to true; pass --no-irreversible for a reversible call")
-    auth.add_argument("--counterparty", default="")
+    auth.add_argument("--amount-usd", type=float, default=None,
+                      help="claim this USD amount; omit it and the amount is read from the argument bytes")
+    auth.add_argument("--data-class", default=None,
+                      help="claim this data class; omit it and a missing class is classified, then the tool floor")
+    auth.add_argument("--irreversible", action=argparse.BooleanOptionalAction, default=None,
+                      help="claim irreversible, or --no-irreversible for reversible; omit it and the tool spec decides")
+    auth.add_argument("--counterparty", default=None,
+                      help="claim this counterparty; omit it and the party is read from the argument bytes")
     auth.add_argument("--agent-session-env", default=None, metavar="NAME",
                       help="name of the environment variable holding the agent session secret")
     auth.add_argument("--agent-session", default=None, help=argparse.SUPPRESS)

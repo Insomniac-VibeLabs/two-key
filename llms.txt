@@ -63,6 +63,9 @@ does not read the contents. Omit shape and the value's children are copied
 unread. After a derive deny, tool_args are withheld from
 judges unless tool_args_on_derive_deny is set. Path B still runs.
 Ledger deny/error type labels use type_tag (≤32 chars); derive_failed and EncodingError paths are capped. Same-jti deny waiters time out (default 30s; deny_inflight_wait_seconds must be finite positive). Free text is not classified. There is no per-value information-flow tracking.
-two-key authorize uses the same fail-closed defaults as normalize_action:
---data-class classified, and --irreversible true. --no-irreversible turns that off.
-Those claims must match the tool spec.
+two-key authorize omits claim fields the operator did not pass. An omitted
+amount or counterparty is read from the argument bytes. An omitted
+irreversible follows the tool spec. An omitted data_class is classified,
+then the tool floor, which never lowers it. --amount-usd, --counterparty,
+--data-class, and --irreversible / --no-irreversible set a claim. A claim
+that disagrees with the bytes or the spec is a deny.

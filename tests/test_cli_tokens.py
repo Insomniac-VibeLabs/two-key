@@ -140,6 +140,56 @@ class CliTokens(unittest.TestCase):
         load_private_key_file(path)
 
 
+class CliOmittedClaims(unittest.TestCase):
+    """#53: a flag the operator did not pass is not a claim."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.key = generate_private_key()
+        save_private_key(self.dir / "principal.pem", self.key)
+        save_envelope(self.dir / "c.json", sign_constitution(PROSE, RULES, self.key, SPECS))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _run(self, argv):
+        judges = [FixedJudge("a", "yes", provider="p0"), FixedJudge("b", "yes", provider="p1")]
+        out, err = io.StringIO(), io.StringIO()
+        with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=2))), \
+             patch("two_key.identity.load_monitored_agent_file", return_value=TEST_AGENT), \
+             patch.object(TwoKey, "load", classmethod(_load_with_doubles)), \
+             redirect_stdout(out), redirect_stderr(err):
+            code = main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_omitted_irreversible_follows_the_spec(self):
+        code, out, err = self._run([
+            "authorize", "--key", str(self.dir / "principal.pem"), "--ledger", str(self.dir / "ledger"),
+            "--constitution", str(self.dir / "c.json"), "--judges", str(self.dir / "unused.yaml"),
+            "--tool", "email_draft", "--args", '{"to":"ada"}', "--proposal", "draft",
+            "--data-class", "public"])
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(json.loads(out)["reason"], "both_paths_allow")
+
+    def test_omitted_amount_is_read_from_the_bytes(self):
+        rules = [{"id": "tools", "allow_only_tools": ["pay_bill"]}]
+        specs = {"pay_bill": {"irreversible": True, "data_class_floor": "financial",
+                              "amount": {"json_path": "amount", "unit": "usd", "currency_path": "currency"},
+                              "counterparties": [{"json_path": "to", "allow": ["power-co.example"]}]}}
+        save_envelope(self.dir / "pay.json", sign_constitution(PROSE, rules, self.key, specs))
+        base = ["authorize", "--key", str(self.dir / "principal.pem"), "--ledger", str(self.dir / "pay"),
+                "--constitution", str(self.dir / "pay.json"), "--judges", str(self.dir / "unused.yaml"),
+                "--tool", "pay_bill", "--args",
+                '{"amount": 12.5, "currency": "usd", "to": "power-co.example"}',
+                "--proposal", "pay", "--data-class", "financial"]
+        code, out, err = self._run(base)
+        self.assertEqual(code, 0, out + err)
+        code, out, err = self._run([*base, "--amount-usd", "1"])
+        self.assertEqual(code, 2, out + err)
+        self.assertEqual(json.loads(out)["reason"], "amount_mismatch")
+
+
 class LibraryRecord(unittest.TestCase):
     def test_to_record_has_no_bearer_token(self):
         from two_key.core import Decision

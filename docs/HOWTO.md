@@ -425,10 +425,23 @@ refused. `--ttl-seconds` sets the token lifetime, 1 to 300 seconds
 (default 120). `--args` is parsed strictly before anything else is loaded.
 The decision entry records `origin: cli`.
 
-`--data-class` defaults to `classified`, and `--irreversible` defaults to
-true. Those are the same fail-closed defaults as a missing field in
-`normalize_action`. The command above sets public and reversible so the
-example rules allow a draft. `--no-irreversible` is the off switch.
+A flag you do not pass is left out of the claim. That is not the same as
+`normalize_action` filling a missing field, and it is what lets the bytes
+and the tool spec decide:
+
+- Omit `--amount-usd` and the amount is read from the argument bytes. Pass
+  it only to claim a number; a different number is `amount_mismatch`.
+- Omit `--counterparty` and the party is read from the argument bytes. Pass
+  it only to claim one; a different party is `counterparty_mismatch`.
+- Omit `--irreversible` and the tool spec decides. `--irreversible` claims
+  true and `--no-irreversible` claims false. A claim that disagrees with the
+  spec is `irreversible_mismatch`. The example above passes
+  `--no-irreversible` because it is showing the flag; `email_draft`'s spec
+  is already reversible, so the flag can be left off.
+- Omit `--data-class` and a missing class is `classified`, then the tool's
+  `data_class_floor`, which never lowers it. Pass `--data-class public`
+  when that class is allowed after the floor. The example above needs it:
+  these rules deny `classified`.
 
 Exit status is 0 on allow and 2 on deny. The ledger records and the head
 are ciphertext. The append lock is `<ledger>.lock` next to the ledger
@@ -584,9 +597,13 @@ so a gateway process today holds the keys that can sign a ledger head.
 
 A process killed between a ledger append and the next checkpoint (the OOM
 killer, SIGKILL, power loss) leaves entries the signed head does not cover.
-The next open refuses with `signed head does not match the chain`; a torn last
-line shows as `ledger record rejected (wrong key or tampered ciphertext)`.
-Nothing is lost or forged. Until a recovery command exists
+The head file is fsynced before it replaces the previous head, which narrows
+that window; it does not close it. The next open refuses with `signed head does not match the chain`. A torn
+last line, and only a last line, refuses with `the last record does not
+decrypt`. That can be a crash or tampering; the message names both. A record
+that does not decrypt in the middle of the file is still `wrong key or
+tampered ciphertext`. Nothing is lost or forged. Until a recovery command
+exists
 ([#49](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/49)),
 recover by hand:
 
@@ -611,6 +628,13 @@ checkpointed, so a removed `redemption_started` means the tool never ran,
 and the token can be redeemed again within its lifetime. A removed
 `redemption` or `redemption_aborted` leaves the signed `redemption_started`
 in place, so a retry is still refused (`already_attempted`).
+
+Appending checks the entries file's size instead of reading it again, and
+the Merkle root is extended one leaf at a time, so a long ledger does not
+re-read or re-hash its whole history on every call. Opening one still reads
+every entry. There is no rotation. A few thousand entries is small next to
+judge latency; tens of thousands make opening the slow part
+([#50](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/50)).
 
 ## Pin the witness key
 
