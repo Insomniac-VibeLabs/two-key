@@ -5,9 +5,9 @@ and Path B (a judge quorum) both allow. Prototype. Apache-2.0.
 
 Package: two-key-concept
 Import: two_key
-Package version: 0.2.4 on working, not tagged. Tag v0.2.3 is on main.
+Package version: 0.2.4. Tag v0.2.4 is on main. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-Not on PyPI. Install the tagged release from git ref v0.2.3 (two-key-concept[yaml] for YAML configs).
+Not on PyPI. Install the tagged release from git ref v0.2.4 (two-key-concept[yaml] for YAML configs).
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
 "Upgrading from 0.2.2" (then "Upgrading from 0.2.1" and "Upgrading from 0.1.12" for older).

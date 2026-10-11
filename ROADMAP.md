@@ -109,9 +109,9 @@ HMACs whatever it is given, goes in the same release.
 Item 6 above is the 0.2.3 plan. 0.2.4 adds a head anchor, described next.
 The witness pins themselves still do not detect a rollback.
 
-### 0.2.4 (this branch)
+### 0.2.4 (shipped)
 
-On `working`, not tagged. CHANGES "0.2.4" is the record.
+Tagged `v0.2.4` on `main`. CHANGES "0.2.4" is the record.
 
 - `two-key recover` drops an uncheckpointed tail and records the ciphertext's
   digest. It does not run on open and it does not move a signed head

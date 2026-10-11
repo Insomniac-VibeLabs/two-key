@@ -1045,11 +1045,13 @@ release: #47, #48, #51, #52, #54, #56, #57, and #60 items 1 and 5. Read
   rollback or wipe of the ledger directory, which neither witness pin
   detects).
 
-## 0.2.4 — on `working`, not tagged
+## 0.2.4 — 2026-10-10
 
-Package version 0.2.4 (`pyproject.toml`, `two_key.__version__`). Tag `v0.2.3`
-stays on `4a4352e` on `main`. This branch is not tagged and is not on `main`.
-Not published to PyPI.
+Package version 0.2.4 (`pyproject.toml`, `two_key.__version__`). Tagged
+`v0.2.4` on `main`, the merge of `working` via
+[#65](https://github.com/Insomniac-VibeLabs/two-key-concept/pull/65)
+(`f541ab5`) plus the release notes in this commit. Tag `v0.2.3` stays on
+`4a4352e`. Not published to PyPI.
 
 ### Fixed
 
@@ -1105,7 +1107,7 @@ Not published to PyPI.
 
 - **#46.** `revoke` still ends only tokens issued before the call. It is not
   a halt. An optional reputation halt, off unless configured, is ROADMAP 0.11.
-  It is not built. The issue is closed as documented behavior.
+  It is not built. The issue stays open.
 
 ### Upgrading from 0.2.3
 

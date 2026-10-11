@@ -1,7 +1,7 @@
 # Two-Key concept
 
 [![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/releases)
-[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.3/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
+[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.4/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
 
 Two independent keys must turn before an AI agent can act.
 
@@ -358,7 +358,7 @@ flowchart LR
 | Target | What |
 | --- | --- |
 | 0.2.3 | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
-| 0.2.4 (this branch, not tagged) | Head anchor against a ledger-directory rollback or wipe (#62); `two-key recover` for an uncheckpointed tail (#49) |
+| 0.2.4 | Head anchor against a ledger-directory rollback or wipe (#62); `two-key recover` for an uncheckpointed tail (#49) |
 | 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys. A restore includes `head.anchor` from the same moment |
 | 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
 | 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
@@ -371,8 +371,8 @@ flowchart LR
 | 0.11, any time before 1.0 | Optional reputation halt. Off unless configured. Not a change to `revoke` |
 | After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
 
-Install from git. It is not published to PyPI. Package version 0.2.4 on
-`working` (not tagged). Tag `v0.2.3` is on `main`. Tag `v0.2.0` stays on
+Install from git. It is not published to PyPI. Package version 0.2.4, tag
+`v0.2.4` on `main`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
 commit `2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
 some judges 0.2.2 accepted (one holding the agent's credential without
 sending it, or in the other form), and pins each ledger's witness key on
@@ -387,11 +387,10 @@ that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.3"
+pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.4"
 ```
 
-That ref is the tagged 0.2.3 release. This branch (`working`) is package
-0.2.4 and is not tagged.
+That ref is the tagged 0.2.4 release. `main` and `working` are that same release.
 
 ## Run the offline demo
 
