@@ -1060,11 +1060,13 @@ Not published to PyPI.
   spec. An omitted `data_class` is still `classified`, then the tool floor.
   `--amount-usd`, `--counterparty`, `--data-class`, and `--irreversible` /
   `--no-irreversible` are claims, and a claim that disagrees is still a deny.
-- **#50, the per-call re-read.** An append checks the entries file's size
-  instead of reading and counting every line. The Merkle root is extended one
-  leaf at a time and matches the previous full recomputation, including a
-  root of a prefix. Opening a ledger still reads every entry. No rotation.
-  The issue stays open for that.
+- **#50.** An append checks the entries file's size instead of reading every
+  line. The Merkle root is extended one leaf at a time and matches the
+  previous full recomputation, including a root of a prefix. A redemption
+  looks up `constitution_loaded` and `revocation` through an index built as
+  the ledger is read, instead of copying the entry list. Opening a ledger
+  still reads every entry: that read is the verification, and it is the
+  cost ceiling. There is no rotation and no second copy of the plaintext.
 - **#49.** The head is fsynced before it replaces the previous head. A last
   record that does not decrypt says it can be a crash or tampering; a record
   in the middle of the file still says `wrong key or tampered ciphertext`.

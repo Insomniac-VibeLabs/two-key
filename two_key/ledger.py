@@ -310,6 +310,7 @@ class Ledger:
         self._head_witness: str | None = None                   # the witness key in the verified head
         self._merkle_ranges: list[tuple[int, bytes]] = []
         self._merkle_roots: list[str] = []
+        self._kind_seqs: dict[str, list[int]] = {}   # kind -> entry seqs, in order (#50)
         self._entries_size: int | None = None                   # bytes of entries.jsonl last read or written
         anchor = self._read_anchor()
         if anchor is not None and anchor["size"] > 0 and self._ledger_files_incomplete():
@@ -586,6 +587,8 @@ class Ledger:
             if verify:
                 self._verify_rotation(entry)
             self._witness_pin = (entry.body["new_witness_public_key"], entry.seq, "rotated")
+        seqs = self._kind_seqs.setdefault(entry.kind, [])
+        seqs.append(entry.seq)
 
     def _verify_rotation(self, entry: Entry) -> None:
         body = entry.body
@@ -1136,8 +1139,44 @@ class Ledger:
     def redemption_started(self, jti: str) -> bool:
         return jti in self._started and jti not in self._redeemed
 
+    def last_before(self, size: int, kind: str) -> Entry | None:
+        """The last entry of ``kind`` with ``seq`` below ``size``, or None.
+
+        ``size`` is a ledger length, the same number a token carries. This does not copy the entry list.
+        """
+        if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
+            return None
+        seqs = self._kind_seqs.get(kind)
+        if not seqs:
+            return None
+        lo, hi = 0, len(seqs)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if seqs[mid] < size:
+                lo = mid + 1
+            else:
+                hi = mid
+        if lo == 0:
+            return None
+        return self.entries[seqs[lo - 1]]
+
     def kinds_after(self, size: int, kinds: set[str]) -> list[Entry]:
-        return [e for e in self.entries[size:] if e.kind in kinds]
+        """Entries at or after ``size`` whose kind is in ``kinds``, in ledger order."""
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            return [e for e in self.entries[size:] if e.kind in kinds]
+        found = []
+        for kind in kinds:
+            seqs = self._kind_seqs.get(kind, ())
+            lo, hi = 0, len(seqs)
+            while lo < hi:
+                mid = (lo + hi) // 2
+                if seqs[mid] < size:
+                    lo = mid + 1
+                else:
+                    hi = mid
+            found.extend(self.entries[seq] for seq in seqs[lo:])
+        found.sort(key=lambda e: e.seq)
+        return found
 
     def verify(self) -> dict:
         """Check the chain and the signed head, and return ``witness_report()``. Raises ``LedgerError``."""

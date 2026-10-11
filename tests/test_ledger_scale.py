@@ -31,6 +31,39 @@ class MerkleIncremental(unittest.TestCase):
             self.assertEqual(reopened.merkle_root(3), led.merkle_root(3))
 
 
+class KindIndex(unittest.TestCase):
+    def test_lookups_match_a_full_walk_and_survive_reopen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key = generate_private_key()
+            path = Path(tmp, "ledger")
+            led = Ledger(path, key)
+            led.append("constitution_loaded", {"capability_key_fingerprint": "sha256:first"})
+            for i in range(30):
+                led.append("note", {"n": i})
+            led.append("constitution_loaded", {"capability_key_fingerprint": "sha256:second"})
+            for i in range(10):
+                led.append("note", {"n": 100 + i})
+            led.append("revocation", {"reason": "stop"})
+            led.checkpoint()
+            second = next(e.seq for e in led.entries if e.body.get("capability_key_fingerprint") == "sha256:second")
+            self.assertEqual(led.last_before(second, "constitution_loaded").body["capability_key_fingerprint"],
+                             "sha256:first")
+            self.assertEqual(led.last_before(second + 1, "constitution_loaded").body["capability_key_fingerprint"],
+                             "sha256:second")
+            self.assertIsNone(led.last_before(0, "constitution_loaded"))
+            naive = [e for e in led.entries[second:] if e.kind in {"constitution_loaded", "revocation", "note"}]
+            self.assertEqual([e.seq for e in led.kinds_after(second, {"constitution_loaded", "revocation", "note"})],
+                             [e.seq for e in naive])
+            self.assertEqual(led.kinds_after(len(led.entries), {"revocation"}), [])
+            reopened = Ledger(path, key)
+            self.assertEqual(
+                reopened.last_before(second + 1, "constitution_loaded").body["capability_key_fingerprint"],
+                "sha256:second")
+            self.assertEqual(
+                [e.seq for e in reopened.kinds_after(second, {"revocation"})],
+                [e.seq for e in led.kinds_after(second, {"revocation"})])
+
+
 class TornLastRecord(unittest.TestCase):
     def test_last_line_names_a_crash_and_a_middle_line_names_tampering(self):
         with tempfile.TemporaryDirectory() as tmp:

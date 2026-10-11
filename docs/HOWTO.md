@@ -656,10 +656,13 @@ in place, so a retry is still refused (`already_attempted`).
 
 Appending checks the entries file's size instead of reading it again, and
 the Merkle root is extended one leaf at a time, so a long ledger does not
-re-read or re-hash its whole history on every call. Opening one still reads
-every entry. There is no rotation. A few thousand entries is small next to
-judge latency; tens of thousands make opening the slow part
-([#50](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/50)).
+re-read or re-hash its whole history on every call. A redemption does not
+copy or walk the entry list either: it uses the kind index built while the
+ledger was read. Opening a ledger still reads every entry, because that
+read is what checks the chain. There is no rotation, and there is no second
+copy of the plaintext. A few thousand entries is small next to judge
+latency; tens of thousands make opening the slow part. That open cost is
+the ceiling.
 
 The head anchor, `<ledger>.ledger-key/head.anchor` unless you passed
 `--head-anchor`, records the newest signed head. Opening a ledger whose
