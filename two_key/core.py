@@ -31,7 +31,7 @@ from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fi
 from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
 from .identity import (AgentDeclaration, IdentityError, PASSWORD_FINGERPRINT_ALG, SeparationReport, check_separation,
-                       configured_agent_identity, fingerprint_key_id, judge_identity)
+                       configured_agent_identity, configured_agent_secrets, fingerprint_key_id, judge_identity)
 from .derive import (MAX_ACTION_BYTES, MAX_ARGS_BYTES, DeriveError, args_size, args_too_large, blocked_from_rules, canonical_too_large,
                      derive, disagreement, disallowed_party, dropped_keys, form_for, size_record)
 from .ledger import LedgerError
@@ -208,15 +208,19 @@ class TwoKey:
             raise TwoKeyConfigError(str(e)) from e
         try:
             agents = []
+            sources = []
             for d in decls:
                 if isinstance(d, AgentDeclaration) or isinstance(d, Mapping):
                     if not isinstance(d, AgentDeclaration):
                         d = AgentDeclaration.from_mapping(d)
+                    sources.append(d)
                     agents.append(d.resolve(allow_in_process=allow_in_process, fp_key=key))
                 elif all(hasattr(d, k) for k in ("agent_id", "model", "base_url", "credential")):
-                    agents.append(configured_agent_identity(d, key))  # a MonitoredAgent from agents.yaml
+                    sources.append(d)   # a MonitoredAgent; its credential is re-read at call time
+                    agents.append(configured_agent_identity(d, key))
                 else:
                     raise IdentityError("monitored_agent must be a mapping, an AgentDeclaration, or a MonitoredAgent")
+            self._agent_sources = sources
             judges = [judge_identity(j, key) for j in self.judges]
             return check_separation(agents, judges, self.quorum.allow_same_provider_judge,
                                     allow_same_model_distinct_tenant=self.quorum.allow_same_model_distinct_tenant)
@@ -364,8 +368,15 @@ class TwoKey:
         judge_args: Mapping | None = arguments
         if _derive_deny(deny_reason) and not self.quorum.tool_args_on_derive_deny:
             judge_args = None
+        try:
+            # Re-read the named agent credential. A placeholder session must not hide it.
+            # Unreadable: deny before any judge sees the call. The value is not in the reason.
+            configured = configured_agent_secrets(self._agent_sources)
+        except IdentityError:
+            return self._deny(origin, "agent_credential_unreadable", agent, path_a_rec, None)
         quorum = convene(self.judges, self.compiled.judge_text, normalized, proposal,
-                         self.quorum, binding, judge_args, agent_session)
+                         self.quorum, binding, judge_args, agent_session,
+                         configured_secrets=configured)
         path_b_rec = {"passed": quorum.passed, "reason": quorum.reason,
                       "yes": quorum.yes, "no": quorum.no, "abstain": quorum.abstain}
         allowed = bool(path_a.allowed and quorum.passed and deny_reason is None)

@@ -179,7 +179,11 @@ the judge; a ballot that names another judge abstains
 that is not on a loopback host makes the round deny when `agent_session`
 is missing. If that string equals the credential of any judge, local or
 cloud, wherever it connects, the ballot abstains with
-`cloud_judge_reused_agent_session` and the round denies. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
+`cloud_judge_reused_agent_session` and the round denies. The credential
+named for the monitored agent is compared the same way on every call, so a
+placeholder does not hide that key. The key is not sent to the judge and
+not written to the ledger. A session that is not that key is still yours
+to pass. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
 session at the model host.
 
 Without a local judge, the constitution prose, the action record, and any

@@ -1086,18 +1086,24 @@ Not published to PyPI.
 - **#60 item 2.** `Ledger()` still creates a ledger at a new path, and now
   warns on stderr when it does. `audit` and `rotate-witness` still refuse a
   path with no ledger.
+- **#60 item 3.** The credential named for the monitored agent is re-read on
+  every `authorize` and compared with each judge's credential, beside the
+  `agent_session` you pass. A placeholder still satisfies the presence
+  check (`cloud_judge_session_required` when you pass nothing and a judge
+  is not on loopback). It no longer hides the named key: a judge holding
+  that key denies the round before anyone is called
+  (`cloud_judge_reused_agent_session`). The named key is not an argument of
+  the judge, not put in the prompt, and not written to the ledger. If it
+  cannot be read, the round denies with `agent_credential_unreadable` and
+  the judges are not called. What this does not do: a secret you never
+  named is still only checked if you pass it, and a keyless agent
+  (`credential: none`) has nothing to add.
 
 ### Not a code change
 
 - **#46.** `revoke` still ends only tokens issued before the call. It is not
   a halt. An optional reputation halt, off unless configured, is ROADMAP 0.11.
   It is not built. The issue is closed as documented behavior.
-- **#60 item 3.** Any non-empty `agent_session` still satisfies the presence
-  check. That is not fail-closed: a placeholder lets the round proceed. The
-  check fails closed only when the session is missing, or when it equals a
-  judge's credential. It is not compared with the declared agent credential.
-  Requiring that would contradict the README: the session is the credential
-  the agent is actually using, which may not be the one `monitored_agent` names.
 
 ### Upgrading from 0.2.3
 
@@ -1116,8 +1122,8 @@ Not published to PyPI.
 
 - README "Known limits" now states what the anchor does and does not catch.
   HOWTO crash section, witness table, revoke, and the `agent_session`
-  paragraph. ROADMAP 0.11. THREAT_MODEL, SECURITY, SCOPE, FIT, llms.txt,
-  AGENTS.md.
+  paragraph (a placeholder does not hide the named agent key). ROADMAP 0.11.
+  THREAT_MODEL, SECURITY, SCOPE, FIT, llms.txt, AGENTS.md.
 
 ### Reviews
 

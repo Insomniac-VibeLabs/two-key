@@ -243,12 +243,17 @@ sends included) abstains with
 `cloud_judge_reused_agent_session`, wherever it connects, and the round
 denies. This is the start-up rule again, at call time, with the session the
 agent really uses: it catches a judge holding the agent's key even when
-`monitored_agent:` names the wrong key or address. Any other non-empty
-string satisfies the presence check, including a placeholder. That does not
-fail closed: the round proceeds, and a judge who does not hold that
-placeholder still votes. The check fails closed only when the session is
-missing, or when it equals a judge's credential. It is not compared with
-the credential declared in `monitored_agent`.
+`monitored_agent:` names the wrong key or address. The credential named for
+the monitored agent is read again on that call and compared the same way,
+whether or not the string you passed is that key. A placeholder still
+satisfies the presence check. It does not hide the named key: a judge
+holding that key denies the round before anyone is called
+(`cloud_judge_reused_agent_session`). The named key is not sent to the
+judge and not written to the ledger. A session that is not the named key
+is still yours to pass; Two-Key cannot see a secret you never named. A
+keyless agent (`credential: none`) has no named key to add. If the named
+key cannot be read, the round denies with `agent_credential_unreadable`
+and the judges are not called.
 
 The in-process placeholder agent `two_key.testing.TEST_AGENT` is accepted
 only with `allow_test_doubles=True` and only when every judge is a test
@@ -757,9 +762,9 @@ names the setting or declaration that controls it.
 - A credential configured on a judge or an `agents.yaml` agent is read at
   start-up even when its connector never sends it (`auth_header: none`, an
   Ollama agent), so a callback or keyring credential runs then, and one that
-  cannot be read refuses to start. At call time it is read only to compare
-  with `agent_session`. Remove `auth:` from a connector that does not send
-  it.
+  cannot be read refuses to start. At call time it is read to compare with
+  `agent_session` and with the credential named for the monitored agent.
+  Remove `auth:` from a connector that does not send it.
 - A secret that contains `:` is fingerprinted with PBKDF2-HMAC-SHA256 at
   start-up (600,000 iterations, about 0.15 s each). PBKDF2 is not
   memory-hard: against someone who holds the key directory it slows a
@@ -807,11 +812,13 @@ names the setting or declaration that controls it.
   `policy_digest`), and announced on stderr.
 - A judge and the agent on the same address and model with different
   credentials start, with a `same_model_same_address` warning.
-- The runtime agent is not matched against `monitored_agent:`. The
-  declaration is what is compared. At call time `agent_session` is compared
-  with each judge's credential, at any address; it is not compared with the
-  declared agent credential and is not ledgered. A placeholder satisfies the
-  presence check and the round proceeds.
+- The runtime agent is not matched against `monitored_agent:` as an
+  identity. The declaration is what is compared at start-up. At call time
+  `agent_session` is compared with each judge's credential, at any address,
+  and the named agent credential is read again and compared the same way.
+  Neither value is ledgered. A placeholder satisfies the presence check. It
+  does not hide the named key. It does hide a secret you never named, and a
+  keyless agent has no named key.
 - `agents.yaml` does not accept `tenant:` or `upstream:`. For an agent
   behind a proxy, declare it with the `monitored_agent:` block or an
   `AgentDeclaration`, which do.
@@ -846,7 +853,9 @@ names the setting or declaration that controls it.
   `ttl_out_of_range:`.
 - On Python 3.12, an agent reply nested past 62 levels parses and is
   `invalid_call`. On 3.10 and 3.11 it is `malformed_proposal`. Both deny.
-- `agent_session` is the frozen session. The agent's key is not added to it.
+- `agent_session` is the session you pass. The named agent key is compared
+  beside it. It is not added to that string, not sent to the judge, and not
+  written down.
 - The ledger's own records are read with the standard JSON parser, not the
   strict one, because they are signed and hash-chained.
 - `audit.check_decision_digests` on a ledger from before 0.2.0 reports the

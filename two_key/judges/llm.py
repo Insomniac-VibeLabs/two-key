@@ -30,6 +30,8 @@ import json
 import time
 import uuid
 import urllib.error
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Callable
 from urllib.parse import urlparse
 
@@ -44,6 +46,67 @@ from ..netloc import host_is_local, host_is_loopback, model_is_cloud, url_host
 from ..strict import StrictParseError, loads_json
 
 Transport = Callable[[str, dict, dict, float], dict]
+
+# Credentials named for the monitored agent, for this call only. Compared here.
+# Never a parameter of score_bound: a judge that accepts **kwargs would otherwise receive the key.
+_CONFIGURED_SECRETS: ContextVar[frozenset[str]] = ContextVar(
+    "two_key_configured_agent_secrets", default=frozenset())
+
+
+@contextmanager
+def comparing_configured_secrets(secrets: frozenset[str]):
+    """Union these into the judge-credential comparison for the current call. Reset on the way out."""
+    token = _CONFIGURED_SECRETS.set(frozenset(secrets))
+    try:
+        yield
+    finally:
+        _CONFIGURED_SECRETS.reset(token)
+
+
+def tokens_from_headers(judge, headers, *, include_unsent: bool) -> list[str]:
+    """Secrets this judge is sending, plus one it holds but does not send when ``include_unsent`` is set.
+
+    Raises ``CredentialError`` (and the errors ``get_token`` already raises) when that held secret cannot
+    be read. Does not log the values.
+    """
+    tokens: list[str] = []
+    if not isinstance(headers, dict):
+        return tokens
+    auth = headers.get("Authorization", "")
+    if isinstance(auth, str) and auth.lower().startswith("bearer "):
+        tokens.append(auth.split(" ", 1)[1].strip())
+    elif isinstance(auth, str) and auth.lower().startswith("basic "):
+        try:
+            tokens.append(base64.b64decode(auth.split(" ", 1)[1].strip(), validate=True).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            pass
+    for key in ("x-api-key", "x-goog-api-key"):
+        value = headers.get(key, "")
+        if isinstance(value, str):
+            tokens.append(value)
+    if (include_unsent and getattr(judge, "auth_header", None) == "none"
+            and getattr(getattr(judge, "credential", None), "kind", None) != "none"):
+        tokens.append(judge.credential.get_token() or "")
+    return tokens
+
+
+def presents_configured_secret(judge, secrets: frozenset[str]) -> bool:
+    """True when a secret this judge holds equals one named for the monitored agent.
+
+    A judge with no connector credential does not. An unreadable credential is not treated as a match:
+    that judge still abstains when it is asked to vote. This does not call the model.
+    """
+    if not secrets:
+        return False
+    headers_fn = getattr(judge, "_auth_headers", None)
+    if not callable(headers_fn):
+        return False
+    try:
+        headers = headers_fn()
+        tokens = tokens_from_headers(judge, headers, include_unsent=True)
+    except (CredentialError, NotImplementedError, ValueError):
+        return False
+    return any(isinstance(token, str) and token.strip() in secrets for token in tokens)
 
 SYSTEM_PROMPT = (
     "You are an independent reviewer (a 'Path B judge') for a personal AI agent. "
@@ -236,25 +299,15 @@ class LLMJudge(Judge):
         sessions.discard("")
         if self.is_cloud() and not sessions:
             return self.abstain("cloud_judge_session_required")
-        # Second layer behind the start-up check (identity.py), for every judge, local or cloud: a judge
-        # must not be the agent, that is, present the agent's own credential, to any address.
-        tokens = []
-        auth = headers.get("Authorization", "")
-        if auth.lower().startswith("bearer "):
-            tokens.append(auth.split(" ", 1)[1].strip())
-        elif auth.lower().startswith("basic "):
-            try:
-                tokens.append(base64.b64decode(auth.split(" ", 1)[1].strip(), validate=True).decode("utf-8"))
-            except (ValueError, UnicodeDecodeError):
-                pass
-        tokens.extend(headers.get(k, "") for k in ("x-api-key", "x-goog-api-key"))
-        if sessions and self.auth_header == "none" and getattr(self.credential, "kind", None) != "none":
-            # A key this judge holds but never sends is still the agent's if it equals the session.
-            try:
-                tokens.append(self.credential.get_token() or "")
-            except (CredentialError, NotImplementedError, ValueError) as e:
-                return self.abstain(cap_ledger_text(f"credential: {e}"))
-        if any(token and token.strip() in sessions for token in tokens):
+        # The configured agent credential is compared here too. It is not part of ``sessions``:
+        # a missing caller session still denies above, and the value is not sent to the model.
+        held = _CONFIGURED_SECRETS.get()
+        compare = sessions | held
+        try:
+            tokens = tokens_from_headers(self, headers, include_unsent=bool(compare))
+        except (CredentialError, NotImplementedError, ValueError) as e:
+            return self.abstain(cap_ledger_text(f"credential: {e}"))
+        if any(token and token.strip() in compare for token in tokens):
             return self.abstain("cloud_judge_reused_agent_session")
         if self.is_cloud():
             # Two-Key's own call id. It is not a session at the provider.

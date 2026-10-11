@@ -386,6 +386,100 @@ class RuntimeSessionCheckForEveryJudge(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+def _yes_transport(calls, bodies):
+    def transport(url, headers, body, timeout):
+        calls.append(url)
+        bodies.append(json.dumps(body))
+        return {"choices": [{"message": {"content":
+                '{"consistent": true, "confidence": 0.9, "rationale": "ok"}'}}]}
+    return transport
+
+
+class ConfiguredCredentialIsCompared(Env):
+    """A placeholder ``agent_session`` must not hide the key named in the config."""
+
+    def cloud(self, calls, bodies, key_var="SEP_JUDGE_KEY"):
+        return OpenAICompatibleJudge(
+            "c", "openai", "gpt-4o", "https://api.openai.com/v1", EnvApiKey(key_var),
+            transport=_yes_transport(calls, bodies))
+
+    def test_a_placeholder_does_not_hide_the_configured_key(self):
+        os.environ["SEP_JUDGE_KEY"] = "judge-other-key"
+        self.addCleanup(os.environ.pop, "SEP_JUDGE_KEY", None)
+        calls, bodies = [], []
+        tk = self.started([self.cloud(calls, bodies)])
+        os.environ["SEP_AGENT_KEY"] = "judge-other-key"   # rotated onto the judge's key after startup
+        decision = tk.authorize({"tool": "search"}, {}, "look", agent_session="x")
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "cloud_judge_reused_agent_session")
+        self.assertEqual(calls, [])
+        ledger_text = json.dumps([e.body for e in tk.ledger.entries])
+        self.assertNotIn("judge-other-key", ledger_text)
+        self.assertNotIn("agent-secret-key", ledger_text)
+
+    def test_a_placeholder_still_allows_a_judge_with_its_own_key(self):
+        os.environ["SEP_JUDGE_KEY"] = "judge-other-key"
+        self.addCleanup(os.environ.pop, "SEP_JUDGE_KEY", None)
+        calls, bodies = [], []
+        tk = self.started([self.cloud(calls, bodies)])
+        decision = tk.authorize({"tool": "search"}, {}, "look", agent_session="x")
+        self.assertTrue(decision.allowed)
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("agent-secret-key", bodies[0])
+        self.assertNotIn("judge-other-key", bodies[0])
+
+    def test_omitting_the_session_still_denies_a_cloud_judge(self):
+        os.environ["SEP_JUDGE_KEY"] = "judge-other-key"
+        self.addCleanup(os.environ.pop, "SEP_JUDGE_KEY", None)
+        tk = self.started([self.cloud([], [])])
+        decision = tk.authorize({"tool": "search"}, {}, "look")
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.path_b["reason"], "cloud_judge_session_required")
+
+    def test_an_unreadable_configured_key_denies_before_the_judge_is_called(self):
+        os.environ["SEP_JUDGE_KEY"] = "judge-other-key"
+        self.addCleanup(os.environ.pop, "SEP_JUDGE_KEY", None)
+        calls, bodies = [], []
+        tk = self.started([self.cloud(calls, bodies)])
+        os.environ.pop("SEP_AGENT_KEY")
+        decision = tk.authorize({"tool": "search"}, {}, "look", agent_session="x")
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "agent_credential_unreadable")
+        self.assertEqual(calls, [])
+        self.assertNotIn("agent-secret-key", json.dumps([e.body for e in tk.ledger.entries]))
+
+    def test_the_configured_key_is_not_a_judge_argument(self):
+        from two_key.judges.base import Ballot
+
+        class Grab(FixedJudge):
+            def __init__(self):
+                super().__init__("g", "yes")
+                self.seen = None
+
+            def score_bound(self, constitution_text, action, proposal, binding, **kwargs):
+                self.seen = dict(kwargs)
+                return Ballot(self.judge_id, self.provider, "yes", 0.9, "fixed")
+
+        judge = Grab()
+        tk = self.started([judge])
+        decision = tk.authorize({"tool": "search"}, {}, "look", agent_session="x")
+        self.assertTrue(decision.allowed)
+        self.assertEqual(judge.seen, {"agent_session": "x"})
+        self.assertNotIn("agent-secret-key", json.dumps(judge.seen))
+
+    def test_a_keyless_agent_still_has_nothing_to_add(self):
+        """Residual: a second secret, or a keyless agent, is still only what the caller passes."""
+        os.environ["SEP_JUDGE_KEY"] = "judge-other-key"
+        self.addCleanup(os.environ.pop, "SEP_JUDGE_KEY", None)
+        calls, bodies = [], []
+        agent = {"id": "local-agent", "model": "m", "provider": "local",
+                 "base_url": "http://127.0.0.1:9/v1", "credential": "none"}
+        tk = self.started([self.cloud(calls, bodies)], agent=agent)
+        decision = tk.authorize({"tool": "search"}, {}, "look", agent_session="x")
+        self.assertTrue(decision.allowed)
+        self.assertEqual(len(calls), 1)
+
+
 class ModelFolding(unittest.TestCase):
     def test_azure_gpt_35_and_unicode_forms(self):
         from two_key.netloc import fold_model_id

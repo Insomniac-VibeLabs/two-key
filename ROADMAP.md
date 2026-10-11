@@ -120,6 +120,9 @@ On `working`, not tagged. CHANGES "0.2.4" is the record.
   ledger directory alone (#62). Deleting that file, or rolling it back with
   the ledger, is still not detected. It is not an external anchor.
 - Creating a ledger at a new path warns on stderr (#60 item 2).
+- The credential named for the monitored agent is compared again on every
+  call. A placeholder `agent_session` does not hide that key (#60 item 3).
+  A secret that was never named still has to be passed.
 - `revoke` is unchanged (#46). The optional halt is 0.11, below.
 
 ## 0.11: Optional reputation halt

@@ -329,7 +329,17 @@ def _accepted(fn, kw: Mapping) -> dict:
 
 
 def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
-               binding: Mapping[str, str] | None = None, agent_session: str | None = None) -> Ballot:
+               binding: Mapping[str, str] | None = None, agent_session: str | None = None,
+               configured_secrets: frozenset[str] = frozenset()) -> Ballot:
+    from .judges.llm import comparing_configured_secrets
+    # Set on this thread, including a judge thread. Not a keyword of the judge: a **kwargs judge
+    # would otherwise be handed the monitored agent's credential.
+    with comparing_configured_secrets(configured_secrets):
+        return _score_one_call(j, constitution_text, action, proposal, binding, agent_session)
+
+
+def _score_one_call(j: Judge, constitution_text: str, action: Action, proposal: str,
+                    binding: Mapping[str, str] | None = None, agent_session: str | None = None) -> Ballot:
     try:
         sb = getattr(j, "score_bound", None)
         if sb is not None:
@@ -355,11 +365,13 @@ def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
 
 def _collect(judges: Sequence[Judge], constitution_text: str, action: Action, proposal: str,
              policy: QuorumPolicy, binding: Mapping[str, str] | None = None,
-             agent_session: str | None = None) -> list[Ballot]:
+             agent_session: str | None = None,
+             configured_secrets: frozenset[str] = frozenset()) -> list[Ballot]:
     if not judges:
         return []
     if not policy.parallel and policy.timeout_seconds is None:
-        return [_score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding, agent_session)
+        return [_score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding, agent_session,
+                           configured_secrets)
                 for j in judges]
     # One daemon thread per judge: a hung judge can neither delay the decision past the deadline
     # nor keep the process alive at exit (its HTTP timeout ends the thread eventually).
@@ -368,7 +380,7 @@ def _collect(judges: Sequence[Judge], constitution_text: str, action: Action, pr
 
     def run(i: int, j: Judge) -> None:
         results[i] = _score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding,
-                                agent_session)
+                                agent_session, configured_secrets)
         done[i].set()
 
     deadline = None if policy.timeout_seconds is None else time.monotonic() + policy.timeout_seconds
@@ -400,6 +412,7 @@ def convene(
     binding: Mapping[str, str] | None = None,
     tool_args: Mapping | None = None,
     agent_session: str | None = None,
+    configured_secrets: frozenset[str] | None = None,
 ) -> QuorumResult:
     """Convene the judges.
 
@@ -420,9 +433,17 @@ def convene(
     selection = heterogeneity_shortfall(judges, policy) if judges and not duplicate else None
     # A floor no round can meet: deny before any judge (or its vendor) sees the call.
     unmeetable = unmeetable_floor(judges, policy) if judges and not duplicate else None
-    if judges and not duplicate and selection is None and unmeetable is None:
+    secrets = frozenset(configured_secrets or ())
+    # The named agent credential. A match denies before any judge is called, so the key is not
+    # handed to a judge function. A placeholder ``agent_session`` does not count as this.
+    reused = False
+    if secrets and judges and not duplicate and selection is None and unmeetable is None:
+        from .judges.llm import presents_configured_secret
+        reused = any(presents_configured_secret(j, secrets) for j in judges)
+    if judges and not duplicate and selection is None and unmeetable is None and not reused:
         ballots = [_bind(b, binding, policy)
-                   for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding, agent_session)]
+                   for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding,
+                                     agent_session, secrets)]
     responding = [b for b in ballots if b.responded]
     abstain = len(ballots) - len(responding)
 
@@ -441,6 +462,8 @@ def convene(
         return result(False, f"judge_set_not_heterogeneous:{selection}", counted=False)
     if unmeetable is not None:
         return result(False, unmeetable, counted=False)
+    if reused:
+        return result(False, "cloud_judge_reused_agent_session", counted=False)
     if any(getattr(j, "is_cloud", lambda: False)() for j in judges) and not agent_session:
         return result(False, "cloud_judge_session_required")
     if any((b.error or "").startswith("cloud_judge_") for b in ballots):
