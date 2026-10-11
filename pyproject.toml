@@ -9,6 +9,7 @@ description = "Initial Two-Key concept: ledger, Path A, Path B, and judge/agent 
 requires-python = ">=3.10"
 license = "Apache-2.0"
 keywords = ["ai-agents", "authorization", "policy-engine", "capability-tokens"]
+# Consumer ranges. The resolved set CI installs is uv.lock (wheels only).
 dependencies = ["cryptography>=41"]
 
 [project.optional-dependencies]

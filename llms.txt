@@ -9,6 +9,7 @@ Package version: 0.3.0 on branch working (not tagged). Tag v0.2.4 is on main. Ta
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
 Not on PyPI. Install the tagged release from git ref v0.2.4 (two-key-concept[yaml] for YAML configs).
 Do not install @v0.3.0 until that tag exists.
+On working, uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
 "Upgrading from 0.2.2" (then "Upgrading from 0.2.1" and "Upgrading from 0.1.12" for older).

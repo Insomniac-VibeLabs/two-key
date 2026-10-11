@@ -16,6 +16,13 @@ pip install -e ".[yaml]"
 python -m unittest discover -s tests
 ```
 
+That follows the ranges in `pyproject.toml`. The same checkout's `uv.lock`
+is what CI installs (wheels only). To match it, install the uv version
+pinned in `.github/workflows/tests.yml`, then `uv sync --locked --no-build
+--extra yaml --no-dev`, and run tests with `.venv/bin/python`. When a
+dependency range changes, regenerate `uv.lock` with that same uv and commit
+it. The lock is not a consumer pin: a git install still uses the ranges.
+
 ## Create a principal key and sign a constitution
 
 ```bash

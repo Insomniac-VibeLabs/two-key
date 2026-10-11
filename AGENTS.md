@@ -43,6 +43,14 @@ python -m unittest discover -s tests
 python -m two_key demo
 ```
 
+CI does not use that floating install. `.github/workflows/tests.yml` pins
+`uv==0.13.0` and runs `uv sync --locked --no-build --extra yaml`, which
+installs `uv.lock` (cryptography, PyYAML, and their dependencies) as wheels.
+Regenerate `uv.lock` with that uv when a dependency range changes, and
+commit the lock. Do not treat the lock as a release pin for consumers.
+Build, coverage, and bandit are pinned in their workflows, not in
+`pyproject.toml`.
+
 | Extra | Provides | When needed |
 | --- | --- | --- |
 | (none) | `cryptography>=41` | Ed25519, SHA-256, AES-256-GCM ledger |

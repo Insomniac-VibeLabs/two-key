@@ -415,6 +415,17 @@ python -m two_key demo
 python -m two_key authorize --help
 ```
 
+That install follows the ranges in `pyproject.toml`. CI does not: it installs
+the versions in `uv.lock` (cryptography, PyYAML, and their dependencies),
+wheels only. To match CI, use the uv version pinned in
+`.github/workflows/tests.yml`:
+
+```bash
+pip install --only-binary :all: "uv==0.13.0"
+uv sync --locked --no-build --extra yaml --no-dev
+.venv/bin/python -m unittest discover -s tests
+```
+
 The demo uses fixed test-double judges. Real judges are configured in
 `examples/judges.yaml`. See [docs/HOWTO.md](docs/HOWTO.md).
 

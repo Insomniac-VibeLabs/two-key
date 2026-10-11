@@ -66,7 +66,8 @@ class KeyFile(unittest.TestCase):
         path = led.fingerprint_key_path()
         self.assertEqual(path, led.ledger_key_path.parent / "fingerprint.key")
         self.assertFalse(path.resolve().is_relative_to(led.path.resolve()))
-        self.assertEqual(led.fingerprint_key(), led.fingerprint_key())
+        key = led.fingerprint_key()
+        self.assertEqual(led.fingerprint_key(), key)
         os.chmod(path, 0o644)
         with self.assertRaisesRegex(LedgerError, "fingerprint_key_insecure"):
             led.fingerprint_key()

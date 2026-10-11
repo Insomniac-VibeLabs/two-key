@@ -1245,4 +1245,32 @@ judge-versus-agent checks are unchanged.
 HOWTO "Back up the keys", the lost-key table, and the PBKDF2 trade-off.
 README known limits. THREAT_MODEL key-backup residual. SECURITY.md.
 
+## CI — 2026-10-11
+
+On branch `working`. Not a release tag. Package version stays 0.3.0.
+`main` and tag `v0.2.4` stay at 0.2.4. Not published to PyPI.
+
+Fixes #71, #72, #73, #74, #75, #76, #77, and #79. Authorization, tokens,
+the gateway, and the judge-versus-agent checks are unchanged.
+
+- **#79.** `test_ledger_keeps_it_beside_the_ledger_key` compares a second
+  `fingerprint_key()` read to the first. It no longer asserts a call
+  equals itself.
+- **#71, #72.** The build workflow installs `build==1.6.1` with
+  `--only-binary :all:`.
+- **#72, #73, #74.** The coverage workflow installs `coverage==7.16.2`
+  the same way.
+- **#72, #75, #76.** The security workflow installs `bandit==1.9.4`
+  the same way. `bandit -r two_key -ll` is unchanged.
+- **#77.** `uv.lock` pins `cryptography==50.0.2`, `pyyaml==6.0.3`, and
+  their dependencies (`cffi`, `pycparser`, `typing-extensions`), with
+  hashes. Tests and coverage install that lock with `uv sync --locked
+  --no-build` (wheels only; uv itself is `uv==0.13.0`). The ranges in
+  `pyproject.toml` stay what a consumer gets. There is no `@v0.3.0` tag.
+
+### Docs
+
+README install, HOWTO install, AGENTS.md, CONTRIBUTING, llms.txt.
+
+
 
