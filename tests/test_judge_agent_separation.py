@@ -22,7 +22,7 @@ from two_key.core import TwoKey, TwoKeyConfigError
 from two_key.identity import (AgentDeclaration, credential_fingerprint, load_monitored_agent, resolve_tenants, resolve_upstream_info,
                               model_maker, normalize_model, resolve_upstreams)
 from two_key.judges.anthropic import AnthropicJudge
-from two_key.judges.credentials import EnvApiKey, StaticToken
+from two_key.judges.credentials import BasicAuthCredential, EnvApiKey, StaticToken
 from two_key.judges.ollama import OllamaJudge
 from two_key.judges.openai_compat import OpenAICompatibleJudge
 from two_key.keys import generate_private_key
@@ -478,6 +478,76 @@ class ConfiguredCredentialIsCompared(Env):
         decision = tk.authorize({"tool": "search"}, {}, "look", agent_session="x")
         self.assertTrue(decision.allowed)
         self.assertEqual(len(calls), 1)
+
+    def test_a_username_and_password_are_the_named_key(self):
+        os.environ["SEP_AGENT_USER"] = "alice"
+        os.environ["SEP_AGENT_PASS"] = "start-secret"
+        os.environ["SEP_JUDGE_USER"] = "carol"
+        os.environ["SEP_JUDGE_PASS"] = "judge-secret"
+        for name in ("SEP_AGENT_USER", "SEP_AGENT_PASS", "SEP_JUDGE_USER", "SEP_JUDGE_PASS"):
+            self.addCleanup(os.environ.pop, name, None)
+        calls, bodies = [], []
+        judge = OpenAICompatibleJudge(
+            "c", "openai", "gpt-4o", "https://api.openai.com/v1",
+            BasicAuthCredential("SEP_JUDGE_USER", "SEP_JUDGE_PASS"),
+            auth_header="basic", transport=_yes_transport(calls, bodies))
+        agent = {"id": "a", "model": "m", "provider": "p", "base_url": "https://api.example.com/v1",
+                 "username_env": "SEP_AGENT_USER", "password_env": "SEP_AGENT_PASS"}
+        tk = self.started([judge], agent=agent)
+        os.environ["SEP_AGENT_USER"] = "carol"
+        os.environ["SEP_AGENT_PASS"] = "judge-secret"
+        decision = tk.authorize({"tool": "search"}, {}, "look", agent_session="x")
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "cloud_judge_reused_agent_session")
+        self.assertEqual(calls, [])
+        ledger_text = json.dumps([e.body for e in tk.ledger.entries])
+        self.assertNotIn("judge-secret", ledger_text)
+        self.assertNotIn("carol", ledger_text)
+
+    def test_a_key_the_judge_holds_but_does_not_send_still_matches(self):
+        calls = []
+
+        def transport(url, headers, body, timeout):
+            calls.append(json.dumps(body))
+            return {"message": {"content": '{"consistent": true, "confidence": 0.9, "rationale": "ok"}'}}
+
+        judge = OllamaJudge("q", "ollama", "qwen2.5:7b", "http://127.0.0.1:11434",
+                            credential=StaticToken("judge-held"), auth_header="none", transport=transport)
+        tk = self.started([judge])
+        judge.credential._t = os.environ["SEP_AGENT_KEY"]
+        decision = tk.authorize({"tool": "search"}, {}, "look", agent_session="x")
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "cloud_judge_reused_agent_session")
+        self.assertEqual(calls, [])
+        self.assertNotIn(os.environ["SEP_AGENT_KEY"], json.dumps([e.body for e in tk.ledger.entries]))
+
+    def test_whitespace_around_the_named_key_still_matches(self):
+        os.environ["SEP_JUDGE_KEY"] = "judge-other-key"
+        self.addCleanup(os.environ.pop, "SEP_JUDGE_KEY", None)
+        calls, bodies = [], []
+        tk = self.started([self.cloud(calls, bodies)])
+        os.environ["SEP_AGENT_KEY"] = "  judge-other-key\n"
+        decision = tk.authorize({"tool": "search"}, {}, "look", agent_session="x")
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "cloud_judge_reused_agent_session")
+        self.assertEqual(calls, [])
+
+    def test_one_matching_judge_means_nobody_is_called(self):
+        os.environ["SEP_JUDGE_KEY"] = "judge-a"
+        os.environ["SEP_JUDGE_KEY_B"] = "judge-b"
+        self.addCleanup(os.environ.pop, "SEP_JUDGE_KEY", None)
+        self.addCleanup(os.environ.pop, "SEP_JUDGE_KEY_B", None)
+        calls, bodies = [], []
+        first = self.cloud(calls, bodies, "SEP_JUDGE_KEY")
+        second = OpenAICompatibleJudge(
+            "b", "other", "claude-sonnet-4-20250514", "https://api.anthropic.com/v1",
+            EnvApiKey("SEP_JUDGE_KEY_B"), transport=_yes_transport(calls, bodies))
+        tk = self.started([first, second], quorum=QuorumPolicy(required_yes=1))
+        os.environ["SEP_JUDGE_KEY_B"] = os.environ["SEP_AGENT_KEY"]
+        decision = tk.authorize({"tool": "search"}, {}, "look", agent_session="x")
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason, "cloud_judge_reused_agent_session")
+        self.assertEqual(calls, [])
 
 
 class ModelFolding(unittest.TestCase):
