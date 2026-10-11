@@ -16,7 +16,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install build
-        run: pip install --only-binary :all: "build==1.6.1"
+        run: |
+          pip install --only-binary :all: "build==1.6.1"
       - name: Build sdist and wheel
         run: python -m build
 

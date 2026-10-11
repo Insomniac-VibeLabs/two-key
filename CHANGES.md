@@ -1257,11 +1257,12 @@ the gateway, and the judge-versus-agent checks are unchanged.
   `fingerprint_key()` read to the first. It no longer asserts a call
   equals itself.
 - **#71, #72.** The build workflow installs `build==1.6.1` with
-  `--only-binary :all:`.
+  `--only-binary :all:`. The command is a YAML block scalar so `:all:`
+  is not read as a mapping.
 - **#72, #73, #74.** The coverage workflow installs `coverage==7.16.2`
   the same way.
 - **#72, #75, #76.** The security workflow installs `bandit==1.9.4`
-  the same way. `bandit -r two_key -ll` is unchanged.
+  the same way, also as a block scalar. `bandit -r two_key -ll` is unchanged.
 - **#77.** `uv.lock` pins `cryptography==50.0.2`, `pyyaml==6.0.3`, and
   their dependencies (`cffi`, `pycparser`, `typing-extensions`), with
   hashes. Tests and coverage install that lock with `uv sync --locked
