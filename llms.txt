@@ -5,13 +5,17 @@ and Path B (a judge quorum) both allow. Prototype. Apache-2.0.
 
 Package: two-key-concept
 Import: two_key
-Package version: 0.2.4. Tag v0.2.4 is on main. Tag v0.2.3 stays on 4a4352e.
+Package version: 0.3.0 on branch working (not tagged). Tag v0.2.4 is on main. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
 Not on PyPI. Install the tagged release from git ref v0.2.4 (two-key-concept[yaml] for YAML configs).
+Do not install @v0.3.0 until that tag exists.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
 "Upgrading from 0.2.2" (then "Upgrading from 0.2.1" and "Upgrading from 0.1.12" for older).
 0.2.4 writes head.anchor on first open and refuses a rolled-back ledger directory: "Upgrading from 0.2.3".
+0.3.0 backs up principal, capability, ledger, and witness keys in three passphrase bundles
+(pbkdf2-sha256, 600000 iterations, AES-256-GCM). backup-restore writes head.anchor from the same
+moment as the ledger and does not delete it. Not a seed phrase. "Upgrading from 0.2.4".
 
 Does: signed constitution, Path A bytecode, Path B judges (xAI/Grok, OpenAI,
 Anthropic, Gemini, Ollama), monitored agents, encrypted ledger, single-use token.
@@ -19,7 +23,7 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(487 tests, no network).
+(506 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or

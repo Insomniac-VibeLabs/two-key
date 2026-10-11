@@ -289,10 +289,10 @@ Not in this repository:
 
 Some of this is planned as optional additions. See the
 [roadmap](#roadmap): DLP and antivirus hooks (an interface that calls
-external scanners, not a scanning engine), key backup (not seed-phrase
-backup), PKI with certificate recovery, and hybrid ML-DSA-65. Enterprise
-deployment modes, permissioned-chain anchoring, and seed phrases are not
-planned.
+external scanners, not a scanning engine), PKI with certificate recovery,
+and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
+backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
+phrases are not planned.
 
 The ledger is encrypted at rest.
 
@@ -331,6 +331,10 @@ It is a prototype. It is not a FIPS 140-3 validated module.
 - Identities are bare keys. There is no certificate chain, expiry, or
   revocation. PKI with certificate recovery is on the roadmap.
 - It does not scan payloads, and it is not an antivirus or DLP product.
+- A key backup is only as strong as its passphrase. The bundle is the keys.
+  PBKDF2 slows guessing and is not memory-hard. It is not a seed phrase and
+  not an external anchor. `--replace-ledger` can make a token spent after
+  the backup look unspent, and it replaces a key file that differs.
 
 The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
@@ -338,7 +342,9 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 The plan from the 0.2.4 prototype to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-Nothing after 0.2.4 in that plan exists yet. The detail is in [ROADMAP.md](ROADMAP.md).
+0.3.0 (key backup) is on `working` and is not tagged. Nothing after 0.3 in
+that plan exists yet. Tag `v0.2.4` is still the tagged release on `main`.
+The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
 flowchart LR
@@ -358,8 +364,8 @@ flowchart LR
 | Target | What |
 | --- | --- |
 | 0.2.3 | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
-| 0.2.4 | Head anchor against a ledger-directory rollback or wipe (#62); `two-key recover` for an uncheckpointed tail (#49) |
-| 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys. A restore includes `head.anchor` from the same moment |
+| 0.2.4 | Head anchor against a ledger-directory rollback or wipe (#62); `two-key recover` for an uncheckpointed tail (#49). Tagged `v0.2.4` on `main` |
+| 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys, in three bundles. A restore includes `head.anchor` from the same moment. On `working` as 0.3.0; not tagged |
 | 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
 | 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
 | 0.6 | MCP adapter: a proxy in front of the gateway, not an MCP server |
@@ -371,8 +377,9 @@ flowchart LR
 | 0.11, any time before 1.0 | Optional reputation halt. Off unless configured. Not a change to `revoke` |
 | After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
 
-Install from git. It is not published to PyPI. Package version 0.2.4, tag
-`v0.2.4` on `main`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
+Install from git. It is not published to PyPI. Package version on `working`
+is 0.3.0 and is not tagged. Tag `v0.2.4` on `main` is the tagged release.
+Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
 commit `2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
 some judges 0.2.2 accepted (one holding the agent's credential without
 sending it, or in the other form), and pins each ledger's witness key on
@@ -380,7 +387,8 @@ its first open: read "Upgrading from 0.2.2" in
 [CHANGES.md](CHANGES.md) before upgrading (and "Upgrading from 0.2.1" and
 "Upgrading from 0.1.12" from older versions). 0.2.4 writes a head anchor on
 the first open of an existing ledger and refuses a rolled-back ledger
-directory: read "Upgrading from 0.2.3".
+directory: read "Upgrading from 0.2.3". 0.3.0 adds key backup. Existing
+ledgers open unchanged: read "Upgrading from 0.2.4".
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
@@ -390,7 +398,9 @@ description.
 pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.4"
 ```
 
-That ref is the tagged 0.2.4 release. `main` and `working` are that same release.
+That ref is the tagged 0.2.4 release. `main` is that release. `working` is
+0.3.0 (key backup) and is not tagged, so do not install `@v0.3.0` until a
+tag exists.
 
 ## Run the offline demo
 
@@ -420,14 +430,14 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
-| `two_key/keys.py`, `cli.py` | Key files; `two-key` command line |
+| `two_key/keys.py`, `cli.py`, `backup.py` | Key files; `two-key` command line; passphrase backup of the package's own keys |
 | `two_key/action.py` | Normalized action record and its validation |
 | `two_key/agent_meta.py` | Bounds on operator- or library-supplied agent identity metadata written to the ledger |
 | `two_key/canonical.py` | Canonical encoding for the ledger, tokens, and judge bindings |
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, judges, agents |
-| `ROADMAP.md` | Planned work from 0.2.4 to 1.0 |
+| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.0 is on `working` and is not tagged |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/FIT.md` | Whether this package is the right control |
 | `docs/COMPARISON.md` | What this package is not a substitute for |

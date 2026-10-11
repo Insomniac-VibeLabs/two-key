@@ -50,7 +50,14 @@ key as well (#58). A head anchor outside the ledger directory
 (`<ledger>.ledger-key/head.anchor`, or `--head-anchor`) refuses a rollback
 or a wipe of that directory alone (#62). Deleting the anchor, or writing an
 older copy of it, accepts the ledger as it stands. Stealing the capability
-private key mints tokens.
+private key mints tokens. A backup bundle is equal to the keys it holds.
+`two-key backup-export` splits them into three files so one bundle never
+holds the principal key, the witness key, and the ledger key together.
+Guessing a bundle's passphrase opens that bundle. PBKDF2-HMAC-SHA256
+(600,000 iterations) slows guessing and is not memory-hard. There is no
+seed phrase. `backup-restore --replace-ledger` writes an older ledger and
+its `head.anchor` together; a token spent after that backup can look unspent.
+Restore does not delete the anchor.
 
 A redemption intent is checkpointed before the tool runs. A later retry does
 not run the tool. Concurrent calls are locked. A crash before the tool runs

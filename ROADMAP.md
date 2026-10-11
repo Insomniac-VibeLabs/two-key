@@ -2,9 +2,10 @@
 
 This is the plan for taking `two-key-concept` from the 0.2.4 prototype to a
 1.0 release. It states intent, not a promise. The order may change, and
-version numbers are targets, not dates. Nothing listed here after the 0.2.x
-baseline exists in 0.2.4. 0.11 may ship before the phases numbered under it;
-its number is not an order claim.
+version numbers are targets, not dates. 0.3.0 (key backup) is on branch
+`working` and is not tagged. Tag `v0.2.4` remains the tagged release on
+`main`. Nothing listed here after 0.3 exists yet. 0.11 may ship before the
+phases numbered under it; its number is not an order claim.
 
 Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
@@ -83,8 +84,8 @@ from its first entry, pin included. So the plan has two pins:
    cannot be detected; CHANGES and THREAT_MODEL say this.
 4. Changing the witness key becomes an explicit, ledgered `witness_rotated`
    entry, signed by the principal and both the old and the new witness key;
-   an out-of-ledger pin is updated by the operator. A lost witness key means
-   a new ledger until 0.3's key backup can restore it.
+   an out-of-ledger pin is updated by the operator. A lost witness key meant
+   a new ledger until 0.3; 0.3.0 restores it from the witness bundle.
 5. `Ledger.verify()` and `audit` report both pins. Tests cover a swapped
    `witness.pem` (refused), a head signed by a key other than the
    configured one (refused), an old ledger pinning on first open, and a
@@ -148,6 +149,33 @@ earlier. It is numbered 0.11 so those phases keep their numbers.
 Losing a key today is severe. A missing or changed capability key refuses to
 start, and a lost ledger key leaves the log unreadable.
 
+### 0.3.0 (on `working`, not tagged)
+
+CHANGES "0.3.0" is the record. The criteria below are what shipped. Tag
+`v0.2.4` is still the tagged release on `main`.
+
+- `two-key backup-export`, `backup-verify`, and `backup-restore`.
+- Three bundles. The ledger key and the witness key are not in the same
+  file. The principal bundle holds the principal key and the capability key,
+  and not those two, so one bundle never holds every key a head needs when
+  the witness public key is pinned outside the ledger.
+- The key derivation function is named in the bundle
+  (`pbkdf2-sha256`, 600,000 iterations, then `aes-256-gcm`). That is the
+  PBKDF2 option 0.9 can keep. No other function ships in 0.3.
+- `backup-verify` decrypts into a temporary ledger and checks fingerprints.
+- `backup-restore` puts `head.anchor` back from the same moment as the
+  ledger. An older ledger left next to the current anchor does not open
+  (`ledger_rolled_back`). `--replace-ledger` writes both together. Deleting
+  the anchor is not the restore procedure.
+- Tests cover restore, a wrong passphrase, and a tampered bundle.
+- HOWTO has the runbook and the table of what each lost key means.
+
+Not in this version: PKI and certificate identities (see 0.7) and
+seed-phrase backup. A weak passphrase remains a residual risk. PBKDF2 is
+not memory-hard.
+
+The list this section was written from:
+
 - Encrypted, passphrase-protected export and restore of this package's own
   keys: principal, capability, ledger, and witness.
 - The key derivation function is named in the bundle. A PBKDF2-based option
@@ -160,9 +188,6 @@ start, and a lost ledger key leaves the log unreadable.
 - A restore puts back `head.anchor` from the same moment as the ledger. An
   older ledger left next to the current anchor does not open
   (`ledger_rolled_back`). Deleting the anchor is not the restore procedure.
-
-Not in scope here: PKI and certificate identities (see 0.7) and
-seed-phrase backup.
 
 ## 0.4: Ledger export for SIEM
 

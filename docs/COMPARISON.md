@@ -8,7 +8,9 @@ current behavior of those projects in their own docs before you rely on them.
 A call runs only if Path A and Path B both allow, and only if the gateway
 later redeems a single-use token bound to that tool and those argument
 bytes. Path A does not read English. There is no MCP server in this release.
-There are no scanner hooks in this package.
+There are no scanner hooks in this package. Key backup (0.3.0) is three
+passphrase bundles of this package's own keys, not a seed phrase and not a
+substitute for a password manager.
 
 | Category | What that category decides | This package |
 | --- | --- | --- |

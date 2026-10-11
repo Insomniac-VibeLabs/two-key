@@ -1,14 +1,15 @@
 # Is this for you
 
 Prototype. Not a FIPS 140-3 validated module. Not on PyPI. There is no MCP
-server in this release. Package `two-key-concept` version 0.2.4, tag `v0.2.4` on `main`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`.
+server in this release. Package `two-key-concept` version 0.3.0 on branch `working` (not tagged). Tag `v0.2.4` on `main` is the tagged release. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`.
 `v0.1.6` stays on the previous tree.
 Apache-2.0.
 Crypto is Ed25519 and SHA-256.
 
 This package has a ledger, Path A, Path B, and judge and
 monitored-agent hooks. It does not scan payloads. It has no PKI, no
-anchoring, and no seed phrase.
+anchoring, and no seed phrase. It can back up its own keys under passphrases
+(0.3.0). That backup is not a seed phrase.
 
 ## Use this if
 

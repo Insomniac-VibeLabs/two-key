@@ -673,6 +673,118 @@ ledger as it stands. Copy the anchor whenever you copy the ledger. Someone
 who can write the anchor file can roll it back together with the ledger.
 Pass the same `--head-anchor` on every command if you move the file.
 
+## Back up the keys
+
+Losing a key is severe. A missing capability key refuses to start once a
+token has been issued. A missing ledger key leaves the log unreadable. A
+missing witness key refuses to open. 0.3.0 backs up this package's own keys.
+It is not a seed phrase. A lost passphrase cannot be recovered.
+
+Back up only after TwoKey has started once, so `capability.pem` and
+`fingerprint.key` exist. Export does not create them.
+
+Use a different passphrase for each bundle. The passphrase is read from an
+environment variable, never from the command line. Other users on the same
+machine can read a process's environment, the same way they can read
+`--agent-session-env`. Use a shell you close when you are done, and do not
+put the passphrase in a world-readable file.
+
+```bash
+read -rs TWO_KEY_PRINCIPAL_PASSPHRASE; echo
+read -rs TWO_KEY_LEDGER_PASSPHRASE; echo
+read -rs TWO_KEY_WITNESS_PASSPHRASE; echo
+export TWO_KEY_PRINCIPAL_PASSPHRASE TWO_KEY_LEDGER_PASSPHRASE TWO_KEY_WITNESS_PASSPHRASE
+two-key backup-export --key keys/principal.pem --ledger ledger --out backups \
+  --principal-passphrase-env TWO_KEY_PRINCIPAL_PASSPHRASE \
+  --ledger-passphrase-env TWO_KEY_LEDGER_PASSPHRASE \
+  --witness-passphrase-env TWO_KEY_WITNESS_PASSPHRASE
+```
+
+That writes three files, mode 0600. Store them apart. One file never holds
+every key a signed head needs:
+
+| Bundle | Holds | Does not hold |
+| --- | --- | --- |
+| `principal.bundle.json` | `principal.pem`, `capability.pem` | ledger key, witness key |
+| `ledger.bundle.json` | `ledger.key`, `fingerprint.key`, the ledger files, and `head.anchor` from that moment | principal key, witness key |
+| `witness.bundle.json` | `witness.pem` | principal key, ledger key |
+
+The bundle names its key derivation: `pbkdf2-sha256` at 600,000 iterations,
+then AES-256-GCM. Format `two-key-concept-key-backup/1`. 0.3 ships that
+function only. PBKDF2 slows guessing and is not memory-hard. A short
+passphrase, or the same passphrase on all three files stored together, is
+warned about. A bundle file over 64 MiB is refused.
+
+Check a backup without touching the real ledger. This decrypts into a
+temporary directory and compares fingerprints:
+
+```bash
+two-key backup-verify --bundles backups \
+  --principal-passphrase-env TWO_KEY_PRINCIPAL_PASSPHRASE \
+  --ledger-passphrase-env TWO_KEY_LEDGER_PASSPHRASE \
+  --witness-passphrase-env TWO_KEY_WITNESS_PASSPHRASE
+```
+
+A wrong passphrase and a tampered bundle both fail as
+`backup_rejected: wrong passphrase or tampered bundle`. Neither writes a key.
+
+Restore puts the keys back. Stop every process that uses the ledger first.
+Pass the same `--head-anchor` and `--witness-public-key` you use on every
+other command.
+
+```bash
+two-key backup-restore --key keys/principal.pem --ledger ledger --bundles backups \
+  --principal-passphrase-env TWO_KEY_PRINCIPAL_PASSPHRASE \
+  --ledger-passphrase-env TWO_KEY_LEDGER_PASSPHRASE \
+  --witness-passphrase-env TWO_KEY_WITNESS_PASSPHRASE
+```
+
+If the ledger on disk is newer than the backup, this restores missing keys
+only and leaves that ledger and its anchor alone. If that newer ledger's
+anchor is already missing, restore still does not write the older anchor.
+The next open adopts the current head. If the ledger files are
+already the backup's files and the anchor is missing or different, restore
+writes that backup's `head.anchor`. It does not delete the anchor.
+
+Putting an older ledger back, over a newer one, is explicit:
+
+```bash
+two-key backup-restore --key keys/principal.pem --ledger ledger --bundles backups \
+  --principal-passphrase-env TWO_KEY_PRINCIPAL_PASSPHRASE \
+  --ledger-passphrase-env TWO_KEY_LEDGER_PASSPHRASE \
+  --witness-passphrase-env TWO_KEY_WITNESS_PASSPHRASE \
+  --replace-ledger
+```
+
+That writes the backup's ledger files and the `head.anchor` from the same
+moment. An older ledger left next to the current anchor does not open
+(`ledger_rolled_back`). Deleting the anchor is not the restore procedure.
+`--replace-ledger` drops every checkpoint made after the backup, and a token
+spent after the backup can look unspent. It also replaces a key file that
+differs from the backup. The restored ledger opens only with the keys from
+that same moment, so a witness key rotated after the backup is put back too.
+
+If restore says `backup_conflict`, a file on disk is not the file in the
+backup. Move that file aside and run restore again. Do not delete
+`head.anchor` to get past it.
+
+| What you lost | What you see | What to do |
+| --- | --- | --- |
+| `principal.pem` | the ledger will not open under that key | restore the principal bundle to `--key` |
+| `capability.pem` | `capability_key_missing` or `capability_key_changed` once a token was issued | restore the principal bundle. It holds this key too |
+| `ledger.key` | `ledger key missing` or `wrong ledger key` | restore the ledger bundle |
+| `fingerprint.key` | a later start creates a new one, and identity digests no longer match | restore the ledger bundle. Do not let a new key be created |
+| `witness.pem` | `witness key missing` or `witness_key_changed` | restore the witness bundle |
+| the ledger directory | `ledger_rolled_back` if the current anchor is still there | `backup-restore --replace-ledger`, which writes the ledger and `head.anchor` together |
+| `head.anchor` only, ledger unchanged | the next open adopts the current head, and the rollback check is gone until the next checkpoint | restore. It writes the anchor from the same backup. Do not delete a newer anchor to force an older ledger open |
+| one bundle file | the other two do not reconstruct it | that bundle. This is why the three files live apart |
+| the passphrase | `backup_rejected` | nothing. There is no seed phrase |
+
+Copy `head.anchor` whenever you copy the ledger by hand. Restoring an older
+copy and leaving the current anchor does not open. The backup command is the
+procedure that puts both back. Deleting the anchor accepts whatever ledger
+is on disk; that is the hole, not the fix.
+
 ## Pin the witness key
 
 The ledger head is signed by the principal key and by the witness key,
@@ -740,9 +852,9 @@ new key into `witness.pem` and its public half into `witness.pub.pem`. Then
 copy the new `witness.pub.pem` over your configured copy: the old copy no
 longer opens the ledger. Outstanding tokens are not affected.
 
-A rotation needs the old witness key's signature, so a lost witness key
-cannot be rotated away from: start a new ledger. Key backup is planned for
-0.3.
+A rotation needs the old witness key's signature. A lost witness key is
+restored from the witness bundle (see "Back up the keys"). Without that
+bundle, start a new ledger.
 
 An interrupted rotation leaves `witness.pem.new` beside `witness.pem`, and
 the next rotation refuses until it is dealt with:
@@ -768,6 +880,10 @@ names the setting or declaration that controls it.
   cannot be read refuses to start. At call time it is read to compare with
   `agent_session` and with the credential named for the monitored agent.
   Remove `auth:` from a connector that does not send it.
+- A key backup uses PBKDF2-HMAC-SHA256 (600,000 iterations). It is not
+  memory-hard. Three bundles with three passphrases, stored apart, are what
+  keeps one stolen file from being every key a head needs. The same
+  passphrase on all three is weaker. There is no seed phrase.
 - A secret that contains `:` is fingerprinted with PBKDF2-HMAC-SHA256 at
   start-up (600,000 iterations, about 0.15 s each). PBKDF2 is not
   memory-hard: against someone who holds the key directory it slows a

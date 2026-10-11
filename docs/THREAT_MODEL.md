@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.2.4, tag `v0.2.4` on `main`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+This is the design model for `two-key-concept` 0.3.0 on branch `working` (not tagged). Tag `v0.2.4` on `main` is the tagged release. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
 It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
@@ -243,7 +243,21 @@ claims to close.
 - A rotation interrupted after its head is written and before the new key
   is moved into place leaves `witness.pem.new` beside `witness.pem`, and the
   ledger refuses to open (`witness_key_changed`) until it is moved. A lost
-  witness key means a new ledger until key backup (0.3) can restore it.
+  witness key is restored from the witness bundle (0.3.0). Without that
+  bundle it means a new ledger.
+- Key backup bundles (0.3.0). A bundle is equal to the keys it holds.
+  `principal.bundle.json` holds the principal key and the capability key.
+  `ledger.bundle.json` holds the ledger key, the fingerprint key, the ledger
+  ciphertext, and `head.anchor` from that moment. `witness.bundle.json` holds
+  the witness key. One bundle never holds every key a signed head needs.
+  Guessing a bundle's passphrase opens that bundle. PBKDF2-HMAC-SHA256
+  (600,000 iterations) slows guessing and is not memory-hard. The same
+  passphrase on all three bundles, stored together, is one guess.
+  `backup-restore --replace-ledger` writes an older ledger and its anchor
+  together, and replaces a key file that differs, which can make a token
+  spent after the backup look unspent and undoes a later witness rotation.
+  Deleting `head.anchor` is still not detected, and restore does not do it.
+  The backup is not an external anchor.
 - What the ledger holds today: the agent's proposal text in full (the
   `proposal` entry), the derived form (`action_normalized.form`: the amount,
   counterparty, and counterparties read from the argument bytes), reasons,
@@ -281,22 +295,17 @@ claims to close.
   server or a scanner.
 - Full per-value information-flow tracking, and a content classifier. A
   tool-spec floor is not a taint label. Scanning engines, anchoring, and
-  seed phrases are not here and are not planned. Planned scanner hooks, key
-  backup, PKI with certificate recovery, and hybrid signatures are in
-  [ROADMAP.md](../ROADMAP.md). See [SCOPE.md](SCOPE.md).
+  seed phrases are not here and are not planned. Planned scanner hooks, PKI
+  with certificate recovery, and hybrid signatures are in
+  [ROADMAP.md](../ROADMAP.md). Key backup shipped in 0.3.0. See [SCOPE.md](SCOPE.md).
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md). None of what follows is in 0.2.4, and nothing in
+These come from [ROADMAP.md](../ROADMAP.md). None of what follows is in 0.3.0, and nothing in
 this section describes current behavior. Each item is added to the sections
-above in the release that ships it.
+above in the release that ships it. Key backup shipped in 0.3.0 and is
+described above, not here.
 
-- Key backup (target 0.3). New asset: the backup bundle. It holds the same
-  secrets as the keys above, so it is treated as equal to them. The ledger
-  key and the witness key are meant to be backed up separately from each
-  other, so that one bundle never holds every key a head needs when the
-  witness key is pinned outside the ledger (#58). A weak passphrase becomes
-  a new residual risk.
 - Ledger export for SIEM (target 0.4). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.
@@ -371,3 +380,4 @@ above in the release that ships it.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
+- `two_key/backup.py`: three bundles; the ledger key and the witness key are never in one file; a wrong passphrase or a tampered bundle is a refusal; restore writes `head.anchor` from the same moment as the ledger and does not delete it. `--replace-ledger` is the only path that overwrites a different ledger, and it also overwrites a key file that differs. A missing anchor on a newer ledger is left missing; the next open adopts that head.

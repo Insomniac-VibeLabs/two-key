@@ -7,6 +7,16 @@
                     [--witness-public-key PEM]
   two-key rotate-witness --key KEY --ledger DIR [--witness-public-key PEM] [--reason TEXT]
   two-key recover --key KEY --ledger DIR [--witness-public-key PEM] [--head-anchor PATH]
+  two-key backup-export --key KEY --ledger DIR --out DIR \
+                    --principal-passphrase-env NAME --ledger-passphrase-env NAME \
+                    --witness-passphrase-env NAME [--witness-public-key PEM] [--head-anchor PATH]
+  two-key backup-verify --bundles DIR \
+                    --principal-passphrase-env NAME --ledger-passphrase-env NAME \
+                    --witness-passphrase-env NAME [--witness-public-key PEM]
+  two-key backup-restore --key KEY --ledger DIR --bundles DIR \
+                    --principal-passphrase-env NAME --ledger-passphrase-env NAME \
+                    --witness-passphrase-env NAME [--witness-public-key PEM] [--head-anchor PATH] \
+                    [--replace-ledger]
   two-key audit --key KEY --ledger DIR [--witness-public-key PEM]
   two-key demo
 
@@ -27,6 +37,14 @@ head anchor (``<ledger>.ledger-key/head.anchor``, or ``--head-anchor``) refuses
 a rollback or a wipe of the ledger directory. Creating a ledger at a new path
 warns on stderr. Opening a ledger made before 0.2.3 pins its witness key
 (trust on first use), whichever command opens it.
+
+``backup-export`` writes three passphrase-protected bundles (principal, ledger, and witness)
+so that one file never holds every key a signed head needs. The passphrases come from
+environment variables, never from argv. ``backup-verify`` decrypts them into a temporary
+ledger and checks fingerprints. It does not touch the real ledger. ``backup-restore`` puts
+the keys back. It writes the ledger files and ``head.anchor`` from the same bundle together,
+or it leaves an existing different ledger in place unless ``--replace-ledger`` is set. It
+never deletes the anchor.
 """
 
 from __future__ import annotations
@@ -265,6 +283,63 @@ def _recover(args) -> int:
     return 0
 
 
+def _passphrase_env(args) -> dict:
+    """The three backup passphrases, from the environment. They are never taken on argv."""
+    names = {
+        "principal": args.principal_passphrase_env,
+        "ledger": args.ledger_passphrase_env,
+        "witness": args.witness_passphrase_env,
+    }
+    out = {}
+    for role, name in names.items():
+        if name is None or not str(name).strip():
+            raise SystemExit(f"--{role}-passphrase-env is required")
+        value = os.environ.get(name)
+        if value is None or value == "":
+            raise SystemExit(f"environment variable {name} is unset or empty")
+        out[role] = value
+    return out
+
+
+def _backup_export(args) -> int:
+    from .backup import BackupError, export_backup
+    try:
+        result = export_backup(args.ledger, args.key, args.out, _passphrase_env(args),
+                               witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args))
+    except BackupError as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2), file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def _backup_verify(args) -> int:
+    from .backup import BackupError, verify_backup
+    try:
+        result = verify_backup(args.bundles, _passphrase_env(args), witness_public_key=_witness_pin(args))
+    except BackupError as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2), file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def _backup_restore(args) -> int:
+    from .backup import BackupError, restore_backup
+    try:
+        result = restore_backup(args.ledger, args.key, args.bundles, _passphrase_env(args),
+                                witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args),
+                                replace_ledger=args.replace_ledger)
+    except BackupError as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2), file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+_PASSPHRASE_HELP = "name of the environment variable holding this bundle's passphrase; not the passphrase"
+
+
 _WITNESS_HELP = ("the witness public key (PEM), kept where whoever writes the ledger directory cannot change it; "
                  "a head signed by any other witness key is refused")
 _ANCHOR_HELP = ("monotonic head anchor outside the ledger directory (default <ledger>.ledger-key/head.anchor); "
@@ -328,6 +403,35 @@ def main(argv: list[str] | None = None) -> int:
     recover.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     recover.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     recover.set_defaults(func=_recover)
+    def _add_passphrases(parser):
+        parser.add_argument("--principal-passphrase-env", required=True, metavar="NAME", help=_PASSPHRASE_HELP)
+        parser.add_argument("--ledger-passphrase-env", required=True, metavar="NAME", help=_PASSPHRASE_HELP)
+        parser.add_argument("--witness-passphrase-env", required=True, metavar="NAME", help=_PASSPHRASE_HELP)
+    export = sub.add_parser("backup-export", help="write three passphrase-protected key bundles")
+    export.add_argument("--key", required=True)
+    export.add_argument("--ledger", required=True)
+    export.add_argument("--out", required=True, help="directory for the three new bundle files")
+    export.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    export.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    _add_passphrases(export)
+    export.set_defaults(func=_backup_export)
+    verify = sub.add_parser("backup-verify", help="decrypt the bundles into a temporary ledger and check fingerprints")
+    verify.add_argument("--bundles", required=True)
+    verify.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    _add_passphrases(verify)
+    verify.set_defaults(func=_backup_verify)
+    restore = sub.add_parser("backup-restore",
+                             help="restore keys; ledger files and head.anchor are written together")
+    restore.add_argument("--key", required=True, help="where to put principal.pem")
+    restore.add_argument("--ledger", required=True)
+    restore.add_argument("--bundles", required=True)
+    restore.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    restore.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    restore.add_argument("--replace-ledger", action="store_true",
+                         help="write the backup's ledger and head.anchor over a different ledger on disk; "
+                              "does not delete the anchor")
+    _add_passphrases(restore)
+    restore.set_defaults(func=_backup_restore)
     demo = sub.add_parser("demo")
     demo.set_defaults(func=_demo)
     args = parser.parse_args(argv)

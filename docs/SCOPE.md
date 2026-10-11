@@ -1,6 +1,8 @@
 # Scope
 
-`two-key-concept` is the first working cut. Package version 0.2.4, tag `v0.2.4` on `main`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
+`two-key-concept` is the first working cut. Package version 0.3.0 on branch
+`working` (not tagged). Tag `v0.2.4` on `main` is the tagged release. Tag
+`v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
 is on `main`. `v0.1.6` stays on the previous tree.
 
 It has:
@@ -12,10 +14,11 @@ It has:
 - an AES-256-GCM ledger, a ledger key, and a witness key outside the ledger directory. The witness public key is pinned in the ledger (`witness_pinned`) and, optionally, outside it (`witness_public_key=`, `--witness-public-key`); it changes only by a ledgered `witness_rotated` entry (`two-key rotate-witness`). A head anchor beside the ledger key (`head.anchor`, or `--head-anchor`) refuses a rollback or wipe of the ledger directory alone; deleting that file accepts the ledger as it stands. `two-key recover` drops an uncheckpointed tail and does not run on open. `two-key audit` reports both pins
 - a capability key outside the ledger directory. The gateway verifies with the public half only
 - a single-use token and a gateway that alone is meant to run the tool
+- passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/identity.py` (judge ≠ agent),
 `two_key/strict.py` (duplicate-key JSON/YAML), `two_key/audit.py` (decision
-digest checks), and the per-install fingerprint key beside the ledger
+digest checks), `two_key/backup.py` (key backup), and the per-install fingerprint key beside the ledger
 (`*.ledger-key/fingerprint.key`).
 
 It does not include scanning, antivirus, DLP, PKI, permissioned-chain
@@ -23,14 +26,11 @@ anchoring, seed phrases, or hybrid ML-DSA.
 
 ## Planned additions
 
-[ROADMAP.md](../ROADMAP.md) lists optional additions to this repository. None
-of those later phases exists in 0.2.4, and the lists above describe 0.2.4. When one ships, this file
-and [THREAT_MODEL.md](THREAT_MODEL.md) change in the same release.
+[ROADMAP.md](../ROADMAP.md) lists optional additions to this repository. 0.3.0
+(key backup) is on `working` and is described above. None of the later phases
+exists yet. When one ships, this file and [THREAT_MODEL.md](THREAT_MODEL.md)
+change in the same release.
 
-- Key backup and recovery (target 0.3): encrypted backup and restore of this
-  package's own keys (principal, capability, ledger, witness). This is not
-  PKI or seed-phrase backup. PKI is the item below. Seed phrases are not
-  planned.
 - Ledger export for SIEM (target 0.4): a command that verifies and decrypts
   the ledger locally and writes events without argument values. A field
   allowlist leaves out the proposal text and the derived amount and

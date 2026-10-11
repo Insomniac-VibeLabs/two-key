@@ -1139,3 +1139,79 @@ Package version 0.2.4 (`pyproject.toml`, `two_key.__version__`). Tagged
   does not open as a new ledger, and deleting the anchor adopts the current
   head.
 
+## 0.3.0 — 2026-10-10
+
+On branch `working`. Not a release tag. `main` and tag `v0.2.4` stay at
+0.2.4. Tag `v0.2.3` stays on `4a4352e`. Not published to PyPI.
+
+Package version 0.3.0 (`pyproject.toml`, `two_key.__version__`).
+
+### Added
+
+Key backup and recovery (ROADMAP 0.3).
+
+- `two-key backup-export` writes three passphrase-protected bundles.
+  `principal.bundle.json` holds `principal.pem` and `capability.pem`.
+  `ledger.bundle.json` holds `ledger.key`, `fingerprint.key`, the ledger
+  files, and `head.anchor` from that same moment. `witness.bundle.json`
+  holds `witness.pem` only. One file never holds every key a signed head
+  needs (principal, witness, and ledger key).
+- The bundle names its key derivation and cipher: format
+  `two-key-concept-key-backup/1`, algorithm `pbkdf2-sha256+aes-256-gcm`,
+  PBKDF2-HMAC-SHA256 at 600,000 iterations, then AES-256-GCM. 0.3 ships
+  that function only. The name is there so 0.9 can keep it and a later
+  version can add another without a new file format.
+- Passphrases come from environment variables, never from argv.
+- `two-key backup-verify` decrypts the bundles into a temporary ledger and
+  checks the principal, capability, and witness fingerprints. It does not
+  write the real ledger.
+- `two-key backup-restore` puts the keys back. It writes the ledger files
+  and `head.anchor` from the same bundle together. An older ledger left
+  next to the current anchor still does not open (`ledger_rolled_back`).
+  `--replace-ledger` is what writes that older ledger and its anchor over
+  a newer one, and it replaces a key file that differs so the restored
+  ledger still opens. The command never deletes the anchor. A missing
+  anchor on a newer ledger is left missing. Deleting it is not
+  the restore procedure.
+- Export refuses to start when the capability key or the fingerprint key
+  is missing. Start TwoKey once first. Export does not create them.
+- A bundle file is at most 64 MiB. The plaintext inside stops at 45 MiB
+  so the base64 wrapper still fits.
+
+### Not in this version
+
+- No second key-derivation function, no seed phrase, and no PKI.
+- Authorization, tokens, the gateway, and the judge-versus-agent checks
+  are unchanged.
+- A backup is not an external anchor. Guessing the passphrase opens that
+  bundle. PBKDF2 is not memory-hard. `--replace-ledger` can make a token
+  spent after the backup look unspent.
+
+### Upgrading from 0.2.4
+
+1. Existing ledgers open as before. Nothing is rewritten until you restore.
+2. Back up only after TwoKey has started once, so `capability.pem` and
+   `fingerprint.key` exist.
+3. Use a different passphrase for each bundle, and store the three files
+   apart. The same passphrase on all three is warned about.
+4. To put an older ledger back, run `backup-restore --replace-ledger`.
+   That writes `head.anchor` from the same backup. Do not delete the anchor
+   to silence `ledger_rolled_back`.
+5. There is no seed phrase. A lost passphrase cannot be recovered.
+
+### Docs
+
+README, ROADMAP, HOWTO, SCOPE, THREAT_MODEL, SECURITY, FIT, COMPARISON,
+llms.txt, AGENTS.md, CONTRIBUTING.
+
+### Reviews
+
+The operator asked for ROADMAP 0.3 on `working`. This writes key files and,
+with `--replace-ledger`, ledger bytes and the head anchor. It does not
+change authorize, the token, the gateway, or judge identity. Tests are
+`tests/test_key_backup.py`: restore, a wrong passphrase, a tampered bundle,
+a newer ledger left in place, and a replace that writes the anchor with
+the ledger and does not delete it. Tagging still wants the maintainer's
+look at the bundle split and the passphrase.
+
+
