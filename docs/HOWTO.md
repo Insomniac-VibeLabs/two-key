@@ -712,8 +712,16 @@ every key a signed head needs:
 The bundle names its key derivation: `pbkdf2-sha256` at 600,000 iterations,
 then AES-256-GCM. Format `two-key-concept-key-backup/1`. 0.3 ships that
 function only. PBKDF2 slows guessing and is not memory-hard. A short
-passphrase, or the same passphrase on all three files stored together, is
-warned about. A bundle file over 64 MiB is refused.
+passphrase, or two bundles that share a passphrase, is warned about. All
+three sharing one passphrase is warned about too. A bundle file over 64 MiB
+is refused.
+
+Export copies the files while it holds the ledger lock, then opens that copy
+in a temporary directory before it writes a bundle. A copy that would not
+open (a capability key that does not match the pin, a torn ledger) is
+`backup_refused` and nothing is written. `--out` must not be a symlink, and
+an existing output directory must not be writable by the group or by others.
+The three files are created mode 0600.
 
 Check a backup without touching the real ledger. This decrypts into a
 temporary directory and compares fingerprints:
@@ -740,11 +748,19 @@ two-key backup-restore --key keys/principal.pem --ledger ledger --bundles backup
 ```
 
 If the ledger on disk is newer than the backup, this restores missing keys
-only and leaves that ledger and its anchor alone. If that newer ledger's
-anchor is already missing, restore still does not write the older anchor.
-The next open adopts the current head. If the ledger files are
+only and leaves that ledger and its anchor alone. A key file that is already
+there is left there, even when the backup has an older copy. That is what
+keeps a witness rotated after the backup. The open uses the key on disk for
+every file that exists, and the backup only for a file that is missing, so
+the old witness is not required to open the current ledger. If a new
+`fingerprint.key` was created after the old one was lost, move that new file
+aside first: a file that exists is not replaced on this path. If that newer
+ledger's anchor is already missing, restore still does not write the older
+anchor. The next open adopts the current head. If the ledger files are
 already the backup's files and the anchor is missing or different, restore
-writes that backup's `head.anchor`. It does not delete the anchor.
+writes that backup's `head.anchor`. It does not delete the anchor. A key
+file that differs while those ledger files still match the backup is
+`backup_conflict` and is not overwritten.
 
 Putting an older ledger back, over a newer one, is explicit:
 
@@ -770,11 +786,11 @@ backup. Move that file aside and run restore again. Do not delete
 
 | What you lost | What you see | What to do |
 | --- | --- | --- |
-| `principal.pem` | the ledger will not open under that key | restore the principal bundle to `--key` |
-| `capability.pem` | `capability_key_missing` or `capability_key_changed` once a token was issued | restore the principal bundle. It holds this key too |
+| `principal.pem` | the ledger will not open under that key | restore. A newer ledger keeps its other keys, including a witness rotated after the backup |
+| `capability.pem` | `capability_key_missing` or `capability_key_changed` once a token was issued | restore the principal bundle. It holds this key too. Same rule after a witness rotation |
 | `ledger.key` | `ledger key missing` or `wrong ledger key` | restore the ledger bundle |
-| `fingerprint.key` | a later start creates a new one, and identity digests no longer match | restore the ledger bundle. Do not let a new key be created |
-| `witness.pem` | `witness key missing` or `witness_key_changed` | restore the witness bundle |
+| `fingerprint.key` | a later start creates a new one, and identity digests no longer match | restore the ledger bundle. If a new file was already created, move it aside first. Do not let a new key be created |
+| `witness.pem` | `witness key missing` or `witness_key_changed` | restore the witness bundle. A backup from before a rotation does not hold the new witness. `--replace-ledger` puts the old ledger and the old witness back; it is not how you keep the rotated ledger |
 | the ledger directory | `ledger_rolled_back` if the current anchor is still there | `backup-restore --replace-ledger`, which writes the ledger and `head.anchor` together |
 | `head.anchor` only, ledger unchanged | the next open adopts the current head, and the rollback check is gone until the next checkpoint | restore. It writes the anchor from the same backup. Do not delete a newer anchor to force an older ledger open |
 | one bundle file | the other two do not reconstruct it | that bundle. This is why the three files live apart |
@@ -882,8 +898,9 @@ names the setting or declaration that controls it.
   Remove `auth:` from a connector that does not send it.
 - A key backup uses PBKDF2-HMAC-SHA256 (600,000 iterations). It is not
   memory-hard. Three bundles with three passphrases, stored apart, are what
-  keeps one stolen file from being every key a head needs. The same
-  passphrase on all three is weaker. There is no seed phrase.
+  keeps one stolen file from being every key a head needs. Two bundles that
+  share a passphrase are weaker, and all three sharing one is weaker still.
+  There is no seed phrase.
 - A secret that contains `:` is fingerprinted with PBKDF2-HMAC-SHA256 at
   start-up (600,000 iterations, about 0.15 s each). PBKDF2 is not
   memory-hard: against someone who holds the key directory it slows a

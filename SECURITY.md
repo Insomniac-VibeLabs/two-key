@@ -55,9 +55,12 @@ private key mints tokens. A backup bundle is equal to the keys it holds.
 holds the principal key, the witness key, and the ledger key together.
 Guessing a bundle's passphrase opens that bundle. PBKDF2-HMAC-SHA256
 (600,000 iterations) slows guessing and is not memory-hard. There is no
-seed phrase. `backup-restore --replace-ledger` writes an older ledger and
+seed phrase. `backup-restore` onto a newer ledger fills missing key files and
+leaves a key that is already there, including a witness rotated later.
+`--replace-ledger` writes an older ledger and
 its `head.anchor` together; a token spent after that backup can look unspent.
-Restore does not delete the anchor.
+Restore does not delete the anchor. Export refuses a copy that would not open,
+a symlink output directory, and a directory the group or others can write.
 
 A redemption intent is checkpointed before the tool runs. A later retry does
 not run the tool. Concurrent calls are locked. A crash before the tool runs

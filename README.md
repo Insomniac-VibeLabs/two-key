@@ -333,8 +333,10 @@ It is a prototype. It is not a FIPS 140-3 validated module.
 - It does not scan payloads, and it is not an antivirus or DLP product.
 - A key backup is only as strong as its passphrase. The bundle is the keys.
   PBKDF2 slows guessing and is not memory-hard. It is not a seed phrase and
-  not an external anchor. `--replace-ledger` can make a token spent after
-  the backup look unspent, and it replaces a key file that differs.
+  not an external anchor. A restore onto a newer ledger fills missing key
+  files and leaves a key that is already there. `--replace-ledger` can make
+  a token spent after the backup look unspent, and it replaces a key file
+  that differs.
 
 The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 

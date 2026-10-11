@@ -1193,7 +1193,8 @@ Key backup and recovery (ROADMAP 0.3).
 2. Back up only after TwoKey has started once, so `capability.pem` and
    `fingerprint.key` exist.
 3. Use a different passphrase for each bundle, and store the three files
-   apart. The same passphrase on all three is warned about.
+   apart. Two bundles that share a passphrase are warned about. All three
+   sharing one passphrase is warned about too.
 4. To put an older ledger back, run `backup-restore --replace-ledger`.
    That writes `head.anchor` from the same backup. Do not delete the anchor
    to silence `ledger_rolled_back`.
@@ -1213,5 +1214,35 @@ change authorize, the token, the gateway, or judge identity. Tests are
 a newer ledger left in place, and a replace that writes the anchor with
 the ledger and does not delete it. Tagging still wants the maintainer's
 look at the bundle split and the passphrase.
+
+## Fixes — 2026-10-11
+
+On branch `working`. Not a release tag. Package version stays 0.3.0.
+`main` and tag `v0.2.4` stay at 0.2.4. Not published to PyPI.
+
+Fixes #67, #68, #69, and #70. Authorization, tokens, the gateway, and the
+judge-versus-agent checks are unchanged.
+
+- **#67.** A restore onto a newer ledger opens with the keys already on
+  disk and uses the backup only for a key file that is missing. A witness
+  rotated after the backup stays. Missing `principal.pem` or
+  `capability.pem` can be put back without `--replace-ledger`. That flag
+  is still what writes the older ledger, its anchor, and the older keys.
+  A key that differs while the ledger files still match the backup is
+  still `backup_conflict`.
+- **#68.** `backup-export` holds the ledger lock while it copies the files,
+  opens that copy in a temporary directory, and writes nothing when the
+  copy would not open (`backup_refused`). A capability key that does not
+  match the pin is refused here, not left as a backup `backup-verify`
+  would reject.
+- **#69.** `--out` refuses a symlink and an existing directory the group
+  or others can write. Bundles are still created mode 0600.
+- **#70.** The passphrase warning fires when any two bundles share a
+  passphrase, not only when all three match.
+
+### Docs
+
+HOWTO "Back up the keys", the lost-key table, and the PBKDF2 trade-off.
+README known limits. THREAT_MODEL key-backup residual. SECURITY.md.
 
 

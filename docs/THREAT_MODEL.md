@@ -252,7 +252,14 @@ claims to close.
   the witness key. One bundle never holds every key a signed head needs.
   Guessing a bundle's passphrase opens that bundle. PBKDF2-HMAC-SHA256
   (600,000 iterations) slows guessing and is not memory-hard. The same
-  passphrase on all three bundles, stored together, is one guess.
+  passphrase on two bundles, or on all three, stored together, is one guess.
+  Export holds the ledger lock while it copies, and it does not write a
+  bundle set that would not open. It refuses a symlink output directory and
+  a directory the group or others can write.
+  A restore onto a newer ledger fills missing key files only. A key already
+  on disk stays, including a witness rotated after the backup, so that
+  restore does not roll the witness back. `--replace-ledger` is what writes
+  the older ledger, its anchor, and the keys from that moment.
   `backup-restore --replace-ledger` writes an older ledger and its anchor
   together, and replaces a key file that differs, which can make a token
   spent after the backup look unspent and undoes a later witness rotation.

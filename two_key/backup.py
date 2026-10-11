@@ -199,10 +199,17 @@ def _exact_fields(obj, fields: tuple, what: str) -> dict:
 
 
 def _warn_passphrases(passphrases: dict) -> None:
-    texts = [passphrases[role] for role in ROLES]
-    if texts[0] == texts[1] == texts[2]:
+    texts = {role: passphrases[role] for role in ROLES}
+    if texts["principal"] == texts["ledger"] == texts["witness"]:
         print("two-key: WARNING: the three backup bundles share one passphrase. A guess that opens one "
               "opens the others if the files are stored together. Store the bundles apart.", file=sys.stderr)
+    else:
+        shared = [f"{a} and {b}" for a, b in (("principal", "ledger"), ("principal", "witness"), ("ledger", "witness"))
+                  if texts[a] == texts[b]]
+        if shared:
+            print("two-key: WARNING: the " + " and ".join(shared) + " backup passphrases match. A guess that "
+                  "opens one opens the other if those files are stored together. Store the bundles apart.",
+                  file=sys.stderr)
     for role in ROLES:
         if len(passphrases[role].encode("utf-8")) < _SHORT_PASSPHRASE:
             print(f"two-key: WARNING: the {role} passphrase is shorter than {_SHORT_PASSPHRASE} bytes. "
@@ -526,6 +533,11 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
     ``head.anchor``. Deleting the anchor is not a step this function takes. When the ledger
     files already match the backup, a missing or different anchor is written back from the same bundle
     without that flag: it is the anchor from that moment, not a deletion.
+
+    A newer ledger keeps a key file that is already there, even when the backup has an older copy
+    (a witness rotated after the backup). Only a missing key file is created from the backup, and
+    only after that mix opens the ledger on disk. A key that differs while the ledger files still
+    match the backup is ``backup_conflict`` and is not overwritten.
     """
     phrases = _passphrases(passphrases)
     _warn_passphrases(phrases)
@@ -544,10 +556,12 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
     anchor_missing = not os.path.lexists(dest["head.anchor"])
     write_files = False
     write_anchor = False
+    key_only = False
     if files_differ or (files_missing and anchor_differs):
         if not replace_ledger:
             if files_differ and not files_missing:
                 _preflight_live(dest, files, witness_public_key=witness_public_key)
+                key_only = True
             else:
                 raise BackupError(
                     "backup_refused: the destination ledger differs from the backup. "
@@ -584,10 +598,19 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
             if _read_named(path, name) == files[name]:
                 actions[name] = "unchanged"
                 continue
+            if key_only and name in _KEY_FILES:
+                # The ledger on disk is newer and this key is the one that opened it. Do not roll it back.
+                actions[name] = "kept"
+                continue
             if not overwrite:
                 raise BackupError(f"backup_conflict: {path} differs from the backup and was not overwritten. "
                                   "Move that file aside and run restore again. Do not delete head.anchor.")
         pending.append(name)
+    if any(actions.get(name) == "kept" for name in _KEY_FILES):
+        print("two-key: WARNING: a key file on disk differs from the backup and was left in place. "
+              "A restore onto a newer ledger does not roll a key back. Move that file aside and run "
+              "restore again if you meant to put the backup's copy there. Do not delete head.anchor.",
+              file=sys.stderr)
     for name in pending:
         actions[name] = _install(dest[name], files[name], overwrite=True, name=name)
     return {"ok": True, "actions": actions, "replaced_ledger": bool(replace_ledger and (files_differ or files_missing)),
@@ -596,10 +619,11 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
 
 
 def _preflight_live(dest: dict, files: dict, *, witness_public_key) -> None:
-    """Open a copy of the ledger on disk with the backup's keys. Write nothing to ``dest``.
+    """Open a copy of the ledger on disk. Write nothing to ``dest``.
 
-    A missing anchor is not an error here. The copy adopts one, the way a real open would, and
-    that new anchor is not written back. The backup's older anchor stays in its bundle.
+    A key that is already on disk is the one opened, including a witness rotated after the backup.
+    A missing key comes from the backup. The backup's old witness is not required to open a ledger
+    that has already moved on.
     """
     from .ledger import LedgerError
     with tempfile.TemporaryDirectory(prefix="two-key-live-") as tmp:
@@ -614,14 +638,16 @@ def _preflight_live(dest: dict, files: dict, *, witness_public_key) -> None:
             layout["head.anchor"].parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             _write_new(layout["head.anchor"], _read_named(dest["head.anchor"], "head.anchor"))
         for name in _KEY_FILES:
-            # Prefer the backup's key. A destination key that differs is a conflict, caught on install
-            # when it exists; here we only need to know the backup's keys open this ledger.
+            if os.path.lexists(dest[name]):
+                data = _read_named(dest[name], name)
+            else:
+                data = files[name]
             layout[name].parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            _write_new(layout[name], files[name])
+            _write_new(layout[name], data)
         try:
             _open_staged(root, witness_public_key=witness_public_key, require_anchor=anchor_present)
         except BackupError as e:
-            raise BackupError("backup_rejected: the backup's keys do not open the ledger on disk "
+            raise BackupError("backup_rejected: those keys do not open the ledger on disk "
                               f"({e}). The destination was not changed.") from None
         except LedgerError as e:
             raise BackupError(f"backup_rejected: {e}. The destination was not changed.") from None
@@ -630,7 +656,12 @@ def _preflight_live(dest: dict, files: dict, *, witness_public_key) -> None:
 def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
                   witness_public_key=None, anchor_path=None, iterations: int = PBKDF2_ITERATIONS) -> dict:
     """Encrypt the three bundles. Refuses to start when a key this package created is missing,
-    when a witness rotation is unfinished, or when the ledger does not open."""
+    when a witness rotation is unfinished, or when the copied bytes would not open as a ledger.
+
+    The ledger lock is held while the files are copied into memory, so the three bundles are one
+    moment. Those bytes are opened in a temporary directory before any bundle is written. A copy
+    that would not restore is ``backup_refused`` and leaves the output directory untouched.
+    """
     from .ledger import Ledger, LedgerError
 
     phrases = _passphrases(passphrases)
@@ -641,33 +672,15 @@ def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
         ledger = Ledger(ledger_path, principal, witness_public_key=witness_public_key, anchor_path=anchor_path)
     except LedgerError as e:
         raise BackupError(f"backup_refused: {e}") from None
-    pending = ledger.witness_path.with_name("witness.pem.new")
-    if os.path.lexists(pending):
-        raise BackupError("backup_refused: witness rotation is unfinished (witness.pem.new); "
-                          "finish it or remove that file before export")
-    cap_path = ledger.capability_key_path()
-    fp_path = ledger.fingerprint_key_path()
-    if not os.path.lexists(cap_path) or not os.path.lexists(fp_path):
-        raise BackupError("backup_refused: the capability key or the fingerprint key is missing. "
-                          "Start TwoKey once so both exist, then export. Export does not create them.")
-    anchor = _read_file(ledger._anchor_path, MAX_BUNDLE_BYTES)
-    groups = {
-        "principal": {
-            "principal.pem": _read_file(Path(principal_path), MAX_BUNDLE_BYTES),
-            "capability.pem": _read_file(cap_path, MAX_BUNDLE_BYTES),
-        },
-        "witness": {"witness.pem": _read_file(ledger.witness_path, MAX_BUNDLE_BYTES)},
-        "ledger": {
-            "ledger.key": _read_file(ledger.ledger_key_path, MAX_BUNDLE_BYTES),
-            "fingerprint.key": _read_file(fp_path, MAX_BUNDLE_BYTES),
-            "entries.jsonl": _read_named(ledger.entries_path, "entries.jsonl"),
-            "head.json": _read_named(ledger.head_path, "head.json"),
-            "keywrap.json": _read_named(ledger.wrap_path, "keywrap.json"),
-            "head.anchor": anchor,
-        },
-    }
-    out = Path(out_dir)
-    out.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        with ledger._exclusive():
+            groups = _snapshot_files(ledger, principal_path)
+    except BackupError:
+        raise
+    except LedgerError as e:
+        raise BackupError(f"backup_refused: {e}") from None
+    _require_snapshot_opens(groups, witness_public_key=witness_public_key)
+    out = _prepare_output_dir(Path(out_dir))
     for role, name in BUNDLE_NAMES.items():
         if os.path.lexists(out / name):
             raise BackupError(f"backup_conflict: refusing to overwrite {out / name}")
@@ -695,3 +708,74 @@ def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
     return {"ok": True, "bundles": written, "fingerprints": fingerprints,
             "ledger_size": ledger.size(), "iterations": iterations,
             "kdf": KDF_NAME, "alg": ALG, "format": FORMAT}
+
+
+def _prepare_output_dir(out: Path) -> Path:
+    """The directory the bundles are written into. A symlink is refused, not followed.
+
+    An existing directory the group or others can write is refused. A new directory is created
+    mode 0700. The bundles themselves are mode 0600; this is about where those files land.
+    """
+    out = Path(out)
+    if os.path.lexists(out):
+        if os.path.islink(out):
+            raise BackupError("backup_refused: the output directory is a symlink")
+        st = os.lstat(out)
+        if not stat.S_ISDIR(st.st_mode):
+            raise BackupError("backup_refused: the output directory is not a directory")
+        if st.st_mode & 0o022:
+            raise BackupError("backup_refused: the output directory is writable by group or others")
+        return out
+    try:
+        out.mkdir(mode=0o700, parents=True, exist_ok=False)
+    except FileExistsError:
+        raise BackupError("backup_refused: the output directory is a symlink") from None
+    except OSError as e:
+        raise BackupError(f"backup_refused: cannot create the output directory ({e.strerror})") from None
+    return out
+
+
+def _snapshot_files(ledger, principal_path) -> dict:
+    """Copy the backup's files while the caller holds the ledger lock. One moment, in memory."""
+    pending = ledger.witness_path.with_name("witness.pem.new")
+    if os.path.lexists(pending):
+        raise BackupError("backup_refused: witness rotation is unfinished (witness.pem.new); "
+                          "finish it or remove that file before export")
+    cap_path = ledger.capability_key_path()
+    fp_path = ledger.fingerprint_key_path()
+    if not os.path.lexists(cap_path) or not os.path.lexists(fp_path):
+        raise BackupError("backup_refused: the capability key or the fingerprint key is missing. "
+                          "Start TwoKey once so both exist, then export. Export does not create them.")
+    anchor = _read_file(ledger._anchor_path, MAX_BUNDLE_BYTES)
+    return {
+        "principal": {
+            "principal.pem": _read_file(Path(principal_path), MAX_BUNDLE_BYTES),
+            "capability.pem": _read_file(cap_path, MAX_BUNDLE_BYTES),
+        },
+        "witness": {"witness.pem": _read_file(ledger.witness_path, MAX_BUNDLE_BYTES)},
+        "ledger": {
+            "ledger.key": _read_file(ledger.ledger_key_path, MAX_BUNDLE_BYTES),
+            "fingerprint.key": _read_file(fp_path, MAX_BUNDLE_BYTES),
+            "entries.jsonl": _read_named(ledger.entries_path, "entries.jsonl"),
+            "head.json": _read_named(ledger.head_path, "head.json"),
+            "keywrap.json": _read_named(ledger.wrap_path, "keywrap.json"),
+            "head.anchor": anchor,
+        },
+    }
+
+
+def _require_snapshot_opens(groups: dict, *, witness_public_key) -> None:
+    """Refuse before any bundle is written when these bytes would not restore."""
+    bundles = {}
+    for role in ROLES:
+        bundles[role] = _check_payload(
+            {"format": PAYLOAD_FORMAT, "version": BACKUP_VERSION, "role": role,
+             "files": {name: _file_entry(data, *_ROLE_FILES[role][name]) for name, data in groups[role].items()},
+             "fingerprints": {name: _sha256(data) for name, data in groups[role].items()}},
+            role)
+    try:
+        with tempfile.TemporaryDirectory(prefix="two-key-backup-") as tmp:
+            _materialize(bundles, Path(tmp))
+            _open_staged(Path(tmp), witness_public_key=witness_public_key)
+    except BackupError as e:
+        raise BackupError(f"backup_refused: this backup would not open ({e}). Nothing was written.") from None

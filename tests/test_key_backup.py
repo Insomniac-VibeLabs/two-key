@@ -122,6 +122,44 @@ class ExportShape(BackupFixture):
         with self.assertRaisesRegex(BackupError, "refusing to overwrite"):
             self.export()
 
+    def test_two_matching_passphrases_warn(self):
+        phrases = dict(PHRASES)
+        phrases["witness"] = phrases["principal"]
+        _, text = self.export(phrases)
+        self.assertIn("principal and witness", text)
+        self.assertIn("passphrases match", text)
+
+    def test_export_refuses_a_snapshot_that_would_not_open(self):
+        cap = self.tk.ledger.capability_key_path()
+        cap.unlink()
+        save_private_key(cap, generate_private_key())
+        with self.assertRaisesRegex(BackupError, "would not open"):
+            self.export()
+        self.assertFalse((self.out / "principal.bundle.json").exists())
+
+    def test_refuses_a_symlink_or_a_group_writable_output_directory(self):
+        real = self.root / "real-out"
+        real.mkdir()
+        os.chmod(real, 0o777)
+        link = self.root / "out-link"
+        link.symlink_to(real, target_is_directory=True)
+        with self.assertRaisesRegex(BackupError, "symlink"):
+            export_backup(self.ledger, self.key_path, link, PHRASES, iterations=FAST)
+        self.assertEqual(list(real.iterdir()), [])
+        wide = self.root / "wide-out"
+        wide.mkdir()
+        os.chmod(wide, 0o775)
+        with self.assertRaisesRegex(BackupError, "writable"):
+            export_backup(self.ledger, self.key_path, wide, PHRASES, iterations=FAST)
+        self.assertEqual(list(wide.iterdir()), [])
+        private = self.root / "private-out"
+        private.mkdir()
+        os.chmod(private, 0o755)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            export_backup(self.ledger, self.key_path, private, PHRASES, iterations=FAST)
+        self.assertTrue((private / "principal.bundle.json").is_file())
+
 
 class VerifyAndPassphrase(BackupFixture):
     def test_verify_checks_fingerprints_in_a_temporary_ledger(self):
@@ -347,6 +385,31 @@ class Restore(BackupFixture):
         opened = Ledger(self.ledger, self.key)
         self.assertEqual(opened.size(), newer)
         self.assertNotEqual(self._anchor().read_bytes(), old_anchor)
+
+    def test_missing_keys_after_witness_rotation_keep_the_new_witness(self):
+        self.export()
+        self.tk.ledger.rotate_witness(reason="yearly")
+        newer = Ledger(self.ledger, self.key).size()
+        witness = self.ledger.parent / "ledger.witness" / "witness.pem"
+        new_witness = witness.read_bytes()
+        anchor = self._anchor().read_bytes()
+        self.key_path.unlink()
+        cap = self.tk.ledger.capability_key_path()
+        cap.unlink()
+        err = io.StringIO()
+        with redirect_stderr(err):
+            result = restore_backup(self.ledger, self.key_path, self.out, PHRASES)
+        self.assertEqual(result["actions"]["principal.pem"], "created")
+        self.assertEqual(result["actions"]["capability.pem"], "created")
+        self.assertEqual(result["actions"]["witness.pem"], "kept")
+        self.assertNotIn("entries.jsonl", result["actions"])
+        self.assertNotIn("head.anchor", result["actions"])
+        self.assertEqual(witness.read_bytes(), new_witness)
+        self.assertEqual(self._anchor().read_bytes(), anchor)
+        self.assertIn("left in place", err.getvalue())
+        opened = Ledger(self.ledger, load_private_key_file(self.key_path))
+        self.assertEqual(opened.size(), newer)
+        self.assertTrue(cap.is_file())
 
 
 class CommandLine(BackupFixture):
