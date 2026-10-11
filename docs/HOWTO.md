@@ -243,7 +243,17 @@ sends included) abstains with
 `cloud_judge_reused_agent_session`, wherever it connects, and the round
 denies. This is the start-up rule again, at call time, with the session the
 agent really uses: it catches a judge holding the agent's key even when
-`monitored_agent:` names the wrong key or address.
+`monitored_agent:` names the wrong key or address. The credential named for
+the monitored agent is read again on that call and compared the same way,
+whether or not the string you passed is that key. A placeholder still
+satisfies the presence check. It does not hide the named key: a judge
+holding that key denies the round before anyone is called
+(`cloud_judge_reused_agent_session`). The named key is not sent to the
+judge and not written to the ledger. A session that is not the named key
+is still yours to pass; Two-Key cannot see a secret you never named. A
+keyless agent (`credential: none`) has no named key to add. If the named
+key cannot be read, the round denies with `agent_credential_unreadable`
+and the judges are not called.
 
 The in-process placeholder agent `two_key.testing.TEST_AGENT` is accepted
 only with `allow_test_doubles=True` and only when every judge is a test
@@ -425,10 +435,23 @@ refused. `--ttl-seconds` sets the token lifetime, 1 to 300 seconds
 (default 120). `--args` is parsed strictly before anything else is loaded.
 The decision entry records `origin: cli`.
 
-`--data-class` defaults to `classified`, and `--irreversible` defaults to
-true. Those are the same fail-closed defaults as a missing field in
-`normalize_action`. The command above sets public and reversible so the
-example rules allow a draft. `--no-irreversible` is the off switch.
+A flag you do not pass is left out of the claim. That is not the same as
+`normalize_action` filling a missing field, and it is what lets the bytes
+and the tool spec decide:
+
+- Omit `--amount-usd` and the amount is read from the argument bytes. Pass
+  it only to claim a number; a different number is `amount_mismatch`.
+- Omit `--counterparty` and the party is read from the argument bytes. Pass
+  it only to claim one; a different party is `counterparty_mismatch`.
+- Omit `--irreversible` and the tool spec decides. `--irreversible` claims
+  true and `--no-irreversible` claims false. A claim that disagrees with the
+  spec is `irreversible_mismatch`. The example above passes
+  `--no-irreversible` because it is showing the flag; `email_draft`'s spec
+  is already reversible, so the flag can be left off.
+- Omit `--data-class` and a missing class is `classified`, then the tool's
+  `data_class_floor`, which never lowers it. Pass `--data-class public`
+  when that class is allowed after the floor. The example above needs it:
+  these rules deny `classified`.
 
 Exit status is 0 on allow and 2 on deny. The ledger records and the head
 are ciphertext. The append lock is `<ledger>.lock` next to the ledger
@@ -584,21 +607,40 @@ so a gateway process today holds the keys that can sign a ledger head.
 
 A process killed between a ledger append and the next checkpoint (the OOM
 killer, SIGKILL, power loss) leaves entries the signed head does not cover.
-The next open refuses with `signed head does not match the chain`; a torn last
-line shows as `ledger record rejected (wrong key or tampered ciphertext)`.
-Nothing is lost or forged. Until a recovery command exists
-([#49](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/49)),
-recover by hand:
+The head file is fsynced before it replaces the previous head, which narrows
+that window; it does not close it. The next open refuses with `signed head does not match the chain`. A torn
+last line, and only a last line, refuses with `the last record does not
+decrypt`. That can be a crash or tampering; the message names both. A record
+that does not decrypt in the middle of the file is still `wrong key or
+tampered ciphertext`. Nothing is truncated on open.
 
-1. Stop every process that uses the ledger. Copy the ledger directory and
-   its `<ledger>.ledger-key`, `<ledger>.witness`, and `<ledger>.capability`
-   siblings somewhere safe.
+Stop every process that uses the ledger, copy the ledger directory and its
+`<ledger>.ledger-key`, `<ledger>.witness`, `<ledger>.capability`, and
+`<ledger>.recovery` siblings, then:
+
+```bash
+two-key recover --key keys/principal.pem --ledger ledger
+```
+
+`recover` keeps the prefix the signed head covers, copies the dropped
+ciphertext to `<ledger>.recovery/dropped-<digest>.bin` (mode 0600; anyone
+with the ledger key can decrypt it), and appends `ledger_recovered` with the
+byte count and digest, not the plaintext. It then checkpoints. It refuses,
+and does not change the file, when a record inside the signed prefix is bad,
+when the entries end before the head, or when the head is behind
+`head.anchor` (that is a rollback, not a crash). A clean ledger is left
+unchanged.
+
+If `recover` refuses, the hand procedure is still:
+
+1. Use the copy you just made. Do not delete `head.anchor`.
 2. Delete `head.json.tmp` in the ledger directory if it exists.
 3. Remove the last line of `entries.jsonl`, then try to open the ledger
    (`Ledger("ledger", key)`). Repeat until it opens. `authorize` writes at
    most six entries before its checkpoint, and the gateway one, so this takes
    at most six tries, or seven with a torn last line. If it still does not
-   open, restore the copy and report it.
+   open, restore the copy and report it. If the error is `ledger_rolled_back`,
+   restoring an older copy will not open while the current anchor remains.
 4. Once it opens, record what you did, for example
    `ledger.append("manual_recovery", {"removed_entries": 3, "reason": "crash before checkpoint"})`
    and then `ledger.checkpoint()`. Keep the copy: the removed lines exist only
@@ -611,6 +653,25 @@ checkpointed, so a removed `redemption_started` means the tool never ran,
 and the token can be redeemed again within its lifetime. A removed
 `redemption` or `redemption_aborted` leaves the signed `redemption_started`
 in place, so a retry is still refused (`already_attempted`).
+
+Appending checks the entries file's size instead of reading it again, and
+the Merkle root is extended one leaf at a time, so a long ledger does not
+re-read or re-hash its whole history on every call. A redemption does not
+copy or walk the entry list either: it uses the kind index built while the
+ledger was read. Opening a ledger still reads every entry, because that
+read is what checks the chain. There is no rotation, and there is no second
+copy of the plaintext. A few thousand entries is small next to judge
+latency; tens of thousands make opening the slow part. That open cost is
+the ceiling.
+
+The head anchor, `<ledger>.ledger-key/head.anchor` unless you passed
+`--head-anchor`, records the newest signed head. Opening a ledger whose
+signed head is older, or a wiped ledger directory, refuses with
+`ledger_rolled_back`. The first open under 0.2.4 writes the anchor from the
+head that verifies then. Deleting the anchor makes the next open accept the
+ledger as it stands. Copy the anchor whenever you copy the ledger. Someone
+who can write the anchor file can roll it back together with the ledger.
+Pass the same `--head-anchor` on every command if you move the file.
 
 ## Pin the witness key
 
@@ -648,9 +709,10 @@ With it, a new ledger needs that witness key already in place
 | --- | --- | --- |
 | `witness.pem` replaced; chain not rewritten | Refused | Refused |
 | Head signed by another witness key; chain not rewritten | Refused | Refused |
-| Chain rewritten from its first entry with the principal key and the ledger key | Not detected | Refused |
+| Chain rewritten from its first entry with the principal key and the ledger key | Not detected once the anchor beside the ledger key is removed too | Refused |
 | Witness key swapped before the first open under 0.2.3 | Not detected | Refused, if your copy is the original key |
-| Rollback to an earlier head signed by the same keys, or a wipe (#62) | Not detected | Not detected |
+| Rollback or wipe of the ledger directory alone (#62) | Refused by `head.anchor`, which is not this pin | Refused by `head.anchor`. Deleting the anchor, or rolling it back too, is not detected |
+| Chain rewritten by someone who can also write the anchor file | Not detected | Refused, if your witness copy is unchanged |
 
 Check both pins with:
 
@@ -703,9 +765,9 @@ names the setting or declaration that controls it.
 - A credential configured on a judge or an `agents.yaml` agent is read at
   start-up even when its connector never sends it (`auth_header: none`, an
   Ollama agent), so a callback or keyring credential runs then, and one that
-  cannot be read refuses to start. At call time it is read only to compare
-  with `agent_session`. Remove `auth:` from a connector that does not send
-  it.
+  cannot be read refuses to start. At call time it is read to compare with
+  `agent_session` and with the credential named for the monitored agent.
+  Remove `auth:` from a connector that does not send it.
 - A secret that contains `:` is fingerprinted with PBKDF2-HMAC-SHA256 at
   start-up (600,000 iterations, about 0.15 s each). PBKDF2 is not
   memory-hard: against someone who holds the key directory it slows a
@@ -753,10 +815,13 @@ names the setting or declaration that controls it.
   `policy_digest`), and announced on stderr.
 - A judge and the agent on the same address and model with different
   credentials start, with a `same_model_same_address` warning.
-- The runtime agent is not matched against `monitored_agent:`. The
-  declaration is what is compared. At call time `agent_session` is compared
-  with each judge's credential, at any address; it is not compared with the
-  declared agent credential and is not ledgered.
+- The runtime agent is not matched against `monitored_agent:` as an
+  identity. The declaration is what is compared at start-up. At call time
+  `agent_session` is compared with each judge's credential, at any address,
+  and the named agent credential is read again and compared the same way.
+  Neither value is ledgered. A placeholder satisfies the presence check. It
+  does not hide the named key. It does hide a secret you never named, and a
+  keyless agent has no named key.
 - `agents.yaml` does not accept `tenant:` or `upstream:`. For an agent
   behind a proxy, declare it with the `monitored_agent:` block or an
   `AgentDeclaration`, which do.
@@ -791,7 +856,9 @@ names the setting or declaration that controls it.
   `ttl_out_of_range:`.
 - On Python 3.12, an agent reply nested past 62 levels parses and is
   `invalid_call`. On 3.10 and 3.11 it is `malformed_proposal`. Both deny.
-- `agent_session` is the frozen session. The agent's key is not added to it.
+- `agent_session` is the session you pass. The named agent key is compared
+  beside it. It is not added to that string, not sent to the judge, and not
+  written down.
 - The ledger's own records are read with the standard JSON parser, not the
   strict one, because they are signed and hash-chained.
 - `audit.check_decision_digests` on a ledger from before 0.2.0 reports the
@@ -822,5 +889,6 @@ This ends every token issued before the call: the gateway refuses them
   and then approves calls as usual.
 
 To stop an agent, stop calling `authorize` (or stop the process), and revoke
-to end tokens already issued. A persistent halt that refuses new approvals
-until a ledgered resume is not built.
+to end tokens already issued. A halt that refuses new approvals is not part
+of `revoke`. An optional reputation halt, off unless configured, is planned
+as 0.11 in ROADMAP. It is not built.

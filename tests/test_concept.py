@@ -312,8 +312,10 @@ class ConceptTests(unittest.TestCase):
                              "--tool", "email_draft", "--args", "{}",
                              "--proposal", "draft"])
             self.assertEqual(code, 2)
-            self.assertEqual(captured["action"]["data_class"], "classified")
-            self.assertIs(captured["action"]["irreversible"], True)
+            self.assertEqual(captured["action"], {"tool": "email_draft"})
+            self.assertNotIn("amount_usd", captured["action"])
+            self.assertNotIn("data_class", captured["action"])
+            self.assertNotIn("irreversible", captured["action"])
             with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=1))), \
                  patch("two_key.identity.load_monitored_agent_file", return_value=TEST_AGENT), \
                  patch("two_key.ledger.Ledger", return_value=object()), \

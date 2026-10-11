@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.2.3 (tag `v0.2.3` on `main`). `v0.2.0` stays on `2f756ac`. 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+This is the design model for `two-key-concept` 0.2.4 on `working` (not tagged). Tag `v0.2.3` is on `main`. `v0.2.0` stays on `2f756ac`. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
 It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
@@ -22,6 +22,9 @@ the code wins, then this file should be corrected.
 - The witness public key the operator keeps outside the ledger
   (`witness_public_key=`, `--witness-public-key`), when one is configured. It
   is not secret, but whoever can change it can make a forged head pass.
+- The head anchor (`<ledger>.ledger-key/head.anchor`, or `anchor_path=` /
+  `--head-anchor`). It is not secret. Whoever can change or delete it can
+  make a rolled-back ledger pass. It is not an external anchor.
 - The per-install fingerprint key (`<ledger>.ledger-key/fingerprint.key`),
   which keys credential fingerprints. It sits beside the ledger key, so it
   protects fingerprints only from someone without that directory. Against
@@ -226,16 +229,17 @@ claims to close.
   swapped before the upgrade, and the heads it signed, cannot be detected.
   A configured out-of-ledger pin, if the operator kept a copy of the
   original witness public key, does detect it.
-- Anyone who can write the ledger directory can roll the ledger back to an
-  earlier signed head (a saved `head.json` and a truncated `entries.jsonl`)
-  or delete `entries.jsonl` and `head.json`, with no key. Both open and
-  verify, and a rolled-back ledger forgets later redemptions. With the
-  principal key and write access to `<ledger>.ledger-key` and
-  `<ledger>.witness`, a whole replacement ledger under a new ledger key
-  verifies, unless the witness public key is configured outside the
-  ledger. Neither witness pin detects a rollback to an earlier head signed
-  by the same keys, or a wipe followed by a new ledger under the same
-  witness key. Without an external anchor, neither is detected (#62).
+- A rollback or wipe that also deletes `head.anchor`, or replaces it with an
+  older copy. The anchor sits outside the ledger directory
+  (`<ledger>.ledger-key/head.anchor`, or `--head-anchor`). A ledger-directory
+  writer who cannot touch that file is refused (`ledger_rolled_back`). The
+  file is adopted when it is missing, so deleting it and opening accepts the
+  ledger as it stands. With the principal key and write access to
+  `<ledger>.ledger-key` and `<ledger>.witness`, a whole replacement ledger
+  under a new ledger key verifies once that attacker also removes the
+  anchor, unless the witness public key is configured outside the ledger.
+  Neither witness pin, by itself, detects a rollback. There is still no
+  external anchor (#62).
 - A rotation interrupted after its head is written and before the new key
   is moved into place leaves `witness.pem.new` beside `witness.pem`, and the
   ledger refuses to open (`witness_key_changed`) until it is moved. A lost
@@ -283,7 +287,7 @@ claims to close.
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md). None is in 0.2.3, and nothing in
+These come from [ROADMAP.md](../ROADMAP.md). None of what follows is in 0.2.4, and nothing in
 this section describes current behavior. Each item is added to the sections
 above in the release that ships it.
 
@@ -366,4 +370,4 @@ above in the release that ships it.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
-- `two_key/ledger.py`: the ledger key, the witness key, the capability key, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds.
+- `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.

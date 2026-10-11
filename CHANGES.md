@@ -1044,3 +1044,96 @@ release: #47, #48, #51, #52, #54, #56, #57, and #60 items 1 and 5. Read
   created at a wrong path, a weak `agent_session` check), and #62 (a
   rollback or wipe of the ledger directory, which neither witness pin
   detects).
+
+## 0.2.4 — on `working`, not tagged
+
+Package version 0.2.4 (`pyproject.toml`, `two_key.__version__`). Tag `v0.2.3`
+stays on `4a4352e` on `main`. This branch is not tagged and is not on `main`.
+Not published to PyPI.
+
+### Fixed
+
+- **#53.** `two-key authorize` no longer puts `amount_usd` (0.0),
+  `irreversible` (true), or `data_class` (`classified`) into the claim when
+  the operator did not pass the flag. An omitted amount or counterparty is
+  read from the argument bytes. An omitted `irreversible` follows the tool
+  spec. An omitted `data_class` is still `classified`, then the tool floor.
+  `--amount-usd`, `--counterparty`, `--data-class`, and `--irreversible` /
+  `--no-irreversible` are claims, and a claim that disagrees is still a deny.
+- **#50.** An append checks the entries file's size instead of reading every
+  line. The Merkle root is extended one leaf at a time and matches the
+  previous full recomputation, including a root of a prefix. A redemption
+  looks up `constitution_loaded` and `revocation` through an index built as
+  the ledger is read, instead of copying the entry list. Opening a ledger
+  still reads every entry: that read is the verification, and it is the
+  cost ceiling. There is no rotation and no second copy of the plaintext.
+- **#49.** The head is fsynced before it replaces the previous head. A last
+  record that does not decrypt says it can be a crash or tampering; a record
+  in the middle of the file still says `wrong key or tampered ciphertext`.
+  `two-key recover` (and `Ledger.recover_tail`) drops only the bytes after the
+  signed head, copies that ciphertext to `<ledger>.recovery/`, and appends a
+  `ledger_recovered` entry (byte count and digest, not plaintext). It refuses
+  a damaged signed prefix and a head that is behind the anchor. It does not
+  run on open. Manual truncation in HOWTO remains the fallback when it refuses.
+- **#62.** A head anchor outside the ledger directory, by default
+  `<ledger>.ledger-key/head.anchor`, records the newest signed head. A signed
+  head older than the anchor, or a wiped ledger directory, is refused
+  (`ledger_rolled_back`). The anchor moves only forward. A missing anchor is
+  adopted from the current head, which is how a 0.2.3 ledger starts being
+  protected, and which is why deleting the anchor undoes the check. Someone
+  who can write the anchor file can roll it back with the ledger. Pass
+  `--head-anchor` / `anchor_path=` to keep it somewhere that writer cannot
+  change. It is not an external anchor. The witness pins still do not detect
+  a rollback by themselves.
+- **#60 item 2.** `Ledger()` still creates a ledger at a new path, and now
+  warns on stderr when it does. `audit` and `rotate-witness` still refuse a
+  path with no ledger.
+- **#60 item 3.** The credential named for the monitored agent is re-read on
+  every `authorize` and compared with each judge's credential, beside the
+  `agent_session` you pass. A placeholder still satisfies the presence
+  check (`cloud_judge_session_required` when you pass nothing and a judge
+  is not on loopback). It no longer hides the named key: a judge holding
+  that key denies the round before anyone is called
+  (`cloud_judge_reused_agent_session`). The named key is not an argument of
+  the judge, not put in the prompt, and not written to the ledger. If it
+  cannot be read, the round denies with `agent_credential_unreadable` and
+  the judges are not called. What this does not do: a secret you never
+  named is still only checked if you pass it, and a keyless agent
+  (`credential: none`) has nothing to add.
+
+### Not a code change
+
+- **#46.** `revoke` still ends only tokens issued before the call. It is not
+  a halt. An optional reputation halt, off unless configured, is ROADMAP 0.11.
+  It is not built. The issue is closed as documented behavior.
+
+### Upgrading from 0.2.3
+
+1. The first open of an existing ledger writes `head.anchor` beside the
+   ledger key, from the head that verifies now. A rollback done before that
+   open is not detected.
+2. Copy `head.anchor` whenever you copy the ledger. Restoring an older ledger
+   directory and leaving the current anchor in place does not open. 0.3
+   backup has to restore the anchor from the same moment as the ledger.
+3. Do not delete `head.anchor` to silence `ledger_rolled_back`. That accepts
+   the ledger as it stands.
+4. `two-key recover --key KEY --ledger DIR` replaces the hand truncation in
+   HOWTO for an uncheckpointed tail. It will not repair a rollback.
+
+### Docs
+
+- README "Known limits" now states what the anchor does and does not catch.
+  HOWTO crash section, witness table, revoke, and the `agent_session`
+  paragraph (a placeholder does not hide the named agent key). ROADMAP 0.11.
+  THREAT_MODEL, SECURITY, SCOPE, FIT, llms.txt, AGENTS.md.
+
+### Reviews
+
+- Operator requested these ledger changes in this session (the AGENTS.md
+  security-review gate for ledger changes). The anchor and `recover` were
+  checked against the tests in `tests/test_recover_and_anchor.py`: a clean
+  ledger is unchanged, a tail is dropped, a torn last line is a tail, damage
+  inside the signed prefix is not truncated, a rollback is refused, a wipe
+  does not open as a new ledger, and deleting the anchor adopts the current
+  head.
+

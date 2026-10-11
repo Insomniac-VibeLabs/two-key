@@ -111,7 +111,11 @@ deprecated no-ops: nothing they used to lift is refused any more.
 
 The runtime check stays as a second layer: a judge whose credential equals
 the frozen agent session abstains with ``cloud_judge_reused_agent_session``,
-wherever it connects.
+wherever it connects. On every call Two-Key also re-reads the credential
+named for the monitored agent and compares that too. A placeholder session
+does not hide it. The value is not sent to the judge and not written down.
+A session that is not that credential is still the caller's to pass. A
+keyless agent (``credential: none``) has nothing to add.
 """
 
 from __future__ import annotations
@@ -872,6 +876,54 @@ class AgentDeclaration:
                 "username_env": self.username_env, "password_env": self.password_env,
                 "tenant": dict(self.tenant) if self.tenant else None,
                 "upstream": sorted(validate_upstream(self.upstream, "monitored_agent")) or None}
+
+
+def configured_agent_secrets(sources: Iterable[Any]) -> frozenset[str]:
+    """The monitored agent's credentials, re-read now, with surrounding whitespace removed.
+
+    ``credential: none`` contributes nothing. A declared credential that cannot be read raises
+    ``IdentityError`` with a fixed message: the value is not included. The caller denies the round.
+    Nothing here is stored or written to the ledger.
+    """
+    found: set[str] = set()
+    for source in sources:
+        found.update(_one_agent_secret(source))
+    return frozenset(secret for secret in (value.strip() for value in found) if secret)
+
+
+def _one_agent_secret(source: Any) -> set[str]:
+    if isinstance(source, Mapping) and not isinstance(source, AgentDeclaration):
+        source = AgentDeclaration.from_mapping(source)
+    if isinstance(source, AgentDeclaration):
+        return _declaration_secret(source)
+    credential = getattr(source, "credential", None)
+    if credential is None or getattr(credential, "kind", None) == NO_CREDENTIAL:
+        return set()
+    from .judges.credentials import CredentialError
+    try:
+        token = credential.get_token()
+    except (CredentialError, NotImplementedError, ValueError):
+        raise IdentityError("monitored agent credential cannot be read") from None
+    if not isinstance(token, str):
+        raise IdentityError("monitored agent credential cannot be read")
+    return {token}
+
+
+def _declaration_secret(decl: AgentDeclaration) -> set[str]:
+    if decl.credential == NO_CREDENTIAL:
+        return set()
+    if decl.username_env is not None:
+        from .judges.credentials import BasicAuthCredential, CredentialError
+        try:
+            return {BasicAuthCredential(decl.username_env, decl.password_env).get_token()}
+        except CredentialError:
+            raise IdentityError("monitored agent credential cannot be read") from None
+    if isinstance(decl.credential_env, str):
+        value = os.environ.get(decl.credential_env)
+        if not value:
+            raise IdentityError("monitored agent credential cannot be read")
+        return {value}
+    raise IdentityError("monitored agent credential cannot be read")
 
 
 def configured_agent_identity(agent: Any, fp_key: bytes | None = None) -> ResolvedIdentity:

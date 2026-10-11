@@ -283,10 +283,10 @@ class ToolGateway:
 
     def _pinned_at(self, size: int) -> str | None:
         """The capability key fingerprint in the last ``constitution_loaded`` entry before ``size``."""
-        for entry in reversed(self.ledger.entries[:size]):
-            if entry.kind == "constitution_loaded":
-                return entry.body.get("capability_key_fingerprint")
-        return None
+        entry = self.ledger.last_before(size, "constitution_loaded")
+        if entry is None:
+            return None
+        return entry.body.get("capability_key_fingerprint")
 
     def _unref(self, jti: str) -> None:
         """Drop one holder of ``jti``'s lock; remove the entry when none is left (#42)."""

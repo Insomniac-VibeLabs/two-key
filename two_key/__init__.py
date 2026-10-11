@@ -5,7 +5,7 @@ allow. This package is the initial concept. It has no scanning, antivirus,
 or DLP hooks.
 """
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 
 from .core import Decision, TwoKey
 

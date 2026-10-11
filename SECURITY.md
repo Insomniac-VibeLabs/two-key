@@ -46,9 +46,11 @@ principal key and the ledger key still allows a forged head, by rewriting
 the chain from its first entry, unless the witness public key is also
 configured outside the ledger (`witness_public_key=`,
 `--witness-public-key`); with it, a forged head needs the witness private
-key as well (#58). Write access to the ledger directory alone can roll the
-ledger back to an earlier signed head or wipe it, with or without either
-pin (#62). Stealing the capability private key mints tokens.
+key as well (#58). A head anchor outside the ledger directory
+(`<ledger>.ledger-key/head.anchor`, or `--head-anchor`) refuses a rollback
+or a wipe of that directory alone (#62). Deleting the anchor, or writing an
+older copy of it, accepts the ledger as it stands. Stealing the capability
+private key mints tokens.
 
 A redemption intent is checkpointed before the tool runs. A later retry does
 not run the tool. Concurrent calls are locked. A crash before the tool runs
