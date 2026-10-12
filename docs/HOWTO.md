@@ -40,7 +40,21 @@ take `--key` refuse a key file that the group or others can read
 (`key_file_insecure`) or that is a symlink.
 
 The signature covers the prose, the hard rules, and `tool_specs`. A modified
-file will not load. `tool_specs` is required. A bare rule list, a missing
+file will not load. `tool_specs` is required.
+
+```mermaid
+flowchart TD
+  prose["Prose<br/>constitution.md"] --> sign["sign-constitution<br/>one signature"]
+  rules["Hard rules<br/>hard_rules.yaml"] --> sign
+  specs["tool_specs<br/>inside hard_rules.yaml"] --> sign
+  sign --> envelope["Signed envelope<br/>prose + hard_rules + tool_specs<br/>+ signature"]
+  envelope --> load["verify_signed<br/>fail-closed on any change"]
+  load --> compiled["CompiledConstitution<br/>bytecode + tool_specs"]
+  compiled --> pathA["Path A Policy VM<br/>uses bytecode + derived fields"]
+  compiled --> pathB["Path B judges<br/>see prose only"]
+```
+
+A bare rule list, a missing
 key, `null`, and an empty mapping are refused. `examples/hard_rules.yaml`
 has a spec for every allow-listed tool. Amount, counterparty, and
 irreversible are read from the argument bytes, and a claim that disagrees
