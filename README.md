@@ -28,6 +28,51 @@ is going, see [ROADMAP.md](ROADMAP.md).
 - **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. Intended to run with only the capability public key and a limited ledger role (designed, not yet built — #45).
 - **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
 
+## What this repo leaves out
+
+Not in this repository:
+
+- payload scanning, antivirus, and DLP hooks
+- enterprise deployment modes and permissioned-chain anchoring
+- X.509 / PKI identities and agent assertions
+- seed-phrase backup
+- hybrid ML-DSA-65
+
+Some of this is planned as optional additions. See the
+[roadmap](#roadmap): DLP and antivirus hooks (an interface that calls
+external scanners, not a scanning engine), PKI with certificate recovery,
+and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
+backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
+phrases are not planned.
+
+The ledger is encrypted at rest.
+
+Crypto here is Ed25519 and SHA-256 via the `cryptography` package. Ledger
+entries and the signed head are AES-256-GCM at rest. The data key is wrapped
+by a ledger key outside the ledger directory, not by the principal key. The
+head is signed by the principal and by a witness key, also outside the ledger
+directory. A stolen principal key alone cannot decrypt the log or sign a new
+head. The witness public key is pinned in the ledger (the first entry,
+`witness_pinned`), so a replaced `witness.pem` is refused
+(`witness_key_changed`). With the ledger key as well, the principal key can
+still rewrite the chain from its first entry, pin included, unless the
+operator also gives the witness public key as configuration
+(`Ledger(..., witness_public_key=...)` or `--witness-public-key`), kept
+where whoever writes the ledger directory cannot change it. With that pin,
+forging a head needs the principal, witness, and ledger keys together. The
+witness key changes only by a ledgered rotation (`two-key rotate-witness`).
+It is a prototype. It is not a FIPS 140-3 validated module.
+
+## Known limits
+
+- Path A structured fields are currently a fixed set used for testing (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`). The intent is that the set is user-configurable at constitution signing time; that configurability is not yet implemented (see open issue).
+- No independent review and no production deployment.
+- No external anchor for the ledger. Someone holding the principal and
+  ledger keys can rewrite a ledger that never leaves the machine, unless
+  the witness public key is configured outside the ledger
+  (`--witness-public-key`); then the witness key is needed too (#58).
+  A head a
+
 ## Dual-path authorization
 
 1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only
@@ -112,7 +157,8 @@ flowchart TD
   agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
   bytecode --> pathA["Path A Policy VM"]
   authorize --> pathA
-  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B: judges vote<br/>needs 1+ judge; yes votes needed: required_yes,<br/>default min(2, judges)<br/>runs even when Path A denies<br/>high_assurance also needs: judges from 2+ makers,<br/>1+ local judge, and a local judge votes yes"]
+  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B: judges vote<br/>needs 1+ judge; yes votes needed: required_yes,<br/>default min(2, judges)<br/>runs even when Path A denies<br/>high_assurance also needs: judges from 2+ makers,
+  1+ local judge, and a local judge votes yes"]
   judgeText --> pathB
   declared["monitored_agent<br/>declared by the operator"] -->|"start-up: refused on the agent's credential,<br/>at any address"| judges
   session["agent_session<br/>no judge may present it"] --> pathB
@@ -148,188 +194,3 @@ still attaches the arguments. The proposal string is not sent unless that
 judge has `receives_proposal: true`, or the quorum policy is
 `judge_inputs: record_and_proposal`. The code default, and
 `examples/judges.yaml`, is `record_only`.
-
-Judges are loaded into `TwoKey` from their own config and their own API
-keys. The operator declares the monitored agent (`monitored_agent:` in
-judges.yaml, or `TwoKey(monitored_agent=...)`): its model, `base_url`, and
-credential. The agent's own report is never used. At start-up `TwoKey`
-resolves every judge and the agent to a normalized model (Unicode forms
-and dashes folded), the endpoint `host:port`, the upstream that serves it
-and how that was found (`resolved_by`: `endpoint`, `model_prefix`, or
-`declared_upstream`), scoped tenant ids (a `tenant:` mapping of
-`organization`, `project`, `account`, or `deployment`, plus what the URL
-shows), and a credential fingerprint under a per-install key, whitespace
-stripped (HMAC-SHA256 for an API token; PBKDF2-HMAC-SHA256, 600,000
-iterations, for a username and password, fingerprinted as one pair, and for
-any secret that contains `:`). Every credential a side holds is fingerprinted, sent or not.
-
-A judge may run any model from any vendor. A judge is not the monitored agent, and
-`TwoKey` refuses to start (`judge_matches_agent:`), when it holds the monitored
-agent's credential (the same API token, or the same username and password),
-at any address: a credential identifies its holder wherever it is sent. Two
-sides that send no credential are the same agent only on the same address (the
-endpoint `host:port`, every alias of this machine folded to `localhost`),
-where nothing tells them apart. Everything else starts. Likely accidents
-are allowed with a `two-key: WARNING:` line on stderr and recorded in
-`constitution_loaded` (`judge_agent_separation.warnings`): the same model
-on the same address, the same model through a shared route or a local or
-unrecognized proxy with no declared `upstream:`, a shared tenant id, one
-side keyless on the same address, and an identity whose upstream cannot be
-resolved. Addresses are compared as configured; DNS names are not
-resolved. A username and password are sent as HTTP Basic over HTTPS only.
-`allow_same_provider_judge` and `allow_same_model_distinct_tenant` are
-accepted and have no effect. Without a declaration it refuses with
-`monitored_agent_required:`. Provider labels are never compared. HOWTO has
-the details.
-
-Judges vote in parallel under one hard deadline. A missing, malformed, or
-timed-out ballot is an abstention, and an abstention is not a yes. No
-judge, no deadline, or two judges with the same id does not start. Each
-ballot is paired with its judge by position and takes its judge id from
-the judge; a ballot that names another judge abstains
-(`judge_id_mismatch`). A judge
-that is not on a loopback host makes the round deny when `agent_session`
-is missing. If that string equals the credential of any judge, local or
-cloud, wherever it connects, the ballot abstains with
-`cloud_judge_reused_agent_session` and the round denies. The credential
-named for the monitored agent is compared the same way on every call, so a
-placeholder does not hide that key. The key is not sent to the judge and
-not written to the ledger. A session that is not that key is still yours
-to pass. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
-session at the model host.
-
-Without a local judge, the constitution prose, the action record, and any
-attached tool arguments go to the cloud judges' vendors.
-
-Every `decision` in the ledger records `policy_digest`, the digest of the
-quorum policy in effect (opt-outs included, written in full once in
-`constitution_loaded`), and `identities_digest`, the digest of the resolved
-judge and agent identities written once in `constitution_loaded`: model,
-upstream, endpoint, tenant ids, and credential fingerprint, never a key.
-
-Every JSON and YAML input is parsed strictly: a repeated key at any depth
-is refused, never last-one-wins, and so is a YAML merge key (`<<`), whose
-winning value the text does not show. An integer of more than 4,300 digits
-is refused or denied as `invalid_call`. Unknown top-level keys in judges.yaml or
-agents.yaml are refused. Tool arguments or a proposal over 256 KiB, or
-tool arguments, the action claim, or a structured proposal nested more than
-62 levels, are denied before they are ledgered.
-
-One call, in code order:
-
-```mermaid
-sequenceDiagram
-  participant Caller
-  participant Agent as Monitored agent
-  participant TwoKey
-  participant PathA as Path A VM
-  participant PathB as Path B quorum
-  participant Judge as Judges
-  participant Ledger
-  participant Gateway
-  participant Tool
-
-  Caller->>Agent: instruction and constitution prose
-  Agent-->>Caller: JSON proposal, no tool call
-  Caller->>TwoKey: proposal and agent_session
-  alt malformed or over a size limit
-    Note over TwoKey: malformed_proposal, proposal_too_large, action_too_large, malformed_action, args_too_large, invalid_call
-    TwoKey->>Ledger: decision with size and digest only
-    TwoKey-->>Caller: deny, neither path runs
-  end
-  TwoKey->>PathA: structured fields
-  PathA-->>TwoKey: allow or deny
-  TwoKey->>PathB: action record and binding hashes
-  Note over PathB: tool args omitted after a derive deny unless tool_args_on_derive_deny
-  PathB->>Judge: score in parallel, own credentials
-  Judge-->>PathB: yes, no, or abstain
-  PathB-->>TwoKey: quorum pass or deny
-  TwoKey->>Ledger: proposal, path_a, path_b
-  alt both allow
-    TwoKey->>Ledger: capability_issued, then decision
-    TwoKey-->>Caller: single-use token
-    Caller->>Gateway: token, tool, arguments
-    Note over Gateway: verifies with the capability public key only
-    opt authenticated token refused
-      Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
-    end
-    Gateway->>Ledger: redemption_started
-    Gateway->>Tool: registered function
-    Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
-  else either path denies
-    TwoKey->>Ledger: decision, no token
-    TwoKey-->>Caller: deny
-  end
-```
-
-The token is signed by the capability key (`<ledger>.capability/capability.pem`,
-outside the ledger directory). It is bound to the tool, the argument hash,
-the ledger Merkle root and size at issuance, the constitution hashes,
-`spec_hash`, and the derived form. The gateway is constructed with
-`issuer.verifier()` or with the issuer; either way it keeps only the public
-half of the capability key. It recomputes the form from the same bytes. It checks the
-signature, expiry, a lifetime no longer than the TTL (`ttl_too_long`), an
-issue time at most 5 s ahead (`issued_in_future`), and that nothing revoked
-or reloaded the constitution after issuance. It writes `redemption_started` before the tool runs. It does not
-scan the bytes for sensitive text. The principal key still signs the
-constitution and the ledger head. A token signed with that principal key
-does not redeem, and a capability key equal to the principal key is
-refused. The capability key is created once, mode 0600 in a 0700
-directory, and, like the witness key, is read only as a regular file that
-the group and others cannot read, never through a symlink. Once a token has been issued it is never regenerated: a missing
-or changed key refuses to start. Its fingerprint is recorded in
-`constitution_loaded` and the gateway checks it.
-
-The gateway is meant to run in its own process or on its own host, holding
-the capability public key and a gateway-only ledger role: it reads the
-ledger, refreshes without ending outstanding tokens, and records
-redemptions, without the principal or witness private key. That role is
-designed, not yet built
-([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)).
-Today the gateway shares the ledger object of the `TwoKey` process, and
-that object holds the principal, witness, and ledger keys.
-
-## What this repo leaves out
-
-Not in this repository:
-
-- payload scanning, antivirus, and DLP hooks
-- enterprise deployment modes and permissioned-chain anchoring
-- X.509 / PKI identities and agent assertions
-- seed-phrase backup
-- hybrid ML-DSA-65
-
-Some of this is planned as optional additions. See the
-[roadmap](#roadmap): DLP and antivirus hooks (an interface that calls
-external scanners, not a scanning engine), PKI with certificate recovery,
-and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
-backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
-phrases are not planned.
-
-The ledger is encrypted at rest.
-
-Crypto here is Ed25519 and SHA-256 via the `cryptography` package. Ledger
-entries and the signed head are AES-256-GCM at rest. The data key is wrapped
-by a ledger key outside the ledger directory, not by the principal key. The
-head is signed by the principal and by a witness key, also outside the ledger
-directory. A stolen principal key alone cannot decrypt the log or sign a new
-head. The witness public key is pinned in the ledger (the first entry,
-`witness_pinned`), so a replaced `witness.pem` is refused
-(`witness_key_changed`). With the ledger key as well, the principal key can
-still rewrite the chain from its first entry, pin included, unless the
-operator also gives the witness public key as configuration
-(`Ledger(..., witness_public_key=...)` or `--witness-public-key`), kept
-where whoever writes the ledger directory cannot change it. With that pin,
-forging a head needs the principal, witness, and ledger keys together. The
-witness key changes only by a ledgered rotation (`two-key rotate-witness`).
-It is a prototype. It is not a FIPS 140-3 validated module.
-
-## Known limits
-
-- Path A structured fields are currently a fixed set used for testing (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`). The intent is that the set is user-configurable at constitution signing time; that configurability is not yet implemented (see open issue).
-- No independent review and no production deployment.
-- No external anchor for the ledger. Someone holding the principal and
-  ledger keys can rewrite a ledger that never leaves the machine, unless
-  the witness public key is configured outside the ledger
-  (`--witness-public-key`); then the witness key is needed too (#58).
-  A head a
