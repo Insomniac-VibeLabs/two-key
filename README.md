@@ -19,11 +19,23 @@ Read [docs/FIT.md](docs/FIT.md) first, then
 [docs/SCOPE.md](docs/SCOPE.md), before relying on it. For where the project
 is going, see [ROADMAP.md](ROADMAP.md).
 
+## Components
+
+- **Constitution**: User/admin-configurable set of signed rules (prose, hard rules, and tool specs). The principal signs it; Two-Key enforces the signed form.
+- **Policy Enforcer (Path A)**: Deterministic bytecode policy VM. It evaluates structured fields derived from the argument bytes according to the signed tool specs. It does not read free text or English.
+- **Judge (Path B)**: Trusted AI agent (local or cloud, preferably suited to the use case). It scores the normalized action record (and optionally the proposal). It has no direct access to any registered tool.
+- **Monitored Agent**: The untrusted agent under constraint. It proposes actions; it has no direct access to any registered tool.
+- **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. Intended to run with only the capability public key and a limited ledger role (designed, not yet built — #45).
+- **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
+
 ## Dual-path authorization
 
 1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only
-   structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`,
-   `irreversible`). It does not read English. A fault is a deny. The signed
+   structured fields derived from the argument bytes according to the signed
+   tool specs (currently `tool`, `amount_usd`, `data_class`, `counterparty`,
+   `irreversible`; the set is intended to be user-configurable at constitution
+   signing time — five was the number used for testing only). It does not read
+   English. A fault is a deny. The signed
    constitution must include `tool_specs`. Those fields are read from the
    argument bytes by [two_key/derive.py](two_key/derive.py). A claim that
    disagrees with the bytes is a deny. Omitting `tool_specs` will not sign
@@ -127,7 +139,7 @@ model again. Those fields are operator/library metadata (str, at most 256
 characters after strip); non-str or oversize is a deny. Hosting is local or
 cloud. It is not trust, and it does not skip either path.
 
-Path A reads only the five structured fields. Path B judges see the
+Path A reads only the structured fields derived from the argument bytes according to the signed tool specs (currently five fields used for testing; the set is intended to be user-configurable at setup/constitution signing time). Path B judges see the
 normalized action record. Non-empty tool arguments are attached on that
 record as `tool_args`, except after a derive deny. Set
 `tool_args_on_derive_deny: true` on the quorum policy to send those bytes
@@ -314,9 +326,10 @@ It is a prototype. It is not a FIPS 140-3 validated module.
 
 ## Known limits
 
+- Path A structured fields are currently a fixed set used for testing (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`). The intent is that the set is user-configurable at constitution signing time; that configurability is not yet implemented (see open issue).
 - No independent review and no production deployment.
 - No external anchor for the ledger. Someone holding the principal and
   ledger keys can rewrite a ledger that never leaves the machine, unless
   the witness public key is configured outside the ledger
   (`--witness-public-key`); then the witness key is needed too (#58).
-  A head a[+ truncated for brevity in this simulation; in actual use the full original content from the file would be included here]
+  A head a
