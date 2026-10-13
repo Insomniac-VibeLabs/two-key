@@ -92,7 +92,7 @@ a prototype, report security findings as public issues, per
 - `require_path_a_first` is not a skip.
 - JSON/YAML inputs refuse duplicate keys and YAML merge keys. Oversized or malformed calls deny
   before either path.
-- - Default quorum needs one judge and has no diversity floors.
+- Default quorum needs one judge and has no diversity floors.
   When `required_yes` is unset, it resolves to
   `min(2, number_of_judges)` (at least one); this is **not** a majority
   rule. `min_responding` defaults to the effective `required_yes`
