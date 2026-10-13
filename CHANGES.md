@@ -1470,4 +1470,8 @@ On branch `working`. Package version stays 0.3.0. No behavior changes.
   projection in `project_arguments` are their own helpers, so this PR no
   longer adds to those functions' complexity (61 and 19; `main` had 59 and
   19). No behavior change.
+- `tests/test_key_backup.py`: `redirect_stdout` is imported once at the top
+  (it was imported twice inside one test). The three `os.chmod` calls that
+  deliberately loosen permissions, to prove export refuses them, carry a
+  `skipcq: BAN-B103` comment saying so.
 

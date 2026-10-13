@@ -11,7 +11,7 @@ import stat
 import tempfile
 import time
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from two_key.backup import (
@@ -140,7 +140,7 @@ class ExportShape(BackupFixture):
     def test_refuses_a_symlink_or_a_group_writable_output_directory(self):
         real = self.root / "real-out"
         real.mkdir()
-        os.chmod(real, 0o777)
+        os.chmod(real, 0o777)  # skipcq: BAN-B103 -- deliberately world-writable; export must refuse it
         link = self.root / "out-link"
         link.symlink_to(real, target_is_directory=True)
         with self.assertRaisesRegex(BackupError, "symlink"):
@@ -148,13 +148,13 @@ class ExportShape(BackupFixture):
         self.assertEqual(list(real.iterdir()), [])
         wide = self.root / "wide-out"
         wide.mkdir()
-        os.chmod(wide, 0o775)
+        os.chmod(wide, 0o775)  # skipcq: BAN-B103 -- deliberately group-writable; export must refuse it
         with self.assertRaisesRegex(BackupError, "writable"):
             export_backup(self.ledger, self.key_path, wide, PHRASES, iterations=FAST)
         self.assertEqual(list(wide.iterdir()), [])
         private = self.root / "private-out"
         private.mkdir()
-        os.chmod(private, 0o755)
+        os.chmod(private, 0o755)  # skipcq: BAN-B103 -- an ordinary directory; export must accept it
         err = io.StringIO()
         with redirect_stderr(err):
             export_backup(self.ledger, self.key_path, private, PHRASES, iterations=FAST)
@@ -427,7 +427,6 @@ class CommandLine(BackupFixture):
                 "--principal-passphrase-env", env_names["principal"],
                 "--ledger-passphrase-env", env_names["ledger"],
                 "--witness-passphrase-env", env_names["witness"]]
-        from contextlib import redirect_stdout
         err = io.StringIO()
         out = io.StringIO()
         with redirect_stderr(err), redirect_stdout(out):
@@ -450,10 +449,8 @@ class CommandLine(BackupFixture):
                        "--ledger-passphrase-env", env_names["ledger"],
                        "--witness-passphrase-env", env_names["witness"]]
         buf = io.StringIO()
-        with redirect_stderr(io.StringIO()):
-            from contextlib import redirect_stdout
-            with redirect_stdout(buf):
-                self.assertEqual(main(verify_args), 0)
+        with redirect_stderr(io.StringIO()), redirect_stdout(buf):
+            self.assertEqual(main(verify_args), 0)
         report = json.loads(buf.getvalue())
         self.assertTrue(report["ok"])
         self.assertEqual(report["capability_key_fingerprint"],
