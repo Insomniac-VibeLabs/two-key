@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "two-key-concept"
-version = "0.2.4"
+version = "0.3.0"
 description = "Initial Two-Key concept: ledger, Path A, Path B, and judge/agent hooks. No scanning."
 requires-python = ">=3.10"
 license = "Apache-2.0"
 keywords = ["ai-agents", "authorization", "policy-engine", "capability-tokens"]
+# Consumer ranges. The resolved set CI installs is uv.lock (wheels only).
 dependencies = ["cryptography>=41"]
 
 [project.optional-dependencies]

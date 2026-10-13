@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.2.4, tag `v0.2.4` on `main`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+This is the design model for `two-key-concept` 0.3.0. Tag `v0.3.0` on `main` is the tagged release. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
 It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
@@ -16,7 +16,12 @@ the code wins, then this file should be corrected.
   It does not sign capability tokens.
 - The capability private key, outside the ledger directory
   (`<ledger>.capability/capability.pem`). `TwoKey` mints with it. The
-  gateway receives only the public half.
+  gateway's verifier holds only the public half. This is key separation
+  at the API, not process isolation: the gateway runs in the `TwoKey`
+  process on the `TwoKey` ledger object (`TwoKey.gateway()`), which holds
+  the principal, witness, and ledger keys, and the minting key is in the
+  same process. A gateway in another process or on another host is not
+  supported (#45).
 - The ledger key and the witness key, both outside the ledger directory
   (`<ledger>.ledger-key` and `<ledger>.witness`).
 - The witness public key the operator keeps outside the ledger
@@ -85,12 +90,14 @@ the code wins, then this file should be corrected.
 - A tool execution inside `authorize_from_agent`.
 - An allow when either path denies or does not answer. A missing, malformed,
   or timed-out ballot is an abstention, not a yes. A ballot that names
-  another judge abstains (`judge_id_mismatch`). The default needs one judge
-  and has no diversity floors. `QuorumPolicy.high_assurance()` needs judges
-  from two model makers (the operator's `maker:` labels, not verified), one
-  local judge, and a yes from a local judge;
-  `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag is
-  still not a skip. `min_distinct_providers` still defaults to 1.
+  another judge abstains (`judge_id_mismatch`). At least one judge must
+  be configured. With `required_yes` unset, the affirmative threshold is
+  `min(2, number_of_judges)`; this is not a majority rule. The default
+  has no diversity floors. `QuorumPolicy.high_assurance()` needs judges
+  from two model makers (the operator's `maker:` labels, not verified),
+  one local judge, and a yes from a local judge;
+  `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag
+  is still not a skip. `min_distinct_providers` still defaults to 1.
 - A judge is not the monitored agent: `TwoKey` refuses to start when a
   judge holds the agent's credential (the same API token, or the same
   username and password) at any address, whether or not either side sends
@@ -146,7 +153,10 @@ the code wins, then this file should be corrected.
   list does not authorize (`counterparty_not_allowed`), unless a blocked
   party is also present, in which case the block rule still denies.
   `deny_unmapped` defaults off. An unnamed key does not reach the tool.
-  Setting the flag denies the call instead (`unmapped_field`).
+  Setting the flag denies the call instead (`unmapped_field`). Custom
+  fields (`fields:`, `deny_if_fields`) are read the same way: from the
+  argument path the signed spec names, never from the agent's claim. A tool
+  that does not map a field gets that field's signed default.
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are off by default; `high_assurance`
   turns them on. A judge that is not the same agent may still share a
@@ -165,6 +175,24 @@ These are accepted or still open. They are not bugs the design already
 claims to close.
 
 - No independent review, and no production deployment.
+- Custom Path A fields (0.3.0). A tool that does not map a field gets the
+  field's signed default, as a tool with no amount spec has `amount_usd` 0.
+  A mapping the operator forgot is therefore silent. Rules written as
+  allow-lists (`not_in`) and restrictive defaults fail closed in that case;
+  rules written as deny-lists (`in`, `eq`) do not. A deny-list on a
+  `string` field also misses spelling variants (`prod` and `production`).
+  Characters are controlled, meaning is not: lookalike letters from another
+  script, invisible characters, and direction controls deny, but this
+  package does not know that two words mean the same thing. A field
+  declares one script or one approved combination (`japanese`, `korean`,
+  `chinese`), so one field cannot hold words from two unrelated scripts.
+  Script detection uses Unicode character names from Python's
+  `unicodedata`, whose Unicode version differs by Python release; a
+  character newer than the running Python's data is refused. Derived field
+  values are written to the encrypted ledger and sent to judges, including
+  cloud judges; descriptions are not. A description is shown to people
+  only, and direction controls are refused in it, but its wording can still
+  mislead a reviewer; it is signed with the rest of the constitution.
 - Trusting the agent's claimed fields instead of reading them from the
   argument bytes is closed for loaded constitutions. `tool_specs` is required to
   sign and to load. `two_key/derive.py` reads amount and counterparties by
@@ -208,12 +236,20 @@ claims to close.
   action record. They do not receive `tool_args` unless
   `tool_args_on_derive_deny` is true. A deny that is not a derive deny still
   attaches non-empty arguments. The tool still does not run on a deny.
-- The gateway's verifier has no private key. The minting key is the
-  capability key outside the ledger directory. The principal key still sits
-  on the ledger object, because the head signature needs it. A token signed
-  with that principal key fails `bad_signature`. A process that keeps the
-  `TwoKey` object can still mint. A process that is given only the gateway
-  cannot.
+- The gateway's verifier has no capability-minting private key. The minting
+  key is the capability key outside the ledger directory. The principal
+  key remains on the shared ledger object because the ledger head needs it.
+  A token signed with the principal key fails `bad_signature`. The gateway
+  is not a separate process or host, and a split gateway is not supported
+  (#45): it shares the `TwoKey` process and ledger object. Registered tools
+  run in that process, so a compromised tool or dependency can read the
+  minting key and the principal, witness, and ledger keys. Do not treat the
+  implementation as providing process-level isolation. A gateway built on a
+  ledger no `TwoKey` in the process opened warns once
+  (`TwoKeyDeploymentWarning`) and refuses tokens issued after that ledger
+  opened: the check fails as `ledger_size_invalid`, and recording that
+  refusal fails too, so the caller sees `ledger_failed: ledger file changed
+  by another writer`.
 - Stealing the ledger key decrypts the log. Stealing the principal key does
   not, and it does not mint a token the gateway will accept. Stealing the
   capability private key does. Stealing the principal key and the ledger
@@ -243,14 +279,36 @@ claims to close.
 - A rotation interrupted after its head is written and before the new key
   is moved into place leaves `witness.pem.new` beside `witness.pem`, and the
   ledger refuses to open (`witness_key_changed`) until it is moved. A lost
-  witness key means a new ledger until key backup (0.3) can restore it.
+  witness key is restored from the witness bundle (0.3.0). Without that
+  bundle it means a new ledger.
+- Key backup bundles (0.3.0). A bundle is equal to the keys it holds.
+  `principal.bundle.json` holds the principal key and the capability key.
+  `ledger.bundle.json` holds the ledger key, the fingerprint key, the ledger
+  ciphertext, and `head.anchor` from that moment. `witness.bundle.json` holds
+  the witness key. One bundle never holds every key a signed head needs.
+  Guessing a bundle's passphrase opens that bundle. PBKDF2-HMAC-SHA256
+  (600,000 iterations) slows guessing and is not memory-hard. The same
+  passphrase on two bundles, or on all three, stored together, is one guess.
+  Export holds the ledger lock while it copies, and it does not write a
+  bundle set that would not open. It refuses a symlink output directory and
+  a directory the group or others can write.
+  A restore onto a newer ledger fills missing key files only. A key already
+  on disk stays, including a witness rotated after the backup, so that
+  restore does not roll the witness back. `--replace-ledger` is what writes
+  the older ledger, its anchor, and the keys from that moment.
+  `backup-restore --replace-ledger` writes an older ledger and its anchor
+  together, and replaces a key file that differs, which can make a token
+  spent after the backup look unspent and undoes a later witness rotation.
+  Deleting `head.anchor` is still not detected, and restore does not do it.
+  The backup is not an external anchor.
 - What the ledger holds today: the agent's proposal text in full (the
   `proposal` entry), the derived form (`action_normalized.form`: the amount,
-  counterparty, and counterparties read from the argument bytes), reasons,
+  counterparty, counterparties, and custom field values read from the
+  argument bytes), reasons,
   digests, and sizes. It never holds the raw argument bytes of an oversized
   or dropped value, only its size, digest, or key name. It never holds keys.
   Anyone who can decrypt the log can read the proposal text and the derived
-  amount and counterparties.
+  amount, counterparties, and custom field values.
 - A crash after `redemption_started` and before the tool runs refuses a
   retry, even if the tool did not run. Exactly-once execution is not claimed.
 - Where `fcntl` is absent, another process can still append. This package
@@ -280,28 +338,25 @@ claims to close.
   in front of or beside the gateway, and they would not make this package a
   server or a scanner.
 - Full per-value information-flow tracking, and a content classifier. A
-  tool-spec floor is not a taint label. Scanning engines, anchoring, and
-  seed phrases are not here and are not planned. Planned scanner hooks, key
-  backup, PKI with certificate recovery, and hybrid signatures are in
-  [ROADMAP.md](../ROADMAP.md). See [SCOPE.md](SCOPE.md).
+  tool-spec floor is not a taint label. Scanning engines, external or
+  permissioned-chain anchoring, and seed phrases are not here and are not
+  planned. Planned scanner hooks, PKI with certificate recovery, and hybrid
+  signatures are in [ROADMAP.md](../ROADMAP.md). Key backup shipped in
+  0.3.0. See [SCOPE.md](SCOPE.md).
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md). None of what follows is in 0.2.4, and nothing in
+These come from [ROADMAP.md](../ROADMAP.md). None of what follows is in 0.3.0, and nothing in
 this section describes current behavior. Each item is added to the sections
-above in the release that ships it.
+above in the release that ships it. Key backup and custom Path A fields
+shipped in 0.3.0 and are described above, not here.
 
-- Key backup (target 0.3). New asset: the backup bundle. It holds the same
-  secrets as the keys above, so it is treated as equal to them. The ledger
-  key and the witness key are meant to be backed up separately from each
-  other, so that one bundle never holds every key a head needs when the
-  witness key is pinned outside the ledger (#58). A weak passphrase becomes
-  a new residual risk.
 - Ledger export for SIEM (target 0.4). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.
   It is meant to use a field allowlist that leaves out the proposal text and
-  the derived amount and counterparty, which the ledger holds today.
+  the derived amount, counterparty, and custom field values, which the
+  ledger holds today.
   Whoever can read the SIEM becomes a new audience for ledger metadata.
 - Inspection hooks for DLP and antivirus (target 0.5). New trust boundary:
   the scanner. A scanner error, timeout, or missing result is meant to be a
@@ -356,14 +411,15 @@ above in the release that ships it.
   principal key. It prepares a constitution and hands it to the existing
   signing command. A GUI that is reachable from another machine is out of
   scope.
-- Generic spec field types (planned, not scheduled). A typed field per
-  argument path, each kind with its own limits. `amount` and `counterparty`
-  are meant to become ordinary typed fields. Until then the model above
-  describes the two special kinds used today.
+- More spec field types (planned, not scheduled). Custom `boolean`,
+  `integer`, `enum`, and `string` fields shipped in 0.3.0 and are described
+  above. Decimal, URL, path, email, and opaque-bytes kinds are not built,
+  and `amount` and `counterparty` remain special kinds.
 
 ## What to re-check when the code changes
 
 - `two_key/core.py`: both paths run once the call is well-formed and within limits, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
+- `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies. A description is never compiled, sent to a judge, or used in a reason.
 - `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children.
 - `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
@@ -371,3 +427,4 @@ above in the release that ships it.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
+- `two_key/backup.py`: three bundles; the ledger key and the witness key are never in one file; a wrong passphrase or a tampered bundle is a refusal; restore writes `head.anchor` from the same moment as the ledger and does not delete it. `--replace-ledger` is the only path that overwrites a different ledger, and it also overwrites a key file that differs. A missing anchor on a newer ledger is left missing; the next open adopts that head.

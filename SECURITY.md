@@ -50,7 +50,26 @@ key as well (#58). A head anchor outside the ledger directory
 (`<ledger>.ledger-key/head.anchor`, or `--head-anchor`) refuses a rollback
 or a wipe of that directory alone (#62). Deleting the anchor, or writing an
 older copy of it, accepts the ledger as it stands. Stealing the capability
-private key mints tokens.
+private key mints tokens. A backup bundle is equal to the keys it holds.
+`two-key backup-export` splits them into three files so one bundle never
+holds the principal key, the witness key, and the ledger key together.
+Guessing a bundle's passphrase opens that bundle. PBKDF2-HMAC-SHA256
+(600,000 iterations) slows guessing and is not memory-hard. There is no
+seed phrase. `backup-restore` onto a newer ledger fills missing key files and
+leaves a key that is already there, including a witness rotated later.
+`--replace-ledger` writes an older ledger and
+its `head.anchor` together; a token spent after that backup can look unspent.
+Restore does not delete the anchor. Export refuses a copy that would not open,
+a symlink output directory, and a directory the group or others can write.
+
+The gateway runs in the `TwoKey` process, on the `TwoKey` ledger object
+(`TwoKey.gateway()`). A gateway in another process or on another host is
+not supported (#45). The gateway's verifier holds only the capability
+public key, so it cannot mint; that is an API property, not key isolation.
+The same process holds the capability minting key and, on the shared
+ledger object, the principal, witness, and ledger keys, and the registered
+tools run there. A compromised tool or dependency can read those keys. Do
+not treat this architecture as providing process-level key isolation.
 
 A redemption intent is checkpointed before the tool runs. A later retry does
 not run the tool. Concurrent calls are locked. A crash before the tool runs

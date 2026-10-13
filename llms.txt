@@ -5,13 +5,17 @@ and Path B (a judge quorum) both allow. Prototype. Apache-2.0.
 
 Package: two-key-concept
 Import: two_key
-Package version: 0.2.4. Tag v0.2.4 is on main. Tag v0.2.3 stays on 4a4352e.
+Package version: 0.3.0. Tag v0.3.0 is on main. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-Not on PyPI. Install the tagged release from git ref v0.2.4 (two-key-concept[yaml] for YAML configs).
+Not on PyPI. Install the tagged release from git ref v0.3.0 (two-key-concept[yaml] for YAML configs).
+uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
 "Upgrading from 0.2.2" (then "Upgrading from 0.2.1" and "Upgrading from 0.1.12" for older).
 0.2.4 writes head.anchor on first open and refuses a rolled-back ledger directory: "Upgrading from 0.2.3".
+0.3.0 backs up principal, capability, ledger, and witness keys in three passphrase bundles
+(pbkdf2-sha256, 600000 iterations, AES-256-GCM). backup-restore writes head.anchor from the same
+moment as the ledger and does not delete it. Not a seed phrase. "Upgrading from 0.2.4".
 
 Does: signed constitution, Path A bytecode, Path B judges (xAI/Grok, OpenAI,
 Anthropic, Gemini, Ollama), monitored agents, encrypted ledger, single-use token.
@@ -19,7 +23,7 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(487 tests, no network).
+(no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or
@@ -45,7 +49,7 @@ allow_same_provider_judge are deprecated no-ops. Local means local_weights true,
 JSON and YAML inputs refuse duplicate keys, YAML merge keys (<<), and integers over 4,300
 digits. Arguments or proposals over
 256 KiB are denied. Ballots are paired with judges by position.
-require_path_a_first is not a skip. There is no scanner, no PKI, and no anchor.
+require_path_a_first is not a skip. There is no scanner, no PKI, and no external anchor.
 The ledger head is signed by the principal and a witness key. The witness public key is pinned
 in the ledger (first entry witness_pinned; a ledger from 0.2.2 or earlier pins its head's key on
 first open) and optionally outside it (Ledger(witness_public_key=...), --witness-public-key).
@@ -59,7 +63,10 @@ presence check, including a placeholder; that does not fail closed. The check fa
 the session is missing or equals a judge credential. revoke ends earlier tokens only; an optional
 reputation halt is roadmap 0.11 and is not built.
 The token TTL default is 120 seconds, at most 300. It is signed by the capability key, not
-the principal key. The gateway verifies only. It binds the tool, the argument
+the principal key. The gateway verifies only. It runs in the TwoKey process on the
+TwoKey ledger object (TwoKey.gateway()); a gateway in another process or host is not
+supported (#45), and verify-only is not key isolation: that process also holds the
+minting, principal, witness, and ledger keys, and the registered tools. It binds the tool, the argument
 hash, the ledger root and size, the constitution hashes, spec_hash, and the
 derived form. tool_specs is required. A disagreeing claim is a deny.
 deny_unmapped defaults off. An unnamed argument key does not reach the tool.
@@ -69,6 +76,14 @@ Optional shape locks it to a string, a number, or a list of strings and
 does not read the contents. Omit shape and the value's children are copied
 unread. After a derive deny, tool_args are withheld from
 judges unless tool_args_on_derive_deny is set. Path B still runs.
+Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer, enum, or
+string; up to 64), each with a signed default and an optional description. A tool spec maps
+a field to an argument path; a mapped field is required, an unmapped tool gets the default.
+Rules name them with deny_if_fields (eq, neq, gt, gte, lt, lte, in, not_in by type). Values
+come from the argument bytes only; an agent cannot claim them. Enum and string values are
+printable ASCII by default, or Unicode with a declared script (charset: unicode, scripts:).
+A description is never compiled, sent to a judge, or used in a reason. A rules file with
+fields signs as a v2 constitution; --envelope-format v2 forces v2 without fields.
 Ledger deny/error type labels use type_tag (≤32 chars); derive_failed and EncodingError paths are capped. Same-jti deny waiters time out (default 30s; deny_inflight_wait_seconds must be finite positive). Free text is not classified. There is no per-value information-flow tracking.
 two-key authorize omits claim fields the operator did not pass. An omitted
 amount or counterparty is read from the argument bytes. An omitted

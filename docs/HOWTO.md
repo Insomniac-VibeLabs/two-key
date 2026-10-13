@@ -16,6 +16,13 @@ pip install -e ".[yaml]"
 python -m unittest discover -s tests
 ```
 
+That follows the ranges in `pyproject.toml`. The same checkout's `uv.lock`
+is what CI installs (wheels only). To match it, install the uv version
+pinned in `.github/workflows/tests.yml`, then `uv sync --locked --no-build
+--extra yaml --no-dev`, and run tests with `.venv/bin/python`. When a
+dependency range changes, regenerate `uv.lock` with that same uv and commit
+it. The lock is not a consumer pin: a git install still uses the ranges.
+
 ## Create a principal key and sign a constitution
 
 ```bash
@@ -32,8 +39,25 @@ chmodded afterwards) and refuses to overwrite an existing key. Commands that
 take `--key` refuse a key file that the group or others can read
 (`key_file_insecure`) or that is a symlink.
 
-The signature covers the prose, the hard rules, and `tool_specs`. A modified
-file will not load. `tool_specs` is required. A bare rule list, a missing
+The signature covers the prose, the hard rules, `tool_specs`, and the
+custom-field registry (`fields:`) when there is one. A modified file will
+not load. `tool_specs` is required. A rules file with `fields:` signs as a
+v2 constitution; see [Custom Path A fields](#custom-path-a-fields) and
+`--envelope-format`.
+
+```mermaid
+flowchart TD
+  prose["Prose<br/>constitution.md"] --> sign["sign-constitution<br/>one signature"]
+  rules["Hard rules<br/>hard_rules.yaml"] --> sign
+  specs["tool_specs<br/>inside hard_rules.yaml"] --> sign
+  sign --> envelope["Signed envelope<br/>prose + hard_rules + tool_specs<br/>+ signature"]
+  envelope --> load["verify_signed<br/>fail-closed on any change"]
+  load --> compiled["CompiledConstitution<br/>bytecode + tool_specs"]
+  compiled --> pathA["Path A Policy VM<br/>uses bytecode + derived fields"]
+  compiled --> pathB["Path B judges<br/>see constitution prose + normalized action record"]
+```
+
+A bare rule list, a missing
 key, `null`, and an empty mapping are refused. `examples/hard_rules.yaml`
 has a spec for every allow-listed tool. Amount, counterparty, and
 irreversible are read from the argument bytes, and a claim that disagrees
@@ -77,6 +101,259 @@ the spec is a deny. Pass `--data-class public` only when that class is
 allowed after the floor, and pass `--no-irreversible` only for a tool the
 spec marks reversible.
 
+
+## Designing a constitution
+
+The commands above sign a constitution. They do not design one. The operator owns the signed constitution; Two-Key enforces only what is signed. A weak or incomplete constitution is the most common way the dual-path control fails to protect the intended actions. The points below are advisory, not a guarantee that a constitution is correct.
+
+1. Define the tools and actions the agent is allowed to perform. Use an `allow_only_tools` rule. An allow-list is required by default so unknown tools fail closed.
+2. Define the actions it must never perform. Use `deny_if`, `deny_counterparties`, or `deny_if_irreversible_over` rules for the cases that must be hard denials.
+3. Specify tool arguments and their schemas in `tool_specs`. Path A derives the built-in structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`) from the argument bytes according to those specs. A claim that disagrees with the derived values is a deny. For facts the built-in fields do not cover (an environment, a region, a count, a flag), declare [custom fields](#custom-path-a-fields) and rules that name them.
+4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package.
+5. Decide how many judges are needed and what their agreement threshold should be. At least one judge must be configured. The default approval threshold is `min(2, number_of_judges)`: one affirmative vote with one judge, or two affirmative votes with two or more judges. This is not a general majority rule. Set `required_yes` explicitly if you want a different threshold, such as a majority or unanimity. Consider the `high_assurance` profile for destructive, irreversible, financial, or external-send tools. Missing, malformed, errored, or timed-out ballots never count as yes.
+6. Test allowed, denied, ambiguous, and adversarial examples before trusting the constitution. Confirm that Path A denies the cases the hard rules are meant to catch, that Path B receives the intended context, and that the gateway drops or denies unmapped keys as configured (`deny_unmapped` defaults off).
+
+The signed constitution remains the authority. A future GUI constitution maker (planned later) should help construct and validate choices, but the principal must still sign the resulting constitution. The GUI must not silently weaken the rules.
+
+See `examples/hard_rules.yaml` and `examples/constitution.md` for a working starting point.
+
+## Custom Path A fields
+
+Path A has five built-in fields. You can declare more, up to 64, in the
+rules file. Each one is a fact Path A reads from the argument bytes and
+your rules can test: which environment a deploy targets, how many
+replicas it starts, whether it is a dry run, which department asked.
+[examples/custom_fields.yaml](../examples/custom_fields.yaml) is a working
+starting point.
+
+### Declare, map, and rule
+
+```yaml
+fields:                         # the registry: each field declared once
+  environment:
+    type: enum
+    values: [dev, staging, prod]
+    default: dev                # the value for tools that do not map this field
+    description: Target environment of a deployment.
+  replicas: {type: integer, min: 0, max: 1000, default: 0}
+  dry_run: {type: boolean, default: true}
+  ticket: {type: string, max_length: 32, default: ""}
+
+tool_specs:
+  deploy:
+    irreversible: true
+    data_class_floor: public
+    fields:                     # this tool carries these fields at these paths
+      environment: {json_path: target.env}
+      replicas: {json_path: target.replicas}
+      dry_run: {json_path: dry_run}
+
+hard_rules:
+  - id: tools
+    allow_only_tools: [deploy]
+  - id: only-dev-or-staging-unless-dry-run
+    deny_if_fields:             # every condition must hold for the rule to deny
+      environment: {not_in: [dev, staging]}
+      dry_run: {eq: false}
+```
+
+Types and the operators each allows:
+
+| Type | Declared with | Value read from the arguments | Operators |
+| --- | --- | --- | --- |
+| `boolean` | `default` | JSON `true` or `false` only | `eq` |
+| `integer` | `min`, `max`, `default` | a JSON integer only (not `5.0`, `"5"`, `true`, or `null`), within `min`..`max` | `eq`, `neq`, `gt`, `gte`, `lt`, `lte` |
+| `enum` | `values`, `default`, optional `charset`/`scripts` | text equal, after normalization, to one declared value | `eq`, `neq`, `in`, `not_in` |
+| `string` | `max_length`, `default`, optional `charset`/`scripts` | text of at most `max_length` characters | `eq`, `neq`, `in`, `not_in` |
+
+Every value in a rule is checked against the field when the constitution
+is signed and loaded. An enum value that is not declared (`prdo`), an
+integer outside `min`..`max`, a wrong type, or an operator the type does
+not allow is refused, so a typo cannot become a rule that never fires.
+
+### What happens to a call
+
+- A field a tool maps is required. The value comes from that argument
+  path, never from the agent's claim. An agent that sends `environment`
+  in its claim is `malformed_action`; a value in the claim's `raw` is
+  ignored.
+- A tool that does not map a field gets the field's signed `default`, the
+  way a tool with no amount spec has `amount_usd` 0.
+- The tool receives the normalized value Path A checked (`" Staging "`
+  arrives as `staging`), and the token binds the values, so the gateway
+  recomputes and compares them.
+- Judges see the values in the action record. They never see
+  descriptions.
+
+| Argument | Result |
+| --- | --- |
+| mapped path missing | `derive_failed:field_missing:<field>` |
+| wrong JSON type, or a character outside the field's character set | `derive_failed:field_unreadable:<field>` |
+| integer outside `min`..`max`, enum value not declared, string longer than `max_length` | `derive_failed:field_not_allowed:<field>` |
+
+Each is a derive deny: Path B still runs, the arguments are withheld from
+judges unless `tool_args_on_derive_deny` is set, and no token is issued.
+
+Write rules as allow-lists where you can. `environment: {not_in: [dev,
+staging]}` still denies when someone adds `prod2` to the field, or when a
+tool that should map the field does not. `environment: {in: [prod]}` does
+not. Pick each `default` as the value your rules treat most strictly.
+
+### Descriptions
+
+`description` is a note for the people who read and review the
+constitution. It is signed with everything else, so editing it after
+signing breaks the signature. It is never compiled, never sent to a judge,
+never written into a deny reason, and never an authorization rule; text
+such as `deny_if: ...` in a description does nothing. It may be in any
+language, up to 2,000 characters, with line breaks. Control characters,
+text-direction embeddings, overrides, and isolates (the characters behind
+"Trojan Source" tricks), private-use and unassigned code points, and
+leading or trailing whitespace are refused.
+
+### Envelope format
+
+A rules file without `fields:` signs exactly as before: format
+`two-key-concept-constitution-v1`, with the same digest, `bytecode_hash`,
+and `spec_hash`. With `fields:`, it signs as
+`two-key-concept-constitution-v2`. Installs older than custom fields refuse
+v2, so they cannot load it and ignore the fields. A v2 constitution
+refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
+`fields`.
+
+The format is the principal's choice at signing time:
+
+```bash
+python -m two_key sign-constitution ... --envelope-format auto   # default
+python -m two_key sign-constitution ... --envelope-format v2     # always v2
+```
+
+In Python: `sign_constitution(prose, rules, key, specs, fields=fields,
+envelope_format="v2")`. `auto` writes v1 unless there are fields. `v2`
+writes v2 even without fields; that loads the same way, and an older
+install refuses it. Loading accepts both formats. A rules file with
+`fields:` is refused by `load_unsigned` (so its fields are never dropped
+silently); use `load_unsigned_with_fields`, which returns them as a fourth
+value.
+
+### Using Two-Key in other languages
+
+Field names are ASCII identifiers (`^[a-z][a-z0-9_]{0,47}$`), because
+they are configuration keys. Descriptions may be in any language, so a
+team can read every field's purpose in its own language.
+
+Enum and string values have a character set:
+
+- `charset: ascii`, the default: printable ASCII, trimmed and
+  lower-cased. Most international deployments need nothing else, because
+  the values tools exchange are usually codes: country codes (`jp`),
+  language tags (`ja-jp`), currencies (`eur`), regions (`eu-west-1`),
+  environment names, ticket ids.
+- `charset: unicode` with `scripts:`: for values that are words in a
+  language, such as departments (`経理`, `buchhaltung`) or place names.
+  Even French or German with accents (`é`, `ü`) needs this, with
+  `scripts: latin`.
+
+```yaml
+fields:
+  abteilung:
+    type: enum
+    charset: unicode
+    scripts: latin
+    values: [entwicklung, buchhaltung, vertrieb]
+    default: entwicklung
+    description: Abteilung, die das Deployment beantragt.
+  bumon:
+    type: enum
+    charset: unicode
+    scripts: japanese
+    values: [経理, 営業, 開発]
+    default: 開発
+    description: 申請した部門
+```
+
+`scripts` is one of: `latin`, `greek`, `cyrillic`, `armenian`,
+`georgian`, `hebrew`, `arabic`, `devanagari`, `bengali`, `gurmukhi`,
+`gujarati`, `tamil`, `telugu`, `kannada`, `malayalam`, `sinhala`, `thai`,
+`lao`, `khmer`, `ethiopic`, `hangul`, `han`, or one combination:
+`japanese` (Latin, Han, Hiragana, Katakana), `korean` (Latin, Hangul,
+Han), `chinese` (Latin, Han, Bopomofo). ASCII digits, spaces, and ASCII
+punctuation are allowed in every script.
+
+How a Unicode value is read:
+
+- It is normalized with NFKC and case-folded (NFKC_Casefold, the Unicode
+  rule for comparing identifiers). `Café` written with a precomposed `é`
+  and with `e` plus a combining accent compare equal; full-width
+  `ｐｒｏｄ` becomes `prod`; Turkish `İ` folds to `i` plus a combining dot.
+- A letter from a script the field did not declare is refused. In a
+  `latin` field, `prоd` written with a Cyrillic `о` is
+  `field_unreadable`, not a near-match. That is what stops lookalike
+  letters.
+- Control characters, invisible format characters (zero-width space, soft
+  hyphen), text-direction controls, private-use and unassigned code points,
+  line and paragraph separators, spaces that NFKC does not turn into an
+  ASCII space, and non-ASCII punctuation or symbols that belong to no
+  declared script (`€`, `‐`) are refused. ZERO WIDTH JOINER and
+  NON-JOINER are allowed only in fields whose script needs them (Arabic,
+  including Persian, and the Indic scripts), after a letter and never at
+  the end.
+- A generic combining mark (an accent) is allowed only on a letter, at
+  most three in a row.
+
+Limits of this approach:
+
+- A field holds one script or one combination. A field cannot hold both
+  Russian and English words; use two fields, or codes.
+- Python's standard library has no Unicode script table, so the script is
+  read from each character's Unicode name. A character no supported
+  script claims is refused, never guessed.
+- Each Python release ships its own Unicode version. A very new
+  character may be accepted on Python 3.13 and refused on 3.10. That fails
+  closed. Sign and test on the oldest Python you run.
+- Characters are controlled; meaning is not. `prod` and `production` are
+  different values. Prefer `enum` with `not_in` rules over `string` with
+  `eq` or `in`.
+
+### Changing a limit
+
+The limits are constants in [two_key/fields.py](../two_key/fields.py),
+enforced the same way when a constitution is signed and when it is
+loaded:
+
+| Constant | Value | Limits |
+| --- | --- | --- |
+| `MAX_FIELDS` | 64 | custom fields in the registry |
+| `MAX_FIELDS_PER_TOOL` | 64 | fields one tool maps |
+| `MAX_FIELD_NAME_CHARS` | 48 | characters in a field name |
+| `MAX_DESCRIPTION_CHARS` | 2000 | characters in a description |
+| `MAX_ENUM_VALUES` | 1024 | values in one enum |
+| `MAX_VALUE_CHARS` / `MAX_VALUE_BYTES` | 256 / 1024 | one enum value or one string in a rule |
+| `MAX_STRING_LENGTH` / `MAX_STRING_BYTES` | 1024 / 4096 | the largest `max_length`, and a string value's UTF-8 size |
+| `MAX_LIST_ITEMS` | 1024 | items in one `in` or `not_in` list |
+| `MAX_CONDITIONS` | 16 | conditions in one `deny_if_fields` rule |
+| `MAX_SAFE_INT` | 2^53 - 1 | the largest `min` or `max` magnitude (exact as a float) |
+| `MAX_PATH_SEGMENTS` / `MAX_PATH_CHARS` | 16 / 512 | a field's `json_path` |
+| `MAX_COMBINING_RUN` | 3 | combining marks in a row on one letter |
+
+The 256 KiB argument cap, the 62-level nesting cap, and the 4,096
+instruction cap on the compiled program (`max_steps`) still apply; a very
+large rule set is refused by that last one.
+
+These are not configuration settings. A limit inside the signed file
+could be raised by the same file it is meant to constrain. To change one:
+
+1. Edit the constant in `two_key/fields.py`. Do not raise `MAX_SAFE_INT`:
+   integers above it lose precision in the policy VM.
+2. Run `python -m unittest discover -s tests`. `tests/test_custom_fields.py`
+   (class `A10Limits`) tests each limit at its value and one past it.
+3. Record the change in `CHANGES.md`.
+4. Install the same build everywhere that signs or loads the constitution.
+
+Raising a limit is backward compatible: every constitution that loaded
+before still loads. Lowering one can make an already-signed constitution
+refuse to load (fail closed) until it is edited and signed again.
+
 ## Judges
 
 `examples/judges.yaml` is the hook list: OpenAI-compatible (OpenAI and xAI),
@@ -85,8 +362,14 @@ connection per origin and does not follow redirects.
 
 Cloud OpenAI and xAI send a strict ballot schema. xAI also sends
 `reasoning_effort: low`. A single HTTP 400 drops those knobs and retries
-once. The local ballot parser does not change on that retry. Any other
-HTTP error abstains.
+once. Anthropic and Gemini judges have the same one-time 400 fallback:
+Anthropic drops its cache breakpoints, and Gemini drops the response schema
+and keeps JSON mode. The local ballot parser does not change on that retry.
+
+A dropped connection and HTTP 429, 502, 503, or 504 are retried at most
+twice more, with a short backoff, inside the quorum deadline. A response
+that was parsed is never retried. A response over 1,000,000 bytes, a
+redirect, and any other HTTP error abstain.
 
 ## The monitored agent and the judge-is-not-the-agent rule
 
@@ -369,6 +652,9 @@ with `invalid_call:tool args are nested too deeply`; the ledger keeps
 `tool_args_omitted: true` and `tool_args_error`. Encoding runs before the
 size check, so the reason is the same on Python 3.10, 3.11, and 3.12.
 
+Custom-field limits (field count, name, description, enum, string, and
+path sizes) are listed under [Changing a limit](#changing-a-limit).
+
 Each input (tool args, the action claim, the proposal) is first copied once
 into built-in types (`canonical.to_plain`). Any Mapping becomes a dict and a
 tuple becomes a list. The size cap, the token's hash, the judges, the ledger
@@ -526,16 +812,19 @@ refused.
 ## Redeem
 
 ```python
-from two_key.gateway import ToolGateway
-gw = ToolGateway(tk.ledger, tk.issuer.verifier(), tk.compiled, tools={
+gw = tk.gateway(tools={
     "email_draft": lambda args: {"drafted": args["to"]},
 })
 result = gw.invoke(decision.token, "email_draft", {"to": "ada@example"})
 ```
 
-Passing `tk.issuer` also works. The constructor keeps a verifier, so
-`gw.issuer.private_key` is `None` and `gw.issuer.issue(...)` raises
-`verifier_cannot_mint`. The minting key is `<ledger>.capability/capability.pem`,
+`TwoKey.gateway()` builds a `ToolGateway` on `tk.ledger` with
+`tk.issuer.verifier()` and `tk.compiled`. It refuses a `TwoKey` started
+without `private_key=` (`no_issuer_key:`). Constructing
+`ToolGateway(tk.ledger, tk.issuer.verifier(), tk.compiled, tools=...)`
+directly in the same process is equivalent; passing `tk.issuer` also works.
+The constructor keeps a verifier, so `gw.issuer.private_key` is `None` and
+`gw.issuer.issue(...)` raises `verifier_cannot_mint`. The minting key is `<ledger>.capability/capability.pem`,
 next to the ledger directory, not inside it. The public half is
 `capability.pub.pem` beside it. The key is created once with mode 0600 in a
 0700 directory. After a token has been issued it is never regenerated: a
@@ -578,30 +867,52 @@ intent, including after the tool has returned, does not run the token again.
 A tool exception appends an abort and leaves the token usable. A crash before
 the tool runs also blocks a retry.
 
-### Running the gateway in its own process or host
+### Deployment boundary: the gateway runs in the TwoKey process
 
-The intended setup puts the gateway in its own process or on its own host,
-next to the tools, with:
+The gateway runs in the same process as `TwoKey`, on the ledger object
+`TwoKey` uses. Build it with `TwoKey.gateway()`. A gateway in another
+process or on another host is not supported
+([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)),
+and this package has no gateway-only ledger role, remote gateway, or
+cross-process protocol.
 
-- the capability public key only; it never holds the minting key;
-- a gateway-only ledger role: it reads the ledger and records
-  `redemption_started`, `redemption`, `redemption_aborted`, and
-  `gateway_denied`, without the principal private key or the witness
-  private key;
-- a refresh that sees tokens issued after it opened, without ending
-  outstanding tokens;
-- a read-only open for audit.
+Why:
 
-This role is designed, not yet built
-([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)).
-Today `ToolGateway` takes a `Ledger` object; in the `TwoKey` process, pass
-`tk.ledger` as above. A `Ledger` opened in another process is its own
-in-memory copy: it does not see tokens issued after it opened, so the first
-such redemption is refused (`ledger_size_invalid`, then
-`ledger_failed: ledger file changed by another writer`) unless the gateway
-reopens the ledger before every redemption. Opening a `Ledger` also loads the
-witness key and the ledger key, and writing needs the principal private key,
-so a gateway process today holds the keys that can sign a ledger head.
+- A `Ledger` opened in another process is its own in-memory copy. It does
+  not see tokens issued after it opened, so it refuses them
+  (`ledger_size_invalid`, then `ledger_failed: ledger file changed by
+  another writer` when it tries to record the refusal). Reopening before
+  every redemption is not a supported mode either.
+- Opening a `Ledger` loads the ledger key and the witness key, and writing
+  needs the principal private key. A second process holding them is a
+  second copy of those keys, not a smaller one.
+
+What "verify only" means here. The gateway's verifier holds only the
+capability public key, so the gateway object cannot mint a token. That is
+an API property, not key isolation. In the supported deployment the same
+process holds:
+
+- the capability minting key (`TwoKey.issuer`, read from
+  `<ledger>.capability/capability.pem`);
+- on the shared `Ledger` object, the principal private key, the ledger key,
+  and the witness private key;
+- the registered tool functions, which the gateway calls in that process.
+
+Python gives no memory isolation between objects in one process. A
+compromised tool, or a compromised dependency it imports, can read every
+one of those keys. Keep registered tools small and trusted. If a tool's
+real work needs isolation, have the registered function call a separate
+service with its own credentials; the keys above still stay in this
+process.
+
+`ToolGateway(ledger, ...)` with a ledger that no `TwoKey` in this process
+opened emits `TwoKeyDeploymentWarning` (a `UserWarning`), at most once per
+process. The warning cannot see another host; what protects a split
+gateway is that it refuses tokens, as above. To silence it:
+`warnings.filterwarnings("ignore", category=TwoKeyDeploymentWarning)`. To
+make it an error in tests or CI:
+`python -W error::two_key.gateway.TwoKeyDeploymentWarning ...` or
+`warnings.simplefilter("error", TwoKeyDeploymentWarning)`.
 
 ## If the ledger will not open after a crash
 
@@ -673,6 +984,134 @@ ledger as it stands. Copy the anchor whenever you copy the ledger. Someone
 who can write the anchor file can roll it back together with the ledger.
 Pass the same `--head-anchor` on every command if you move the file.
 
+## Back up the keys
+
+Losing a key is severe. A missing capability key refuses to start once a
+token has been issued. A missing ledger key leaves the log unreadable. A
+missing witness key refuses to open. 0.3.0 backs up this package's own keys.
+It is not a seed phrase. A lost passphrase cannot be recovered.
+
+Back up only after TwoKey has started once, so `capability.pem` and
+`fingerprint.key` exist. Export does not create them.
+
+Use a different passphrase for each bundle. The passphrase is read from an
+environment variable, never from the command line. Other users on the same
+machine can read a process's environment, the same way they can read
+`--agent-session-env`. Use a shell you close when you are done, and do not
+put the passphrase in a world-readable file.
+
+```bash
+read -rs TWO_KEY_PRINCIPAL_PASSPHRASE; echo
+read -rs TWO_KEY_LEDGER_PASSPHRASE; echo
+read -rs TWO_KEY_WITNESS_PASSPHRASE; echo
+export TWO_KEY_PRINCIPAL_PASSPHRASE TWO_KEY_LEDGER_PASSPHRASE TWO_KEY_WITNESS_PASSPHRASE
+two-key backup-export --key keys/principal.pem --ledger ledger --out backups \
+  --principal-passphrase-env TWO_KEY_PRINCIPAL_PASSPHRASE \
+  --ledger-passphrase-env TWO_KEY_LEDGER_PASSPHRASE \
+  --witness-passphrase-env TWO_KEY_WITNESS_PASSPHRASE
+```
+
+That writes three files, mode 0600. Store them apart. One file never holds
+every key a signed head needs:
+
+| Bundle | Holds | Does not hold |
+| --- | --- | --- |
+| `principal.bundle.json` | `principal.pem`, `capability.pem` | ledger key, witness key |
+| `ledger.bundle.json` | `ledger.key`, `fingerprint.key`, the ledger files, and `head.anchor` from that moment | principal key, witness key |
+| `witness.bundle.json` | `witness.pem` | principal key, ledger key |
+
+The bundle names its key derivation: `pbkdf2-sha256` at 600,000 iterations,
+then AES-256-GCM. Format `two-key-concept-key-backup/1`. 0.3 ships that
+function only. PBKDF2 slows guessing and is not memory-hard. A short
+passphrase, or two bundles that share a passphrase, is warned about. All
+three sharing one passphrase is warned about too. A bundle file over 64 MiB
+is refused.
+
+Export copies the files while it holds the ledger lock, then opens that copy
+in a temporary directory before it writes a bundle. A copy that would not
+open (a capability key that does not match the pin, a torn ledger) is
+`backup_refused` and nothing is written. `--out` must not be a symlink, and
+an existing output directory must not be writable by the group or by others.
+The three files are created mode 0600.
+
+Check a backup without touching the real ledger. This decrypts into a
+temporary directory and compares fingerprints:
+
+```bash
+two-key backup-verify --bundles backups \
+  --principal-passphrase-env TWO_KEY_PRINCIPAL_PASSPHRASE \
+  --ledger-passphrase-env TWO_KEY_LEDGER_PASSPHRASE \
+  --witness-passphrase-env TWO_KEY_WITNESS_PASSPHRASE
+```
+
+A wrong passphrase and a tampered bundle both fail as
+`backup_rejected: wrong passphrase or tampered bundle`. Neither writes a key.
+
+Restore puts the keys back. Stop every process that uses the ledger first.
+Pass the same `--head-anchor` and `--witness-public-key` you use on every
+other command.
+
+```bash
+two-key backup-restore --key keys/principal.pem --ledger ledger --bundles backups \
+  --principal-passphrase-env TWO_KEY_PRINCIPAL_PASSPHRASE \
+  --ledger-passphrase-env TWO_KEY_LEDGER_PASSPHRASE \
+  --witness-passphrase-env TWO_KEY_WITNESS_PASSPHRASE
+```
+
+If the ledger on disk is newer than the backup, this restores missing keys
+only and leaves that ledger and its anchor alone. A key file that is already
+there is left there, even when the backup has an older copy. That is what
+keeps a witness rotated after the backup. The open uses the key on disk for
+every file that exists, and the backup only for a file that is missing, so
+the old witness is not required to open the current ledger. If a new
+`fingerprint.key` was created after the old one was lost, move that new file
+aside first: a file that exists is not replaced on this path. If that newer
+ledger's anchor is already missing, restore still does not write the older
+anchor. The next open adopts the current head. If the ledger files are
+already the backup's files and the anchor is missing or different, restore
+writes that backup's `head.anchor`. It does not delete the anchor. A key
+file that differs while those ledger files still match the backup is
+`backup_conflict` and is not overwritten.
+
+Putting an older ledger back, over a newer one, is explicit:
+
+```bash
+two-key backup-restore --key keys/principal.pem --ledger ledger --bundles backups \
+  --principal-passphrase-env TWO_KEY_PRINCIPAL_PASSPHRASE \
+  --ledger-passphrase-env TWO_KEY_LEDGER_PASSPHRASE \
+  --witness-passphrase-env TWO_KEY_WITNESS_PASSPHRASE \
+  --replace-ledger
+```
+
+That writes the backup's ledger files and the `head.anchor` from the same
+moment. An older ledger left next to the current anchor does not open
+(`ledger_rolled_back`). Deleting the anchor is not the restore procedure.
+`--replace-ledger` drops every checkpoint made after the backup, and a token
+spent after the backup can look unspent. It also replaces a key file that
+differs from the backup. The restored ledger opens only with the keys from
+that same moment, so a witness key rotated after the backup is put back too.
+
+If restore says `backup_conflict`, a file on disk is not the file in the
+backup. Move that file aside and run restore again. Do not delete
+`head.anchor` to get past it.
+
+| What you lost | What you see | What to do |
+| --- | --- | --- |
+| `principal.pem` | the ledger will not open under that key | restore. A newer ledger keeps its other keys, including a witness rotated after the backup |
+| `capability.pem` | `capability_key_missing` or `capability_key_changed` once a token was issued | restore the principal bundle. It holds this key too. Same rule after a witness rotation |
+| `ledger.key` | `ledger key missing` or `wrong ledger key` | restore the ledger bundle |
+| `fingerprint.key` | a later start creates a new one, and identity digests no longer match | restore the ledger bundle. If a new file was already created, move it aside first. Do not let a new key be created |
+| `witness.pem` | `witness key missing` or `witness_key_changed` | restore the witness bundle. A backup from before a rotation does not hold the new witness. `--replace-ledger` puts the old ledger and the old witness back; it is not how you keep the rotated ledger |
+| the ledger directory | `ledger_rolled_back` if the current anchor is still there | `backup-restore --replace-ledger`, which writes the ledger and `head.anchor` together |
+| `head.anchor` only, ledger unchanged | the next open adopts the current head, and the rollback check is gone until the next checkpoint | restore. It writes the anchor from the same backup. Do not delete a newer anchor to force an older ledger open |
+| one bundle file | the other two do not reconstruct it | that bundle. This is why the three files live apart |
+| the passphrase | `backup_rejected` | nothing. There is no seed phrase |
+
+Copy `head.anchor` whenever you copy the ledger by hand. Restoring an older
+copy and leaving the current anchor does not open. The backup command is the
+procedure that puts both back. Deleting the anchor accepts whatever ledger
+is on disk; that is the hole, not the fix.
+
 ## Pin the witness key
 
 The ledger head is signed by the principal key and by the witness key,
@@ -740,9 +1179,9 @@ new key into `witness.pem` and its public half into `witness.pub.pem`. Then
 copy the new `witness.pub.pem` over your configured copy: the old copy no
 longer opens the ledger. Outstanding tokens are not affected.
 
-A rotation needs the old witness key's signature, so a lost witness key
-cannot be rotated away from: start a new ledger. Key backup is planned for
-0.3.
+A rotation needs the old witness key's signature. A lost witness key is
+restored from the witness bundle (see "Back up the keys"). Without that
+bundle, start a new ledger.
 
 An interrupted rotation leaves `witness.pem.new` beside `witness.pem`, and
 the next rotation refuses until it is dealt with:
@@ -768,11 +1207,35 @@ names the setting or declaration that controls it.
   cannot be read refuses to start. At call time it is read to compare with
   `agent_session` and with the credential named for the monitored agent.
   Remove `auth:` from a connector that does not send it.
+- A key backup uses PBKDF2-HMAC-SHA256 (600,000 iterations). It is not
+  memory-hard. Three bundles with three passphrases, stored apart, are what
+  keeps one stolen file from being every key a head needs. Two bundles that
+  share a passphrase are weaker, and all three sharing one is weaker still.
+  There is no seed phrase.
 - A secret that contains `:` is fingerprinted with PBKDF2-HMAC-SHA256 at
   start-up (600,000 iterations, about 0.15 s each). PBKDF2 is not
   memory-hard: against someone who holds the key directory it slows a
   guessable password less than scrypt did, in exchange for running on a
   FIPS-only OpenSSL.
+- A tool that does not map a custom field gets the field's signed
+  `default`. A forgotten mapping is silent. Rules written with `not_in`,
+  and defaults your rules treat strictly, fail closed in that case; `in`
+  and `eq` deny-lists do not.
+- A `string` field compares exact normalized text. A deny-list on it
+  misses spelling variants (`prod`, `production`). Use `enum` where the
+  values can be listed.
+- `charset: unicode` reads characters through Python's Unicode data, whose
+  version differs by Python release. A character newer than the running
+  Python's data is refused.
+- `--envelope-format v2` (or any `fields:`) makes the signed constitution
+  unreadable to installs older than custom fields. `auto` keeps a
+  constitution without fields in v1.
+- The gateway runs in the `TwoKey` process (`TwoKey.gateway()`). Its
+  verifier cannot mint, but the process holds the capability minting key,
+  the principal, witness, and ledger keys, and the registered tools. A
+  gateway in another process or host is not supported; a ledger no
+  `TwoKey` here opened warns once per process (`TwoKeyDeploymentWarning`)
+  and refuses newer tokens.
 - Without `--witness-public-key` (`witness_public_key=`), the principal key
   and the ledger key together can rewrite the ledger under a new witness
   key. With it, the witness key is needed too, and the configured copy must
@@ -865,8 +1328,7 @@ names the setting or declaration that controls it.
   missing digests as mismatches. Start a new ledger, or read those as "pre-0.2.0".
 
 Open items that no setting changes:
-- Test gaps: the ledger's O_EXCL path, the case-folded control-path check,
-  the audit self-check, and five bare `assertRaises`.
+- Test gaps: the audit self-check, and five bare `assertRaises`.
 - Each redemption leaves one empty lock file per jti under
   `<ledger>.redeem-locks/`. Nothing deletes them, because removing a file
   another process holds a `flock` on is unsafe. The gateway's in-memory

@@ -28,6 +28,8 @@ from typing import Any, Mapping
 
 from .action import DATA_CLASSES, MAX_AMOUNT_USD
 from .agent_meta import type_tag
+from .canonical import canonical_bytes
+from .fields import FieldValueError, coerce_value, defaults
 
 
 # Size cap on tool arguments and on the proposal text, in UTF-8 bytes of their compact JSON.
@@ -90,6 +92,8 @@ class Derived:
     counterparties: tuple[str, ...]
     irreversible: bool
     data_class_floor: str
+    # Custom field values, sorted by name: read from the bytes for mapped fields, the signed default otherwise.
+    fields: tuple[tuple[str, Any], ...] = ()
 
 
 def _cents(value: Any) -> int:
@@ -196,17 +200,29 @@ def disallowed_party(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> b
     return False
 
 
-def project_arguments(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> dict:
+def _project_fields(out: dict, spec: Mapping[str, Any], derived_fields: Mapping[str, Any] | None) -> None:
+    """Each mapped custom field gets the normalized value Path A checked, at its path."""
+    if derived_fields is None:
+        return
+    for name, entry in (spec.get("fields") or {}).items():
+        if name in derived_fields and isinstance(entry, Mapping):
+            _assign(out, entry["json_path"], derived_fields[name])
+
+
+def project_arguments(spec: Mapping[str, Any], arguments: Mapping[str, Any],
+                      derived_fields: Mapping[str, Any] | None = None) -> dict:
     """Arguments the tool may see.
 
     Unnamed keys are dropped. A counterparty path is the canonical party
     Path A checked, not the raw spelling. A payload path with no shape is
     copied whole, including its children, and is not interpreted. A shaped
-    payload is that value only, still unread.
+    payload is that value only, still unread. A custom field path is the
+    normalized value Path A checked (``derived_fields``), not the raw spelling.
     """
     if not isinstance(arguments, Mapping):
         return {}
     out: dict[str, Any] = {}
+    _project_fields(out, spec, derived_fields)
     for entry in spec.get("payload") or []:
         if not isinstance(entry, Mapping) or not isinstance(entry.get("json_path"), str):
             continue
@@ -252,6 +268,9 @@ def _declared_paths(spec: Mapping[str, Any]) -> tuple[str, ...]:
         for entry in spec.get(key) or []:
             if isinstance(entry, Mapping) and isinstance(entry.get("json_path"), str):
                 paths.append(entry["json_path"])
+    for entry in (spec.get("fields") or {}).values():
+        if isinstance(entry, Mapping) and isinstance(entry.get("json_path"), str):
+            paths.append(entry["json_path"])
     return tuple(paths)
 
 
@@ -315,7 +334,8 @@ def dropped_keys(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> list[
     return sorted(set(found))[:MAX_DROPPED_NAMES]
 
 
-def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
+def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any],
+           registry: Mapping[str, Mapping[str, Any]] | None = None) -> Derived:
     """Read the derived fields from ``arguments`` using ``spec`` paths.
 
     Any value this cannot read is a ``DeriveError``, never another exception.
@@ -327,7 +347,7 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
     ``derive_failed:`` deny (``cap_ledger_text`` on the reason).
     """
     try:
-        return _derive(spec, arguments)
+        return _derive(spec, arguments, registry or {})
     except DeriveError:
         raise
     except (OverflowError, TypeError, ValueError, RecursionError) as exc:
@@ -335,7 +355,25 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
         raise DeriveError(f"value_unreadable:{type_tag(exc)}") from None
 
 
-def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
+def _custom_fields(spec: Mapping[str, Any], arguments: Mapping[str, Any],
+                   registry: Mapping[str, Mapping[str, Any]]) -> tuple[tuple[str, Any], ...]:
+    """Every registry field: a mapped field from the bytes (required), any other its signed default."""
+    values = defaults(registry)
+    for name, entry in (spec.get("fields") or {}).items():
+        if name not in registry:
+            raise DeriveError(f"field_unreadable:{name}")
+        found, raw = lookup(arguments, entry["json_path"])
+        if not found:
+            raise DeriveError(f"field_missing:{name}")
+        try:
+            values[name] = coerce_value(registry[name], raw)
+        except FieldValueError as e:
+            raise DeriveError(f"{e.kind}:{name}") from None
+    return tuple(sorted(values.items()))
+
+
+def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any],
+            registry: Mapping[str, Mapping[str, Any]]) -> Derived:
     if not isinstance(arguments, Mapping):
         raise DeriveError("arguments_not_object")
     amount_spec = spec.get("amount")
@@ -374,6 +412,7 @@ def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
         found, raw = lookup(arguments, entry["json_path"])
         if found:
             _payload_shape(entry, raw)
+    custom = _custom_fields(spec, arguments, registry) if registry else ()
     if spec.get("deny_unmapped") is True and _unmapped(arguments, _declared_paths(spec)):
         raise DeriveError("unmapped_field")
     return Derived(
@@ -381,6 +420,7 @@ def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
         counterparties=tuple(sorted(set(parties))),
         irreversible=bool(spec["irreversible"]),
         data_class_floor=str(spec["data_class_floor"]),
+        fields=custom,
     )
 
 
@@ -450,13 +490,16 @@ def form_for(derived: Derived, claimed_data_class: str, blocked: set[str]) -> di
     else:
         party = ""
     amount = 0.0 if derived.amount_usd is None else derived.amount_usd
-    return {
+    form = {
         "amount_usd": amount,
         "data_class": join_data_class(claimed_data_class, derived.data_class_floor),
         "counterparty": party,
         "irreversible": derived.irreversible,
         "counterparties": list(derived.counterparties),
     }
+    if derived.fields:     # only with a registry, so a form without custom fields keeps its shape
+        form["fields"] = dict(derived.fields)
+    return form
 
 
 def forms_match(signed: Mapping[str, Any], fresh: Mapping[str, Any]) -> bool:
@@ -469,4 +512,10 @@ def forms_match(signed: Mapping[str, Any], fresh: Mapping[str, Any]) -> bool:
             return False
     if list(signed["counterparties"]) != list(fresh["counterparties"]):
         return False
+    if "fields" in signed:
+        # Compared as canonical bytes, so the types must match too (true is not 1).
+        try:
+            return canonical_bytes(signed["fields"]) == canonical_bytes(fresh["fields"])
+        except (TypeError, ValueError):
+            return False
     return True

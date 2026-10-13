@@ -1,7 +1,7 @@
 # Two-Key concept
 
 [![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/releases)
-[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.4/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
+[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.3.0/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept/)
 
 Two independent keys must turn before an AI agent can act.
 
@@ -19,12 +19,18 @@ Read [docs/FIT.md](docs/FIT.md) first, then
 [docs/SCOPE.md](docs/SCOPE.md), before relying on it. For where the project
 is going, see [ROADMAP.md](ROADMAP.md).
 
+## Components
+
+- **Constitution**: User/admin-configurable set of signed rules (prose, hard rules, and tool specs). The principal signs it; Two-Key enforces the signed form.
+- **Policy Enforcer (Path A)**: Deterministic bytecode policy VM. It evaluates structured fields derived from the argument bytes according to the signed tool specs. It does not read free text or English.
+- **Judge (Path B)**: Trusted AI agent (local or cloud, preferably suited to the use case). It scores the normalized action record (and optionally the proposal). It has no direct access to any registered tool.
+- **Monitored Agent**: The untrusted agent under constraint. It proposes actions; it has no direct access to any registered tool.
+- **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported (#45). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
+- **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
+
 ## Dual-path authorization
 
-1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only
-   structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`,
-   `irreversible`). It does not read English. A fault is a deny. The signed
-   constitution must include `tool_specs`. Those fields are read from the
+1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads five built-in structured fields (tool, amount_usd, data_class, counterparty, and irreversible) and any custom fields the principal declares under `fields:` (boolean, integer, enum, or string; up to 64; see [examples/custom_fields.yaml](examples/custom_fields.yaml) and HOWTO "Custom Path A fields"). It does not read English. A fault is a deny. A field's description is a signed note for people, never a rule. The signed constitution must include tool_specs.  Those fields are read from the
    argument bytes by [two_key/derive.py](two_key/derive.py). A claim that
    disagrees with the bytes is a deny. Omitting `tool_specs` will not sign
    and will not load. A key the spec does not name does not reach the tool.
@@ -58,8 +64,7 @@ is going, see [ROADMAP.md](ROADMAP.md).
    with no local judge does not start. A judge is local only when it says
    so (`local_weights: true`) and its `base_url` host is on an allowlist:
    loopback, RFC 1918, or IPv6 unique-local. A `:cloud`/`-cloud` model is
-   never local, for any judge class. With
-   `required_yes` unset, the quorum needs `min(2, judges)` yes votes.
+   never local, for any judge class. With `required_yes` unset, the approval threshold is `min(2, number_of_judges)`. The default policy permits a one-judge deployment, but the operator must still configure at least one judge; Two-Key does not create or select judges automatically. With one configured judge, one affirmative vote is required. With two or more judges, two affirmative votes are required by default. This is not a general majority rule: for example, a three-judge setup requires two affirmative votes, and a four-judge setup also requires two. Operators who want a different threshold, such as a majority or unanimity, must explicitly configure `required_yes` to the desired number of affirmative votes.
    `require_path_a_first` is not a floor and it is not a skip. After a derive
    deny, judges do not receive the argument bytes unless
    `tool_args_on_derive_deny` is set. Path B still runs. Other denies still
@@ -113,7 +118,7 @@ flowchart TD
   gate -->|no| ledger
   gate -->|yes| token["Capability token<br/>signed by the capability key"]
   token --> ledger
-  token --> gateway["Tool gateway<br/>capability public key only, cannot mint<br/>own process or host: designed, not built (#45)"]
+  token --> gateway["Tool gateway<br/>same process as TwoKey, shares its ledger<br/>verifier: capability public key only, cannot mint"]
   gateway -->|"redemption_started, then declared paths only"| tool["Registered tool"]
   gateway --> ledger
 ```
@@ -127,7 +132,8 @@ model again. Those fields are operator/library metadata (str, at most 256
 characters after strip); non-str or oversize is a deny. Hosting is local or
 cloud. It is not trust, and it does not skip either path.
 
-Path A reads only the five structured fields. Path B judges see the
+Path A reads only the structured fields: the five built-in ones and the
+declared custom fields, all derived from the argument bytes. Path B judges see the
 normalized action record. Non-empty tool arguments are attached on that
 record as `tool_args`, except after a derive deny. Set
 `tool_args_on_derive_deny: true` on the quorum policy to send those bytes
@@ -237,7 +243,7 @@ sequenceDiagram
     TwoKey->>Ledger: capability_issued, then decision
     TwoKey-->>Caller: single-use token
     Caller->>Gateway: token, tool, arguments
-    Note over Gateway: verifies with the capability public key only
+    Note over Gateway: same process as TwoKey; verifies with the capability public key only
     opt authenticated token refused
       Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
     end
@@ -253,9 +259,10 @@ sequenceDiagram
 The token is signed by the capability key (`<ledger>.capability/capability.pem`,
 outside the ledger directory). It is bound to the tool, the argument hash,
 the ledger Merkle root and size at issuance, the constitution hashes,
-`spec_hash`, and the derived form. The gateway is constructed with
-`issuer.verifier()` or with the issuer; either way it keeps only the public
-half of the capability key. It recomputes the form from the same bytes. It checks the
+`spec_hash`, and the derived form. The gateway is built with
+`TwoKey.gateway()` (or `ToolGateway(tk.ledger, tk.issuer.verifier(), ...)`
+in the same process); either way it keeps only the public half of the
+capability key. It recomputes the form from the same bytes. It checks the
 signature, expiry, a lifetime no longer than the TTL (`ttl_too_long`), an
 issue time at most 5 s ahead (`issued_in_future`), and that nothing revoked
 or reloaded the constitution after issuance. It writes `redemption_started` before the tool runs. It does not
@@ -268,14 +275,23 @@ the group and others cannot read, never through a symlink. Once a token has been
 or changed key refuses to start. Its fingerprint is recorded in
 `constitution_loaded` and the gateway checks it.
 
-The gateway is meant to run in its own process or on its own host, holding
-the capability public key and a gateway-only ledger role: it reads the
-ledger, refreshes without ending outstanding tokens, and records
-redemptions, without the principal or witness private key. That role is
-designed, not yet built
-([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)).
-Today the gateway shares the ledger object of the `TwoKey` process, and
-that object holds the principal, witness, and ledger keys.
+The gateway runs in the `TwoKey` process, on the ledger object `TwoKey`
+uses. Build it with `TwoKey.gateway()`. A gateway in another process or on
+another host is not supported
+([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)):
+a `Ledger` opened elsewhere does not see tokens issued after it opened, so
+it refuses them, and it would hold the principal, witness, and ledger keys
+anyway. A gateway built on a ledger no `TwoKey` in the process opened emits
+`TwoKeyDeploymentWarning` once per process.
+
+The gateway's verifier holds only the capability public key, so the
+gateway object cannot mint. That is an API property, not key isolation.
+The same process holds the capability minting key (`TwoKey.issuer`) and,
+on the shared ledger object, the principal, witness, and ledger keys. The
+registered tools run in that process too. Python gives no memory isolation
+inside one process, so a compromised tool or dependency can read every one
+of those keys. Keep tools small and trusted, or put the work they do
+behind a service of their own.
 
 ## What this repo leaves out
 
@@ -289,10 +305,10 @@ Not in this repository:
 
 Some of this is planned as optional additions. See the
 [roadmap](#roadmap): DLP and antivirus hooks (an interface that calls
-external scanners, not a scanning engine), key backup (not seed-phrase
-backup), PKI with certificate recovery, and hybrid ML-DSA-65. Enterprise
-deployment modes, permissioned-chain anchoring, and seed phrases are not
-planned.
+external scanners, not a scanning engine), PKI with certificate recovery,
+and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
+backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
+phrases are not planned.
 
 The ledger is encrypted at rest.
 
@@ -331,6 +347,12 @@ It is a prototype. It is not a FIPS 140-3 validated module.
 - Identities are bare keys. There is no certificate chain, expiry, or
   revocation. PKI with certificate recovery is on the roadmap.
 - It does not scan payloads, and it is not an antivirus or DLP product.
+- A key backup is only as strong as its passphrase. The bundle is the keys.
+  PBKDF2 slows guessing and is not memory-hard. It is not a seed phrase and
+  not an external anchor. A restore onto a newer ledger fills missing key
+  files and leaves a key that is already there. `--replace-ledger` can make
+  a token spent after the backup look unspent, and it replaces a key file
+  that differs.
 
 The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
@@ -338,7 +360,9 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 The plan from the 0.2.4 prototype to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-Nothing after 0.2.4 in that plan exists yet. The detail is in [ROADMAP.md](ROADMAP.md).
+0.3.0 (key backup) is released: tag `v0.3.0` on `main`. Nothing after 0.3 in
+that plan exists yet.
+The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
 flowchart LR
@@ -358,8 +382,8 @@ flowchart LR
 | Target | What |
 | --- | --- |
 | 0.2.3 | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
-| 0.2.4 | Head anchor against a ledger-directory rollback or wipe (#62); `two-key recover` for an uncheckpointed tail (#49) |
-| 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys. A restore includes `head.anchor` from the same moment |
+| 0.2.4 | Head anchor against a ledger-directory rollback or wipe (#62); `two-key recover` for an uncheckpointed tail (#49). Tagged `v0.2.4` on `main` |
+| 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys, in three bundles. A restore includes `head.anchor` from the same moment. Tagged `v0.3.0` on `main` |
 | 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
 | 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
 | 0.6 | MCP adapter: a proxy in front of the gateway, not an MCP server |
@@ -369,10 +393,11 @@ flowchart LR
 | 0.10 | Local GUI for configuration and ledger auditing |
 | 1.0 | Public community review, then release. Described as community-reviewed, not audited |
 | 0.11, any time before 1.0 | Optional reputation halt. Off unless configured. Not a change to `revoke` |
-| After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
+| After 1.0, not scheduled | More spec field types (decimal, URL, path, email, opaque bytes), and `amount` / `counterparty` as ordinary typed fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped in 0.3.0 |
 
-Install from git. It is not published to PyPI. Package version 0.2.4, tag
-`v0.2.4` on `main`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
+Install from git. It is not published to PyPI. Package version is 0.3.0.
+Tag `v0.3.0` on `main` is the tagged release. Tag `v0.2.4` stays on
+`fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
 commit `2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
 some judges 0.2.2 accepted (one holding the agent's credential without
 sending it, or in the other form), and pins each ledger's witness key on
@@ -380,17 +405,23 @@ its first open: read "Upgrading from 0.2.2" in
 [CHANGES.md](CHANGES.md) before upgrading (and "Upgrading from 0.2.1" and
 "Upgrading from 0.1.12" from older versions). 0.2.4 writes a head anchor on
 the first open of an existing ledger and refuses a rolled-back ledger
-directory: read "Upgrading from 0.2.3".
+directory: read "Upgrading from 0.2.3". 0.3.0 adds key backup, custom Path
+A fields, and `TwoKey.gateway()` (#45). Existing ledgers and constitutions
+open unchanged: read "Upgrading from 0.2.4". A constitution that declares
+custom fields signs as v2, which installs before 0.3.0 refuse: read
+"Custom Path A fields" > "Upgrading" in CHANGES.md.
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.4"
+pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.0"
 ```
 
-That ref is the tagged 0.2.4 release. `main` and `working` are that same release.
+That ref is the tagged 0.3.0 release (key backup, custom Path A fields, and
+the #45 gateway boundary). `main` is that release. `working` is where the
+next changes land. For the previous release, use `@v0.2.4`.
 
 ## Run the offline demo
 
@@ -401,6 +432,17 @@ pip install -e ".[yaml]"
 python -m unittest discover -s tests
 python -m two_key demo
 python -m two_key authorize --help
+```
+
+That install follows the ranges in `pyproject.toml`. CI does not: it installs
+the versions in `uv.lock` (cryptography, PyYAML, and their dependencies),
+wheels only. To match CI, use the uv version pinned in
+`.github/workflows/tests.yml`:
+
+```bash
+pip install --only-binary :all: "uv==0.13.0"
+uv sync --locked --no-build --extra yaml --no-dev
+.venv/bin/python -m unittest discover -s tests
 ```
 
 The demo uses fixed test-double judges. Real judges are configured in
@@ -414,21 +456,23 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/audit.py` | `check_decision_digests`: recompute each decision's `identities_digest` and `policy_digest` |
 | `two_key/policy_vm.py`, `compiler.py` | Path A |
 | `two_key/derive.py` | Tool-spec derivation for Path A's form |
+| `two_key/fields.py` | Custom Path A fields: registry, types, character sets, limits |
 | `two_key/quorum.py`, `two_key/judges/` | Path B and judge transport |
 | `two_key/identity.py`, `netloc.py` | Judge ≠ monitored agent check; local vs. cloud host |
 | `two_key/strict.py` | Strict JSON and YAML loading (duplicate keys, merge keys, and huge integers refused) |
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
-| `two_key/keys.py`, `cli.py` | Key files; `two-key` command line |
+| `two_key/keys.py`, `cli.py`, `backup.py` | Key files; `two-key` command line; passphrase backup of the package's own keys |
 | `two_key/action.py` | Normalized action record and its validation |
 | `two_key/agent_meta.py` | Bounds on operator- or library-supplied agent identity metadata written to the ledger |
 | `two_key/canonical.py` | Canonical encoding for the ledger, tokens, and judge bindings |
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
-| `examples/` | Constitution, hard rules, judges, agents |
-| `ROADMAP.md` | Planned work from 0.2.4 to 1.0 |
+| `examples/` | Constitution, hard rules, custom fields, judges, agents |
+| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.0 is tagged `v0.3.0` |
 | `docs/HOWTO.md` | Operator how-to |
+| `docs/JUDGES_AND_QUORUM.md` | How judges vote and how Path A and Path B combine |
 | `docs/FIT.md` | Whether this package is the right control |
 | `docs/COMPARISON.md` | What this package is not a substitute for |
 | `docs/THREAT_MODEL.md` | Boundaries and residual risk |

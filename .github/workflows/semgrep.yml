@@ -1,0 +1,29 @@
+name: Semgrep
+
+on:
+  pull_request: {}
+  push:
+    branches: [main, working]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write   # so findings can appear in the Security tab
+
+jobs:
+  semgrep:
+    name: Semgrep Scan
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: semgrep scan --config=auto --sarif --output=semgrep.sarif
+
+      - name: Upload SARIF to GitHub
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif

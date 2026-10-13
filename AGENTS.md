@@ -13,17 +13,18 @@ monitored-agent hooks, encrypted ledger, single-use capability token, and a
 verify-only gateway. Prototype. Apache-2.0.
 
 Do **not** add a scanning or antivirus engine, chain anchoring, or seed
-phrases here. The items in [ROADMAP.md](ROADMAP.md) are in scope: key backup,
-ledger export for a SIEM, DLP and antivirus hooks that call external scanners,
+phrases here. The items in [ROADMAP.md](ROADMAP.md) are in scope: key backup
+(shipped in 0.3.0), ledger export for a SIEM, DLP and antivirus hooks that call external scanners,
 an MCP adapter, PKI with certificate recovery, hybrid ML-DSA signatures, a FIPS
 approved mode, and a local GUI. Build them in the order and with the limits stated there, unless the
 operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.2.4 is tag `v0.2.4` on `main`. `working` is the same release.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.2.0`
-  (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees.
+- Package 0.3.0 is tag `v0.3.0` on `main`. Tag `v0.2.4` stays on `fc836bb`.
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.3.0` or `v0.2.0`
+  (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
+  where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
 - Never commit keys, ledgers, or credentials.
 - Update `CHANGES.md` with every commit. Read
@@ -32,7 +33,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key-concept`, import name `two_key`,
-version `0.2.4`. Tag `v0.2.4` is the tagged release. Not on PyPI.
+version `0.3.0`, tag `v0.3.0` on `main`. Not on PyPI.
 
 ```bash
 python3 -m venv .venv
@@ -42,13 +43,21 @@ python -m unittest discover -s tests
 python -m two_key demo
 ```
 
+CI does not use that floating install. `.github/workflows/tests.yml` pins
+`uv==0.13.0` and runs `uv sync --locked --no-build --extra yaml`, which
+installs `uv.lock` (cryptography, PyYAML, and their dependencies) as wheels.
+Regenerate `uv.lock` with that uv when a dependency range changes, and
+commit the lock. Do not treat the lock as a release pin for consumers.
+Build, coverage, and bandit are pinned in their workflows, not in
+`pyproject.toml`.
+
 | Extra | Provides | When needed |
 | --- | --- | --- |
 | (none) | `cryptography>=41` | Ed25519, SHA-256, AES-256-GCM ledger |
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 
 Git install:  
-`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.4"`
+`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.0"`
 
 ## Tests and docs
 
@@ -83,10 +92,26 @@ a prototype, report security findings as public issues, per
 - `require_path_a_first` is not a skip.
 - JSON/YAML inputs refuse duplicate keys and YAML merge keys. Oversized or malformed calls deny
   before either path.
-- Default quorum needs one judge and has no diversity floors;
-  `QuorumPolicy.high_assurance` / `profile: high_assurance` adds judges from
-  two makers (`min_makers`), one local judge, and a local yes.
+- Default quorum needs one judge and has no diversity floors.
+  When `required_yes` is unset, it resolves to
+  `min(2, number_of_judges)` (at least one); this is **not** a majority
+  rule. `min_responding` defaults to the effective `required_yes`
+  threshold. `QuorumPolicy.high_assurance` / `profile: high_assurance`
+  adds requirements for judges from two makers (`min_makers`), one
+  local judge, and a local yes. Note that
+  `QuorumPolicy.without_diversity_floors()` explicitly defaults
+  `required_yes` to `2`.
 - `tool_specs` is required. A disagreeing claim is a deny.
+- Path A evaluates five built-in structured fields (`tool`, `amount_usd`,
+  `data_class`, `counterparty`, `irreversible`) and the operator's custom
+  fields (`two_key/fields.py`). Custom field values come from argument
+  paths in the signed spec only, never from the agent's claim or
+  `Action.raw`; `LOAD` refuses any name but a built-in field, and custom
+  fields load with `LOAD_FIELD`. A mapped field is required; an unmapped
+  tool gets the signed default. A description is never compiled, sent to a
+  judge, or used in a reason. A constitution with no custom fields must
+  stay byte-for-byte v1 (`tests/test_fields_compat.py`). Path A evaluates
+  structured data, not English-language policy prose.
 - No judge may be the monitored agent: a judge holding the agent's
   credential (the same API token, or the same username and password) is
   refused at any address, whether or not either side sends it; so are two
@@ -96,5 +121,11 @@ a prototype, report security findings as public issues, per
   does not match the pin in the ledger, or the configured
   `witness_public_key`, is refused. It changes only by `rotate_witness`.
 - The gateway verifies only; it never mints.
+- The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
+  (`TwoKey.gateway()`). A gateway in another process or host is not
+  supported (#45); do not add a gateway-only ledger role, remote gateway,
+  or cross-process protocol without the operator. Do not describe
+  verify-only as key isolation: the process holds the minting, principal,
+  witness, and ledger keys, and the registered tools run there.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

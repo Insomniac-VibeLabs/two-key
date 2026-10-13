@@ -8,7 +8,9 @@ current behavior of those projects in their own docs before you rely on them.
 A call runs only if Path A and Path B both allow, and only if the gateway
 later redeems a single-use token bound to that tool and those argument
 bytes. Path A does not read English. There is no MCP server in this release.
-There are no scanner hooks in this package.
+There are no scanner hooks in this package. Key backup (0.3.0) is three
+passphrase bundles of this package's own keys, not a seed phrase and not a
+substitute for a password manager.
 
 | Category | What that category decides | This package |
 | --- | --- | --- |
@@ -26,7 +28,8 @@ There are no scanner hooks in this package.
 - a FIPS 140-3 validated module
 
 Path A is only as good as the fields the signed tool spec can read. Those
-fields are derived from the argument bytes and a disagreeing claim is a
+fields, the built-in ones and any custom fields the principal declares,
+are derived from the argument bytes and a disagreeing claim is a
 deny. A constitution without `tool_specs` does not load. An unnamed argument
 key does not reach the tool. `deny_unmapped` (off by default) denies the call
 instead of dropping the key. A copied counterparty must be on that path's

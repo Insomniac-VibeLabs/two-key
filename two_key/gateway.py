@@ -7,6 +7,12 @@ ledger's ``constitution_loaded`` entry (``capability_key_mismatch``). A redempti
 retry of that intent does not run the tool. A tool exception appends an
 abort and leaves the token usable. A crash after a successful return
 cannot run the token again, because the intent is already on the ledger.
+The gateway runs in the ``TwoKey`` process, on the ledger object that ``TwoKey`` uses
+(``TwoKey.gateway()``). A gateway in another process or on another host is not supported (#45): a
+``Ledger`` opened elsewhere does not see tokens issued after it opened, and it holds the principal,
+witness, and ledger keys anyway. Built on a ledger no ``TwoKey`` in this process opened, the gateway
+emits ``TwoKeyDeploymentWarning`` once per process. The verifier holding only the capability public key
+is an API property, not process isolation: the registered tools run in this process too.
 A refusal of an authenticated token is ledgered as ``gateway_denied`` (reason,
 jti, tool, argument size and digest) at most once per jti after a successful append:
 the jti is recorded only after ``append_bounded`` + ``checkpoint`` succeed, so a
@@ -28,6 +34,7 @@ import math
 import os
 import sys
 import threading
+import warnings
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -64,6 +71,45 @@ def _short(value) -> str | None:
     return value if isinstance(value, str) and len(value) <= _MAX_JTI_CHARS else None
 
 
+class TwoKeyDeploymentWarning(UserWarning):
+    """The gateway was given a ledger no ``TwoKey`` in this process opened. A split gateway is unsupported (#45)."""
+
+
+# Set by TwoKey on the ledger object it uses. A gateway on another object is not the supported deployment.
+_TWO_KEY_LEDGER_MARK = "_two_key_bound"
+# Set once the warning has been emitted in this process. The lock makes check-and-set one step.
+_deployment_warned = threading.Event()
+_deployment_warned_guard = threading.Lock()
+
+
+def mark_two_key_ledger(ledger) -> None:
+    """Record that a ``TwoKey`` in this process uses ``ledger``. A double that refuses attributes stays unmarked."""
+    try:
+        setattr(ledger, _TWO_KEY_LEDGER_MARK, True)
+    except (AttributeError, TypeError):
+        pass
+
+
+def _warn_unbound_ledger(ledger) -> None:
+    """Warn, at most once per process, when ``ledger`` is not one a ``TwoKey`` here opened."""
+    if getattr(ledger, _TWO_KEY_LEDGER_MARK, False) is True:
+        return
+    with _deployment_warned_guard:
+        if _deployment_warned.is_set():
+            return
+        _deployment_warned.set()
+    warnings.warn("ToolGateway was given a ledger that no TwoKey in this process opened. A gateway in "
+                  "another process or on another host is not supported (#45); it refuses tokens issued "
+                  "after its ledger opened. Build it with TwoKey.gateway().",
+                  TwoKeyDeploymentWarning, stacklevel=3)
+
+
+def reset_deployment_warning() -> None:
+    """Let the next unbound ledger warn again. Tests use this to check the warning more than once per process."""
+    with _deployment_warned_guard:
+        _deployment_warned.clear()
+
+
 _BOUND_FIELDS = ("jti", "tool", "args_hash", "bytecode_hash", "nl_hash", "ledger_root", "ledger_size")
 
 
@@ -92,6 +138,7 @@ class ToolGateway:
                  max_denied_jtis: int | None = None,
                  deny_inflight_wait_seconds: float | None = None):
         self.ledger = ledger
+        _warn_unbound_ledger(ledger)
         self.issuer = _as_verifier(issuer)
         principal = getattr(ledger, "public_key", None)
         if principal is not None and _raw(self.issuer.public_key) == _raw(principal):
@@ -235,7 +282,7 @@ class ToolGateway:
         if "form" not in payload or "claimed_data_class" not in payload:
             return GatewayResult(False, "derived_mismatch")
         try:
-            derived = derive(spec, arguments)
+            derived = derive(spec, arguments, self.compiled.fields)
             fresh = form_for(derived, payload["claimed_data_class"],
                              blocked_from_rules(self.compiled.rules))
         except DeriveError:
@@ -266,7 +313,7 @@ class ToolGateway:
             except Exception as e:      # not only LedgerError: an OSError (disk full) must not escape invoke (#60)
                 return GatewayResult(False, _ledger_failed(e))
             try:
-                output = fn(project_arguments(spec, arguments))
+                output = fn(project_arguments(spec, arguments, dict(derived.fields)))
             except Exception as e:
                 try:
                     self.ledger.append_bounded("redemption_aborted", {"jti": payload["jti"], "tool": tool})

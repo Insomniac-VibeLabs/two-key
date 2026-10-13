@@ -1139,3 +1139,339 @@ Package version 0.2.4 (`pyproject.toml`, `two_key.__version__`). Tagged
   does not open as a new ledger, and deleting the anchor adopts the current
   head.
 
+## 0.3.0 — 2026-10-10
+
+On branch `working`. Not a release tag. `main` and tag `v0.2.4` stay at
+0.2.4. Tag `v0.2.3` stays on `4a4352e`. Not published to PyPI.
+
+Package version 0.3.0 (`pyproject.toml`, `two_key.__version__`).
+
+This section describes key backup as first written. 0.3.0 also carries the
+later sections "Gateway deployment boundary (#45)" and "Custom Path A
+fields", which do change the gateway and Path A; "Not in this version"
+below was true of key backup alone.
+
+### Added
+
+Key backup and recovery (ROADMAP 0.3).
+
+- `two-key backup-export` writes three passphrase-protected bundles.
+  `principal.bundle.json` holds `principal.pem` and `capability.pem`.
+  `ledger.bundle.json` holds `ledger.key`, `fingerprint.key`, the ledger
+  files, and `head.anchor` from that same moment. `witness.bundle.json`
+  holds `witness.pem` only. One file never holds every key a signed head
+  needs (principal, witness, and ledger key).
+- The bundle names its key derivation and cipher: format
+  `two-key-concept-key-backup/1`, algorithm `pbkdf2-sha256+aes-256-gcm`,
+  PBKDF2-HMAC-SHA256 at 600,000 iterations, then AES-256-GCM. 0.3 ships
+  that function only. The name is there so 0.9 can keep it and a later
+  version can add another without a new file format.
+- Passphrases come from environment variables, never from argv.
+- `two-key backup-verify` decrypts the bundles into a temporary ledger and
+  checks the principal, capability, and witness fingerprints. It does not
+  write the real ledger.
+- `two-key backup-restore` puts the keys back. It writes the ledger files
+  and `head.anchor` from the same bundle together. An older ledger left
+  next to the current anchor still does not open (`ledger_rolled_back`).
+  `--replace-ledger` is what writes that older ledger and its anchor over
+  a newer one, and it replaces a key file that differs so the restored
+  ledger still opens. The command never deletes the anchor. A missing
+  anchor on a newer ledger is left missing. Deleting it is not
+  the restore procedure.
+- Export refuses to start when the capability key or the fingerprint key
+  is missing. Start TwoKey once first. Export does not create them.
+- A bundle file is at most 64 MiB. The plaintext inside stops at 45 MiB
+  so the base64 wrapper still fits.
+
+### Not in this version
+
+- No second key-derivation function, no seed phrase, and no PKI.
+- Authorization, tokens, the gateway, and the judge-versus-agent checks
+  are unchanged.
+- A backup is not an external anchor. Guessing the passphrase opens that
+  bundle. PBKDF2 is not memory-hard. `--replace-ledger` can make a token
+  spent after the backup look unspent.
+
+### Upgrading from 0.2.4
+
+1. Existing ledgers open as before. Nothing is rewritten until you restore.
+2. Back up only after TwoKey has started once, so `capability.pem` and
+   `fingerprint.key` exist.
+3. Use a different passphrase for each bundle, and store the three files
+   apart. Two bundles that share a passphrase are warned about. All three
+   sharing one passphrase is warned about too.
+4. To put an older ledger back, run `backup-restore --replace-ledger`.
+   That writes `head.anchor` from the same backup. Do not delete the anchor
+   to silence `ledger_rolled_back`.
+5. There is no seed phrase. A lost passphrase cannot be recovered.
+
+### Docs
+
+README, ROADMAP, HOWTO, SCOPE, THREAT_MODEL, SECURITY, FIT, COMPARISON,
+llms.txt, AGENTS.md, CONTRIBUTING.
+
+### Reviews
+
+The operator asked for ROADMAP 0.3 on `working`. This writes key files and,
+with `--replace-ledger`, ledger bytes and the head anchor. It does not
+change authorize, the token, the gateway, or judge identity. Tests are
+`tests/test_key_backup.py`: restore, a wrong passphrase, a tampered bundle,
+a newer ledger left in place, and a replace that writes the anchor with
+the ledger and does not delete it. Tagging still wants the maintainer's
+look at the bundle split and the passphrase.
+
+## Fixes — 2026-10-11
+
+On branch `working`. Not a release tag. Package version stays 0.3.0.
+`main` and tag `v0.2.4` stay at 0.2.4. Not published to PyPI.
+
+Fixes #67, #68, #69, and #70. Authorization, tokens, the gateway, and the
+judge-versus-agent checks are unchanged.
+
+- **#67.** A restore onto a newer ledger opens with the keys already on
+  disk and uses the backup only for a key file that is missing. A witness
+  rotated after the backup stays. Missing `principal.pem` or
+  `capability.pem` can be put back without `--replace-ledger`. That flag
+  is still what writes the older ledger, its anchor, and the older keys.
+  A key that differs while the ledger files still match the backup is
+  still `backup_conflict`.
+- **#68.** `backup-export` holds the ledger lock while it copies the files,
+  opens that copy in a temporary directory, and writes nothing when the
+  copy would not open (`backup_refused`). A capability key that does not
+  match the pin is refused here, not left as a backup `backup-verify`
+  would reject.
+- **#69.** `--out` refuses a symlink and an existing directory the group
+  or others can write. Bundles are still created mode 0600.
+- **#70.** The passphrase warning fires when any two bundles share a
+  passphrase, not only when all three match.
+
+### Docs
+
+HOWTO "Back up the keys", the lost-key table, and the PBKDF2 trade-off.
+README known limits. THREAT_MODEL key-backup residual. SECURITY.md.
+
+## CI — 2026-10-11
+
+On branch `working`. Not a release tag. Package version stays 0.3.0.
+`main` and tag `v0.2.4` stay at 0.2.4. Not published to PyPI.
+
+Fixes #71, #72, #73, #74, #75, #76, #77, and #79. Authorization, tokens,
+the gateway, and the judge-versus-agent checks are unchanged.
+
+- **#79.** `test_ledger_keeps_it_beside_the_ledger_key` compares a second
+  `fingerprint_key()` read to the first. It no longer asserts a call
+  equals itself.
+- **#71, #72.** The build workflow installs `build==1.6.1` with
+  `--only-binary :all:`. The command is a YAML block scalar so `:all:`
+  is not read as a mapping.
+- **#72, #73, #74.** The coverage workflow installs `coverage==7.16.2`
+  the same way.
+- **#72, #75, #76.** The security workflow installs `bandit==1.9.4`
+  the same way, also as a block scalar. `bandit -r two_key -ll` is unchanged.
+- **#77.** `uv.lock` pins `cryptography==50.0.2`, `pyyaml==6.0.3`, and
+  their dependencies (`cffi`, `pycparser`, `typing-extensions`), with
+  hashes. Tests and coverage install that lock with `uv sync --locked
+  --no-build` (wheels only; uv itself is `uv==0.13.0`). The ranges in
+  `pyproject.toml` stay what a consumer gets. There is no `@v0.3.0` tag.
+
+### Docs
+
+README install, HOWTO install, AGENTS.md, CONTRIBUTING, llms.txt.
+
+## Gateway deployment boundary (#45) — 2026-10-13
+
+On branch `working`. Not a release tag. Package version stays 0.3.0.
+`main` and tag `v0.2.4` stay at 0.2.4. Not published to PyPI.
+
+Decides #45: the gateway runs in the `TwoKey` process, on the ledger object
+`TwoKey` uses. A gateway in another process or on another host is not
+supported. There is no gateway-only ledger role, remote gateway, or
+cross-process protocol, and none is planned (ROADMAP "Not planned").
+
+### Added
+
+- `TwoKey.gateway(tools=..., **kw)` builds the gateway on `tk.ledger` with
+  `tk.issuer.verifier()` and `tk.compiled`. It refuses a `TwoKey` started
+  without `private_key=` (`no_issuer_key:`). `two-key demo` uses it.
+- `two_key.gateway.TwoKeyDeploymentWarning` (a `UserWarning`). `TwoKey`
+  marks the ledger object it uses. `ToolGateway(...)` built on a ledger no
+  `TwoKey` in this process opened emits the warning at most once per
+  process. It cannot see another host. Silence it or make it an error with
+  the standard `warnings` filters.
+
+### Unchanged
+
+- `ToolGateway(...)` keeps its signature. Built directly on `tk.ledger`, it
+  does not warn.
+- Token checks, redemption, and the ledger are unchanged. A gateway on a
+  separately opened `Ledger` still refuses a token issued after it opened
+  (`ledger_size_invalid`, then `ledger_failed`); a test now pins that.
+
+### Docs
+
+README (component list, diagram, gateway paragraph), HOWTO ("Redeem",
+"Deployment boundary", known trade-offs), SECURITY, THREAT_MODEL, SCOPE,
+JUDGES_AND_QUORUM, FIT, ROADMAP, llms.txt, AGENTS.md. They say plainly that
+verify-only is an API property, not key isolation: the `TwoKey` process
+holds the capability minting key and the principal, witness, and ledger
+keys, and the registered tools run there.
+
+### Reviews
+
+The operator decided #45 and approved the helper and the warning. Tests:
+`tests/test_gateway_boundary.py`.
+
+## Custom Path A fields — 2026-10-13
+
+On branch `working`. Not a release tag. Package version stays 0.3.0.
+`main` and tag `v0.2.4` stay at 0.2.4. Not published to PyPI.
+
+Path A was limited to five built-in fields. The principal can now declare
+custom fields, with descriptions, and write rules on them. Requested by the
+operator (ROADMAP "spec field types", ahead of its order).
+
+### Added
+
+- `fields:` in the rules file: up to 64 custom fields, each `boolean`,
+  `integer` (`min`, `max`), `enum` (`values`), or `string` (`max_length`),
+  with a required signed `default` and an optional `description`.
+  `two_key/fields.py` holds the registry, the types, and the limits.
+- `tool_specs.<tool>.fields` maps a declared field to an argument path. A
+  mapped field is required (`derive_failed:field_missing:<field>`); a value
+  of the wrong type or character set is `field_unreadable`, and one outside
+  its bounds or values is `field_not_allowed`. A tool that does not map a
+  field gets the signed default. A field path may not equal, contain, or
+  sit under any other declared path, compared without regard to case.
+- `deny_if_fields` rule type: `{field: {op: value}}`, every condition
+  ANDed, operators by type (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`,
+  `not_in`). Rule values are type-checked at sign and load time; an enum
+  value that is not declared is refused.
+- Enum and string values are printable ASCII by default. `charset: unicode`
+  with `scripts:` (one script, or `japanese`, `korean`, `chinese`) reads
+  values with NFKC_Casefold and refuses a letter outside the declared
+  scripts, invisible and direction-control characters, and non-ASCII
+  punctuation of no declared script.
+- Policy VM opcode `LOAD_FIELD` reads custom fields from the derived values
+  only. `LOAD` now refuses any name that is not a built-in field, so it can
+  never read the agent's `raw` mapping. `Action.field_value` no longer falls
+  back to `raw`.
+- The token's `form` carries `fields`, and the gateway compares it as
+  canonical bytes (`true` is not `1`). The tool receives the normalized
+  values. Judges see the values; never descriptions.
+- `spec_hash` covers the registry when there is one.
+- Envelope format `two-key-concept-constitution-v2`, used when the rules
+  declare fields. `sign_constitution(..., fields=, envelope_format=)` and
+  `two-key sign-constitution --envelope-format auto|v2`. `auto` (the
+  default) keeps v1 without fields; `v2` always writes v2. A v2 envelope
+  refuses unknown signed keys; a v1 envelope with `fields` is refused.
+- `load_unsigned_with_fields` returns the registry. `load_unsigned` refuses
+  a rules file with fields rather than dropping them.
+- `examples/custom_fields.yaml`.
+
+### Unchanged
+
+- A constitution without custom fields signs byte for byte as before: the
+  same v1 format, digest, `bytecode_hash`, `spec_hash`, action-record hash,
+  and token form. `tests/test_fields_compat.py` pins the hashes recorded
+  before this change.
+- An agent still cannot claim a field: a claim naming `environment` or
+  `fields` is `malformed_action`.
+
+### Upgrading
+
+1. Nothing changes for a constitution without `fields:`.
+2. A constitution with `fields:` (or signed with `--envelope-format v2`) is
+   refused by installs older than this change. Upgrade every install that
+   loads it first.
+3. Use `load_unsigned_with_fields` in code that signs a rules file that may
+   declare fields.
+
+### Docs
+
+HOWTO ("Custom Path A fields", "Using Two-Key in other languages",
+"Changing a limit", envelope format, design steps, known trade-offs),
+README, SCOPE, ROADMAP, THREAT_MODEL, COMPARISON, llms.txt, AGENTS.md.
+
+### Reviews
+
+The operator approved the design: the types, the signed defaults, mapped
+means required, values but not descriptions to judges, the envelope
+setting, the Unicode rules, the limits, and the `LOAD` hardening. Tests:
+`tests/test_custom_fields.py`, `tests/test_fields_compat.py`.
+
+## Docs match the code — 2026-10-13
+
+On branch `working`. Not a release tag. Package version stays 0.3.0.
+Docs only; no code or behavior changes.
+
+- HOWTO "Judges": transient failures (a dropped connection, HTTP 429, 502,
+  503, 504) are retried at most twice inside the deadline; a response over
+  1,000,000 bytes, a redirect, and any other error abstain. The one-time 400
+  fallback also exists for Anthropic and Gemini.
+- THREAT_MODEL: a gateway on a separately opened ledger returns
+  `ledger_failed: ledger file changed by another writer` to the caller (the
+  check itself fails as `ledger_size_invalid`). The ledger holds custom
+  field values in `action_normalized.form`.
+- README, ROADMAP, THREAT_MODEL, and the CHANGES 0.3.0 section say that
+  0.3.0 carries custom Path A fields and the #45 gateway boundary as well as
+  key backup, and that the field types shipped ahead of order. README points
+  to the v2-envelope upgrade note.
+- llms.txt no longer states a test count. HOWTO's test-gap list drops the
+  ledger's O_EXCL path and the case-folded control-path check, which have
+  tests. CONTRIBUTING and README's layout list `llms.txt` and
+  `docs/JUDGES_AND_QUORUM.md`.
+
+## Release v0.3.0 — 2026-10-13
+
+Package version 0.3.0 (`pyproject.toml`, `two_key.__version__`). Tagged
+`v0.3.0` on `main`: `working` merged with `main`, plus the release notes in
+this entry. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on
+`4a4352e`. Not published to PyPI.
+
+0.3.0 is the sum of these sections: "0.3.0" (key backup), "Fixes",
+"CI", "Gateway deployment boundary (#45)", "Custom Path A fields", and
+"Docs match the code". Where one of them says "On branch `working`" or "Not
+a release tag", it was written before this release.
+
+- The merge of `main` into `working` kept `main`'s SonarCloud coverage
+  upload (PR #78) together with `working`'s locked, pinned coverage install
+  (#77) in `.github/workflows/coverage.yml`. Nothing else conflicted.
+- README, ROADMAP, SCOPE, FIT, THREAT_MODEL, JUDGES_AND_QUORUM, AGENTS.md,
+  and llms.txt now say `v0.3.0` is the tagged release on `main` and the
+  install line uses `@v0.3.0`.
+- Upgrading: read "Upgrading from 0.2.4" and the "Upgrading" note under
+  "Custom Path A fields". A constitution with custom fields is refused by
+  0.2.4 and earlier.
+
+## PR #85 check fixes — 2026-10-13
+
+On branch `working`. Package version stays 0.3.0. No behavior changes.
+
+- CodeQL "Clear-text logging of sensitive information" (`backup.py`, the
+  short-passphrase warning): the message prints a role name and the number
+  12, never a passphrase. The scanner matched the constant's name,
+  `_SHORT_PASSPHRASE`. It is now `_WEAK_BELOW_BYTES`.
+- DeepSource PYL-W0706 (critical, "the except handler raises immediately"):
+  removed `except BackupError: raise` in `export_backup`. `BackupError` is a
+  `ValueError` and `LedgerError` is a `RuntimeError`, so the clause never
+  changed which exception reaches the caller.
+  `test_export_refuses_a_missing_capability_key_and_low_iterations` pins that
+  a `BackupError` from the snapshot still comes out unwrapped.
+- DeepSource findings in code added for custom fields and #45, no
+  behavior change: the `deny_if_fields` compiler is its own typed helper
+  (`compile_constitution` back to the complexity it had on `main`); the
+  field-definition and Unicode checks are split into one helper per case;
+  the once-per-process gateway warning uses a `threading.Event` instead of
+  `global`; `gateway.reset_deployment_warning()` is public (tests call it);
+  the rules-file loaders are annotated `Mapping`. Tests: no lambdas, one
+  merged `with`, and `Harness` is a mixin. Compiled bytecode is unchanged
+  (`tests/test_fields_compat.py`).
+- The custom-field mapping check in `validate_tool_specs` and the field
+  projection in `project_arguments` are their own helpers, so this PR no
+  longer adds to those functions' complexity (61 and 19; `main` had 59 and
+  19). No behavior change.
+- `tests/test_key_backup.py`: `redirect_stdout` is imported once at the top
+  (it was imported twice inside one test). The three `os.chmod` calls that
+  deliberately loosen permissions, to prove export refuses them, carry a
+  `skipcq: BAN-B103` comment saying so.
+

@@ -7,11 +7,15 @@ the limits given there.
 
 Do not add a scanning, antivirus, or DLP engine here. Hooks that call external
 scanners are on the roadmap, as are PKI and certificate recovery.
-Permissioned-chain anchoring and seed phrases are not planned.
+Permissioned-chain anchoring and seed phrases are not planned. Key backup
+shipped in 0.3.0 (three passphrase bundles, not a seed phrase).
 
 Update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`, `docs/FIT.md`,
 `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`, `docs/SCOPE.md`, `CHANGES.md`,
-`SECURITY.md`, `CONTRIBUTING.md`, and `AGENTS.md` when a claim changes.
+`SECURITY.md`, `CONTRIBUTING.md`, `AGENTS.md`, `llms.txt`, and
+`docs/JUDGES_AND_QUORUM.md` when a claim changes.
 When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
 in the same release.
+When `dependencies` or the `yaml` extra changes, regenerate `uv.lock` with
+the uv version pinned in `.github/workflows/tests.yml` and commit it.
 Run `python -m unittest discover -s tests` before opening a pull request.
