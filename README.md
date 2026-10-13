@@ -32,7 +32,7 @@ is going, see [ROADMAP.md](ROADMAP.md).
 
 1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only
    structured fields (currently for testing: `tool`, `amount_usd`, `data_class`, `counterparty`,
-   `irreversible`.  However, will be customizable). It does not read English. A fault is a deny. The signed
+   `irreversible`.  However, these are intended to be customizable). It does not read English. A fault is a deny. The signed
    constitution must include `tool_specs`. Those fields are read from the
    argument bytes by [two_key/derive.py](two_key/derive.py). A claim that
    disagrees with the bytes is a deny. Omitting `tool_specs` will not sign
