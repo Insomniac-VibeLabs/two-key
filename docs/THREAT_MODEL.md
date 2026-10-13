@@ -89,12 +89,14 @@ the code wins, then this file should be corrected.
 - A tool execution inside `authorize_from_agent`.
 - An allow when either path denies or does not answer. A missing, malformed,
   or timed-out ballot is an abstention, not a yes. A ballot that names
-  another judge abstains (`judge_id_mismatch`). The default needs one judge
-  and has no diversity floors. `QuorumPolicy.high_assurance()` needs judges
-  from two model makers (the operator's `maker:` labels, not verified), one
-  local judge, and a yes from a local judge;
-  `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag is
-  still not a skip. `min_distinct_providers` still defaults to 1.
+  another judge abstains (`judge_id_mismatch`). At least one judge must
+  be configured. With `required_yes` unset, the affirmative threshold is
+  `min(2, number_of_judges)`; this is not a majority rule. The default
+  has no diversity floors. `QuorumPolicy.high_assurance()` needs judges
+  from two model makers (the operator's `maker:` labels, not verified),
+  one local judge, and a yes from a local judge;
+  `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag
+  is still not a skip. `min_distinct_providers` still defaults to 1.
 - A judge is not the monitored agent: `TwoKey` refuses to start when a
   judge holds the agent's credential (the same API token, or the same
   username and password) at any address, whether or not either side sends
@@ -307,10 +309,11 @@ claims to close.
   in front of or beside the gateway, and they would not make this package a
   server or a scanner.
 - Full per-value information-flow tracking, and a content classifier. A
-  tool-spec floor is not a taint label. Scanning engines, anchoring, and
-  seed phrases are not here and are not planned. Planned scanner hooks, PKI
-  with certificate recovery, and hybrid signatures are in
-  [ROADMAP.md](../ROADMAP.md). Key backup shipped in 0.3.0. See [SCOPE.md](SCOPE.md).
+  tool-spec floor is not a taint label. Scanning engines, external or
+  permissioned-chain anchoring, and seed phrases are not here and are not
+  planned. Planned scanner hooks, PKI with certificate recovery, and hybrid
+  signatures are in [ROADMAP.md](../ROADMAP.md). Key backup shipped in
+  0.3.0. See [SCOPE.md](SCOPE.md).
 
 ## Planned changes to this model
 
