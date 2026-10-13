@@ -153,7 +153,10 @@ the code wins, then this file should be corrected.
   list does not authorize (`counterparty_not_allowed`), unless a blocked
   party is also present, in which case the block rule still denies.
   `deny_unmapped` defaults off. An unnamed key does not reach the tool.
-  Setting the flag denies the call instead (`unmapped_field`).
+  Setting the flag denies the call instead (`unmapped_field`). Custom
+  fields (`fields:`, `deny_if_fields`) are read the same way: from the
+  argument path the signed spec names, never from the agent's claim. A tool
+  that does not map a field gets that field's signed default.
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are off by default; `high_assurance`
   turns them on. A judge that is not the same agent may still share a
@@ -172,6 +175,24 @@ These are accepted or still open. They are not bugs the design already
 claims to close.
 
 - No independent review, and no production deployment.
+- Custom Path A fields (0.3.0). A tool that does not map a field gets the
+  field's signed default, as a tool with no amount spec has `amount_usd` 0.
+  A mapping the operator forgot is therefore silent. Rules written as
+  allow-lists (`not_in`) and restrictive defaults fail closed in that case;
+  rules written as deny-lists (`in`, `eq`) do not. A deny-list on a
+  `string` field also misses spelling variants (`prod` and `production`).
+  Characters are controlled, meaning is not: lookalike letters from another
+  script, invisible characters, and direction controls deny, but this
+  package does not know that two words mean the same thing. A field
+  declares one script or one approved combination (`japanese`, `korean`,
+  `chinese`), so one field cannot hold words from two unrelated scripts.
+  Script detection uses Unicode character names from Python's
+  `unicodedata`, whose Unicode version differs by Python release; a
+  character newer than the running Python's data is refused. Derived field
+  values are written to the encrypted ledger and sent to judges, including
+  cloud judges; descriptions are not. A description is shown to people
+  only, and direction controls are refused in it, but its wording can still
+  mislead a reviewer; it is signed with the rest of the constitution.
 - Trusting the agent's claimed fields instead of reading them from the
   argument bytes is closed for loaded constitutions. `tool_specs` is required to
   sign and to load. `two_key/derive.py` reads amount and counterparties by
@@ -331,7 +352,8 @@ described above, not here.
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.
   It is meant to use a field allowlist that leaves out the proposal text and
-  the derived amount and counterparty, which the ledger holds today.
+  the derived amount, counterparty, and custom field values, which the
+  ledger holds today.
   Whoever can read the SIEM becomes a new audience for ledger metadata.
 - Inspection hooks for DLP and antivirus (target 0.5). New trust boundary:
   the scanner. A scanner error, timeout, or missing result is meant to be a
@@ -386,14 +408,15 @@ described above, not here.
   principal key. It prepares a constitution and hands it to the existing
   signing command. A GUI that is reachable from another machine is out of
   scope.
-- Generic spec field types (planned, not scheduled). A typed field per
-  argument path, each kind with its own limits. `amount` and `counterparty`
-  are meant to become ordinary typed fields. Until then the model above
-  describes the two special kinds used today.
+- More spec field types (planned, not scheduled). Custom `boolean`,
+  `integer`, `enum`, and `string` fields shipped in 0.3.0 and are described
+  above. Decimal, URL, path, email, and opaque-bytes kinds are not built,
+  and `amount` and `counterparty` remain special kinds.
 
 ## What to re-check when the code changes
 
 - `two_key/core.py`: both paths run once the call is well-formed and within limits, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
+- `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies. A description is never compiled, sent to a judge, or used in a reason.
 - `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children.
 - `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.

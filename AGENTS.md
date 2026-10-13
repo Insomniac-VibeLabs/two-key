@@ -102,11 +102,16 @@ a prototype, report security findings as public issues, per
   `QuorumPolicy.without_diversity_floors()` explicitly defaults
   `required_yes` to `2`.
 - `tool_specs` is required. A disagreeing claim is a deny.
-- Path A currently evaluates five structured fields: `tool`, `amount_usd`,
-  `data_class`, `counterparty`, and `irreversible`. The field set is
-  fixed in the current implementation; do not describe it as
-  operator-customizable unless that capability is implemented and tested.
-  Path A evaluates structured data, not English-language policy prose.
+- Path A evaluates five built-in structured fields (`tool`, `amount_usd`,
+  `data_class`, `counterparty`, `irreversible`) and the operator's custom
+  fields (`two_key/fields.py`). Custom field values come from argument
+  paths in the signed spec only, never from the agent's claim or
+  `Action.raw`; `LOAD` refuses any name but a built-in field, and custom
+  fields load with `LOAD_FIELD`. A mapped field is required; an unmapped
+  tool gets the signed default. A description is never compiled, sent to a
+  judge, or used in a reason. A constitution with no custom fields must
+  stay byte-for-byte v1 (`tests/test_fields_compat.py`). Path A evaluates
+  structured data, not English-language policy prose.
 - No judge may be the monitored agent: a judge holding the agent's
   credential (the same API token, or the same username and password) is
   refused at any address, whether or not either side sends it; so are two

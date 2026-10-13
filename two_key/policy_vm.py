@@ -23,8 +23,9 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Iterable, Mapping
 
-from .action import DATA_CLASSES, Action, canon_str
+from .action import DATA_CLASSES, LOADABLE_FIELDS, Action, canon_str
 from .agent_meta import exception_ledger_error
+from .fields import FieldError, validate_condition
 
 DEFAULT_MAX_STEPS = 4096
 
@@ -47,6 +48,7 @@ class Op(IntEnum):
     FAIL = 15
     PASS = 16
     ASSERT = 17       # pop bool; if False -> deny with label arg
+    LOAD_FIELD = 18   # load a custom field derived from the argument bytes (never Action.raw)
 
 
 class ConstitutionError(ValueError):
@@ -98,7 +100,14 @@ class PolicyVM:
                 if op == Op.PUSH:
                     stack.append(args[0])
                 elif op == Op.LOAD:
+                    if args[0] not in LOADABLE_FIELDS:
+                        raise VMFault("LOAD of a name that is not a built-in field")
                     stack.append(action.field_value(args[0]))
+                elif op == Op.LOAD_FIELD:
+                    fields = getattr(action, "fields", None)
+                    if not isinstance(fields, Mapping) or args[0] not in fields:
+                        raise VMFault("LOAD_FIELD of a field with no derived value")
+                    stack.append(fields[args[0]])
                 elif op in (Op.EQ, Op.NEQ):
                     b, a = pop(), pop()
                     stack.append((a == b) if op == Op.EQ else (a != b))
@@ -153,7 +162,7 @@ class PolicyVM:
 # Compiler
 # ---------------------------------------------------------------------------
 
-RULE_TYPES = ("allow_only_tools", "deny_counterparties", "deny_if", "deny_if_irreversible_over")
+RULE_TYPES = ("allow_only_tools", "deny_counterparties", "deny_if", "deny_if_irreversible_over", "deny_if_fields")
 DENY_IF_KEYS = ("tool", "amount_usd_gt", "data_class_in", "irreversible")
 RULE_META_KEYS = ("id",)
 
@@ -178,8 +187,12 @@ def _str_list(v: Any, where: str, *, allow_empty: bool = False) -> list[str]:
     return sorted(set(out))
 
 
-def validate_rules(rules: Any, *, require_allow_list: bool = True) -> list[dict]:
-    """Validate and canonicalize a hard-rule list. Raises ConstitutionError."""
+def validate_rules(rules: Any, *, require_allow_list: bool = True, fields: Mapping | None = None) -> list[dict]:
+    """Validate and canonicalize a hard-rule list. Raises ConstitutionError.
+
+    ``fields`` is the canonical custom-field registry (fields.py). A ``deny_if_fields`` rule may name
+    only fields declared there, with literals of the field's type.
+    """
     if not isinstance(rules, list):
         raise ConstitutionError("hard rules must be a list")
     if not rules:
@@ -211,6 +224,11 @@ def validate_rules(rules: Any, *, require_allow_list: bool = True) -> list[dict]
             val = _str_list(body, f"{where}.deny_counterparties")
         elif rtype == "deny_if_irreversible_over":
             val = _nonneg_number(body, f"{where}.deny_if_irreversible_over")
+        elif rtype == "deny_if_fields":
+            try:
+                val = validate_condition(body, fields or {}, f"{where}.deny_if_fields")
+            except FieldError as e:
+                raise ConstitutionError(str(e)) from None
         else:  # deny_if
             if not isinstance(body, Mapping) or not body:
                 raise ConstitutionError(f"{where}.deny_if: expected a non-empty mapping")
@@ -243,15 +261,19 @@ def validate_rules(rules: Any, *, require_allow_list: bool = True) -> list[dict]
     return out
 
 
+_FIELD_OPS = {"eq": Op.EQ, "neq": Op.NEQ, "gt": Op.GT, "gte": Op.GTE, "lt": Op.LT, "lte": Op.LTE}
+
+
 def compile_constitution(
     rules: Iterable[Mapping] | list,
     *,
     max_steps: int = DEFAULT_MAX_STEPS,
     require_allow_list: bool = True,
+    fields: Mapping | None = None,
 ) -> list[tuple]:
     """Compile validated hard rules to bytecode. Raises ConstitutionError."""
     canon = validate_rules(list(rules) if not isinstance(rules, list) else rules,
-                           require_allow_list=require_allow_list)
+                           require_allow_list=require_allow_list, fields=fields)
     bc: list[tuple] = []
     for rule in canon:
         rid = rule["id"]
@@ -259,6 +281,25 @@ def compile_constitution(
             bc += [(Op.LOAD, "tool"), (Op.PUSH, rule["allow_only_tools"]), (Op.IN,)]
         elif "deny_counterparties" in rule:
             bc += [(Op.LOAD, "counterparty"), (Op.PUSH, rule["deny_counterparties"]), (Op.IN,), (Op.NOT,)]
+        elif "deny_if_fields" in rule:
+            # allowed iff NOT(every condition holds). Custom fields load with LOAD_FIELD only.
+            parts = []
+            for name in sorted(rule["deny_if_fields"]):
+                for op_name in sorted(rule["deny_if_fields"][name]):
+                    lit = rule["deny_if_fields"][name][op_name]
+                    part = [(Op.LOAD_FIELD, name), (Op.PUSH, lit)]
+                    if op_name in ("in", "not_in"):
+                        part.append((Op.IN,))
+                        if op_name == "not_in":
+                            part.append((Op.NOT,))
+                    else:
+                        part.append((_FIELD_OPS[op_name],))
+                    parts.append(part)
+            for j, p in enumerate(parts):
+                bc += p
+                if j:
+                    bc.append((Op.AND,))
+            bc.append((Op.NOT,))
         elif "deny_if_irreversible_over" in rule:
             # allowed iff (not irreversible) OR (amount <= limit)
             bc += [(Op.LOAD, "irreversible"), (Op.NOT,),

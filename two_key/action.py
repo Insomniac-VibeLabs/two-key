@@ -40,6 +40,8 @@ KNOWN_FIELDS = {
     "tool", "amount_usd", "currency", "counterparty", "data_class",
     "destination", "duration_hours", "irreversible", "tags", "raw",
 }
+# What the policy VM's LOAD may read. Not ``raw``, and never a custom field (those use LOAD_FIELD).
+LOADABLE_FIELDS = frozenset(KNOWN_FIELDS - {"raw"})
 
 
 class ActionValidationError(ValueError):
@@ -84,16 +86,25 @@ class Action:
     irreversible: bool = DEFAULT_IRREVERSIBLE
     tags: tuple[str, ...] = ()
     raw: Mapping[str, Any] = field(default_factory=dict)
+    # Custom field values derived from the argument bytes (fields.py). Never from the claim: a claim
+    # that names ``fields`` is an unknown action field.
+    fields: Mapping[str, Any] = field(default_factory=dict)
 
     def field_value(self, name: str) -> Any:
-        if name in KNOWN_FIELDS:
+        """A built-in field. Any other name is a ``KeyError``: ``raw`` is the agent's, never a field."""
+        if name in LOADABLE_FIELDS:
             return getattr(self, name)
-        return self.raw.get(name)
+        raise KeyError("not a built-in field")
 
     def to_record(self) -> dict[str, Any]:
         d = asdict(self)
         d["tags"] = list(self.tags)
         d["raw"] = dict(self.raw)
+        # Present only when the constitution declares custom fields, so a record without them hashes as before.
+        if self.fields:
+            d["fields"] = dict(self.fields)
+        else:
+            del d["fields"]
         return d
 
 

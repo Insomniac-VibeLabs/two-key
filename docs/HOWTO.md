@@ -39,8 +39,11 @@ chmodded afterwards) and refuses to overwrite an existing key. Commands that
 take `--key` refuse a key file that the group or others can read
 (`key_file_insecure`) or that is a symlink.
 
-The signature covers the prose, the hard rules, and `tool_specs`. A modified
-file will not load. `tool_specs` is required.
+The signature covers the prose, the hard rules, `tool_specs`, and the
+custom-field registry (`fields:`) when there is one. A modified file will
+not load. `tool_specs` is required. A rules file with `fields:` signs as a
+v2 constitution; see [Custom Path A fields](#custom-path-a-fields) and
+`--envelope-format`.
 
 ```mermaid
 flowchart TD
@@ -105,7 +108,7 @@ The commands above sign a constitution. They do not design one. The operator own
 
 1. Define the tools and actions the agent is allowed to perform. Use an `allow_only_tools` rule. An allow-list is required by default so unknown tools fail closed.
 2. Define the actions it must never perform. Use `deny_if`, `deny_counterparties`, or `deny_if_irreversible_over` rules for the cases that must be hard denials.
-3. Specify tool arguments and their schemas in `tool_specs`. Path A derives the structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`) from the argument bytes according to those specs. A claim that disagrees with the derived values is a deny. The current field set is fixed for testing; configurability of the field set itself is intended but not yet implemented.
+3. Specify tool arguments and their schemas in `tool_specs`. Path A derives the built-in structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`) from the argument bytes according to those specs. A claim that disagrees with the derived values is a deny. For facts the built-in fields do not cover (an environment, a region, a count, a flag), declare [custom fields](#custom-path-a-fields) and rules that name them.
 4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package.
 5. Decide how many judges are needed and what their agreement threshold should be. At least one judge must be configured. The default approval threshold is `min(2, number_of_judges)`: one affirmative vote with one judge, or two affirmative votes with two or more judges. This is not a general majority rule. Set `required_yes` explicitly if you want a different threshold, such as a majority or unanimity. Consider the `high_assurance` profile for destructive, irreversible, financial, or external-send tools. Missing, malformed, errored, or timed-out ballots never count as yes.
 6. Test allowed, denied, ambiguous, and adversarial examples before trusting the constitution. Confirm that Path A denies the cases the hard rules are meant to catch, that Path B receives the intended context, and that the gateway drops or denies unmapped keys as configured (`deny_unmapped` defaults off).
@@ -113,6 +116,243 @@ The commands above sign a constitution. They do not design one. The operator own
 The signed constitution remains the authority. A future GUI constitution maker (planned later) should help construct and validate choices, but the principal must still sign the resulting constitution. The GUI must not silently weaken the rules.
 
 See `examples/hard_rules.yaml` and `examples/constitution.md` for a working starting point.
+
+## Custom Path A fields
+
+Path A has five built-in fields. You can declare more, up to 64, in the
+rules file. Each one is a fact Path A reads from the argument bytes and
+your rules can test: which environment a deploy targets, how many
+replicas it starts, whether it is a dry run, which department asked.
+[examples/custom_fields.yaml](../examples/custom_fields.yaml) is a working
+starting point.
+
+### Declare, map, and rule
+
+```yaml
+fields:                         # the registry: each field declared once
+  environment:
+    type: enum
+    values: [dev, staging, prod]
+    default: dev                # the value for tools that do not map this field
+    description: Target environment of a deployment.
+  replicas: {type: integer, min: 0, max: 1000, default: 0}
+  dry_run: {type: boolean, default: true}
+  ticket: {type: string, max_length: 32, default: ""}
+
+tool_specs:
+  deploy:
+    irreversible: true
+    data_class_floor: public
+    fields:                     # this tool carries these fields at these paths
+      environment: {json_path: target.env}
+      replicas: {json_path: target.replicas}
+      dry_run: {json_path: dry_run}
+
+hard_rules:
+  - id: tools
+    allow_only_tools: [deploy]
+  - id: only-dev-or-staging-unless-dry-run
+    deny_if_fields:             # every condition must hold for the rule to deny
+      environment: {not_in: [dev, staging]}
+      dry_run: {eq: false}
+```
+
+Types and the operators each allows:
+
+| Type | Declared with | Value read from the arguments | Operators |
+| --- | --- | --- | --- |
+| `boolean` | `default` | JSON `true` or `false` only | `eq` |
+| `integer` | `min`, `max`, `default` | a JSON integer only (not `5.0`, `"5"`, `true`, or `null`), within `min`..`max` | `eq`, `neq`, `gt`, `gte`, `lt`, `lte` |
+| `enum` | `values`, `default`, optional `charset`/`scripts` | text equal, after normalization, to one declared value | `eq`, `neq`, `in`, `not_in` |
+| `string` | `max_length`, `default`, optional `charset`/`scripts` | text of at most `max_length` characters | `eq`, `neq`, `in`, `not_in` |
+
+Every value in a rule is checked against the field when the constitution
+is signed and loaded. An enum value that is not declared (`prdo`), an
+integer outside `min`..`max`, a wrong type, or an operator the type does
+not allow is refused, so a typo cannot become a rule that never fires.
+
+### What happens to a call
+
+- A field a tool maps is required. The value comes from that argument
+  path, never from the agent's claim. An agent that sends `environment`
+  in its claim is `malformed_action`; a value in the claim's `raw` is
+  ignored.
+- A tool that does not map a field gets the field's signed `default`, the
+  way a tool with no amount spec has `amount_usd` 0.
+- The tool receives the normalized value Path A checked (`" Staging "`
+  arrives as `staging`), and the token binds the values, so the gateway
+  recomputes and compares them.
+- Judges see the values in the action record. They never see
+  descriptions.
+
+| Argument | Result |
+| --- | --- |
+| mapped path missing | `derive_failed:field_missing:<field>` |
+| wrong JSON type, or a character outside the field's character set | `derive_failed:field_unreadable:<field>` |
+| integer outside `min`..`max`, enum value not declared, string longer than `max_length` | `derive_failed:field_not_allowed:<field>` |
+
+Each is a derive deny: Path B still runs, the arguments are withheld from
+judges unless `tool_args_on_derive_deny` is set, and no token is issued.
+
+Write rules as allow-lists where you can. `environment: {not_in: [dev,
+staging]}` still denies when someone adds `prod2` to the field, or when a
+tool that should map the field does not. `environment: {in: [prod]}` does
+not. Pick each `default` as the value your rules treat most strictly.
+
+### Descriptions
+
+`description` is a note for the people who read and review the
+constitution. It is signed with everything else, so editing it after
+signing breaks the signature. It is never compiled, never sent to a judge,
+never written into a deny reason, and never an authorization rule; text
+such as `deny_if: ...` in a description does nothing. It may be in any
+language, up to 2,000 characters, with line breaks. Control characters,
+text-direction embeddings, overrides, and isolates (the characters behind
+"Trojan Source" tricks), private-use and unassigned code points, and
+leading or trailing whitespace are refused.
+
+### Envelope format
+
+A rules file without `fields:` signs exactly as before: format
+`two-key-concept-constitution-v1`, with the same digest, `bytecode_hash`,
+and `spec_hash`. With `fields:`, it signs as
+`two-key-concept-constitution-v2`. Installs older than custom fields refuse
+v2, so they cannot load it and ignore the fields. A v2 constitution
+refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
+`fields`.
+
+The format is the principal's choice at signing time:
+
+```bash
+python -m two_key sign-constitution ... --envelope-format auto   # default
+python -m two_key sign-constitution ... --envelope-format v2     # always v2
+```
+
+In Python: `sign_constitution(prose, rules, key, specs, fields=fields,
+envelope_format="v2")`. `auto` writes v1 unless there are fields. `v2`
+writes v2 even without fields; that loads the same way, and an older
+install refuses it. Loading accepts both formats. A rules file with
+`fields:` is refused by `load_unsigned` (so its fields are never dropped
+silently); use `load_unsigned_with_fields`, which returns them as a fourth
+value.
+
+### Using Two-Key in other languages
+
+Field names are ASCII identifiers (`^[a-z][a-z0-9_]{0,47}$`), because
+they are configuration keys. Descriptions may be in any language, so a
+team can read every field's purpose in its own language.
+
+Enum and string values have a character set:
+
+- `charset: ascii`, the default: printable ASCII, trimmed and
+  lower-cased. Most international deployments need nothing else, because
+  the values tools exchange are usually codes: country codes (`jp`),
+  language tags (`ja-jp`), currencies (`eur`), regions (`eu-west-1`),
+  environment names, ticket ids.
+- `charset: unicode` with `scripts:`: for values that are words in a
+  language, such as departments (`経理`, `buchhaltung`) or place names.
+  Even French or German with accents (`é`, `ü`) needs this, with
+  `scripts: latin`.
+
+```yaml
+fields:
+  abteilung:
+    type: enum
+    charset: unicode
+    scripts: latin
+    values: [entwicklung, buchhaltung, vertrieb]
+    default: entwicklung
+    description: Abteilung, die das Deployment beantragt.
+  bumon:
+    type: enum
+    charset: unicode
+    scripts: japanese
+    values: [経理, 営業, 開発]
+    default: 開発
+    description: 申請した部門
+```
+
+`scripts` is one of: `latin`, `greek`, `cyrillic`, `armenian`,
+`georgian`, `hebrew`, `arabic`, `devanagari`, `bengali`, `gurmukhi`,
+`gujarati`, `tamil`, `telugu`, `kannada`, `malayalam`, `sinhala`, `thai`,
+`lao`, `khmer`, `ethiopic`, `hangul`, `han`, or one combination:
+`japanese` (Latin, Han, Hiragana, Katakana), `korean` (Latin, Hangul,
+Han), `chinese` (Latin, Han, Bopomofo). ASCII digits, spaces, and ASCII
+punctuation are allowed in every script.
+
+How a Unicode value is read:
+
+- It is normalized with NFKC and case-folded (NFKC_Casefold, the Unicode
+  rule for comparing identifiers). `Café` written with a precomposed `é`
+  and with `e` plus a combining accent compare equal; full-width
+  `ｐｒｏｄ` becomes `prod`; Turkish `İ` folds to `i` plus a combining dot.
+- A letter from a script the field did not declare is refused. In a
+  `latin` field, `prоd` written with a Cyrillic `о` is
+  `field_unreadable`, not a near-match. That is what stops lookalike
+  letters.
+- Control characters, invisible format characters (zero-width space, soft
+  hyphen), text-direction controls, private-use and unassigned code points,
+  line and paragraph separators, spaces that NFKC does not turn into an
+  ASCII space, and non-ASCII punctuation or symbols that belong to no
+  declared script (`€`, `‐`) are refused. ZERO WIDTH JOINER and
+  NON-JOINER are allowed only in fields whose script needs them (Arabic,
+  including Persian, and the Indic scripts), after a letter and never at
+  the end.
+- A generic combining mark (an accent) is allowed only on a letter, at
+  most three in a row.
+
+Limits of this approach:
+
+- A field holds one script or one combination. A field cannot hold both
+  Russian and English words; use two fields, or codes.
+- Python's standard library has no Unicode script table, so the script is
+  read from each character's Unicode name. A character no supported
+  script claims is refused, never guessed.
+- Each Python release ships its own Unicode version. A very new
+  character may be accepted on Python 3.13 and refused on 3.10. That fails
+  closed. Sign and test on the oldest Python you run.
+- Characters are controlled; meaning is not. `prod` and `production` are
+  different values. Prefer `enum` with `not_in` rules over `string` with
+  `eq` or `in`.
+
+### Changing a limit
+
+The limits are constants in [two_key/fields.py](../two_key/fields.py),
+enforced the same way when a constitution is signed and when it is
+loaded:
+
+| Constant | Value | Limits |
+| --- | --- | --- |
+| `MAX_FIELDS` | 64 | custom fields in the registry |
+| `MAX_FIELDS_PER_TOOL` | 64 | fields one tool maps |
+| `MAX_FIELD_NAME_CHARS` | 48 | characters in a field name |
+| `MAX_DESCRIPTION_CHARS` | 2000 | characters in a description |
+| `MAX_ENUM_VALUES` | 1024 | values in one enum |
+| `MAX_VALUE_CHARS` / `MAX_VALUE_BYTES` | 256 / 1024 | one enum value or one string in a rule |
+| `MAX_STRING_LENGTH` / `MAX_STRING_BYTES` | 1024 / 4096 | the largest `max_length`, and a string value's UTF-8 size |
+| `MAX_LIST_ITEMS` | 1024 | items in one `in` or `not_in` list |
+| `MAX_CONDITIONS` | 16 | conditions in one `deny_if_fields` rule |
+| `MAX_SAFE_INT` | 2^53 - 1 | the largest `min` or `max` magnitude (exact as a float) |
+| `MAX_PATH_SEGMENTS` / `MAX_PATH_CHARS` | 16 / 512 | a field's `json_path` |
+| `MAX_COMBINING_RUN` | 3 | combining marks in a row on one letter |
+
+The 256 KiB argument cap, the 62-level nesting cap, and the 4,096
+instruction cap on the compiled program (`max_steps`) still apply; a very
+large rule set is refused by that last one.
+
+These are not configuration settings. A limit inside the signed file
+could be raised by the same file it is meant to constrain. To change one:
+
+1. Edit the constant in `two_key/fields.py`. Do not raise `MAX_SAFE_INT`:
+   integers above it lose precision in the policy VM.
+2. Run `python -m unittest discover -s tests`. `tests/test_custom_fields.py`
+   (class `A10Limits`) tests each limit at its value and one past it.
+3. Record the change in `CHANGES.md`.
+4. Install the same build everywhere that signs or loads the constitution.
+
+Raising a limit is backward compatible: every constitution that loaded
+before still loads. Lowering one can make an already-signed constitution
+refuse to load (fail closed) until it is edited and signed again.
 
 ## Judges
 
@@ -405,6 +645,9 @@ nested too deeply to encode are denied in `authorize` and at the gateway
 with `invalid_call:tool args are nested too deeply`; the ledger keeps
 `tool_args_omitted: true` and `tool_args_error`. Encoding runs before the
 size check, so the reason is the same on Python 3.10, 3.11, and 3.12.
+
+Custom-field limits (field count, name, description, enum, string, and
+path sizes) are listed under [Changing a limit](#changing-a-limit).
 
 Each input (tool args, the action claim, the proposal) is first copied once
 into built-in types (`canonical.to_plain`). Any Mapping becomes a dict and a
@@ -968,6 +1211,19 @@ names the setting or declaration that controls it.
   memory-hard: against someone who holds the key directory it slows a
   guessable password less than scrypt did, in exchange for running on a
   FIPS-only OpenSSL.
+- A tool that does not map a custom field gets the field's signed
+  `default`. A forgotten mapping is silent. Rules written with `not_in`,
+  and defaults your rules treat strictly, fail closed in that case; `in`
+  and `eq` deny-lists do not.
+- A `string` field compares exact normalized text. A deny-list on it
+  misses spelling variants (`prod`, `production`). Use `enum` where the
+  values can be listed.
+- `charset: unicode` reads characters through Python's Unicode data, whose
+  version differs by Python release. A character newer than the running
+  Python's data is refused.
+- `--envelope-format v2` (or any `fields:`) makes the signed constitution
+  unreadable to installs older than custom fields. `auto` keeps a
+  constitution without fields in v1.
 - The gateway runs in the `TwoKey` process (`TwoKey.gateway()`). Its
   verifier cannot mint, but the process holds the capability minting key,
   the principal, witness, and ledger keys, and the registered tools. A

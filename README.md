@@ -30,7 +30,7 @@ is going, see [ROADMAP.md](ROADMAP.md).
 
 ## Dual-path authorization
 
-1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only five structured fields for testing: tool, amount_usd, data_class, counterparty, and irreversible. It does not read English. A fault is a deny. The field set is intended to become customizable, but that is not yet implemented. The signed constitution must include tool_specs.  Those fields are read from the
+1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads five built-in structured fields (tool, amount_usd, data_class, counterparty, and irreversible) and any custom fields the principal declares under `fields:` (boolean, integer, enum, or string; up to 64; see [examples/custom_fields.yaml](examples/custom_fields.yaml) and HOWTO "Custom Path A fields"). It does not read English. A fault is a deny. A field's description is a signed note for people, never a rule. The signed constitution must include tool_specs.  Those fields are read from the
    argument bytes by [two_key/derive.py](two_key/derive.py). A claim that
    disagrees with the bytes is a deny. Omitting `tool_specs` will not sign
    and will not load. A key the spec does not name does not reach the tool.
@@ -132,7 +132,8 @@ model again. Those fields are operator/library metadata (str, at most 256
 characters after strip); non-str or oversize is a deny. Hosting is local or
 cloud. It is not trust, and it does not skip either path.
 
-Path A reads only the five structured fields. Path B judges see the
+Path A reads only the structured fields: the five built-in ones and the
+declared custom fields, all derived from the argument bytes. Path B judges see the
 normalized action record. Non-empty tool arguments are attached on that
 record as `tool_args`, except after a derive deny. Set
 `tool_args_on_derive_deny: true` on the quorum policy to send those bytes
@@ -452,6 +453,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/audit.py` | `check_decision_digests`: recompute each decision's `identities_digest` and `policy_digest` |
 | `two_key/policy_vm.py`, `compiler.py` | Path A |
 | `two_key/derive.py` | Tool-spec derivation for Path A's form |
+| `two_key/fields.py` | Custom Path A fields: registry, types, character sets, limits |
 | `two_key/quorum.py`, `two_key/judges/` | Path B and judge transport |
 | `two_key/identity.py`, `netloc.py` | Judge ≠ monitored agent check; local vs. cloud host |
 | `two_key/strict.py` | Strict JSON and YAML loading (duplicate keys, merge keys, and huge integers refused) |
@@ -464,7 +466,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/canonical.py` | Canonical encoding for the ledger, tokens, and judge bindings |
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
-| `examples/` | Constitution, hard rules, judges, agents |
+| `examples/` | Constitution, hard rules, custom fields, judges, agents |
 | `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.0 is on `working` and is not tagged |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/FIT.md` | Whether this package is the right control |

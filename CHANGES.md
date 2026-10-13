@@ -1315,3 +1315,82 @@ keys, and the registered tools run there.
 
 The operator decided #45 and approved the helper and the warning. Tests:
 `tests/test_gateway_boundary.py`.
+
+## Custom Path A fields — 2026-10-13
+
+On branch `working`. Not a release tag. Package version stays 0.3.0.
+`main` and tag `v0.2.4` stay at 0.2.4. Not published to PyPI.
+
+Path A was limited to five built-in fields. The principal can now declare
+custom fields, with descriptions, and write rules on them. Requested by the
+operator (ROADMAP "spec field types", ahead of its order).
+
+### Added
+
+- `fields:` in the rules file: up to 64 custom fields, each `boolean`,
+  `integer` (`min`, `max`), `enum` (`values`), or `string` (`max_length`),
+  with a required signed `default` and an optional `description`.
+  `two_key/fields.py` holds the registry, the types, and the limits.
+- `tool_specs.<tool>.fields` maps a declared field to an argument path. A
+  mapped field is required (`derive_failed:field_missing:<field>`); a value
+  of the wrong type or character set is `field_unreadable`, and one outside
+  its bounds or values is `field_not_allowed`. A tool that does not map a
+  field gets the signed default. A field path may not equal, contain, or
+  sit under any other declared path, compared without regard to case.
+- `deny_if_fields` rule type: `{field: {op: value}}`, every condition
+  ANDed, operators by type (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`,
+  `not_in`). Rule values are type-checked at sign and load time; an enum
+  value that is not declared is refused.
+- Enum and string values are printable ASCII by default. `charset: unicode`
+  with `scripts:` (one script, or `japanese`, `korean`, `chinese`) reads
+  values with NFKC_Casefold and refuses a letter outside the declared
+  scripts, invisible and direction-control characters, and non-ASCII
+  punctuation of no declared script.
+- Policy VM opcode `LOAD_FIELD` reads custom fields from the derived values
+  only. `LOAD` now refuses any name that is not a built-in field, so it can
+  never read the agent's `raw` mapping. `Action.field_value` no longer falls
+  back to `raw`.
+- The token's `form` carries `fields`, and the gateway compares it as
+  canonical bytes (`true` is not `1`). The tool receives the normalized
+  values. Judges see the values; never descriptions.
+- `spec_hash` covers the registry when there is one.
+- Envelope format `two-key-concept-constitution-v2`, used when the rules
+  declare fields. `sign_constitution(..., fields=, envelope_format=)` and
+  `two-key sign-constitution --envelope-format auto|v2`. `auto` (the
+  default) keeps v1 without fields; `v2` always writes v2. A v2 envelope
+  refuses unknown signed keys; a v1 envelope with `fields` is refused.
+- `load_unsigned_with_fields` returns the registry. `load_unsigned` refuses
+  a rules file with fields rather than dropping them.
+- `examples/custom_fields.yaml`.
+
+### Unchanged
+
+- A constitution without custom fields signs byte for byte as before: the
+  same v1 format, digest, `bytecode_hash`, `spec_hash`, action-record hash,
+  and token form. `tests/test_fields_compat.py` pins the hashes recorded
+  before this change.
+- An agent still cannot claim a field: a claim naming `environment` or
+  `fields` is `malformed_action`.
+
+### Upgrading
+
+1. Nothing changes for a constitution without `fields:`.
+2. A constitution with `fields:` (or signed with `--envelope-format v2`) is
+   refused by installs older than this change. Upgrade every install that
+   loads it first.
+3. Use `load_unsigned_with_fields` in code that signs a rules file that may
+   declare fields.
+
+### Docs
+
+HOWTO ("Custom Path A fields", "Using Two-Key in other languages",
+"Changing a limit", envelope format, design steps, known trade-offs),
+README, SCOPE, ROADMAP, THREAT_MODEL, COMPARISON, llms.txt, AGENTS.md.
+
+### Reviews
+
+The operator approved the design: the types, the signed defaults, mapped
+means required, values but not descriptions to judges, the envelope
+setting, the Unicode rules, the limits, and the `LOAD` hardening. Tests:
+`tests/test_custom_fields.py`, `tests/test_fields_compat.py`.
+

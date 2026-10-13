@@ -358,14 +358,14 @@ CLI and file formats, so it adds no new logic of its own.
 
 Planned, with no target version.
 
-- Generic spec field types. Today a tool spec knows two special field kinds,
-  `amount` (USD or cents) and `counterparties`, plus unread `payload` paths.
-  The plan is a typed field per argument path, each kind with its own
-  limits: string, int, decimal, enum, identifier/principal, path, URL,
-  email, and opaque bytes. `amount` and `counterparty` stop being special
-  cases and become ordinary typed fields that rules can name. Until then the
-  action record keeps `amount_usd` and `counterparty` as fields, with neutral
-  defaults for tools that have neither.
+- More spec field types. 0.3.0 adds operator-declared custom fields of type
+  `boolean`, `integer`, `enum`, and `string` (`fields:` in the rules file,
+  `deny_if_fields` in rules; see HOWTO "Custom Path A fields"). Still
+  planned: decimal, identifier/principal, path, URL, email, and opaque
+  bytes, and making `amount` and `counterparty` ordinary typed fields that
+  rules can name. Until then the action record keeps `amount_usd` and
+  `counterparty` as fields, with neutral defaults for tools that have
+  neither.
 
 ## Not planned for this repository
 

@@ -34,6 +34,7 @@ from .identity import (AgentDeclaration, IdentityError, PASSWORD_FINGERPRINT_ALG
                        configured_agent_identity, configured_agent_secrets, fingerprint_key_id, judge_identity)
 from .derive import (MAX_ACTION_BYTES, MAX_ARGS_BYTES, DeriveError, args_size, args_too_large, blocked_from_rules, canonical_too_large,
                      derive, disagreement, disallowed_party, dropped_keys, form_for, size_record)
+from .fields import defaults as field_defaults
 from .gateway import ToolGateway, mark_two_key_ledger
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
@@ -106,7 +107,7 @@ class TwoKey:
         self.constitution = constitution
         self.compiled: CompiledConstitution = compile_both(
             constitution.prose, constitution.hard_rules, constitution.tool_specs,
-            specs_enforced=True)
+            specs_enforced=True, fields=constitution.fields)
         self.vm = PolicyVM(self.compiled.bytecode)
         self.judges = list(judges)
         if not self.judges:
@@ -347,9 +348,11 @@ class TwoKey:
             try:
                 if not isinstance(arguments, Mapping):
                     raise DeriveError("arguments_not_object")
-                derived = derive(spec, arguments)
+                derived = derive(spec, arguments, self.compiled.fields)
             except DeriveError as exc:
                 deny_reason = f"derive_failed:{cap_ledger_text(exc.reason)}"
+                # No custom field values were derived, so a deny_if_fields rule reaches LOAD_FIELD with
+                # nothing to load and Path A records a vm_fault: still a deny, and honest about why.
                 normalized = replace(normalized, data_class="classified", irreversible=True)
             else:
                 mismatch = disagreement(proposed, derived)
@@ -363,6 +366,7 @@ class TwoKey:
                     data_class=form["data_class"],
                     counterparty=party,
                     irreversible=bool(form["irreversible"]),
+                    fields=dict(derived.fields),     # from the bytes; Path A reads them with LOAD_FIELD
                 )
                 if (
                     deny_reason is None
@@ -370,6 +374,10 @@ class TwoKey:
                     and not (set(derived.counterparties) & blocked)
                 ):
                     deny_reason = "counterparty_not_allowed"
+        if spec is None and self.compiled.fields:
+            # No spec means the tool is not allow-listed, so Path A denies; the defaults keep a custom-field
+            # rule from faulting first, so the deny names the rule that caught it.
+            normalized = replace(normalized, fields=field_defaults(self.compiled.fields))
         path_a = self.vm.eval(normalized)
         path_a_rec = {"allowed": path_a.allowed, "reason": path_a.reason, "denied_by": path_a.denied_by}
         binding = {

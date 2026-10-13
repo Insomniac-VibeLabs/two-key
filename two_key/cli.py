@@ -1,7 +1,7 @@
 """Command line for the concept build.
 
   two-key init-key DIR
-  two-key sign-constitution --key KEY --prose FILE --rules FILE --out FILE
+  two-key sign-constitution --key KEY --prose FILE --rules FILE --out FILE [--envelope-format auto|v2]
   two-key authorize --key KEY --ledger DIR --constitution FILE --judges FILE --tool NAME
                     [--agent-session-env NAME] [--ttl-seconds N] [--emit-token PATH]
                     [--witness-public-key PEM]
@@ -55,7 +55,7 @@ import os
 import sys
 from pathlib import Path
 
-from .constitution import load_unsigned, save_envelope, sign_constitution
+from .constitution import ENVELOPE_FORMATS, load_unsigned_with_fields, save_envelope, sign_constitution
 from .keys import generate_private_key, load_private_key_file, load_public_key, save_private_key, save_public_key
 
 
@@ -74,8 +74,9 @@ def _init_key(args) -> int:
 
 def _sign(args) -> int:
     key = load_private_key_file(args.key)
-    prose, rules, specs = load_unsigned(args.prose, args.rules)
-    save_envelope(args.out, sign_constitution(prose, rules, key, specs))
+    prose, rules, specs, fields = load_unsigned_with_fields(args.prose, args.rules)
+    save_envelope(args.out, sign_constitution(prose, rules, key, specs, fields=fields,
+                                              envelope_format=args.envelope_format))
     print(f"wrote {args.out}")
     return 0
 
@@ -355,6 +356,9 @@ def main(argv: list[str] | None = None) -> int:
     sign.add_argument("--key", required=True)
     sign.add_argument("--prose", required=True)
     sign.add_argument("--rules", required=True)
+    sign.add_argument("--envelope-format", choices=ENVELOPE_FORMATS, default="auto",
+                      help="auto (default): v1 unless the rules declare custom fields, then v2; "
+                           "v2: always v2. Installs older than custom fields refuse v2")
     sign.add_argument("--out", required=True)
     sign.set_defaults(func=_sign)
     auth = sub.add_parser("authorize", help="run Path A and Path B; do not execute the tool")

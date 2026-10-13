@@ -283,7 +283,7 @@ class ToolGateway:
         if "form" not in payload or "claimed_data_class" not in payload:
             return GatewayResult(False, "derived_mismatch")
         try:
-            derived = derive(spec, arguments)
+            derived = derive(spec, arguments, self.compiled.fields)
             fresh = form_for(derived, payload["claimed_data_class"],
                              blocked_from_rules(self.compiled.rules))
         except DeriveError:
@@ -314,7 +314,7 @@ class ToolGateway:
             except Exception as e:      # not only LedgerError: an OSError (disk full) must not escape invoke (#60)
                 return GatewayResult(False, _ledger_failed(e))
             try:
-                output = fn(project_arguments(spec, arguments))
+                output = fn(project_arguments(spec, arguments, dict(derived.fields)))
             except Exception as e:
                 try:
                     self.ledger.append_bounded("redemption_aborted", {"jti": payload["jti"], "tool": tool})

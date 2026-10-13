@@ -9,10 +9,14 @@ It has:
 
 - a signed constitution, Path A bytecode, and a policy VM that does not read English
 - required `tool_specs` that fill Path A's form from argument bytes.
-  Omitting them does not load. Path A currently evaluates five structured
-  fields: `tool`, `amount_usd`, `data_class`, `counterparty`, and
-  `irreversible`. This field set is fixed in the current implementation;
-  operator-customizable fields are planned, not implemented. `deny_unmapped`
+  Omitting them does not load. Path A evaluates five built-in structured
+  fields (`tool`, `amount_usd`, `data_class`, `counterparty`,
+  `irreversible`) plus up to 64 operator-declared custom fields (0.3.0):
+  `boolean`, `integer`, `enum`, or `string`, each with a signed default and
+  an optional description that is never an authorization rule. Enum and
+  string values are printable ASCII by default, or Unicode with a declared
+  script. Rules name them with `deny_if_fields`. A rules file that declares
+  fields signs as a v2 constitution. `deny_unmapped`
   defaults off: an unnamed key does not reach the tool. Set the flag to deny
   it. A counterparty path requires `allow`. A payload `shape`, when set,
   locks the value to a string, a number, or a list of strings and does not
@@ -35,7 +39,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   tool directly through another path
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
-Modules that carry these rules include `two_key/identity.py` (judge ≠ agent),
+Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent),
 `two_key/strict.py` (duplicate-key JSON/YAML), `two_key/audit.py` (decision
 digest checks), `two_key/backup.py` (key backup), and the per-install fingerprint key beside the ledger
 (`*.ledger-key/fingerprint.key`).
@@ -81,9 +85,10 @@ change in the same release.
   Filtering by judge needs per-judge ballot records (judge id, vote, and
   capped error only, never the rationale text), which the ledger does not
   hold today.
-- Generic spec field types (planned, not scheduled): a typed field per
-  argument path, each kind with its own limits. `amount` and `counterparty`
-  become ordinary typed fields.
+- More spec field types (planned, not scheduled): decimal, URL, path,
+  email, and opaque bytes. `amount` and `counterparty` become ordinary typed
+  fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped
+  in 0.3.0 and are described above.
 
 Read [FIT.md](FIT.md) before adopting it, [COMPARISON.md](COMPARISON.md)
 before treating it as a substitute, and [THREAT_MODEL.md](THREAT_MODEL.md)

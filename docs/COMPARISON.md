@@ -28,7 +28,8 @@ substitute for a password manager.
 - a FIPS 140-3 validated module
 
 Path A is only as good as the fields the signed tool spec can read. Those
-fields are derived from the argument bytes and a disagreeing claim is a
+fields, the built-in ones and any custom fields the principal declares,
+are derived from the argument bytes and a disagreeing claim is a
 deny. A constitution without `tool_specs` does not load. An unnamed argument
 key does not reach the tool. `deny_unmapped` (off by default) denies the call
 instead of dropping the key. A copied counterparty must be on that path's

@@ -77,6 +77,14 @@ Optional shape locks it to a string, a number, or a list of strings and
 does not read the contents. Omit shape and the value's children are copied
 unread. After a derive deny, tool_args are withheld from
 judges unless tool_args_on_derive_deny is set. Path B still runs.
+Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer, enum, or
+string; up to 64), each with a signed default and an optional description. A tool spec maps
+a field to an argument path; a mapped field is required, an unmapped tool gets the default.
+Rules name them with deny_if_fields (eq, neq, gt, gte, lt, lte, in, not_in by type). Values
+come from the argument bytes only; an agent cannot claim them. Enum and string values are
+printable ASCII by default, or Unicode with a declared script (charset: unicode, scripts:).
+A description is never compiled, sent to a judge, or used in a reason. A rules file with
+fields signs as a v2 constitution; --envelope-format v2 forces v2 without fields.
 Ledger deny/error type labels use type_tag (≤32 chars); derive_failed and EncodingError paths are capped. Same-jti deny waiters time out (default 30s; deny_inflight_wait_seconds must be finite positive). Free text is not classified. There is no per-value information-flow tracking.
 two-key authorize omits claim fields the operator did not pass. An omitted
 amount or counterparty is read from the argument bytes. An omitted

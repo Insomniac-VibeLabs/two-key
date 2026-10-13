@@ -1,0 +1,69 @@
+# Custom Path A fields. Sign it with examples/constitution.md or your own prose:
+#   python -m two_key sign-constitution --key ./keys/principal.pem \
+#     --prose examples/constitution.md --rules examples/custom_fields.yaml --out custom.signed.json
+# A rules file with `fields:` signs as a v2 constitution. Installs before custom fields refuse it.
+#
+# Each field is declared once, with a type and a default. The default is the value for every tool
+# that does not map the field. A tool maps a field to an argument path; a mapped field is required.
+# Values come from the argument bytes only. A description is a note for people: it is signed, but it
+# is never compiled, never sent to a judge, and never an authorization rule.
+fields:
+  environment:
+    type: enum
+    values: [dev, staging, prod]
+    default: dev
+    description: Target environment of a deployment.
+  replicas:
+    type: integer
+    min: 0
+    max: 1000
+    default: 0
+    description: Number of instances the deployment starts.
+  dry_run:
+    type: boolean
+    default: true
+  ticket:
+    type: string                # printable ASCII by default
+    max_length: 32
+    default: ""
+    description: Change ticket id, such as CHG-1234.
+  abteilung:                    # a field whose values are German words
+    type: enum
+    charset: unicode
+    scripts: latin
+    values: [entwicklung, buchhaltung, vertrieb]
+    default: entwicklung
+    description: Abteilung, die das Deployment beantragt (Entwicklung, Buchhaltung, Vertrieb).
+
+hard_rules:
+  - id: tool-allowlist
+    allow_only_tools: [deploy, search]
+  # Written as an allow-list: a new environment, or a mapping you forgot, fails closed.
+  - id: only-dev-or-staging-unless-dry-run
+    deny_if_fields:
+      environment: {not_in: [dev, staging]}
+      dry_run: {eq: false}
+  - id: replica-cap
+    deny_if_fields:
+      replicas: {gt: 20}
+  - id: no-buchhaltung-deploys
+    deny_if_fields:
+      abteilung: {eq: buchhaltung}
+
+tool_specs:
+  deploy:
+    irreversible: true
+    data_class_floor: public
+    fields:
+      environment: {json_path: target.env}
+      replicas: {json_path: target.replicas}
+      dry_run: {json_path: dry_run}
+      ticket: {json_path: ticket}
+      abteilung: {json_path: requested_by.abteilung}
+    payload:
+      - json_path: note
+        shape: string
+        max_length: 500
+  search:
+    irreversible: false
+    data_class_floor: public
