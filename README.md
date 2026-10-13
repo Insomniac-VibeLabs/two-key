@@ -31,13 +31,8 @@ is going, see [ROADMAP.md](ROADMAP.md).
 ## Dual-path authorization
 
 1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only
-   structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`,
-   `irreversible`). It does not read English. A fault is a deny. The signed
-   structured fields derived from the argument bytes according to the signed
-   tool specs (currently `tool`, `amount_usd`, `data_class`, `counterparty`,
-   `irreversible`; the set is intended to be user-configurable at constitution
-   signing time — five was the number used for testing only). It does not read
-   English. A fault is a deny. The signed
+   structured fields (currently for testing: `tool`, `amount_usd`, `data_class`, `counterparty`,
+   `irreversible`.  However, will be customizable). It does not read English. A fault is a deny. The signed
    constitution must include `tool_specs`. Those fields are read from the
    argument bytes by [two_key/derive.py](two_key/derive.py). A claim that
    disagrees with the bytes is a deny. Omitting `tool_specs` will not sign
