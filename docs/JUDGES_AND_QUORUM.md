@@ -1,66 +1,60 @@
-Judges and Quorum
+Judges and quorum
 
-Status and scope
+This document describes judge and quorum behavior in two-key-concept 0.3.0 on branch working (not tagged). It is not an independent review or a claim of formal verification. The code wins if this document disagrees with the implementation; correct the document after verifying the intended behavior.
 
-This document describes the judge and quorum behavior implemented on the working branch. It is an explanation of the current implementation, not a claim of independent validation, formal verification, or production readiness.
+See THREAT_MODEL.md for the threat register, SCOPE.md for the project’s boundaries, and FIT.md for when this package is or is not suitable.
 
-Implementation references:
+What a judge is
 
-* two_key/quorum.py — quorum policy, ballot handling, thresholds, and diversity requirements.
-* two_key/core.py — authorization flow and the final decision.
-* docs/THREAT_MODEL.md — threats, limitations, and residual risk.
-* docs/FIT.md — when this package is or is not the appropriate control.
+A Path B judge is a configured evaluator that returns a ballot on an authorization attempt. A judge is not the authorization system by itself, and an affirmative ballot is not proof that an action is safe.
 
-1. What is a judge?
+The operator configures the judges. Two-Key requires at least one judge and performs startup checks to prevent a judge from sharing the monitored agent’s credential or qualifying as the same agent under the configured identity checks.
 
-A judge is a configured Path B evaluator that returns a ballot on an authorization attempt. A judge is not the authorization system by itself, and one affirmative ballot is not proof that an action is safe.
+A ballot is affirmative, negative, or unusable. A missing, malformed, errored, mismatched, or timed-out ballot cannot count as an affirmative vote.
 
-Each judge is configured by the operator. Two-Key does not automatically select or create judges. The monitored agent and judges have separate roles and are subject to startup identity-separation checks.
-
-A judge may return an affirmative vote, a negative vote, or an unusable response. A missing, malformed, errored, mismatched, or timed-out ballot cannot count as an affirmative vote.
-
-2. A single judge’s role
+One judge
 
 flowchart TD
     A["Authorization request"] --> B["Build normalized action record"]
     B --> C["Prepare configured judge input"]
-    C --> D["Call the judge adapter"]
-    D --> E{"Is the ballot usable?"}
+    C --> D["Call judge adapter"]
+    D --> E{"Usable ballot?"}
     E -->|Yes| F{"Vote"}
     F -->|YES| G["One affirmative ballot"]
     F -->|NO| H["One negative ballot"]
     E -->|No| I["Abstention"]
-    G --> J["Send ballot to quorum evaluator"]
+    G --> J["Quorum evaluation"]
     H --> J
     I --> J
 
-The diagram represents one judge’s contribution, not the final authorization decision.
+This diagram shows one judge’s contribution, not the final authorization decision.
 
-A usable ballot is checked against the configured ballot and binding rules. A ballot that reports an inconsistent binding is treated as an abstention. The convenor binds ballots to the action record and constitution; with ballot_binding="echo", the judge must also provide the required binding information itself.
+The convenor checks ballot identity and binding. A ballot that reports inconsistent binding hashes becomes an abstention. With ballot_binding="echo", a judge must also return the required binding information itself.
 
-By default, judges receive the normalized action record and constitution, not the agent’s proposal text. This is controlled by judge_inputs="record_only". The alternative record_and_proposal permits the proposal text to be included. Tool arguments are withheld from judges after a derive failure unless tool_args_on_derive_deny=True.
+By default, judge_inputs="record_only" gives judges the normalized action record and constitution, not the agent’s proposal text. judge_inputs="record_and_proposal" permits the proposal to be included. After a derive deny, tool arguments are withheld unless tool_args_on_derive_deny=True. Path B still runs either way.
 
-3. How the default affirmative threshold works
+The quorum threshold
 
-The quorum policy separates two questions:
+The quorum policy separates the affirmative threshold (required_yes) from the minimum number of valid responses (min_responding).
 
-* Approval threshold (required_yes): how many affirmative ballots are required.
-* Availability floor (min_responding): how many valid ballots must be received before the round can be counted.
-
-When required_yes is not explicitly configured, the implementation resolves it to min(2, number_of_judges). The default min_responding follows the effective affirmative threshold.
+* required_yes is the number of affirmative ballots needed to pass the vote threshold.
+* min_responding is the minimum number of valid ballots required before the round can be counted.
+* If required_yes is unset, Two-Key resolves it to min(2, number_of_judges).
+* If min_responding is unset, it follows the effective required_yes.
 
 flowchart TD
-    A["Count configured judges: N"] --> B{"Is required_yes configured?"}
-    B -->|Yes| C["Use configured required_yes"]
-    B -->|No| D["Resolve to min(2, N)"]
+    A["Configured judges: N"] --> B{"required_yes set?"}
+    B -->|Yes| C["Use configured threshold"]
+    B -->|No| D["Use min(2, N)"]
     C --> E["Resolve min_responding"]
     D --> E
-    E --> F["Collect ballots and apply policy floors"]
-    F --> G{"All requirements met?"}
-    G -->|Yes| H["Path B passes"]
-    G -->|No| I["Path B denies"]
+    E --> F["Collect and validate ballots"]
+    F --> G["Apply quorum and diversity requirements"]
+    G --> H{"All requirements met?"}
+    H -->|Yes| I["Path B passes"]
+    H -->|No| J["Path B denies"]
 
-With the default policy, the affirmative threshold is:
+With the default policy:
 
 Configured judges	Required YES ballots
 1	1
@@ -69,52 +63,54 @@ Configured judges	Required YES ballots
 4	2
 5	2
 
-This is not a majority rule. For example, two YES ballots can meet the default threshold in a five-judge configuration. Operators who require a majority or unanimity must explicitly configure an appropriate threshold.
+This is not a majority rule. Two affirmative ballots can meet the default threshold with five configured judges. Operators who need a majority or unanimity must configure an appropriate required_yes value.
 
-The configured judge set must be capable of meeting the policy. If the affirmative or response threshold cannot be met with the configured judges, startup is refused.
+The configured set must be capable of satisfying the policy. If the affirmative threshold, response floor, provider floor, or judge-set diversity requirements cannot be met, configuration may be rejected at startup. convene also denies when the configured policy cannot be met.
 
-4. YES, NO, and ABSTAIN
+YES, NO, and ABSTAIN
 
-The quorum evaluator distinguishes affirmative votes, negative votes, and abstentions.
+The quorum evaluator distinguishes affirmative ballots, negative ballots, and abstentions.
 
 * YES: a usable affirmative ballot.
 * NO: a usable negative ballot.
-* ABSTAIN: a ballot that is missing, malformed, errored, timed out, mismatched, or otherwise unusable.
+* ABSTAIN: a missing, malformed, errored, timed-out, identity-mismatched, or binding-mismatched ballot, or another unusable response.
 
-An abstention is not a YES. If the valid-response availability floor is not met, the round denies without counting the vote tally; the recorded result marks the round as not counted.
+An abstention is never a YES. If fewer than min_responding valid ballots arrive, the round denies without counting the vote tally. The recorded result has counted=False and does not report a YES/NO tally.
 
-Judges run in parallel by default under an overall hard deadline. A judge that has not returned a usable ballot by the deadline cannot make the round wait indefinitely or contribute a late affirmative vote.
+Judges run in parallel by default, under the overall timeout_seconds deadline (45 seconds by default). Two-Key refuses a configuration without a positive hard deadline. A judge that does not return a usable ballot by the deadline cannot supply a YES for that round.
 
-5. Diversity and local-judge requirements
+Diversity and local judges
 
-The default quorum policy has minimal diversity requirements:
+The default policy has minimal diversity requirements:
 
-* At least one configured judge.
-* At least one distinct model-maker label.
-* No requirement for a local judge.
-* No requirement that a local judge vote YES.
-* min_distinct_providers defaults to one, so it does not itself require provider diversity.
+* min_makers=1.
+* min_local_judges=0.
+* require_local_yes=False.
+* min_distinct_providers=1.
 
-QuorumPolicy.high_assurance() opts into stronger judge-set requirements:
+A provider floor of one does not require provider diversity. The default policy does not require a local judge or a local affirmative vote.
+
+QuorumPolicy.high_assurance() opts into stronger requirements:
 
 * At least two distinct model-maker labels.
 * At least one local judge.
-* At least one YES vote from a local judge.
-* An affirmative threshold of two by default, unless the caller overrides it.
+* An affirmative vote from a local judge.
+* required_yes=2 by default, unless the caller overrides it.
 
-The section4() policy includes those diversity requirements and sets require_path_a_first=True. However, in the current implementation, TwoKey.authorize does not use that flag to skip Path B. Both paths still run once a request is well-formed and within limits.
+QuorumPolicy.section4() applies those same diversity requirements and sets require_path_a_first=True. In the current implementation, however, TwoKey.authorize does not read that flag to skip Path B. Both paths run once a request is well-formed and within limits.
 
-These settings should not be described as independent proof of diversity:
+These requirements do not prove that judges are independent:
 
-* Maker labels are operator-supplied configuration, not independently verified claims about model ownership.
-* Locality is determined by the configured judge’s local-weight and endpoint-host checks; it is not remote attestation of the hardware or model.
-* Different providers or maker labels do not, by themselves, prove statistical or operational independence.
+* A judge’s maker label is operator-supplied configuration, not an independently verified claim about model ownership.
+* Locality is determined by the configured judge’s effective locality checks. It is not hardware or model attestation.
+* Different provider names or maker labels do not establish statistical, organizational, or operational independence.
+* With heterogeneity_scope="responding", the diversity floor also applies to the judges that return valid ballots; the default is "selection".
 
-For high-impact tools, operators should choose and configure the judge set deliberately, review the actual endpoints and credentials, and set the threshold appropriate to their risk.
+For high-impact tools, configure the judge set deliberately, check the actual endpoints and credentials, and choose thresholds according to the risk.
 
-6. How the two authorization paths combine
+How Path A and Path B combine
 
-Path A and Path B have different responsibilities. Path A evaluates deterministic policy rules against the normalized structured action. Path B evaluates the action using the configured judge quorum.
+Path A evaluates deterministic policy rules against the normalized structured action record. Path B evaluates the action using the configured judge quorum. Neither path alone is sufficient for authorization.
 
 flowchart TD
     A["Well-formed request within limits"] --> B["Path A: deterministic policy VM"]
@@ -128,38 +124,42 @@ flowchart TD
     G -->|Yes| F
     G -->|No| H["Capability may be issued"]
 
-The overall decision is allowed only when Path A allows, the quorum passes, and no other deny condition remains.
+The final decision allows the action only if Path A allows, the quorum passes, and no other deny condition remains. Capability issuance can still fail, including when the issuer key is unavailable or a required ledger write fails.
 
-A Path A deny does not skip Path B in the current implementation. After a derive deny, judge input omits the argument bytes by default, but the normalized record is still evaluated by Path B. The require_path_a_first setting does not change that execution order today.
+A Path A deny does not skip Path B in the current implementation. After a derive deny, judge input omits argument bytes by default, but Path B still evaluates the normalized record. require_path_a_first does not change this behavior today.
 
-Malformed or oversized requests may be denied before either path runs.
+Malformed or oversized requests can be denied before either path runs.
 
-7. What a quorum pass does—and does not—mean
+What a quorum pass means
 
-A quorum pass means that the configured Path B requirements were met for that authorization attempt. It does not establish that:
+A quorum pass means the configured Path B requirements were met for that authorization attempt. It does not establish that:
 
-* The judges are infallible or truly independent.
-* The model-maker labels are truthful.
-* A judge’s reasoning is correct.
-* The tool’s payload has been scanned for malware or sensitive information.
+* The judges are correct, infallible, or independent.
+* The maker labels are truthful.
+* The proposal or action is safe in every relevant context.
+* The payload has been scanned for malware, data loss, or sensitive information.
 * The deployment has been independently audited or formally verified.
 * The package is a FIPS 140-3 validated cryptographic module.
 
-The capability and gateway controls provide additional restrictions, but they do not eliminate these limitations. The gateway is intended to be separated from the minting keys; the current project documentation notes that the fully separated gateway-only ledger role is designed but not yet built.
+The capability and gateway controls add restrictions but do not eliminate these limitations. The capability private key is separate from the gateway verifier’s key, but the current gateway shares the TwoKey process and ledger object. Process-level isolation and a gateway-only ledger role remain unimplemented; see THREAT_MODEL.md.
 
-8. Operator checklist
+Operator checklist
 
 Before relying on a deployment:
 
 1. Configure the monitored agent and at least one judge explicitly.
-2. Ensure judge credentials and identity declarations match the actual deployment.
-3. Choose required_yes and min_responding intentionally; do not assume the default is a majority.
-4. For higher-impact actions, consider QuorumPolicy.high_assurance() and verify the configured local judge and maker labels.
-5. Decide whether judges should receive only the normalized record or also the proposal text.
-6. Review the effect of tool_args_on_derive_deny; argument bytes are withheld by default after a derive deny.
-7. Test timeout, malformed-ballot, binding-mismatch, insufficient-response, and deny scenarios.
-8. Read docs/THREAT_MODEL.md and docs/FIT.md before deployment.
+2. Confirm that judge identities and credentials match the actual deployment.
+3. Set required_yes and min_responding intentionally. Do not assume the default is a majority.
+4. For higher-impact actions, consider QuorumPolicy.high_assurance() and check the configured local judge and maker labels.
+5. Decide whether judges receive only the normalized record or also the proposal text.
+6. Review tool_args_on_derive_deny; argument bytes are withheld by default after a derive deny.
+7. Test timeout, malformed ballot, binding mismatch, insufficient response, and deny cases.
+8. Read THREAT_MODEL.md and FIT.md before deployment.
 
-Sources of truth
+Implementation references
 
-The implementation in two_key/quorum.py and two_key/core.py is authoritative for runtime behavior. If this document conflicts with the code, treat the document as incorrect and update it after verifying the intended behavior.
+* two_key/quorum.py — quorum policy, threshold resolution, ballot validation, response floors, and diversity requirements.
+* two_key/core.py — Path A/Path B execution and final authorization decision.
+* THREAT_MODEL.md — threats, assumptions, and residual risks.
+* SCOPE.md — project boundaries.
+* FIT.md — intended users and reasons not to use this package.
