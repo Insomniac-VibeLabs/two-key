@@ -8,7 +8,15 @@ is on `main`. `v0.1.6` stays on the previous tree.
 It has:
 
 - a signed constitution, Path A bytecode, and a policy VM that does not read English
-- required `tool_specs` that fill Path A's form from argument bytes. Omitting them does not load. `deny_unmapped` defaults off: an unnamed key does not reach the tool. Set the flag to deny it. A counterparty path requires `allow`. A payload `shape`, when set, locks the value to a string, a number, or a list of strings and does not read it
+- required `tool_specs` that fill Path A's form from argument bytes.
+  Omitting them does not load. Path A currently evaluates five structured
+  fields: `tool`, `amount_usd`, `data_class`, `counterparty`, and
+  `irreversible`. This field set is fixed in the current implementation;
+  operator-customizable fields are planned, not implemented. `deny_unmapped`
+  defaults off: an unnamed key does not reach the tool. Set the flag to deny
+  it. A counterparty path requires `allow`. A payload `shape`, when set,
+  locks the value to a string, a number, or a list of strings and does not
+  read the contents
 - Path B judge hooks for xAI, OpenAI-compatible APIs, Anthropic, Gemini, and local Ollama. At least one judge must be configured. With `required_yes` unset, the
 affirmative threshold is `min(2, number_of_judges)`: one judge requires
 one yes; two or more judges require two yes votes. This is not a majority
