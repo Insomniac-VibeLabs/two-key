@@ -1421,3 +1421,25 @@ Docs only; no code or behavior changes.
   tests. CONTRIBUTING and README's layout list `llms.txt` and
   `docs/JUDGES_AND_QUORUM.md`.
 
+## Release v0.3.0 — 2026-10-13
+
+Package version 0.3.0 (`pyproject.toml`, `two_key.__version__`). Tagged
+`v0.3.0` on `main`: `working` merged with `main`, plus the release notes in
+this entry. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on
+`4a4352e`. Not published to PyPI.
+
+0.3.0 is the sum of these sections: "0.3.0" (key backup), "Fixes",
+"CI", "Gateway deployment boundary (#45)", "Custom Path A fields", and
+"Docs match the code". Where one of them says "On branch `working`" or "Not
+a release tag", it was written before this release.
+
+- The merge of `main` into `working` kept `main`'s SonarCloud coverage
+  upload (PR #78) together with `working`'s locked, pinned coverage install
+  (#77) in `.github/workflows/coverage.yml`. Nothing else conflicted.
+- README, ROADMAP, SCOPE, FIT, THREAT_MODEL, JUDGES_AND_QUORUM, AGENTS.md,
+  and llms.txt now say `v0.3.0` is the tagged release on `main` and the
+  install line uses `@v0.3.0`.
+- Upgrading: read "Upgrading from 0.2.4" and the "Upgrading" note under
+  "Custom Path A fields". A constitution with custom fields is refused by
+  0.2.4 and earlier.
+

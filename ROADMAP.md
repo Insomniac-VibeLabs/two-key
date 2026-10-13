@@ -2,9 +2,8 @@
 
 This is the plan for taking `two-key-concept` from the 0.2.4 prototype to a
 1.0 release. It states intent, not a promise. The order may change, and
-version numbers are targets, not dates. 0.3.0 (key backup) is on branch
-`working` and is not tagged. Tag `v0.2.4` remains the tagged release on
-`main`. Nothing listed here after 0.3 exists yet, except the custom field
+version numbers are targets, not dates. 0.3.0 (key backup) is released as
+tag `v0.3.0` on `main`. Nothing listed here after 0.3 exists yet, except the custom field
 types that 0.3.0 added ahead of order (see "After 1.0"). 0.11 may ship before the
 phases numbered under it; its number is not an order claim.
 
@@ -150,10 +149,10 @@ earlier. It is numbered 0.11 so those phases keep their numbers.
 Losing a key today is severe. A missing or changed capability key refuses to
 start, and a lost ledger key leaves the log unreadable.
 
-### 0.3.0 (on `working`, not tagged)
+### 0.3.0 (shipped)
 
-CHANGES "0.3.0" is the record. The criteria below are what shipped. Tag
-`v0.2.4` is still the tagged release on `main`.
+Tagged `v0.3.0` on `main`. CHANGES "0.3.0" is the record. The criteria
+below are what shipped.
 
 - `two-key backup-export`, `backup-verify`, and `backup-restore`.
 - Three bundles. The ledger key and the witness key are not in the same
@@ -171,7 +170,7 @@ CHANGES "0.3.0" is the record. The criteria below are what shipped. Tag
 - Tests cover restore, a wrong passphrase, and a tampered bundle.
 - HOWTO has the runbook and the table of what each lost key means.
 
-0.3.0 on `working` also carries two changes that are not part of this
+0.3.0 also carries two changes that are not part of this
 phase: custom Path A fields (see "After 1.0") and the gateway deployment
 boundary (#45; see "Not planned"). CHANGES has a section for each.
 

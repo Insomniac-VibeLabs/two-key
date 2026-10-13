@@ -1,7 +1,7 @@
 # Is this for you?
 
 Prototype. Not a FIPS 140-3 validated module. Not on PyPI. There is no MCP
-server in this release. Package `two-key-concept` version 0.3.0 on branch `working` (not tagged). Tag `v0.2.4` on `main` is the tagged release. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`.
+server in this release. Package `two-key-concept` version 0.3.0. Tag `v0.3.0` on `main` is the tagged release. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`.
 `v0.1.6` stays on the previous tree.
 Apache-2.0.
 Crypto is Ed25519 and SHA-256.

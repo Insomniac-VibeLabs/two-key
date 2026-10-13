@@ -1,7 +1,7 @@
 # Two-Key concept
 
 [![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/releases)
-[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.4/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept/)
+[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.3.0/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept/)
 
 Two independent keys must turn before an AI agent can act.
 
@@ -360,8 +360,8 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 The plan from the 0.2.4 prototype to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-0.3.0 (key backup) is on `working` and is not tagged. Nothing after 0.3 in
-that plan exists yet. Tag `v0.2.4` is still the tagged release on `main`.
+0.3.0 (key backup) is released: tag `v0.3.0` on `main`. Nothing after 0.3 in
+that plan exists yet.
 The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
@@ -383,7 +383,7 @@ flowchart LR
 | --- | --- |
 | 0.2.3 | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
 | 0.2.4 | Head anchor against a ledger-directory rollback or wipe (#62); `two-key recover` for an uncheckpointed tail (#49). Tagged `v0.2.4` on `main` |
-| 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys, in three bundles. A restore includes `head.anchor` from the same moment. On `working` as 0.3.0; not tagged |
+| 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys, in three bundles. A restore includes `head.anchor` from the same moment. Tagged `v0.3.0` on `main` |
 | 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
 | 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
 | 0.6 | MCP adapter: a proxy in front of the gateway, not an MCP server |
@@ -395,9 +395,9 @@ flowchart LR
 | 0.11, any time before 1.0 | Optional reputation halt. Off unless configured. Not a change to `revoke` |
 | After 1.0, not scheduled | More spec field types (decimal, URL, path, email, opaque bytes), and `amount` / `counterparty` as ordinary typed fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped in 0.3.0 |
 
-Install from git. It is not published to PyPI. Package version on `working`
-is 0.3.0 and is not tagged. Tag `v0.2.4` on `main` is the tagged release.
-Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
+Install from git. It is not published to PyPI. Package version is 0.3.0.
+Tag `v0.3.0` on `main` is the tagged release. Tag `v0.2.4` stays on
+`fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
 commit `2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
 some judges 0.2.2 accepted (one holding the agent's credential without
 sending it, or in the other form), and pins each ledger's witness key on
@@ -416,12 +416,12 @@ that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.4"
+pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.0"
 ```
 
-That ref is the tagged 0.2.4 release. `main` is that release. `working` is
-0.3.0 (key backup, custom Path A fields, and the #45 gateway boundary) and is not tagged, so do not install `@v0.3.0` until a
-tag exists.
+That ref is the tagged 0.3.0 release (key backup, custom Path A fields, and
+the #45 gateway boundary). `main` is that release. `working` is where the
+next changes land. For the previous release, use `@v0.2.4`.
 
 ## Run the offline demo
 
@@ -470,7 +470,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, custom fields, judges, agents |
-| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.0 is on `working` and is not tagged |
+| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.0 is tagged `v0.3.0` |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/JUDGES_AND_QUORUM.md` | How judges vote and how Path A and Path B combine |
 | `docs/FIT.md` | Whether this package is the right control |

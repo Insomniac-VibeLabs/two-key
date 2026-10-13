@@ -14,17 +14,17 @@ verify-only gateway. Prototype. Apache-2.0.
 
 Do **not** add a scanning or antivirus engine, chain anchoring, or seed
 phrases here. The items in [ROADMAP.md](ROADMAP.md) are in scope: key backup
-(shipped in 0.3.0, on `working`, not tagged), ledger export for a SIEM, DLP and antivirus hooks that call external scanners,
+(shipped in 0.3.0), ledger export for a SIEM, DLP and antivirus hooks that call external scanners,
 an MCP adapter, PKI with certificate recovery, hybrid ML-DSA signatures, a FIPS
 approved mode, and a local GUI. Build them in the order and with the limits stated there, unless the
 operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.3.0 is on `working` and is not tagged. Tag `v0.2.4` is the tagged
-  release on `main`. Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.2.0`
-  (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. Do not tell an
-  install line to use `@v0.3.0` until that tag exists.
+- Package 0.3.0 is tag `v0.3.0` on `main`. Tag `v0.2.4` stays on `fc836bb`.
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.3.0` or `v0.2.0`
+  (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
+  where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
 - Never commit keys, ledgers, or credentials.
 - Update `CHANGES.md` with every commit. Read
@@ -33,7 +33,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key-concept`, import name `two_key`,
-version `0.3.0` on `working` (not tagged). Tag `v0.2.4` is the tagged release. Not on PyPI.
+version `0.3.0`, tag `v0.3.0` on `main`. Not on PyPI.
 
 ```bash
 python3 -m venv .venv
@@ -57,7 +57,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 
 Git install:  
-`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.4"`
+`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.0"`
 
 ## Tests and docs
 
