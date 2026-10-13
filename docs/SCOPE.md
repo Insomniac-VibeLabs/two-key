@@ -9,7 +9,12 @@ It has:
 
 - a signed constitution, Path A bytecode, and a policy VM that does not read English
 - required `tool_specs` that fill Path A's form from argument bytes. Omitting them does not load. `deny_unmapped` defaults off: an unnamed key does not reach the tool. Set the flag to deny it. A counterparty path requires `allow`. A payload `shape`, when set, locks the value to a string, a number, or a list of strings and does not read it
-- Path B judge hooks for xAI, OpenAI-compatible APIs, Anthropic, Gemini, and local Ollama. One judge by default, no diversity floors; `high_assurance` turns them on. No judge may be the monitored agent (a judge holding its credential, the same API token or the same username and password, at any address and whether or not either side sends it; or both keyless on one address); other overlaps warn. After a derive deny, argument bytes are withheld from judges unless `tool_args_on_derive_deny` is set. Path B still runs
+- Path B judge hooks for xAI, OpenAI-compatible APIs, Anthropic, Gemini, and local Ollama. At least one judge must be configured. With `required_yes` unset, the
+affirmative threshold is `min(2, number_of_judges)`: one judge requires
+one yes; two or more judges require two yes votes. This is not a majority
+rule. Diversity floors are off by default; `high_assurance` requires at
+least two operator-labelled model makers, at least one local judge, and
+a yes from a local judge. No judge may be the monitored agent (a judge holding its credential, the same API token or the same username and password, at any address and whether or not either side sends it; or both keyless on one address); other overlaps warn. After a derive deny, argument bytes are withheld from judges unless `tool_args_on_derive_deny` is set. Path B still runs
 - monitored-agent hooks; `authorize_from_agent` does not execute a tool
 - an AES-256-GCM ledger, a ledger key, and a witness key outside the ledger directory. The witness public key is pinned in the ledger (`witness_pinned`) and, optionally, outside it (`witness_public_key=`, `--witness-public-key`); it changes only by a ledgered `witness_rotated` entry (`two-key rotate-witness`). A head anchor beside the ledger key (`head.anchor`, or `--head-anchor`) refuses a rollback or wipe of the ledger directory alone; deleting that file accepts the ledger as it stands. `two-key recover` drops an uncheckpointed tail and does not run on open. `two-key audit` reports both pins
 - a capability key outside the ledger directory. The gateway verifies
