@@ -4,7 +4,8 @@ This is the plan for taking `two-key-concept` from the 0.2.4 prototype to a
 1.0 release. It states intent, not a promise. The order may change, and
 version numbers are targets, not dates. 0.3.0 (key backup) is on branch
 `working` and is not tagged. Tag `v0.2.4` remains the tagged release on
-`main`. Nothing listed here after 0.3 exists yet. 0.11 may ship before the
+`main`. Nothing listed here after 0.3 exists yet, except the custom field
+types that 0.3.0 added ahead of order (see "After 1.0"). 0.11 may ship before the
 phases numbered under it; its number is not an order claim.
 
 Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
@@ -169,6 +170,10 @@ CHANGES "0.3.0" is the record. The criteria below are what shipped. Tag
   the anchor is not the restore procedure.
 - Tests cover restore, a wrong passphrase, and a tampered bundle.
 - HOWTO has the runbook and the table of what each lost key means.
+
+0.3.0 on `working` also carries two changes that are not part of this
+phase: custom Path A fields (see "After 1.0") and the gateway deployment
+boundary (#45; see "Not planned"). CHANGES has a section for each.
 
 Not in this version: PKI and certificate identities (see 0.7) and
 seed-phrase backup. A weak passphrase remains a residual risk. PBKDF2 is

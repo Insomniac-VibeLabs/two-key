@@ -1146,6 +1146,11 @@ On branch `working`. Not a release tag. `main` and tag `v0.2.4` stay at
 
 Package version 0.3.0 (`pyproject.toml`, `two_key.__version__`).
 
+This section describes key backup as first written. 0.3.0 also carries the
+later sections "Gateway deployment boundary (#45)" and "Custom Path A
+fields", which do change the gateway and Path A; "Not in this version"
+below was true of key backup alone.
+
 ### Added
 
 Key backup and recovery (ROADMAP 0.3).
@@ -1393,4 +1398,26 @@ The operator approved the design: the types, the signed defaults, mapped
 means required, values but not descriptions to judges, the envelope
 setting, the Unicode rules, the limits, and the `LOAD` hardening. Tests:
 `tests/test_custom_fields.py`, `tests/test_fields_compat.py`.
+
+## Docs match the code — 2026-10-13
+
+On branch `working`. Not a release tag. Package version stays 0.3.0.
+Docs only; no code or behavior changes.
+
+- HOWTO "Judges": transient failures (a dropped connection, HTTP 429, 502,
+  503, 504) are retried at most twice inside the deadline; a response over
+  1,000,000 bytes, a redirect, and any other error abstain. The one-time 400
+  fallback also exists for Anthropic and Gemini.
+- THREAT_MODEL: a gateway on a separately opened ledger returns
+  `ledger_failed: ledger file changed by another writer` to the caller (the
+  check itself fails as `ledger_size_invalid`). The ledger holds custom
+  field values in `action_normalized.form`.
+- README, ROADMAP, THREAT_MODEL, and the CHANGES 0.3.0 section say that
+  0.3.0 carries custom Path A fields and the #45 gateway boundary as well as
+  key backup, and that the field types shipped ahead of order. README points
+  to the v2-envelope upgrade note.
+- llms.txt no longer states a test count. HOWTO's test-gap list drops the
+  ledger's O_EXCL path and the case-folded control-path check, which have
+  tests. CONTRIBUTING and README's layout list `llms.txt` and
+  `docs/JUDGES_AND_QUORUM.md`.
 

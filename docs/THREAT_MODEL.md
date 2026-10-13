@@ -247,7 +247,9 @@ claims to close.
   implementation as providing process-level isolation. A gateway built on a
   ledger no `TwoKey` in the process opened warns once
   (`TwoKeyDeploymentWarning`) and refuses tokens issued after that ledger
-  opened (`ledger_size_invalid`).
+  opened: the check fails as `ledger_size_invalid`, and recording that
+  refusal fails too, so the caller sees `ledger_failed: ledger file changed
+  by another writer`.
 - Stealing the ledger key decrypts the log. Stealing the principal key does
   not, and it does not mint a token the gateway will accept. Stealing the
   capability private key does. Stealing the principal key and the ledger
@@ -301,11 +303,12 @@ claims to close.
   The backup is not an external anchor.
 - What the ledger holds today: the agent's proposal text in full (the
   `proposal` entry), the derived form (`action_normalized.form`: the amount,
-  counterparty, and counterparties read from the argument bytes), reasons,
+  counterparty, counterparties, and custom field values read from the
+  argument bytes), reasons,
   digests, and sizes. It never holds the raw argument bytes of an oversized
   or dropped value, only its size, digest, or key name. It never holds keys.
   Anyone who can decrypt the log can read the proposal text and the derived
-  amount and counterparties.
+  amount, counterparties, and custom field values.
 - A crash after `redemption_started` and before the tool runs refuses a
   retry, even if the tool did not run. Exactly-once execution is not claimed.
 - Where `fcntl` is absent, another process can still append. This package
@@ -345,8 +348,8 @@ claims to close.
 
 These come from [ROADMAP.md](../ROADMAP.md). None of what follows is in 0.3.0, and nothing in
 this section describes current behavior. Each item is added to the sections
-above in the release that ships it. Key backup shipped in 0.3.0 and is
-described above, not here.
+above in the release that ships it. Key backup and custom Path A fields
+shipped in 0.3.0 and are described above, not here.
 
 - Ledger export for SIEM (target 0.4). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It

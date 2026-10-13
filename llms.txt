@@ -24,7 +24,7 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(510 tests, no network).
+(no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or

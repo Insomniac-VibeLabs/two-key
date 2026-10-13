@@ -12,7 +12,8 @@ shipped in 0.3.0 (three passphrase bundles, not a seed phrase).
 
 Update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`, `docs/FIT.md`,
 `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`, `docs/SCOPE.md`, `CHANGES.md`,
-`SECURITY.md`, `CONTRIBUTING.md`, and `AGENTS.md` when a claim changes.
+`SECURITY.md`, `CONTRIBUTING.md`, `AGENTS.md`, `llms.txt`, and
+`docs/JUDGES_AND_QUORUM.md` when a claim changes.
 When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
 in the same release.
 When `dependencies` or the `yaml` extra changes, regenerate `uv.lock` with

@@ -362,8 +362,14 @@ connection per origin and does not follow redirects.
 
 Cloud OpenAI and xAI send a strict ballot schema. xAI also sends
 `reasoning_effort: low`. A single HTTP 400 drops those knobs and retries
-once. The local ballot parser does not change on that retry. Any other
-HTTP error abstains.
+once. Anthropic and Gemini judges have the same one-time 400 fallback:
+Anthropic drops its cache breakpoints, and Gemini drops the response schema
+and keeps JSON mode. The local ballot parser does not change on that retry.
+
+A dropped connection and HTTP 429, 502, 503, or 504 are retried at most
+twice more, with a short backoff, inside the quorum deadline. A response
+that was parsed is never retried. A response over 1,000,000 bytes, a
+redirect, and any other HTTP error abstain.
 
 ## The monitored agent and the judge-is-not-the-agent rule
 
@@ -1322,8 +1328,7 @@ names the setting or declaration that controls it.
   missing digests as mismatches. Start a new ledger, or read those as "pre-0.2.0".
 
 Open items that no setting changes:
-- Test gaps: the ledger's O_EXCL path, the case-folded control-path check,
-  the audit self-check, and five bare `assertRaises`.
+- Test gaps: the audit self-check, and five bare `assertRaises`.
 - Each redemption leaves one empty lock file per jti under
   `<ledger>.redeem-locks/`. Nothing deletes them, because removing a file
   another process holds a `flock` on is unsafe. The gateway's in-memory

@@ -393,7 +393,7 @@ flowchart LR
 | 0.10 | Local GUI for configuration and ledger auditing |
 | 1.0 | Public community review, then release. Described as community-reviewed, not audited |
 | 0.11, any time before 1.0 | Optional reputation halt. Off unless configured. Not a change to `revoke` |
-| After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
+| After 1.0, not scheduled | More spec field types (decimal, URL, path, email, opaque bytes), and `amount` / `counterparty` as ordinary typed fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped in 0.3.0 |
 
 Install from git. It is not published to PyPI. Package version on `working`
 is 0.3.0 and is not tagged. Tag `v0.2.4` on `main` is the tagged release.
@@ -405,8 +405,11 @@ its first open: read "Upgrading from 0.2.2" in
 [CHANGES.md](CHANGES.md) before upgrading (and "Upgrading from 0.2.1" and
 "Upgrading from 0.1.12" from older versions). 0.2.4 writes a head anchor on
 the first open of an existing ledger and refuses a rolled-back ledger
-directory: read "Upgrading from 0.2.3". 0.3.0 adds key backup. Existing
-ledgers open unchanged: read "Upgrading from 0.2.4".
+directory: read "Upgrading from 0.2.3". 0.3.0 adds key backup, custom Path
+A fields, and `TwoKey.gateway()` (#45). Existing ledgers and constitutions
+open unchanged: read "Upgrading from 0.2.4". A constitution that declares
+custom fields signs as v2, which installs before 0.3.0 refuse: read
+"Custom Path A fields" > "Upgrading" in CHANGES.md.
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
@@ -417,7 +420,7 @@ pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/t
 ```
 
 That ref is the tagged 0.2.4 release. `main` is that release. `working` is
-0.3.0 (key backup) and is not tagged, so do not install `@v0.3.0` until a
+0.3.0 (key backup, custom Path A fields, and the #45 gateway boundary) and is not tagged, so do not install `@v0.3.0` until a
 tag exists.
 
 ## Run the offline demo
@@ -469,6 +472,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `examples/` | Constitution, hard rules, custom fields, judges, agents |
 | `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.0 is on `working` and is not tagged |
 | `docs/HOWTO.md` | Operator how-to |
+| `docs/JUDGES_AND_QUORUM.md` | How judges vote and how Path A and Path B combine |
 | `docs/FIT.md` | Whether this package is the right control |
 | `docs/COMPARISON.md` | What this package is not a substitute for |
 | `docs/THREAT_MODEL.md` | Boundaries and residual risk |
