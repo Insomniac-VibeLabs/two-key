@@ -1,5 +1,4 @@
-
-# Is this for you
+# Is this for you?
 
 Prototype. Not a FIPS 140-3 validated module. Not on PyPI. There is no MCP
 server in this release. Package `two-key-concept` version 0.3.0 on branch `working` (not tagged). Tag `v0.2.4` on `main` is the tagged release. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`.
