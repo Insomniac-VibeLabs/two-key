@@ -92,10 +92,21 @@ a prototype, report security findings as public issues, per
 - `require_path_a_first` is not a skip.
 - JSON/YAML inputs refuse duplicate keys and YAML merge keys. Oversized or malformed calls deny
   before either path.
-- Default quorum needs one judge and has no diversity floors;
-  `QuorumPolicy.high_assurance` / `profile: high_assurance` adds judges from
-  two makers (`min_makers`), one local judge, and a local yes.
+- - Default quorum needs one judge and has no diversity floors.
+  When `required_yes` is unset, it resolves to
+  `min(2, number_of_judges)` (at least one); this is **not** a majority
+  rule. `min_responding` defaults to the effective `required_yes`
+  threshold. `QuorumPolicy.high_assurance` / `profile: high_assurance`
+  adds requirements for judges from two makers (`min_makers`), one
+  local judge, and a local yes. Note that
+  `QuorumPolicy.without_diversity_floors()` explicitly defaults
+  `required_yes` to `2`.
 - `tool_specs` is required. A disagreeing claim is a deny.
+- Path A currently evaluates five structured fields: `tool`, `amount_usd`,
+  `data_class`, `counterparty`, and `irreversible`. The field set is
+  fixed in the current implementation; do not describe it as
+  operator-customizable unless that capability is implemented and tested.
+  Path A evaluates structured data, not English-language policy prose.
 - No judge may be the monitored agent: a judge holding the agent's
   credential (the same API token, or the same username and password) is
   refused at any address, whether or not either side sends it; so are two
