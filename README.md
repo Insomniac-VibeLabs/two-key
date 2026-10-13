@@ -67,8 +67,7 @@ is going, see [ROADMAP.md](ROADMAP.md).
    with no local judge does not start. A judge is local only when it says
    so (`local_weights: true`) and its `base_url` host is on an allowlist:
    loopback, RFC 1918, or IPv6 unique-local. A `:cloud`/`-cloud` model is
-   never local, for any judge class. With
-   `required_yes` unset, the quorum needs `min(2, judges)` yes votes.
+   never local, for any judge class. With `required_yes` unset, the approval threshold is `min(2, number_of_judges)`. The default policy permits a one-judge deployment, but the operator must still configure at least one judge; Two-Key does not create or select judges automatically. With one configured judge, one affirmative vote is required. With two or more judges, two affirmative votes are required by default. This is not a general majority rule: for example, a three-judge setup requires two affirmative votes, and a four-judge setup also requires two. Operators who want a different threshold, such as a majority or unanimity, must explicitly configure `required_yes` to the desired number of affirmative votes.
    `require_path_a_first` is not a floor and it is not a skip. After a derive
    deny, judges do not receive the argument bytes unless
    `tool_args_on_derive_deny` is set. Path B still runs. Other denies still
