@@ -50,7 +50,7 @@ allow_same_provider_judge are deprecated no-ops. Local means local_weights true,
 JSON and YAML inputs refuse duplicate keys, YAML merge keys (<<), and integers over 4,300
 digits. Arguments or proposals over
 256 KiB are denied. Ballots are paired with judges by position.
-require_path_a_first is not a skip. There is no scanner, no PKI, and no anchor.
+require_path_a_first is not a skip. There is no scanner, no PKI, and no external anchor.
 The ledger head is signed by the principal and a witness key. The witness public key is pinned
 in the ledger (first entry witness_pinned; a ledger from 0.2.2 or earlier pins its head's key on
 first open) and optionally outside it (Ledger(witness_public_key=...), --witness-public-key).
