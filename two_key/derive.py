@@ -200,6 +200,15 @@ def disallowed_party(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> b
     return False
 
 
+def _project_fields(out: dict, spec: Mapping[str, Any], derived_fields: Mapping[str, Any] | None) -> None:
+    """Each mapped custom field gets the normalized value Path A checked, at its path."""
+    if derived_fields is None:
+        return
+    for name, entry in (spec.get("fields") or {}).items():
+        if name in derived_fields and isinstance(entry, Mapping):
+            _assign(out, entry["json_path"], derived_fields[name])
+
+
 def project_arguments(spec: Mapping[str, Any], arguments: Mapping[str, Any],
                       derived_fields: Mapping[str, Any] | None = None) -> dict:
     """Arguments the tool may see.
@@ -213,9 +222,7 @@ def project_arguments(spec: Mapping[str, Any], arguments: Mapping[str, Any],
     if not isinstance(arguments, Mapping):
         return {}
     out: dict[str, Any] = {}
-    for name, entry in (spec.get("fields") or {}).items():
-        if derived_fields is not None and name in derived_fields and isinstance(entry, Mapping):
-            _assign(out, entry["json_path"], derived_fields[name])
+    _project_fields(out, spec, derived_fields)
     for entry in spec.get("payload") or []:
         if not isinstance(entry, Mapping) or not isinstance(entry.get("json_path"), str):
             continue

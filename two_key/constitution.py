@@ -76,6 +76,37 @@ def _overlaps(a: str, b: str) -> bool:
     return a == b or a.startswith(b + ".") or b.startswith(a + ".")
 
 
+def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: list, take) -> dict:
+    """``tool_specs.<tool>.fields``: declared field name -> {json_path}. Adds each path to ``control_paths``.
+
+    A path must not equal, contain, or sit under another declared path, compared without regard to case.
+    """
+    out: dict[str, dict] = {}
+    if mapped is None:
+        return out
+    if not isinstance(mapped, Mapping) or not mapped:
+        raise ConstitutionError(f"tool_specs.{tool}.fields: expected a non-empty mapping")
+    if len(mapped) > MAX_FIELDS_PER_TOOL:
+        raise ConstitutionError(f"tool_specs.{tool}.fields: more than {MAX_FIELDS_PER_TOOL} fields")
+    for fname, entry in mapped.items():
+        where = f"tool_specs.{tool}.fields.{fname}"
+        if not isinstance(fname, str) or fname not in registry:
+            raise ConstitutionError(f"{where}: not a declared field (add it under fields:)")
+        if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
+            raise ConstitutionError(f"{where}: expected json_path only")
+        try:
+            path = check_path(_json_path(entry["json_path"], where), where)
+        except FieldError as e:
+            raise _field_error(e) from None
+        path = take(path, where)
+        for other in control_paths:
+            if _overlaps(path, other):
+                raise ConstitutionError(f"{where}: field path {path!r} overlaps the path {other!r}")
+        control_paths.append(path)
+        out[fname] = {"json_path": path}
+    return out
+
+
 def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) -> dict:
     """Canonical tool specs. Every allow-listed tool must have one.
 
@@ -174,29 +205,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
         # compared without regard to case.
         control_paths = [p for p in ((amount_out or {}).get("json_path"), (amount_out or {}).get("currency_path"))
                          if p] + [entry["json_path"] for entry in party_out]
-        mapped = spec.get("fields")
-        fields_out: dict[str, dict] = {}
-        if mapped is not None:
-            if not isinstance(mapped, Mapping) or not mapped:
-                raise ConstitutionError(f"tool_specs.{tool}.fields: expected a non-empty mapping")
-            if len(mapped) > MAX_FIELDS_PER_TOOL:
-                raise ConstitutionError(f"tool_specs.{tool}.fields: more than {MAX_FIELDS_PER_TOOL} fields")
-            for fname, entry in mapped.items():
-                where = f"tool_specs.{tool}.fields.{fname}"
-                if not isinstance(fname, str) or fname not in registry:
-                    raise ConstitutionError(f"{where}: not a declared field (add it under fields:)")
-                if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
-                    raise ConstitutionError(f"{where}: expected json_path only")
-                try:
-                    path = check_path(_json_path(entry["json_path"], where), where)
-                except FieldError as e:
-                    raise _field_error(e) from None
-                path = take(path, where)
-                for other in control_paths:
-                    if _overlaps(path, other):
-                        raise ConstitutionError(f"{where}: field path {path!r} overlaps the path {other!r}")
-                control_paths.append(path)
-                fields_out[fname] = {"json_path": path}
+        fields_out = _field_mappings(tool, spec.get("fields"), registry, control_paths, take)
         payload = spec.get("payload", [])
         if not isinstance(payload, list):
             raise ConstitutionError(f"tool_specs.{tool}.payload: expected a list")

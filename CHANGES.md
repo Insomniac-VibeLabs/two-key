@@ -1466,4 +1466,8 @@ On branch `working`. Package version stays 0.3.0. No behavior changes.
   the rules-file loaders are annotated `Mapping`. Tests: no lambdas, one
   merged `with`, and `Harness` is a mixin. Compiled bytecode is unchanged
   (`tests/test_fields_compat.py`).
+- The custom-field mapping check in `validate_tool_specs` and the field
+  projection in `project_arguments` are their own helpers, so this PR no
+  longer adds to those functions' complexity (61 and 19; `main` had 59 and
+  19). No behavior change.
 
