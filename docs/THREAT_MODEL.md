@@ -16,11 +16,12 @@ the code wins, then this file should be corrected.
   It does not sign capability tokens.
 - The capability private key, outside the ledger directory
   (`<ledger>.capability/capability.pem`). `TwoKey` mints with it. The
-  gateway's verifier holds only the public half. This is key separation,
-  not process isolation: today the gateway shares the `TwoKey` process
-  and ledger object, which holds the principal, witness, and ledger keys.
-  A separate gateway process/host and gateway-only ledger role are
-  designed but not yet implemented (#45).
+  gateway's verifier holds only the public half. This is key separation
+  at the API, not process isolation: the gateway runs in the `TwoKey`
+  process on the `TwoKey` ledger object (`TwoKey.gateway()`), which holds
+  the principal, witness, and ledger keys, and the minting key is in the
+  same process. A gateway in another process or on another host is not
+  supported (#45).
 - The ledger key and the witness key, both outside the ledger directory
   (`<ledger>.ledger-key` and `<ledger>.witness`).
 - The witness public key the operator keeps outside the ledger
@@ -217,11 +218,15 @@ claims to close.
 - The gateway's verifier has no capability-minting private key. The minting
   key is the capability key outside the ledger directory. The principal
   key remains on the shared ledger object because the ledger head needs it.
-  A token signed with the principal key fails `bad_signature`. The current
-  gateway is not a separate process or host, however: it shares the `TwoKey`
-  process and ledger object. Do not treat the current implementation as
-  providing process-level isolation. The intended gateway-only process and
-  ledger role remain unimplemented (#45).
+  A token signed with the principal key fails `bad_signature`. The gateway
+  is not a separate process or host, and a split gateway is not supported
+  (#45): it shares the `TwoKey` process and ledger object. Registered tools
+  run in that process, so a compromised tool or dependency can read the
+  minting key and the principal, witness, and ledger keys. Do not treat the
+  implementation as providing process-level isolation. A gateway built on a
+  ledger no `TwoKey` in the process opened warns once
+  (`TwoKeyDeploymentWarning`) and refuses tokens issued after that ledger
+  opened (`ledger_size_invalid`).
 - Stealing the ledger key decrypts the log. Stealing the principal key does
   not, and it does not mint a token the gateway will accept. Stealing the
   capability private key does. Stealing the principal key and the ledger

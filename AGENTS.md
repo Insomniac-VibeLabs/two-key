@@ -116,5 +116,11 @@ a prototype, report security findings as public issues, per
   does not match the pin in the ledger, or the configured
   `witness_public_key`, is refused. It changes only by `rotate_witness`.
 - The gateway verifies only; it never mints.
+- The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
+  (`TwoKey.gateway()`). A gateway in another process or host is not
+  supported (#45); do not add a gateway-only ledger role, remote gateway,
+  or cross-process protocol without the operator. Do not describe
+  verify-only as key isolation: the process holds the minting, principal,
+  witness, and ledger keys, and the registered tools run there.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

@@ -60,12 +60,16 @@ leaves a key that is already there, including a witness rotated later.
 `--replace-ledger` writes an older ledger and
 its `head.anchor` together; a token spent after that backup can look unspent.
 Restore does not delete the anchor. Export refuses a copy that would not open,
-a symlink output directory, and a directory the group or others can write.  The gateway is not yet isolated in a separate process or host. Today it shares
-the TwoKey process's ledger object, which holds the principal, witness,
-and ledger keys. The gateway's intended public-key-only capability and
-gateway-only ledger role are designed but not yet implemented (#45).
-Do not treat the current architecture as providing process-level key
-isolation.
+a symlink output directory, and a directory the group or others can write.
+
+The gateway runs in the `TwoKey` process, on the `TwoKey` ledger object
+(`TwoKey.gateway()`). A gateway in another process or on another host is
+not supported (#45). The gateway's verifier holds only the capability
+public key, so it cannot mint; that is an API property, not key isolation.
+The same process holds the capability minting key and, on the shared
+ledger object, the principal, witness, and ledger keys, and the registered
+tools run there. A compromised tool or dependency can read those keys. Do
+not treat this architecture as providing process-level key isolation.
 
 A redemption intent is checkpointed before the tool runs. A later retry does
 not run the tool. Concurrent calls are locked. A crash before the tool runs

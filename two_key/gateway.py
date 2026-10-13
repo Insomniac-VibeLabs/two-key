@@ -7,6 +7,12 @@ ledger's ``constitution_loaded`` entry (``capability_key_mismatch``). A redempti
 retry of that intent does not run the tool. A tool exception appends an
 abort and leaves the token usable. A crash after a successful return
 cannot run the token again, because the intent is already on the ledger.
+The gateway runs in the ``TwoKey`` process, on the ledger object that ``TwoKey`` uses
+(``TwoKey.gateway()``). A gateway in another process or on another host is not supported (#45): a
+``Ledger`` opened elsewhere does not see tokens issued after it opened, and it holds the principal,
+witness, and ledger keys anyway. Built on a ledger no ``TwoKey`` in this process opened, the gateway
+emits ``TwoKeyDeploymentWarning`` once per process. The verifier holding only the capability public key
+is an API property, not process isolation: the registered tools run in this process too.
 A refusal of an authenticated token is ledgered as ``gateway_denied`` (reason,
 jti, tool, argument size and digest) at most once per jti after a successful append:
 the jti is recorded only after ``append_bounded`` + ``checkpoint`` succeed, so a
@@ -28,6 +34,7 @@ import math
 import os
 import sys
 import threading
+import warnings
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -64,6 +71,46 @@ def _short(value) -> str | None:
     return value if isinstance(value, str) and len(value) <= _MAX_JTI_CHARS else None
 
 
+class TwoKeyDeploymentWarning(UserWarning):
+    """The gateway was given a ledger no ``TwoKey`` in this process opened. A split gateway is unsupported (#45)."""
+
+
+# Set by TwoKey on the ledger object it uses. A gateway on another object is not the supported deployment.
+_TWO_KEY_LEDGER_MARK = "_two_key_bound"
+_deployment_warned = False
+_deployment_warned_guard = threading.Lock()
+
+
+def mark_two_key_ledger(ledger) -> None:
+    """Record that a ``TwoKey`` in this process uses ``ledger``. A double that refuses attributes stays unmarked."""
+    try:
+        setattr(ledger, _TWO_KEY_LEDGER_MARK, True)
+    except (AttributeError, TypeError):
+        pass
+
+
+def _warn_unbound_ledger(ledger) -> None:
+    """Warn, at most once per process, when ``ledger`` is not one a ``TwoKey`` here opened."""
+    global _deployment_warned
+    if getattr(ledger, _TWO_KEY_LEDGER_MARK, False) is True:
+        return
+    with _deployment_warned_guard:
+        if _deployment_warned:
+            return
+        _deployment_warned = True
+    warnings.warn("ToolGateway was given a ledger that no TwoKey in this process opened. A gateway in "
+                  "another process or on another host is not supported (#45); it refuses tokens issued "
+                  "after its ledger opened. Build it with TwoKey.gateway().",
+                  TwoKeyDeploymentWarning, stacklevel=3)
+
+
+def _reset_deployment_warning() -> None:
+    """For tests: let the next unbound ledger warn again."""
+    global _deployment_warned
+    with _deployment_warned_guard:
+        _deployment_warned = False
+
+
 _BOUND_FIELDS = ("jti", "tool", "args_hash", "bytecode_hash", "nl_hash", "ledger_root", "ledger_size")
 
 
@@ -92,6 +139,7 @@ class ToolGateway:
                  max_denied_jtis: int | None = None,
                  deny_inflight_wait_seconds: float | None = None):
         self.ledger = ledger
+        _warn_unbound_ledger(ledger)
         self.issuer = _as_verifier(issuer)
         principal = getattr(ledger, "public_key", None)
         if principal is not None and _raw(self.issuer.public_key) == _raw(principal):

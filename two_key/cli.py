@@ -84,7 +84,6 @@ def _demo(_args) -> int:
     import tempfile
     from .constitution import sign_constitution
     from .core import TwoKey
-    from .gateway import ToolGateway
     from .ledger import Ledger
     from .quorum import QuorumPolicy
     from .testing import TEST_AGENT, FixedJudge
@@ -114,7 +113,7 @@ def _demo(_args) -> int:
                               {}, "please wire the funds")
         allowed = tk.authorize({"tool": "email_draft", "amount_usd": 0, "data_class": "public", "irreversible": False},
                                {"to": "ada@example"}, "draft a note")
-        gateway = ToolGateway(ledger, tk.issuer, tk.compiled, tools={"email_draft": lambda a: {"drafted": a.get("to")}})
+        gateway = tk.gateway(tools={"email_draft": lambda a: {"drafted": a.get("to")}})
         redeemed = gateway.invoke(allowed.token, "email_draft", {"to": "ada@example"}) if allowed.token else None
         replay = gateway.invoke(allowed.token, "email_draft", {"to": "ada@example"}) if allowed.token else None
     print(json.dumps({

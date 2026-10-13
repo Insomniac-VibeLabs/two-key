@@ -29,7 +29,10 @@ That backup is not a seed phrase.
   abstention, timeout, and path-combination details.
 - The only component that runs the tool should be the gateway. It holds a
   single-use token, 120 seconds by default, signed by the capability key.
-  That private key is not on the gateway. The token is bound to the tool,
+  That private key is not on the gateway object, but it is in the same
+  process: the gateway runs in the `TwoKey` process (`TwoKey.gateway()`),
+  and a gateway in another process or on another host is not supported
+  (#45). The token is bound to the tool,
   the argument hash, the ledger Merkle root and size at issuance, and the
   constitution hashes (`bytecode_hash`, `nl_hash`, and `spec_hash`), plus
   the form derived from the argument bytes. A constitution that omits

@@ -149,7 +149,7 @@ A quorum pass means the configured Path B requirements were met for that authori
 - The deployment has been independently audited or formally verified.
 - The package is a FIPS 140-3 validated cryptographic module.
 
-The capability and gateway controls add restrictions but do not eliminate these limitations. The capability private key is separate from the gateway verifier's key, but the current gateway shares the Two-Key process and ledger object. Process-level isolation and a gateway-only ledger role remain unimplemented; see [THREAT_MODEL.md](THREAT_MODEL.md).
+The capability and gateway controls add restrictions but do not eliminate these limitations. The capability private key is separate from the gateway verifier's key, but the gateway shares the Two-Key process and ledger object; a gateway in another process or host is not supported (#45). There is no process-level isolation between them; see [THREAT_MODEL.md](THREAT_MODEL.md).
 
 ## Operator checklist
 

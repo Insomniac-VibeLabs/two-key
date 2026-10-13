@@ -563,16 +563,19 @@ refused.
 ## Redeem
 
 ```python
-from two_key.gateway import ToolGateway
-gw = ToolGateway(tk.ledger, tk.issuer.verifier(), tk.compiled, tools={
+gw = tk.gateway(tools={
     "email_draft": lambda args: {"drafted": args["to"]},
 })
 result = gw.invoke(decision.token, "email_draft", {"to": "ada@example"})
 ```
 
-Passing `tk.issuer` also works. The constructor keeps a verifier, so
-`gw.issuer.private_key` is `None` and `gw.issuer.issue(...)` raises
-`verifier_cannot_mint`. The minting key is `<ledger>.capability/capability.pem`,
+`TwoKey.gateway()` builds a `ToolGateway` on `tk.ledger` with
+`tk.issuer.verifier()` and `tk.compiled`. It refuses a `TwoKey` started
+without `private_key=` (`no_issuer_key:`). Constructing
+`ToolGateway(tk.ledger, tk.issuer.verifier(), tk.compiled, tools=...)`
+directly in the same process is equivalent; passing `tk.issuer` also works.
+The constructor keeps a verifier, so `gw.issuer.private_key` is `None` and
+`gw.issuer.issue(...)` raises `verifier_cannot_mint`. The minting key is `<ledger>.capability/capability.pem`,
 next to the ledger directory, not inside it. The public half is
 `capability.pub.pem` beside it. The key is created once with mode 0600 in a
 0700 directory. After a token has been issued it is never regenerated: a
@@ -615,30 +618,52 @@ intent, including after the tool has returned, does not run the token again.
 A tool exception appends an abort and leaves the token usable. A crash before
 the tool runs also blocks a retry.
 
-### Running the gateway in its own process or host
+### Deployment boundary: the gateway runs in the TwoKey process
 
-The intended setup puts the gateway in its own process or on its own host,
-next to the tools, with:
+The gateway runs in the same process as `TwoKey`, on the ledger object
+`TwoKey` uses. Build it with `TwoKey.gateway()`. A gateway in another
+process or on another host is not supported
+([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)),
+and this package has no gateway-only ledger role, remote gateway, or
+cross-process protocol.
 
-- the capability public key only; it never holds the minting key;
-- a gateway-only ledger role: it reads the ledger and records
-  `redemption_started`, `redemption`, `redemption_aborted`, and
-  `gateway_denied`, without the principal private key or the witness
-  private key;
-- a refresh that sees tokens issued after it opened, without ending
-  outstanding tokens;
-- a read-only open for audit.
+Why:
 
-This role is designed, not yet built
-([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)).
-Today `ToolGateway` takes a `Ledger` object; in the `TwoKey` process, pass
-`tk.ledger` as above. A `Ledger` opened in another process is its own
-in-memory copy: it does not see tokens issued after it opened, so the first
-such redemption is refused (`ledger_size_invalid`, then
-`ledger_failed: ledger file changed by another writer`) unless the gateway
-reopens the ledger before every redemption. Opening a `Ledger` also loads the
-witness key and the ledger key, and writing needs the principal private key,
-so a gateway process today holds the keys that can sign a ledger head.
+- A `Ledger` opened in another process is its own in-memory copy. It does
+  not see tokens issued after it opened, so it refuses them
+  (`ledger_size_invalid`, then `ledger_failed: ledger file changed by
+  another writer` when it tries to record the refusal). Reopening before
+  every redemption is not a supported mode either.
+- Opening a `Ledger` loads the ledger key and the witness key, and writing
+  needs the principal private key. A second process holding them is a
+  second copy of those keys, not a smaller one.
+
+What "verify only" means here. The gateway's verifier holds only the
+capability public key, so the gateway object cannot mint a token. That is
+an API property, not key isolation. In the supported deployment the same
+process holds:
+
+- the capability minting key (`TwoKey.issuer`, read from
+  `<ledger>.capability/capability.pem`);
+- on the shared `Ledger` object, the principal private key, the ledger key,
+  and the witness private key;
+- the registered tool functions, which the gateway calls in that process.
+
+Python gives no memory isolation between objects in one process. A
+compromised tool, or a compromised dependency it imports, can read every
+one of those keys. Keep registered tools small and trusted. If a tool's
+real work needs isolation, have the registered function call a separate
+service with its own credentials; the keys above still stay in this
+process.
+
+`ToolGateway(ledger, ...)` with a ledger that no `TwoKey` in this process
+opened emits `TwoKeyDeploymentWarning` (a `UserWarning`), at most once per
+process. The warning cannot see another host; what protects a split
+gateway is that it refuses tokens, as above. To silence it:
+`warnings.filterwarnings("ignore", category=TwoKeyDeploymentWarning)`. To
+make it an error in tests or CI:
+`python -W error::two_key.gateway.TwoKeyDeploymentWarning ...` or
+`warnings.simplefilter("error", TwoKeyDeploymentWarning)`.
 
 ## If the ledger will not open after a crash
 
@@ -943,6 +968,12 @@ names the setting or declaration that controls it.
   memory-hard: against someone who holds the key directory it slows a
   guessable password less than scrypt did, in exchange for running on a
   FIPS-only OpenSSL.
+- The gateway runs in the `TwoKey` process (`TwoKey.gateway()`). Its
+  verifier cannot mint, but the process holds the capability minting key,
+  the principal, witness, and ledger keys, and the registered tools. A
+  gateway in another process or host is not supported; a ledger no
+  `TwoKey` here opened warns once per process (`TwoKeyDeploymentWarning`)
+  and refuses newer tokens.
 - Without `--witness-public-key` (`witness_public_key=`), the principal key
   and the ledger key together can rewrite the ledger under a new witness
   key. With it, the witness key is needed too, and the configured copy must

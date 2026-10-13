@@ -25,7 +25,7 @@ is going, see [ROADMAP.md](ROADMAP.md).
 - **Policy Enforcer (Path A)**: Deterministic bytecode policy VM. It evaluates structured fields derived from the argument bytes according to the signed tool specs. It does not read free text or English.
 - **Judge (Path B)**: Trusted AI agent (local or cloud, preferably suited to the use case). It scores the normalized action record (and optionally the proposal). It has no direct access to any registered tool.
 - **Monitored Agent**: The untrusted agent under constraint. It proposes actions; it has no direct access to any registered tool.
-- **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. Intended to run with only the capability public key and a limited ledger role (designed, not yet built — #45).
+- **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported (#45). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
 - **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
 
 ## Dual-path authorization
@@ -118,7 +118,7 @@ flowchart TD
   gate -->|no| ledger
   gate -->|yes| token["Capability token<br/>signed by the capability key"]
   token --> ledger
-  token --> gateway["Tool gateway<br/>capability public key only, cannot mint<br/>own process or host: designed, not built (#45)"]
+  token --> gateway["Tool gateway<br/>same process as TwoKey, shares its ledger<br/>verifier: capability public key only, cannot mint"]
   gateway -->|"redemption_started, then declared paths only"| tool["Registered tool"]
   gateway --> ledger
 ```
@@ -242,7 +242,7 @@ sequenceDiagram
     TwoKey->>Ledger: capability_issued, then decision
     TwoKey-->>Caller: single-use token
     Caller->>Gateway: token, tool, arguments
-    Note over Gateway: verifies with the capability public key only
+    Note over Gateway: same process as TwoKey; verifies with the capability public key only
     opt authenticated token refused
       Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
     end
@@ -258,9 +258,10 @@ sequenceDiagram
 The token is signed by the capability key (`<ledger>.capability/capability.pem`,
 outside the ledger directory). It is bound to the tool, the argument hash,
 the ledger Merkle root and size at issuance, the constitution hashes,
-`spec_hash`, and the derived form. The gateway is constructed with
-`issuer.verifier()` or with the issuer; either way it keeps only the public
-half of the capability key. It recomputes the form from the same bytes. It checks the
+`spec_hash`, and the derived form. The gateway is built with
+`TwoKey.gateway()` (or `ToolGateway(tk.ledger, tk.issuer.verifier(), ...)`
+in the same process); either way it keeps only the public half of the
+capability key. It recomputes the form from the same bytes. It checks the
 signature, expiry, a lifetime no longer than the TTL (`ttl_too_long`), an
 issue time at most 5 s ahead (`issued_in_future`), and that nothing revoked
 or reloaded the constitution after issuance. It writes `redemption_started` before the tool runs. It does not
@@ -273,14 +274,23 @@ the group and others cannot read, never through a symlink. Once a token has been
 or changed key refuses to start. Its fingerprint is recorded in
 `constitution_loaded` and the gateway checks it.
 
-The gateway is meant to run in its own process or on its own host, holding
-the capability public key and a gateway-only ledger role: it reads the
-ledger, refreshes without ending outstanding tokens, and records
-redemptions, without the principal or witness private key. That role is
-designed, not yet built
-([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)).
-Today the gateway shares the ledger object of the `TwoKey` process, and
-that object holds the principal, witness, and ledger keys.
+The gateway runs in the `TwoKey` process, on the ledger object `TwoKey`
+uses. Build it with `TwoKey.gateway()`. A gateway in another process or on
+another host is not supported
+([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)):
+a `Ledger` opened elsewhere does not see tokens issued after it opened, so
+it refuses them, and it would hold the principal, witness, and ledger keys
+anyway. A gateway built on a ledger no `TwoKey` in the process opened emits
+`TwoKeyDeploymentWarning` once per process.
+
+The gateway's verifier holds only the capability public key, so the
+gateway object cannot mint. That is an API property, not key isolation.
+The same process holds the capability minting key (`TwoKey.issuer`) and,
+on the shared ledger object, the principal, witness, and ledger keys. The
+registered tools run in that process too. Python gives no memory isolation
+inside one process, so a compromised tool or dependency can read every one
+of those keys. Keep tools small and trusted, or put the work they do
+behind a service of their own.
 
 ## What this repo leaves out
 

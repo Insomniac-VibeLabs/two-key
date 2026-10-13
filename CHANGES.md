@@ -1273,5 +1273,45 @@ the gateway, and the judge-versus-agent checks are unchanged.
 
 README install, HOWTO install, AGENTS.md, CONTRIBUTING, llms.txt.
 
+## Gateway deployment boundary (#45) — 2026-10-13
 
+On branch `working`. Not a release tag. Package version stays 0.3.0.
+`main` and tag `v0.2.4` stay at 0.2.4. Not published to PyPI.
 
+Decides #45: the gateway runs in the `TwoKey` process, on the ledger object
+`TwoKey` uses. A gateway in another process or on another host is not
+supported. There is no gateway-only ledger role, remote gateway, or
+cross-process protocol, and none is planned (ROADMAP "Not planned").
+
+### Added
+
+- `TwoKey.gateway(tools=..., **kw)` builds the gateway on `tk.ledger` with
+  `tk.issuer.verifier()` and `tk.compiled`. It refuses a `TwoKey` started
+  without `private_key=` (`no_issuer_key:`). `two-key demo` uses it.
+- `two_key.gateway.TwoKeyDeploymentWarning` (a `UserWarning`). `TwoKey`
+  marks the ledger object it uses. `ToolGateway(...)` built on a ledger no
+  `TwoKey` in this process opened emits the warning at most once per
+  process. It cannot see another host. Silence it or make it an error with
+  the standard `warnings` filters.
+
+### Unchanged
+
+- `ToolGateway(...)` keeps its signature. Built directly on `tk.ledger`, it
+  does not warn.
+- Token checks, redemption, and the ledger are unchanged. A gateway on a
+  separately opened `Ledger` still refuses a token issued after it opened
+  (`ledger_size_invalid`, then `ledger_failed`); a test now pins that.
+
+### Docs
+
+README (component list, diagram, gateway paragraph), HOWTO ("Redeem",
+"Deployment boundary", known trade-offs), SECURITY, THREAT_MODEL, SCOPE,
+JUDGES_AND_QUORUM, FIT, ROADMAP, llms.txt, AGENTS.md. They say plainly that
+verify-only is an API property, not key isolation: the `TwoKey` process
+holds the capability minting key and the principal, witness, and ledger
+keys, and the registered tools run there.
+
+### Reviews
+
+The operator decided #45 and approved the helper and the warning. Tests:
+`tests/test_gateway_boundary.py`.

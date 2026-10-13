@@ -64,7 +64,10 @@ presence check, including a placeholder; that does not fail closed. The check fa
 the session is missing or equals a judge credential. revoke ends earlier tokens only; an optional
 reputation halt is roadmap 0.11 and is not built.
 The token TTL default is 120 seconds, at most 300. It is signed by the capability key, not
-the principal key. The gateway verifies only. It binds the tool, the argument
+the principal key. The gateway verifies only. It runs in the TwoKey process on the
+TwoKey ledger object (TwoKey.gateway()); a gateway in another process or host is not
+supported (#45), and verify-only is not key isolation: that process also holds the
+minting, principal, witness, and ledger keys, and the registered tools. It binds the tool, the argument
 hash, the ledger root and size, the constitution hashes, spec_hash, and the
 derived form. tool_specs is required. A disagreeing claim is a deny.
 deny_unmapped defaults off. An unnamed argument key does not reach the tool.

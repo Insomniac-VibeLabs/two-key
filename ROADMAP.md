@@ -218,7 +218,7 @@ The list this section was written from:
 ## 0.6: MCP adapter
 
 - A proxy for `tools/call` that runs `authorize` and forwards through the
-  gateway only with a valid token. The package does not become an MCP
+  gateway, in the same process (`TwoKey.gateway()`), only with a valid token. The package does not become an MCP
   server.
 - A helper that drafts `tool_specs` from an MCP server's tool schemas. The
   output is a draft for the principal to review and sign.
@@ -371,6 +371,8 @@ Planned, with no target version.
 
 - Its own antivirus or content-classification engine.
 - Running as an MCP server.
+- A gateway in its own process or on its own host, or a gateway-only
+  ledger role (#45). The gateway runs in the `TwoKey` process.
 - A hosted, remote, or multi-user GUI, and a GUI that holds the signing key.
 - A CMVP validation of this package, and any claim that it is "FIPS
   compliant" or "FIPS validated".

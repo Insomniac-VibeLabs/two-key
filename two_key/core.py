@@ -34,6 +34,7 @@ from .identity import (AgentDeclaration, IdentityError, PASSWORD_FINGERPRINT_ALG
                        configured_agent_identity, configured_agent_secrets, fingerprint_key_id, judge_identity)
 from .derive import (MAX_ACTION_BYTES, MAX_ARGS_BYTES, DeriveError, args_size, args_too_large, blocked_from_rules, canonical_too_large,
                      derive, disagreement, disallowed_party, dropped_keys, form_for, size_record)
+from .gateway import ToolGateway, mark_two_key_ledger
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, check_judge_set, convene, unmeetable_floor
@@ -167,6 +168,8 @@ class TwoKey:
                 raise TwoKeyConfigError(str(e)) from e
             self.issuer = CapabilityIssuer(cap_key, clock=clock, max_ttl_seconds=ttl_seconds)
         self._clock = clock
+        # The supported deployment: the gateway runs in this process on this ledger object (#45).
+        mark_two_key_ledger(ledger)
         self.ledger.append("constitution_loaded", {
             "digest": constitution.digest,
             "bytecode_hash": self.compiled.bytecode_hash,
@@ -184,6 +187,19 @@ class TwoKey:
             "same_model_tenant_optin_pairs": list(self.separation.tenant_optin_pairs),
         })
         self.ledger.checkpoint()
+
+    def gateway(self, tools: dict | None = None, **kw) -> ToolGateway:
+        """The supported way to build the gateway: in this process, on this ledger object (#45).
+
+        The gateway gets the capability public key only (a verifier), never ``self.issuer``. That is an
+        API property, not isolation: this process also holds the minting key, the principal, witness,
+        and ledger keys, and the registered tools run here. A gateway in another process or on another
+        host is not supported.
+        """
+        if self.issuer is None:
+            raise TwoKeyConfigError("no_issuer_key: a TwoKey started without private_key= issues no tokens, "
+                                    "so it has no gateway")
+        return ToolGateway(self.ledger, self.issuer.verifier(), self.compiled, tools=tools, **kw)
 
     @staticmethod
     def _has_capability_key(ledger) -> bool:

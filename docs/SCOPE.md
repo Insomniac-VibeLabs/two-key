@@ -26,9 +26,10 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
 - monitored-agent hooks; `authorize_from_agent` does not execute a tool
 - an AES-256-GCM ledger, a ledger key, and a witness key outside the ledger directory. The witness public key is pinned in the ledger (`witness_pinned`) and, optionally, outside it (`witness_public_key=`, `--witness-public-key`); it changes only by a ledgered `witness_rotated` entry (`two-key rotate-witness`). A head anchor beside the ledger key (`head.anchor`, or `--head-anchor`) refuses a rollback or wipe of the ledger directory alone; deleting that file accepts the ledger as it stands. `two-key recover` drops an uncheckpointed tail and does not run on open. `two-key audit` reports both pins
 - a capability key outside the ledger directory. The gateway verifies
-  tokens with the public half only. Today it shares the `TwoKey` process
-  and ledger object; separate-process/host isolation and a gateway-only
-  ledger role are designed but not yet built (#45)
+  tokens with the public half only. It runs in the `TwoKey` process on the
+  `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process
+  or on another host is not supported (#45), and there is no gateway-only
+  ledger role
 - a single-use token and a gateway intended to be the only component that
   invokes registered tools; this does not stop an agent from calling a
   tool directly through another path
