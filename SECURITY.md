@@ -60,7 +60,12 @@ leaves a key that is already there, including a witness rotated later.
 `--replace-ledger` writes an older ledger and
 its `head.anchor` together; a token spent after that backup can look unspent.
 Restore does not delete the anchor. Export refuses a copy that would not open,
-a symlink output directory, and a directory the group or others can write.
+a symlink output directory, and a directory the group or others can write.  The gateway is not yet isolated in a separate process or host. Today it shares
+the TwoKey process's ledger object, which holds the principal, witness,
+and ledger keys. The gateway's intended public-key-only capability and
+gateway-only ledger role are designed but not yet implemented (#45).
+Do not treat the current architecture as providing process-level key
+isolation.
 
 A redemption intent is checkpointed before the tool runs. A later retry does
 not run the tool. Concurrent calls are locked. A crash before the tool runs
