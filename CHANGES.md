@@ -1443,3 +1443,18 @@ a release tag", it was written before this release.
   "Custom Path A fields". A constitution with custom fields is refused by
   0.2.4 and earlier.
 
+## PR #85 check fixes — 2026-10-13
+
+On branch `working`. Package version stays 0.3.0. No behavior changes.
+
+- CodeQL "Clear-text logging of sensitive information" (`backup.py`, the
+  short-passphrase warning): the message prints a role name and the number
+  12, never a passphrase. The scanner matched the constant's name,
+  `_SHORT_PASSPHRASE`. It is now `_WEAK_BELOW_BYTES`.
+- DeepSource PYL-W0706 (critical, "the except handler raises immediately"):
+  removed `except BackupError: raise` in `export_backup`. `BackupError` is a
+  `ValueError` and `LedgerError` is a `RuntimeError`, so the clause never
+  changed which exception reaches the caller.
+  `test_export_refuses_a_missing_capability_key_and_low_iterations` pins that
+  a `BackupError` from the snapshot still comes out unwrapped.
+

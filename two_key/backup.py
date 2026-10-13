@@ -84,7 +84,7 @@ _ROLE_FILES = {
 _HEADER_FIELDS = ("format", "version", "role", "alg", "kdf", "enc", "ciphertext")
 _KDF_FIELDS = ("name", "iterations", "salt", "length")
 _ENC_FIELDS = ("name", "nonce")
-_SHORT_PASSPHRASE = 12
+_WEAK_BELOW_BYTES = 12      # a length, in bytes: a backup passphrase shorter than this draws a warning
 
 
 def _b64e(data: bytes) -> str:
@@ -211,8 +211,8 @@ def _warn_passphrases(passphrases: dict) -> None:
                   "opens one opens the other if those files are stored together. Store the bundles apart.",
                   file=sys.stderr)
     for role in ROLES:
-        if len(passphrases[role].encode("utf-8")) < _SHORT_PASSPHRASE:
-            print(f"two-key: WARNING: the {role} passphrase is shorter than {_SHORT_PASSPHRASE} bytes. "
+        if len(passphrases[role].encode("utf-8")) < _WEAK_BELOW_BYTES:
+            print(f"two-key: WARNING: the {role} passphrase is shorter than {_WEAK_BELOW_BYTES} bytes. "
                   "The backup is only as strong as that passphrase, and PBKDF2 is not memory-hard.",
                   file=sys.stderr)
 
@@ -675,9 +675,7 @@ def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
     try:
         with ledger._exclusive():
             groups = _snapshot_files(ledger, principal_path)
-    except BackupError:
-        raise
-    except LedgerError as e:
+    except LedgerError as e:       # a BackupError from the snapshot is not a LedgerError and passes through
         raise BackupError(f"backup_refused: {e}") from None
     _require_snapshot_opens(groups, witness_public_key=witness_public_key)
     out = _prepare_output_dir(Path(out_dir))
