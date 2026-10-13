@@ -16,7 +16,11 @@ the code wins, then this file should be corrected.
   It does not sign capability tokens.
 - The capability private key, outside the ledger directory
   (`<ledger>.capability/capability.pem`). `TwoKey` mints with it. The
-  gateway receives only the public half.
+  gateway's verifier holds only the public half. This is key separation,
+  not process isolation: today the gateway shares the `TwoKey` process
+  and ledger object, which holds the principal, witness, and ledger keys.
+  A separate gateway process/host and gateway-only ledger role are
+  designed but not yet implemented (#45).
 - The ledger key and the witness key, both outside the ledger directory
   (`<ledger>.ledger-key` and `<ledger>.witness`).
 - The witness public key the operator keeps outside the ledger
@@ -208,12 +212,14 @@ claims to close.
   action record. They do not receive `tool_args` unless
   `tool_args_on_derive_deny` is true. A deny that is not a derive deny still
   attaches non-empty arguments. The tool still does not run on a deny.
-- The gateway's verifier has no private key. The minting key is the
-  capability key outside the ledger directory. The principal key still sits
-  on the ledger object, because the head signature needs it. A token signed
-  with that principal key fails `bad_signature`. A process that keeps the
-  `TwoKey` object can still mint. A process that is given only the gateway
-  cannot.
+- The gateway's verifier has no capability-minting private key. The minting
+  key is the capability key outside the ledger directory. The principal
+  key remains on the shared ledger object because the ledger head needs it.
+  A token signed with the principal key fails `bad_signature`. The current
+  gateway is not a separate process or host, however: it shares the `TwoKey`
+  process and ledger object. Do not treat the current implementation as
+  providing process-level isolation. The intended gateway-only process and
+  ledger role remain unimplemented (#45).
 - Stealing the ledger key decrypts the log. Stealing the principal key does
   not, and it does not mint a token the gateway will accept. Stealing the
   capability private key does. Stealing the principal key and the ledger
