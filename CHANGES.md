@@ -1457,4 +1457,13 @@ On branch `working`. Package version stays 0.3.0. No behavior changes.
   changed which exception reaches the caller.
   `test_export_refuses_a_missing_capability_key_and_low_iterations` pins that
   a `BackupError` from the snapshot still comes out unwrapped.
+- DeepSource findings in code added for custom fields and #45, no
+  behavior change: the `deny_if_fields` compiler is its own typed helper
+  (`compile_constitution` back to the complexity it had on `main`); the
+  field-definition and Unicode checks are split into one helper per case;
+  the once-per-process gateway warning uses a `threading.Event` instead of
+  `global`; `gateway.reset_deployment_warning()` is public (tests call it);
+  the rules-file loaders are annotated `Mapping`. Tests: no lambdas, one
+  merged `with`, and `Harness` is a mixin. Compiled bytecode is unchanged
+  (`tests/test_fields_compat.py`).
 

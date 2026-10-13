@@ -142,45 +142,60 @@ def _script_of(ch: str) -> str | None:
 MAX_COMBINING_RUN = 3     # generic combining marks allowed in a row after a letter (Turkish i + dot above)
 
 
+def _unreadable() -> FieldValueError:
+    return FieldValueError("field_unreadable")
+
+
+def _ascii_char(ch: str, scripts: frozenset[str]) -> tuple[bool, bool]:
+    """Printable ASCII only; a letter needs ``latin``. Returns (prev_ok, prev_letter) for the next character."""
+    if not 0x20 <= ord(ch) < 0x7F:
+        raise _unreadable()
+    if ch.isalpha():
+        if "latin" not in scripts:
+            raise _unreadable()
+        return True, True
+    return ch.isdigit(), False
+
+
+def _generic_combining(ch: str) -> bool:
+    """A combining mark of no particular script (inherited), such as COMBINING DOT ABOVE."""
+    return (unicodedata.category(ch)[0] == "M" and _script_of(ch) is None
+            and unicodedata.name(ch, "").startswith("COMBINING "))
+
+
+def _script_char(ch: str, scripts: frozenset[str]) -> tuple[bool, bool]:
+    """A non-ASCII character of a declared script. Returns (prev_ok, prev_letter) for the next character."""
+    cat = unicodedata.category(ch)
+    if cat[0] in "CZ":   # control, format, surrogate, private use, unassigned, non-ASCII separators
+        raise _unreadable()
+    script = _script_of(ch)
+    if script is None or script not in scripts:
+        raise _unreadable()
+    return cat[0] in "LMN", cat[0] in "LM"
+
+
 def _check_unicode(text: str, scripts: frozenset[str]) -> None:
     joiners = bool(scripts & JOINING_SCRIPTS)
     prev_ok = False          # the previous character was a letter, mark, or digit of a declared script
     prev_letter = False      # the previous character was a letter of a declared script, or a mark on one
     run = 0                  # generic combining marks since that letter
     for i, ch in enumerate(text):
-        o = ord(ch)
-        if o < 0x80:
-            if not 0x20 <= o < 0x7F:
-                raise FieldValueError("field_unreadable")
-            if ch.isalpha():
-                if "latin" not in scripts:
-                    raise FieldValueError("field_unreadable")
-                prev_ok = prev_letter = True
-            else:
-                prev_ok, prev_letter = ch.isdigit(), False
+        if ord(ch) < 0x80:
+            prev_ok, prev_letter = _ascii_char(ch, scripts)
             run = 0
-            continue
-        cat = unicodedata.category(ch)
-        if ch in (_ZWJ, _ZWNJ):
+        elif ch in (_ZWJ, _ZWNJ):
             if not (joiners and prev_ok and i + 1 < len(text)):
-                raise FieldValueError("field_unreadable")
+                raise _unreadable()
             prev_ok = prev_letter = False
             run = 0
-            continue
-        if cat[0] in "CZ":   # control, format, surrogate, private use, unassigned, non-ASCII separators
-            raise FieldValueError("field_unreadable")
-        script = _script_of(ch)
-        if script is None and cat[0] == "M" and unicodedata.name(ch, "").startswith("COMBINING "):
+        elif _generic_combining(ch):
             # A generic combining mark (inherited script) only sits on a letter of a declared script.
             run += 1
             if not prev_letter or run > MAX_COMBINING_RUN:
-                raise FieldValueError("field_unreadable")
-            continue
-        if script is None or script not in scripts:
-            raise FieldValueError("field_unreadable")
-        prev_ok = cat[0] in "LMN"
-        prev_letter = cat[0] in "LM"
-        run = 0
+                raise _unreadable()
+        else:
+            prev_ok, prev_letter = _script_char(ch, scripts)
+            run = 0
 
 
 def normalize_text(value: Any, charset: str, scripts: str | None = None) -> str:
@@ -272,6 +287,50 @@ def field_name(name: Any, where: str) -> str:
     return name
 
 
+def _integer_bounds(out: dict, defn: Mapping[str, Any], where: str) -> None:
+    if "min" not in defn or "max" not in defn:
+        raise FieldError(f"{where}: integer needs min and max")
+    out["min"] = _safe_int(defn["min"], f"{where}.min")
+    out["max"] = _safe_int(defn["max"], f"{where}.max")
+    if out["min"] > out["max"]:
+        raise FieldError(f"{where}: min is greater than max")
+
+
+def _text_charset(out: dict, defn: Mapping[str, Any], where: str) -> None:
+    charset = defn.get("charset", "ascii")
+    if charset not in CHARSETS:
+        raise FieldError(f"{where}.charset: expected ascii or unicode")
+    out["charset"] = charset
+    if charset == "unicode":
+        scripts = defn.get("scripts")
+        if scripts not in SCRIPT_SETS:
+            raise FieldError(f"{where}.scripts: expected one of {sorted(SCRIPT_SETS)}")
+        out["scripts"] = scripts
+    elif "scripts" in defn:
+        raise FieldError(f"{where}.scripts: only valid with charset: unicode")
+
+
+def _enum_values(out: dict, defn: Mapping[str, Any], where: str) -> None:
+    values = defn.get("values")
+    if not isinstance(values, list) or not values:
+        raise FieldError(f"{where}.values: expected a non-empty list")
+    if len(values) > MAX_ENUM_VALUES:
+        raise FieldError(f"{where}.values: more than {MAX_ENUM_VALUES} values")
+    members = [_text_member(out, v, f"{where}.values[{i}]") for i, v in enumerate(values)]
+    if any(not m for m in members):
+        raise FieldError(f"{where}.values: an empty value is not allowed")
+    if len(set(members)) != len(members):
+        raise FieldError(f"{where}.values: two values are the same after normalization")
+    out["values"] = sorted(members)
+
+
+def _string_limit(out: dict, defn: Mapping[str, Any], where: str) -> None:
+    limit = defn.get("max_length")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_STRING_LENGTH:
+        raise FieldError(f"{where}.max_length: expected an integer from 1 to {MAX_STRING_LENGTH}")
+    out["max_length"] = limit
+
+
 def _definition(name: str, defn: Any) -> dict:
     where = f"fields.{name}"
     if not isinstance(defn, Mapping):
@@ -286,41 +345,13 @@ def _definition(name: str, defn: Any) -> dict:
         raise FieldError(f"{where}.default: required (the value for tools that do not map this field)")
     out: dict[str, Any] = {"type": kind}
     if kind == "integer":
-        if "min" not in defn or "max" not in defn:
-            raise FieldError(f"{where}: integer needs min and max")
-        out["min"] = _safe_int(defn["min"], f"{where}.min")
-        out["max"] = _safe_int(defn["max"], f"{where}.max")
-        if out["min"] > out["max"]:
-            raise FieldError(f"{where}: min is greater than max")
+        _integer_bounds(out, defn, where)
     if kind in ("enum", "string"):
-        charset = defn.get("charset", "ascii")
-        if charset not in CHARSETS:
-            raise FieldError(f"{where}.charset: expected ascii or unicode")
-        out["charset"] = charset
-        if charset == "unicode":
-            scripts = defn.get("scripts")
-            if scripts not in SCRIPT_SETS:
-                raise FieldError(f"{where}.scripts: expected one of {sorted(SCRIPT_SETS)}")
-            out["scripts"] = scripts
-        elif "scripts" in defn:
-            raise FieldError(f"{where}.scripts: only valid with charset: unicode")
+        _text_charset(out, defn, where)
     if kind == "enum":
-        values = defn.get("values")
-        if not isinstance(values, list) or not values:
-            raise FieldError(f"{where}.values: expected a non-empty list")
-        if len(values) > MAX_ENUM_VALUES:
-            raise FieldError(f"{where}.values: more than {MAX_ENUM_VALUES} values")
-        members = [_text_member(out, v, f"{where}.values[{i}]") for i, v in enumerate(values)]
-        if any(not m for m in members):
-            raise FieldError(f"{where}.values: an empty value is not allowed")
-        if len(set(members)) != len(members):
-            raise FieldError(f"{where}.values: two values are the same after normalization")
-        out["values"] = sorted(members)
+        _enum_values(out, defn, where)
     if kind == "string":
-        limit = defn.get("max_length")
-        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_STRING_LENGTH:
-            raise FieldError(f"{where}.max_length: expected an integer from 1 to {MAX_STRING_LENGTH}")
-        out["max_length"] = limit
+        _string_limit(out, defn, where)
     try:
         out["default"] = coerce_value(out, defn["default"])
     except FieldValueError:

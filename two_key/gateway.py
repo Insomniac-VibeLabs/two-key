@@ -77,7 +77,8 @@ class TwoKeyDeploymentWarning(UserWarning):
 
 # Set by TwoKey on the ledger object it uses. A gateway on another object is not the supported deployment.
 _TWO_KEY_LEDGER_MARK = "_two_key_bound"
-_deployment_warned = False
+# Set once the warning has been emitted in this process. The lock makes check-and-set one step.
+_deployment_warned = threading.Event()
 _deployment_warned_guard = threading.Lock()
 
 
@@ -91,24 +92,22 @@ def mark_two_key_ledger(ledger) -> None:
 
 def _warn_unbound_ledger(ledger) -> None:
     """Warn, at most once per process, when ``ledger`` is not one a ``TwoKey`` here opened."""
-    global _deployment_warned
     if getattr(ledger, _TWO_KEY_LEDGER_MARK, False) is True:
         return
     with _deployment_warned_guard:
-        if _deployment_warned:
+        if _deployment_warned.is_set():
             return
-        _deployment_warned = True
+        _deployment_warned.set()
     warnings.warn("ToolGateway was given a ledger that no TwoKey in this process opened. A gateway in "
                   "another process or on another host is not supported (#45); it refuses tokens issued "
                   "after its ledger opened. Build it with TwoKey.gateway().",
                   TwoKeyDeploymentWarning, stacklevel=3)
 
 
-def _reset_deployment_warning() -> None:
-    """For tests: let the next unbound ledger warn again."""
-    global _deployment_warned
+def reset_deployment_warning() -> None:
+    """Let the next unbound ledger warn again. Tests use this to check the warning more than once per process."""
     with _deployment_warned_guard:
-        _deployment_warned = False
+        _deployment_warned.clear()
 
 
 _BOUND_FIELDS = ("jti", "tool", "args_hash", "bytecode_hash", "nl_hash", "ledger_root", "ledger_size")

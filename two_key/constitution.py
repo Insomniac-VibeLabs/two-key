@@ -245,7 +245,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
     return out
 
 
-def load_unsigned(prose_path: Path | str, rules_path: Path | str) -> tuple[str, list, dict]:
+def load_unsigned(prose_path: Path | str, rules_path: Path | str) -> tuple[str, list, Mapping]:
     """Return prose, hard rules, and tool specs.
 
     ``tool_specs`` is required. A bare rule list, a missing key, and ``null``
@@ -260,7 +260,7 @@ def load_unsigned(prose_path: Path | str, rules_path: Path | str) -> tuple[str, 
     return prose, rules, specs
 
 
-def load_unsigned_with_fields(prose_path: Path | str, rules_path: Path | str) -> tuple[str, list, dict, dict]:
+def load_unsigned_with_fields(prose_path: Path | str, rules_path: Path | str) -> tuple[str, list, Mapping, dict]:
     """Return prose, hard rules, tool specs, and the canonical custom-field registry (empty if none)."""
     prose = Path(prose_path).read_text(encoding="utf-8")
     rules, specs, fields = _load_rules_document(Path(rules_path))
@@ -271,7 +271,7 @@ def load_unsigned_with_fields(prose_path: Path | str, rules_path: Path | str) ->
     return prose, validate_rules(rules, fields=registry), specs, registry
 
 
-def _load_rules_document(path: Path) -> tuple[list, dict, Any]:
+def _load_rules_document(path: Path) -> tuple[list, Mapping, Any]:
     if path.suffix.lower() != ".json":
         try:
             import yaml  # noqa: F401

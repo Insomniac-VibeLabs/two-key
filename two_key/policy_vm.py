@@ -264,6 +264,30 @@ def validate_rules(rules: Any, *, require_allow_list: bool = True, fields: Mappi
 _FIELD_OPS = {"eq": Op.EQ, "neq": Op.NEQ, "gt": Op.GT, "gte": Op.GTE, "lt": Op.LT, "lte": Op.LTE}
 
 
+def _compile_field_condition(name: str, op_name: str, lit: Any) -> list[tuple]:
+    """One condition: LOAD_FIELD, PUSH, compare. ``not_in`` is IN then NOT."""
+    part: list[tuple] = [(Op.LOAD_FIELD, name), (Op.PUSH, lit)]
+    if op_name in ("in", "not_in"):
+        part.append((Op.IN,))
+        if op_name == "not_in":
+            part.append((Op.NOT,))
+    else:
+        part.append((_FIELD_OPS[op_name],))
+    return part
+
+
+def _compile_field_rule(body: Mapping) -> list[tuple]:
+    """A deny_if_fields block: allowed iff NOT(every condition holds). Custom fields load with LOAD_FIELD only."""
+    out: list[tuple] = []
+    conditions = [(name, op_name) for name in sorted(body) for op_name in sorted(body[name])]
+    for j, (name, op_name) in enumerate(conditions):
+        out += _compile_field_condition(name, op_name, body[name][op_name])
+        if j:
+            out.append((Op.AND,))
+    out.append((Op.NOT,))
+    return out
+
+
 def compile_constitution(
     rules: Iterable[Mapping] | list,
     *,
@@ -282,24 +306,7 @@ def compile_constitution(
         elif "deny_counterparties" in rule:
             bc += [(Op.LOAD, "counterparty"), (Op.PUSH, rule["deny_counterparties"]), (Op.IN,), (Op.NOT,)]
         elif "deny_if_fields" in rule:
-            # allowed iff NOT(every condition holds). Custom fields load with LOAD_FIELD only.
-            parts = []
-            for name in sorted(rule["deny_if_fields"]):
-                for op_name in sorted(rule["deny_if_fields"][name]):
-                    lit = rule["deny_if_fields"][name][op_name]
-                    part = [(Op.LOAD_FIELD, name), (Op.PUSH, lit)]
-                    if op_name in ("in", "not_in"):
-                        part.append((Op.IN,))
-                        if op_name == "not_in":
-                            part.append((Op.NOT,))
-                    else:
-                        part.append((_FIELD_OPS[op_name],))
-                    parts.append(part)
-            for j, p in enumerate(parts):
-                bc += p
-                if j:
-                    bc.append((Op.AND,))
-            bc.append((Op.NOT,))
+            bc += _compile_field_rule(rule["deny_if_fields"])
         elif "deny_if_irreversible_over" in rule:
             # allowed iff (not irreversible) OR (amount <= limit)
             bc += [(Op.LOAD, "irreversible"), (Op.NOT,),

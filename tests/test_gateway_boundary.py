@@ -29,8 +29,8 @@ class GatewayBoundary(unittest.TestCase):
         self.path = Path(self.tmp.name, "ledger")
         self.env = sign_constitution("Searching is fine.", RULES, self.key, SPECS)
         self.tk = self._two_key(private_key=self.key)
-        gateway_mod._reset_deployment_warning()
-        self.addCleanup(gateway_mod._reset_deployment_warning)
+        gateway_mod.reset_deployment_warning()
+        self.addCleanup(gateway_mod.reset_deployment_warning)
         self.calls = []
 
     def _two_key(self, **kw):

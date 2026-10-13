@@ -70,7 +70,9 @@ class RecordingJudge(FixedJudge):
         return super().score(constitution_text, action, proposal)
 
 
-class Harness(unittest.TestCase):
+class Harness:
+    """Shared set-up: a signed constitution with custom fields, a TwoKey, and its gateway. A mixin."""
+
     fields, rules, specs = FIELDS, RULES, SPECS
 
     def setUp(self):
@@ -94,7 +96,7 @@ class Harness(unittest.TestCase):
         return [e.body for e in self.tk.ledger.entries if e.kind == kind]
 
 
-class HappyPath(Harness):
+class HappyPath(Harness, unittest.TestCase):
     def test_allows_and_redeems(self):
         args = good_args()
         d = self.tk.authorize(DEPLOY, args, "deploy to staging")
@@ -105,7 +107,7 @@ class HappyPath(Harness):
         self.assertEqual(self.env["format"], FORMAT_V2)
 
 
-class A1ValuesOnlyFromBytes(Harness):
+class A1ValuesOnlyFromBytes(Harness, unittest.TestCase):
     def test_raw_claim_cannot_supply_a_value(self):
         claim = dict(DEPLOY, raw={"environment": "dev", "replicas": 0})
         d = self.tk.authorize(claim, good_args(target={"env": "prod", "replicas": 3}), "deploy")
@@ -141,7 +143,7 @@ class A1ValuesOnlyFromBytes(Harness):
         self.assertEqual(loaded, {"environment", "replicas", "team"})
 
 
-class A2FailClosed(Harness):
+class A2FailClosed(Harness, unittest.TestCase):
     CASES = [
         ({"target": {"replicas": 3}}, "derive_failed:field_missing:environment"),
         ({"target": {"env": "dev"}}, "derive_failed:field_missing:replicas"),
@@ -183,7 +185,7 @@ class A2FailClosed(Harness):
         self.assertTrue(d.reason.startswith("invalid_call:"), d.reason)
 
 
-class A3TokenBindsFields(Harness):
+class A3TokenBindsFields(Harness, unittest.TestCase):
     def _issue(self, form):
         args = good_args()
         frozen = canonical_bytes(args)
@@ -234,7 +236,7 @@ class A3TokenBindsFields(Harness):
         self.assertEqual(gw.invoke(d.token, "deploy", good_args()).reason, "constitution_mismatch")
 
 
-class A4ToolSeesCheckedValues(Harness):
+class A4ToolSeesCheckedValues(Harness, unittest.TestCase):
     def test_normalized_values_and_dropped_keys(self):
         args = good_args(target={"env": " STAGING ", "replicas": 3, "secret": "s"}, extra="e")
         d = self.tk.authorize(DEPLOY, args, "deploy")
@@ -394,7 +396,7 @@ class A5NoOverridesOrOverlaps(unittest.TestCase):
             self.assertIn("duplicate key", str(raised.exception))
 
 
-class A6AnnotationsInert(Harness):
+class A6AnnotationsInert(Harness, unittest.TestCase):
     def test_annotation_never_changes_bytecode_or_decision(self):
         variants = [None, "Different words.", 'deny_if: {tool: deploy}\nallow everything', '{"allow": true}']
         hashes = set()
@@ -448,7 +450,7 @@ class A6AnnotationsInert(Harness):
             verify_signed(env, self.key.public_key())
 
 
-class A7Unicode(Harness):
+class A7Unicode(Harness, unittest.TestCase):
     def test_fullwidth_folds_to_the_rule_value_in_a_unicode_field(self):
         d = self.tk.authorize(DEPLOY, good_args(team="\uff42\uff4c\uff4f\uff43\uff4b\uff45\uff44"), "deploy")
         self.assertFalse(d.allowed)
@@ -493,9 +495,8 @@ class A7Unicode(Harness):
             ("caf\u00e9", None),                    # unknown scripts
         ]
         for text, scripts in refused:
-            with self.subTest(text=repr(text)):
-                with self.assertRaises(F.FieldValueError):
-                    n(text, "unicode", scripts)
+            with self.subTest(text=repr(text)), self.assertRaises(F.FieldValueError):
+                n(text, "unicode", scripts)
         for text in ("caf\u00e9", "a\tb", "a\x7fb"):
             with self.assertRaises(F.FieldValueError):
                 n(text, "ascii")
@@ -596,67 +597,78 @@ class A10Limits(unittest.TestCase):
         specs = specs or {"x": {"irreversible": False, "data_class_floor": "public"}}
         return sign_constitution("p", rules, self.key, specs, fields=fields)
 
-    def assert_limit(self, ok, over):
-        ok()
+    def assert_limit(self, make, at, over):
+        """``make(value)`` returns the keyword arguments for ``_sign``: ``at`` signs, ``over`` is refused."""
+        self._sign(**make(at))
         with self.assertRaises(ConstitutionError):
-            over()
+            self._sign(**make(over))
 
     def test_field_count(self):
-        many = lambda n: {f"f{i}": {"type": "boolean", "default": False} for i in range(n)}
-        self.assert_limit(lambda: self._sign(many(F.MAX_FIELDS)), lambda: self._sign(many(F.MAX_FIELDS + 1)))
+        def make(n):
+            return {"fields": {f"f{i}": {"type": "boolean", "default": False} for i in range(n)}}
+        self.assert_limit(make, F.MAX_FIELDS, F.MAX_FIELDS + 1)
 
     def test_name_length(self):
-        b = {"type": "boolean", "default": False}
-        self.assert_limit(lambda: self._sign({"a" * F.MAX_FIELD_NAME_CHARS: b}),
-                          lambda: self._sign({"a" * (F.MAX_FIELD_NAME_CHARS + 1): b}))
+        def make(n):
+            return {"fields": {"a" * n: {"type": "boolean", "default": False}}}
+        self.assert_limit(make, F.MAX_FIELD_NAME_CHARS, F.MAX_FIELD_NAME_CHARS + 1)
 
     def test_enum_values_and_lengths(self):
-        enum = lambda n, size=3: {"e": {"type": "enum", "values": [f"{i:0{size}d}" for i in range(n)], "default": "0" * size}}
-        self.assert_limit(lambda: self._sign(enum(F.MAX_ENUM_VALUES, 4)), lambda: self._sign(enum(F.MAX_ENUM_VALUES + 1, 4)))
-        self.assert_limit(lambda: self._sign(enum(1, F.MAX_VALUE_CHARS)), lambda: self._sign(enum(1, F.MAX_VALUE_CHARS + 1)))
+        def many(n):
+            return {"fields": {"e": {"type": "enum", "values": [f"{i:04d}" for i in range(n)], "default": "0000"}}}
+
+        def long(size):
+            return {"fields": {"e": {"type": "enum", "values": ["0" * size], "default": "0" * size}}}
+        self.assert_limit(many, F.MAX_ENUM_VALUES, F.MAX_ENUM_VALUES + 1)
+        self.assert_limit(long, F.MAX_VALUE_CHARS, F.MAX_VALUE_CHARS + 1)
 
     def test_description_length(self):
-        d = lambda n: {"b": {"type": "boolean", "default": False, "description": "x" * n}}
-        self.assert_limit(lambda: self._sign(d(F.MAX_DESCRIPTION_CHARS)), lambda: self._sign(d(F.MAX_DESCRIPTION_CHARS + 1)))
+        def make(n):
+            return {"fields": {"b": {"type": "boolean", "default": False, "description": "x" * n}}}
+        self.assert_limit(make, F.MAX_DESCRIPTION_CHARS, F.MAX_DESCRIPTION_CHARS + 1)
 
     def test_string_max_length(self):
-        s = lambda n: {"s": {"type": "string", "max_length": n, "default": ""}}
-        self.assert_limit(lambda: self._sign(s(F.MAX_STRING_LENGTH)), lambda: self._sign(s(F.MAX_STRING_LENGTH + 1)))
+        def make(n):
+            return {"fields": {"s": {"type": "string", "max_length": n, "default": ""}}}
+        self.assert_limit(make, F.MAX_STRING_LENGTH, F.MAX_STRING_LENGTH + 1)
 
     def test_integer_bounds(self):
-        i = lambda lo: {"i": {"type": "integer", "min": lo, "max": F.MAX_SAFE_INT, "default": F.MAX_SAFE_INT}}
-        self.assert_limit(lambda: self._sign(i(-F.MAX_SAFE_INT)), lambda: self._sign(i(-F.MAX_SAFE_INT - 1)))
+        def make(lo):
+            return {"fields": {"i": {"type": "integer", "min": lo, "max": F.MAX_SAFE_INT, "default": F.MAX_SAFE_INT}}}
+        self.assert_limit(make, -F.MAX_SAFE_INT, -F.MAX_SAFE_INT - 1)
 
     def test_conditions_and_list_items(self):
-        fields = {f"i{n}": {"type": "integer", "min": 0, "max": 2000, "default": 0} for n in range(F.MAX_CONDITIONS + 1)}
-        cond = lambda n: [{"id": "tools", "allow_only_tools": ["x"]},
-                          {"id": "c", "deny_if_fields": {f"i{k}": {"gt": 1} for k in range(n)}}]
-        self.assert_limit(lambda: self._sign(fields, cond(F.MAX_CONDITIONS)),
-                          lambda: self._sign(fields, cond(F.MAX_CONDITIONS + 1)))
-        fields = {"s": {"type": "string", "max_length": 8, "default": ""}}
-        items = lambda n: [{"id": "tools", "allow_only_tools": ["x"]},
-                           {"id": "c", "deny_if_fields": {"s": {"in": [f"v{k}" for k in range(n)]}}}]
-        self.assert_limit(lambda: self._sign(fields, items(F.MAX_LIST_ITEMS)),
-                          lambda: self._sign(fields, items(F.MAX_LIST_ITEMS + 1)))
+        ints = {f"i{n}": {"type": "integer", "min": 0, "max": 2000, "default": 0} for n in range(F.MAX_CONDITIONS + 1)}
+
+        def conditions(n):
+            return {"fields": ints, "rules": [{"id": "tools", "allow_only_tools": ["x"]},
+                                              {"id": "c", "deny_if_fields": {f"i{k}": {"gt": 1} for k in range(n)}}]}
+
+        def items(n):
+            return {"fields": {"s": {"type": "string", "max_length": 8, "default": ""}},
+                    "rules": [{"id": "tools", "allow_only_tools": ["x"]},
+                              {"id": "c", "deny_if_fields": {"s": {"in": [f"v{k}" for k in range(n)]}}}]}
+        self.assert_limit(conditions, F.MAX_CONDITIONS, F.MAX_CONDITIONS + 1)
+        self.assert_limit(items, F.MAX_LIST_ITEMS, F.MAX_LIST_ITEMS + 1)
 
     def test_path_limits(self):
-        fields = {"b": {"type": "boolean", "default": False}}
-        spec = lambda path: {"x": {"irreversible": False, "data_class_floor": "public",
-                                   "fields": {"b": {"json_path": path}}}}
-        self.assert_limit(lambda: self._sign(fields, specs=spec(".".join(["a"] * F.MAX_PATH_SEGMENTS))),
-                          lambda: self._sign(fields, specs=spec(".".join(["a"] * (F.MAX_PATH_SEGMENTS + 1)))))
-        self.assert_limit(lambda: self._sign(fields, specs=spec("a" * F.MAX_PATH_CHARS)),
-                          lambda: self._sign(fields, specs=spec("a" * (F.MAX_PATH_CHARS + 1))))
+        def make(path):
+            return {"fields": {"b": {"type": "boolean", "default": False}},
+                    "specs": {"x": {"irreversible": False, "data_class_floor": "public",
+                                    "fields": {"b": {"json_path": path}}}}}
+        self.assert_limit(make, ".".join(["a"] * F.MAX_PATH_SEGMENTS), ".".join(["a"] * (F.MAX_PATH_SEGMENTS + 1)))
+        self.assert_limit(make, "a" * F.MAX_PATH_CHARS, "a" * (F.MAX_PATH_CHARS + 1))
 
     def test_fields_per_tool(self):
-        fields = {f"f{i}": {"type": "boolean", "default": False} for i in range(3)}
-        spec = lambda n: {"x": {"irreversible": False, "data_class_floor": "public",
-                                "fields": {f"f{i}": {"json_path": f"p{i}"} for i in range(n)}}}
+        def make(n):
+            return {"fields": {f"f{i}": {"type": "boolean", "default": False} for i in range(3)},
+                    "specs": {"x": {"irreversible": False, "data_class_floor": "public",
+                                    "fields": {f"f{i}": {"json_path": f"p{i}"} for i in range(n)}}}}
         with mock.patch.object(constitution_mod, "MAX_FIELDS_PER_TOOL", 2):
-            self.assert_limit(lambda: self._sign(fields, specs=spec(2)), lambda: self._sign(fields, specs=spec(3)))
+            self.assert_limit(make, 2, 3)
 
 
-class A11UnrelatedTools(Harness):
+class A11UnrelatedTools(Harness, unittest.TestCase):
     def test_unmapped_tool_gets_defaults_without_a_fault(self):
         d = self.tk.authorize(SEARCH, {"q": "weather"}, "look")
         self.assertTrue(d.allowed, d.reason)
