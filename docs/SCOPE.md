@@ -12,8 +12,13 @@ It has:
 - Path B judge hooks for xAI, OpenAI-compatible APIs, Anthropic, Gemini, and local Ollama. One judge by default, no diversity floors; `high_assurance` turns them on. No judge may be the monitored agent (a judge holding its credential, the same API token or the same username and password, at any address and whether or not either side sends it; or both keyless on one address); other overlaps warn. After a derive deny, argument bytes are withheld from judges unless `tool_args_on_derive_deny` is set. Path B still runs
 - monitored-agent hooks; `authorize_from_agent` does not execute a tool
 - an AES-256-GCM ledger, a ledger key, and a witness key outside the ledger directory. The witness public key is pinned in the ledger (`witness_pinned`) and, optionally, outside it (`witness_public_key=`, `--witness-public-key`); it changes only by a ledgered `witness_rotated` entry (`two-key rotate-witness`). A head anchor beside the ledger key (`head.anchor`, or `--head-anchor`) refuses a rollback or wipe of the ledger directory alone; deleting that file accepts the ledger as it stands. `two-key recover` drops an uncheckpointed tail and does not run on open. `two-key audit` reports both pins
-- a capability key outside the ledger directory. The gateway verifies with the public half only
-- a single-use token and a gateway that alone is meant to run the tool
+- a capability key outside the ledger directory. The gateway verifies
+  tokens with the public half only. Today it shares the `TwoKey` process
+  and ledger object; separate-process/host isolation and a gateway-only
+  ledger role are designed but not yet built (#45)
+- a single-use token and a gateway intended to be the only component that
+  invokes registered tools; this does not stop an agent from calling a
+  tool directly through another path
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/identity.py` (judge ≠ agent),
