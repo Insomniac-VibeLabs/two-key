@@ -51,7 +51,7 @@ flowchart TD
   envelope --> load["verify_signed<br/>fail-closed on any change"]
   load --> compiled["CompiledConstitution<br/>bytecode + tool_specs"]
   compiled --> pathA["Path A Policy VM<br/>uses bytecode + derived fields"]
-  compiled --> pathB["Path B judges<br/>see prose only"]
+  compiled --> pathB["Path B judges<br/>see constitution prose + normalized action record"]
 ```
 
 A bare rule list, a missing
