@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
+from .action import DATA_CLASSES, DEFAULT_DATA_CLASS
 from .derive import MAX_ARGS_BYTES
 from .judges.config import JudgeConfigError, build_credential
 from .judges.credentials import CredentialError, CredentialProvider, NoCredential, basic_authorization
@@ -43,7 +44,9 @@ SYSTEM = (
     "Reply with ONLY a JSON object and nothing else, with exactly these keys: "
     '"tool" (string), "arguments" (object), "proposal" (short string), and optionally '
     '"amount_usd" (number), "counterparty" (string), "data_class" (string), "irreversible" (boolean). '
-    "Do not add other keys."
+    "Do not add other keys. "
+    f'"data_class" is one of {", ".join(DATA_CLASSES)}. '
+    f'Omitting "data_class" means {DEFAULT_DATA_CLASS}, whatever the tool is.'
 )
 _CONSTITUTION_END = "</principal_constitution>\n\n"
 

@@ -1516,3 +1516,14 @@ legitimate calls allowed; every safety check held).
   hash test reads a frozen copy of the old prose
   (`tests/fixtures/v1_constitution.md`); its hashes are unchanged.
 - AGENTS.md: keep the `classified` default; no display-name mapping.
+
+## Agent prompt names the data classes — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. The agent system prompt
+changes; nothing Path A or Path B checks changes.
+
+- `two_key.agents.SYSTEM` lists the five data classes (`DATA_CLASSES`) and
+  says that omitting `data_class` means `classified`, whatever the tool is.
+  The `classified` default stays: it is not lowered to the tool's floor.
+- `tests/test_agent_prompt.py` pins both, and that the user prompt still
+  carries only the prose and the instruction.

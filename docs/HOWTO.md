@@ -821,6 +821,8 @@ model. Hosting is recorded. It is not trust.
 instruction. It does not send `tool_specs`, so the agent learns tool ids,
 argument keys, counterparty ids, and data classes only from the prose
 (see [Designing a constitution](#designing-a-constitution), point 6).
+The system prompt lists the five data classes and says that omitting
+`data_class` means `classified`.
 
 `authorize_from_agent` parses the proposal (`tool`, `arguments`, `proposal`,
 and optional structured fields) and runs both paths. It does not call the
