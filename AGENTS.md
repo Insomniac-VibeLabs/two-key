@@ -10,7 +10,8 @@ any LLM reader is in [llms.txt](llms.txt). Do not replace one with the other.
 
 Concept line only: signed constitution, Path A bytecode, Path B judge hooks,
 monitored-agent hooks, encrypted ledger, single-use capability token, and a
-verify-only gateway. Prototype. Apache-2.0.
+verify-only gateway. Beta (pre-1.0), maintainer-reviewed, not independently
+audited. Apache-2.0.
 
 Do **not** add a scanning or antivirus engine, chain anchoring, or seed
 phrases here. The items in [ROADMAP.md](ROADMAP.md) are in scope: key backup
@@ -21,8 +22,9 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.3.0 is tag `v0.3.0` on `main`. Tag `v0.2.4` stays on `fc836bb`.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.3.0` or `v0.2.0`
+- Package 0.3.1 is tag `v0.3.1` on `main`. Tag `v0.3.0` stays on `e44be56`.
+  Tag `v0.2.4` stays on `fc836bb`.
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.3.1`, `v0.3.0`, or `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
   where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
@@ -33,7 +35,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key-concept`, import name `two_key`,
-version `0.3.0`, tag `v0.3.0` on `main`. Not on PyPI.
+version `0.3.1`, tag `v0.3.1` on `main`. Not on PyPI.
 
 ```bash
 python3 -m venv .venv
@@ -57,7 +59,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 
 Git install:  
-`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.0"`
+`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.1"`
 
 ## Tests and docs
 
@@ -80,9 +82,8 @@ live outside the ledger directory. The gateway must verify only; it must not
 mint.
 
 Before changing authorization, tokens, the gateway, the ledger, or judge ≠
-agent identity checks: get a security review from the maintainer. While this is
-a prototype, report security findings as public issues, per
-[SECURITY.md](SECURITY.md).
+agent identity checks: get a security review from the maintainer. Report
+security findings privately, per [SECURITY.md](SECURITY.md).
 
 ## Fail-closed defaults to preserve
 

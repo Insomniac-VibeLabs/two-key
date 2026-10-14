@@ -1,13 +1,14 @@
 # Security
 
-This is a prototype and a public concept. It has had no independent review and
-has no production use. Security findings are welcome as public issues on this
-repository: the project would rather have them seen and argued over than
-hidden. State what the code does, what the docs claim, and how you checked.
+Status: beta (pre-1.0). The maintainer reviews changes with live LLM testing
+(a refereed functional harness) and automated scanners (Semgrep, DeepSource,
+Bandit, CodeQL). There has been no independent or paid audit, and no
+production use is claimed.
 
-Private vulnerability reporting (the repository's Security tab, "Report a
-vulnerability") will become the channel once the product is more mature and in
-use. This file will say so when that happens.
+Report a vulnerability privately: the repository's Security tab, "Report a
+vulnerability". State what the code does, what the docs claim, and how you
+checked. Hardening ideas and documentation errors that do not expose users
+are welcome as public issues.
 
 The threat model is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). This file
 is how to report a vulnerability. It is not the model.

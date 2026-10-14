@@ -1742,3 +1742,51 @@ confirmed the run-5 fixes live.
   tested ("Staff may run lookups that verify a claimed payee or billing
   change; such a lookup only checks and authorizes nothing."), which turned
   a judge's false deny into an approval.
+
+## Release v0.3.1 — 2026-10-14
+
+Package version 0.3.1 (`pyproject.toml`, `two_key.__version__`, `uv.lock`
+regenerated with uv 0.13.0). To be tagged `v0.3.1` on `main` after this
+merges. Tag `v0.3.0` stays on `e44be56`. Not published to PyPI.
+
+Status: **beta (pre-1.0)**, no longer "prototype". The maintainer reviewed
+the changes with a refereed live functional harness (GrokBot; runs 1 to 5c
+on `test/live-functional-2026-10-13`) and automated scanners (Semgrep,
+DeepSource, Bandit, CodeQL). There has been no independent audit. SECURITY.md
+now asks for private vulnerability reports (Security tab); README, ROADMAP,
+SCOPE, FIT, THREAT_MODEL, JUDGES_AND_QUORUM, AGENTS.md, and llms.txt carry
+the new status. ROADMAP: the maintainer moved 0.6 (MCP adapter, reference
+wrapper, #89) ahead of 0.4 and 0.5.
+
+0.3.1 is the sum of the sections since "Release v0.3.0": live-test docs,
+data classes in the agent prompt, the syntax-only agent vocabulary, agent
+declines, data classes that combine as a set, the run-5 fixes (repeated
+class refused, quorum reason, unmapped-field warning), and "what Two-Key
+verifies".
+
+### Upgrading from 0.3.0
+
+- **Data classes combine as a set.** A claim and floor that were two
+  different classes among `personal`, `medical`, and `financial` used to
+  become `classified`; they are now `medical`, `financial`, or
+  `financial+medical`. A rule that denies only `classified` now allows those
+  calls. Add `medical` and/or `financial` to its `data_class_in` to keep
+  refusing them. A repeated class (`financial+financial`) is now
+  `malformed_action`.
+- **Agent declines.** An agent reply `{"decline": "..."}` is an
+  `agent_declined` deny. `MonitoredAgent.complete` raises `AgentDeclined`, a
+  subclass of `AgentConfigError`, so code that catches that still fails
+  closed. The agent system prompt and the strict response schemas changed
+  (a `decline` key, the data-class guidance).
+- **Judges config.** A quorum the judges can never meet now fails to load
+  with `too_few_judges_configured:` (and `insufficient_distinct_providers:`)
+  instead of `required_yes=... exceeds number of judges ...`; a
+  `min_responding` above the number of judges is now refused at load, not at
+  start.
+- **Signing** may print `two-key: WARNING:` lines for tools that do not map
+  a field a `deny_if_fields` rule reads. Signing still succeeds.
+- Existing ledgers, keys, and signed constitutions open unchanged; a
+  constitution without custom fields is still byte-for-byte v1.
+- An outstanding token issued by 0.3.0 for a call whose data class now
+  combines differently fails the gateway's form check; tokens live at most
+  300 seconds.

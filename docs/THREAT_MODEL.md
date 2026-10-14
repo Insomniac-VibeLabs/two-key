@@ -1,8 +1,9 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.3.0. Tag `v0.3.0` on `main` is the tagged release. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
-It is not a penetration test and it is not an independent review. The package is a
-prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
+This is the design model for `two-key-concept` 0.3.1. Tag `v0.3.1` on `main` is the tagged release. Tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+It is not a penetration test and it is not an independent review. The package is
+beta (pre-1.0): maintainer-reviewed with live LLM testing and automated
+scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
 
 How to report a vulnerability is [SECURITY.md](../SECURITY.md). The longer
@@ -360,7 +361,7 @@ claims to close.
 
 ## Out of scope
 
-- The prototype status itself and missing FIPS validation. A planned
+- The lack of an independent audit, and missing FIPS validation. A planned
   approved mode (see [ROADMAP.md](../ROADMAP.md)) would run on a validated
   module. It would not validate this package.
 - Prompt injection that Path A denies because the structured record tripped
