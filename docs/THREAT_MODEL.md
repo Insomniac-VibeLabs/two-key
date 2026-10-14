@@ -62,8 +62,11 @@ the code wins, then this file should be corrected.
   it, the syntax-only `agent_vocabulary()`. It never gets bytecode, an
   `allow` list, a rule, a threshold, or a credential. Ids written in the
   prose or the instruction do reach it and its host.
-- Agent to `authorize_from_agent`. The reply is a proposal. The method does
-  not execute a tool. A cloud judge must not reuse an agent credential.
+- Agent to `authorize_from_agent`. The reply is a proposal or a decline. The
+  method does not execute a tool. A decline (`agent_declined`) runs neither
+  path and issues no token; a decline mixed with a call is
+  `malformed_proposal`. A hostile agent can decline to deny service, as it
+  already could with a bad proposal; it cannot turn a decline into an allow. A cloud judge must not reuse an agent credential.
   A missing session is a deny (`cloud_judge_session_required`).
 - Caller to Path A. The VM sees the normalized action record, not the proposal.
 - Caller to Path B. Judges see the constitution prose and the normalized

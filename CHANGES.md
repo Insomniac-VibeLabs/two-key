@@ -1613,3 +1613,35 @@ docstring.
   prompt names the data classes"). AGENTS.md, the "Opt-in tool vocabulary"
   entry above, and the `user_prompt` docstring now say so.
 - Every Mermaid block in README and HOWTO renders with Mermaid 11.4.1.
+
+## Agent declines — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Changes
+`authorize_from_agent` and the agent reply format; reviewed and approved by
+the maintainer before the change (AGENTS.md "Crypto and security changes").
+From the run-2 live test: 8 refusals arrived as `tool: "none"` calls.
+
+- An agent may reply `{"decline": "<reason>"}`. A schema-forced reply
+  (OpenAI and xAI strict schema) may carry the call keys too, empty:
+  `"tool": ""`, `"arguments": "{}"`, optional keys `null`. The strict and
+  Gemini response schemas gain a `decline` key; the system prompt says how
+  to decline.
+- `parse_proposal` raises `AgentDeclined` (a subclass of
+  `AgentConfigError`, so older callers fail closed); `MonitoredAgent.complete`
+  raises it too. `authorize_from_agent` returns a deny with reason
+  `agent_declined`: neither path runs, no token is issued, and the ledger
+  `decision` keeps the reason (at most `MAX_DECLINE_CHARS`, 1,000) plus the
+  reply's size and digest.
+- A decline that also names a tool, carries arguments or a claim, has an
+  unknown key, or has an empty, non-string, or over-long reason is
+  `malformed_proposal`. `"decline": null` is an ordinary call.
+- `tests/test_agent_decline.py`: no token, no path, no judge call, ledger
+  body, mixed replies, strict-schema shape, `complete()` raising.
+- HOWTO "Monitored agents" has a "Declines" section (replacing "there is no
+  decline reply yet"). README (text and request-flow diagram),
+  THREAT_MODEL, SECURITY.md (in scope), AGENTS.md, and llms.txt match.
+- HOWTO "Designing a constitution": point 4 suggests `deny_unmapped: true`
+  for send tools (a hidden `bcc` becomes a Path A deny); point 7 says an
+  agent may repair a mistyped address to an allowed one, how to forbid that
+  in the prose, and that only the agent can apply it (judges never see the
+  instruction).

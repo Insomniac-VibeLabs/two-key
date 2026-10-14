@@ -97,8 +97,9 @@ argument paths, value syntax, floors, field types, data classes; never a value: 
 enum value, integer bound, rule, threshold, blocked party, description, default, or
 irreversible flag; grants nothing). Exact values (payee id, enum value) come from the
 instruction or the prose; ids in the prose reach the agent too. An agent proposal that omits data_class is classified, whatever the floor.
-No display-name-to-id mapping or fuzzy matching. There is no decline reply; a refusal shows up
-as a denied call. Judges do not enforce allow lists or data classes; Path A does.
+No display-name-to-id mapping or fuzzy matching. An agent declines with {"decline": "<reason>"}
+(call keys may be present only if empty): authorize_from_agent denies agent_declined, neither path
+runs, no token; complete() raises AgentDeclined. A decline mixed with a call is malformed_proposal. Judges do not enforce allow lists or data classes; Path A does.
 decision.reason names one cause (parse/limit/derive deny, then Path A, then Path B); read
 path_a.reason and path_b.reason too. judges.yaml and agents.yaml are trusted operator config:
 a callback auth entry imports the module it names.

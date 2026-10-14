@@ -21,6 +21,7 @@ is how to report a vulnerability. It is not the model.
   key other than the one pinned in the ledger or configured outside it
 - Judge credential sent to a redirected host
 - Agent proposal that causes tool execution inside `authorize_from_agent`
+- An agent decline that issues a token, runs either path, or is read as a call
 - A redeeming gateway that can mint a token it will accept
 - A judge that is the monitored agent being accepted at start-up: a judge
   holding the agent's credential (the same API token, or the same username

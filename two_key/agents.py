@@ -34,8 +34,11 @@ AGENT_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", 
 # A proposal carries arguments (at most MAX_ARGS_BYTES) plus prose; four times that is generous.
 # Longer text is refused before it is parsed.
 MAX_PROPOSAL_TEXT_CHARS = 4 * MAX_ARGS_BYTES
-_ALLOWED = {"tool", "arguments", "proposal", "amount_usd", "counterparty", "data_class", "irreversible"}
+_ALLOWED = {"tool", "arguments", "proposal", "amount_usd", "counterparty", "data_class", "irreversible", "decline"}
 _REQUIRED = {"tool", "arguments", "proposal"}
+# A decline is {"decline": "<reason>"}. A schema-forced reply may also carry the call keys, empty or null.
+MAX_DECLINE_CHARS = 1000
+_EMPTY_ARGUMENTS = (None, "", "{}", {})
 
 SYSTEM = (
     "You are a monitored agent. You may PROPOSE one tool call. You cannot execute tools, "
@@ -46,7 +49,9 @@ SYSTEM = (
     '"amount_usd" (number), "counterparty" (string), "data_class" (string), "irreversible" (boolean). '
     "Do not add other keys. "
     f'"data_class" is one of {", ".join(DATA_CLASSES)}. '
-    f'Omitting "data_class" means {DEFAULT_DATA_CLASS}, whatever the tool is.'
+    f'Omitting "data_class" means {DEFAULT_DATA_CLASS}, whatever the tool is. '
+    'To decline instead of proposing a call, reply {"decline": "<short reason>"}; if every key is required, '
+    'set "tool" to "", "arguments" to "{}", and the optional keys to null.'
 )
 _INSTRUCTION_START = "<untrusted_instruction>\n"
 # The vocabulary describes syntax, never values: no allow list, enum value, integer bound, rule
@@ -138,7 +143,8 @@ def _nullable(kind: str) -> dict:
 _PROPOSAL_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["tool", "arguments", "proposal", "amount_usd", "counterparty", "data_class", "irreversible"],
+    "required": ["tool", "arguments", "proposal", "amount_usd", "counterparty", "data_class", "irreversible",
+                 "decline"],
     "properties": {
         "tool": {"type": "string"},
         "arguments": {"type": "string"},
@@ -147,12 +153,21 @@ _PROPOSAL_SCHEMA = {
         "counterparty": _nullable("string"),
         "data_class": _nullable("string"),
         "irreversible": _nullable("boolean"),
+        "decline": _nullable("string"),
     },
 }
 
 
 class AgentConfigError(ValueError):
     pass
+
+
+class AgentDeclined(AgentConfigError):
+    """The agent declined: no call. A subclass, so a caller that only catches AgentConfigError fails closed."""
+
+    def __init__(self, reason: str):
+        super().__init__("agent declined")
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -193,13 +208,39 @@ def _loads_strict(text: str, what: str):
         raise AgentConfigError(f"{what} has a {msg}") from None
 
 
+def _decline_reason(obj: dict) -> str:
+    """A decline carries no call. One that also names a tool, arguments, or a claim is malformed, not a decline."""
+    if set(obj) - _ALLOWED:
+        raise AgentConfigError("a decline has no other keys")
+    reason = obj["decline"]
+    if not isinstance(reason, str) or not reason.strip():
+        raise AgentConfigError("decline must be a non-empty string")
+    if len(reason) > MAX_DECLINE_CHARS:
+        raise AgentConfigError(f"decline is longer than {MAX_DECLINE_CHARS} characters")
+    tool = obj.get("tool")
+    if tool is not None and (not isinstance(tool, str) or tool.strip()):
+        raise AgentConfigError("a decline names no tool")
+    if obj.get("arguments") not in _EMPTY_ARGUMENTS:
+        raise AgentConfigError("a decline carries no arguments")
+    if any(obj.get(k) is not None for k in ("amount_usd", "counterparty", "data_class", "irreversible")):
+        raise AgentConfigError("a decline carries no claim")
+    if obj.get("proposal") is not None and not isinstance(obj["proposal"], str):
+        raise AgentConfigError("proposal must be a string")
+    return reason.strip()
+
+
 def parse_proposal(text: str) -> tuple[dict, dict, str]:
-    """Parse an untrusted proposal. A duplicate key at any depth is refused, not last-one-wins."""
+    """Parse an untrusted proposal. A duplicate key at any depth is refused, not last-one-wins.
+
+    A decline raises ``AgentDeclined`` (an ``AgentConfigError``) with its reason: it is never a call.
+    """
     if not isinstance(text, str):
         raise AgentConfigError("agent proposal must be a string")
     if len(text) > MAX_PROPOSAL_TEXT_CHARS:
         raise AgentConfigError(f"agent proposal is longer than {MAX_PROPOSAL_TEXT_CHARS} characters")
     obj = _loads_strict(text.strip(), "agent proposal")
+    if isinstance(obj, dict) and obj.get("decline") is not None:
+        raise AgentDeclined(_decline_reason(obj))
     if not isinstance(obj, dict) or set(obj) - _ALLOWED or not _REQUIRED <= set(obj):
         raise AgentConfigError("agent proposal must contain tool, arguments, and proposal, and no other keys")
     if not isinstance(obj["tool"], str) or not obj["tool"].strip():
@@ -288,7 +329,8 @@ class MonitoredAgent:
                                          "responseSchema": {"type": "OBJECT", "required": ["tool", "arguments", "proposal"],
                                                             "properties": {"tool": {"type": "STRING"},
                                                                            "arguments": {"type": "STRING"},
-                                                                           "proposal": {"type": "STRING"}}}}}
+                                                                           "proposal": {"type": "STRING"},
+                                                                           "decline": {"type": "STRING"}}}}}
             return f"{self.base_url}/v1beta/models/{quote(self.model, safe='')}:generateContent", body
         if self.kind == "ollama":
             body = {"model": self.model, "stream": False, "format": "json", "keep_alive": "10m",

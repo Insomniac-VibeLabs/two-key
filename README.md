@@ -134,7 +134,8 @@ enum value, bound, or rule). The exact values a call needs, such as the
 payee id, come from the instruction or the prose (HOWTO "Designing a
 constitution"). Either way Path A checks every call.
 Its reply is data: `tool`, `arguments`, `proposal`, and optional structured
-fields. Omitting `data_class` means `classified`, whatever the tool's floor
+fields, or a decline (`{"decline": "<reason>"}`), which is a ledgered
+`agent_declined` deny with no token and neither path run. Omitting `data_class` means `classified`, whatever the tool's floor
 is. Extra keys are rejected. `authorize_from_agent` parses that JSON,
 records `agent id`, `hosting`, and `trusted: false`, and does not call the
 model again. Those fields are operator/library metadata (str, at most 256
@@ -239,8 +240,12 @@ sequenceDiagram
   participant Tool
 
   Caller->>Agent: instruction, constitution prose, opt-in vocabulary (syntax only)
-  Agent-->>Caller: JSON proposal, no tool call
+  Agent-->>Caller: JSON proposal or decline, no tool call
   Caller->>TwoKey: proposal and agent_session
+  alt agent declined
+    TwoKey->>Ledger: decision agent_declined, with the decline reason
+    TwoKey-->>Caller: deny, neither path runs, no token
+  end
   alt malformed or over a size limit
     Note over TwoKey: malformed_proposal, proposal_too_large, action_too_large, malformed_action, args_too_large, invalid_call
     TwoKey->>Ledger: decision with size and digest only

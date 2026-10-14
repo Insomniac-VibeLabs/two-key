@@ -109,10 +109,10 @@ The commands above sign a constitution. They do not design one. The operator own
 1. Define the tools and actions the agent is allowed to perform. Use an `allow_only_tools` rule. An allow-list is required by default so unknown tools fail closed.
 2. Define the actions it must never perform. Use `deny_if`, `deny_counterparties`, or `deny_if_irreversible_over` rules for the cases that must be hard denials.
 3. Specify tool arguments and their schemas in `tool_specs`. Path A derives the built-in structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`) from the argument bytes according to those specs. A claim that disagrees with the derived values is a deny. For facts the built-in fields do not cover (an environment, a region, a count, a flag), declare [custom fields](#custom-path-a-fields) and rules that name them.
-4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class. Omitting `data_class` means `classified`, whatever the floor is: if a rule denies `classified`, every call that does not claim a class is denied. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package.
+4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class. Omitting `data_class` means `classified`, whatever the floor is: if a rule denies `classified`, every call that does not claim a class is denied. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package. For a tool that sends data out (email, payments), consider `deny_unmapped: true`: a call that carries a key the spec does not name, such as a hidden `bcc`, is then a Path A deny, rather than resting on a judge's vote and the gateway dropping the key.
 5. Decide how many judges are needed and what their agreement threshold should be. At least one judge must be configured. The default approval threshold is `min(2, number_of_judges)`: one affirmative vote with one judge, or two affirmative votes with two or more judges. This is not a general majority rule. Set `required_yes` explicitly if you want a different threshold, such as a majority or unanimity. Consider the `high_assurance` profile for destructive, irreversible, financial, or external-send tools. Missing, malformed, errored, or timed-out ballots never count as yes.
 6. Give the monitored agent the syntax, and each call its values. The agent sees the prose and the instruction, not `tool_specs`. Pass `vocabulary=tk.agent_vocabulary()` to `MonitoredAgent.complete` to send the tool ids, argument paths, and value syntax (see [Monitored agents](#monitored-agents)); it never lists a value. Put the exact values a call needs (the counterparty id, an enum value) in the instruction, for example "pay `power-co.example` $64.12": the agent then learns one id per task, not the whole `allow` list. An agent that guesses `send_email` for `email_send`, or `Power Co` for `power-co.example`, is denied every time.
-7. Use one vocabulary everywhere. Where the prose names a party, write its exact id, optionally with a display name: "the power company (`power-co.example`)". A judge that reads only a company name cannot tie it to the id in the call, and denying is correct for that judge. The same prose goes to the monitored agent, so every id in it reaches the agent's host; name in the prose only the parties you are content for the agent to know, and pass the rest in the instruction. Two-Key does not map display names to ids and does no fuzzy matching: that would let a look-alike payee pass.
+7. Use one vocabulary everywhere. Where the prose names a party, write its exact id, optionally with a display name: "the power company (`power-co.example`)". A judge that reads only a company name cannot tie it to the id in the call, and denying is correct for that judge. The same prose goes to the monitored agent, so every id in it reaches the agent's host; name in the prose only the parties you are content for the agent to know, and pass the rest in the instruction. Two-Key does not map display names to ids and does no fuzzy matching: that would let a look-alike payee pass. An agent may still repair a mistyped address to an allowed one (`ana@mailbox.exmaple` to `ana@mailbox.example`): the `allow` list keeps the result to an approved party. If you want it to decline instead, say so in the prose ("use only the exact address in my request; never correct or guess one"). Only the agent can apply that rule: judges never see the instruction, so they cannot compare the recipient with the request.
 8. Test allowed, denied, ambiguous, and adversarial examples before trusting the constitution. Confirm that Path A denies the cases the hard rules are meant to catch, that Path B receives the intended context, and that the gateway drops or denies unmapped keys as configured (`deny_unmapped` defaults off).
 
 The signed constitution remains the authority. A future GUI constitution maker (planned later) should help construct and validate choices, but the principal must still sign the resulting constitution. The GUI must not silently weaken the rules.
@@ -901,11 +901,27 @@ judge at startup like the judges.yaml declaration. A proposal with a
 repeated JSON key, at any depth or inside an `arguments` string, is
 refused.
 
-There is no decline reply yet. An agent that refuses the instruction still
-has to propose a call, and a refusal usually shows up as a denied call
-(for example `tool: "none"`, denied by the tool allow-list). Read such a
-deny alongside the proposal text: the same deny can be a decline or a
-blocked attack.
+### Declines
+
+An agent that refuses the instruction replies `{"decline": "<short
+reason>"}` instead of a call; the system prompt tells it how. A host that
+forces every key (the strict schema on OpenAI and xAI) may send the call
+keys too, as long as they are empty: `"tool": ""`, `"arguments": "{}"`,
+and the optional keys `null`.
+
+- `authorize_from_agent` returns a deny with reason `agent_declined`. No
+  token is issued, and neither Path A nor Path B runs: a decline is not a
+  call. The ledger `decision` keeps the reason (at most 1,000 characters),
+  plus the size and digest of the whole reply.
+- `MonitoredAgent.complete` raises `AgentDeclined` (its `.reason` holds the
+  text). It subclasses `AgentConfigError`, so code that catches only that
+  still fails closed.
+- A decline that also names a tool, carries arguments or a claim, has
+  another key, or has an empty or over-long reason is `malformed_proposal`,
+  not a decline.
+- A decline can block a call, which a bad proposal could already do. It can
+  never allow one. The reason is agent text: it is recorded, never used as
+  the decision reason, and never sent to a judge.
 
 ## Redeem
 

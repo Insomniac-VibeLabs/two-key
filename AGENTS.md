@@ -89,6 +89,9 @@ a prototype, report security findings as public issues, per
 - A missing ballot is not a yes.
 - Both paths run once the call is well-formed and within limits.
 - `authorize_from_agent` does not execute a tool.
+- A decline (`{"decline": ...}`) is not a call: `agent_declined` deny,
+  neither path runs, never a token. A decline that also carries a tool,
+  arguments, or a claim is `malformed_proposal` (`tests/test_agent_decline.py`).
 - `require_path_a_first` is not a skip.
 - JSON/YAML inputs refuse duplicate keys and YAML merge keys. Oversized or malformed calls deny
   before either path.
