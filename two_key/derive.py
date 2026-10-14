@@ -26,7 +26,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from .action import DATA_CLASSES, MAX_AMOUNT_USD
+from .action import DATA_CLASS_SEP, DATA_CLASSES, MAX_AMOUNT_USD, SPECIFIC_DATA_CLASSES
 from .agent_meta import type_tag
 from .canonical import canonical_bytes
 from .fields import FieldValueError, coerce_value, defaults
@@ -425,20 +425,22 @@ def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any],
 
 
 def join_data_class(claimed: str, floor: str) -> str:
-    """Return the stricter class. Two different middle classes become classified.
+    """The classes the call carries: the claim's and the floor's, the more specific kept.
 
-    The order is public, then personal/medical/financial, then classified.
-    A floor never lowers a claim, and a claim never lowers a floor.
+    Order: public < personal < {financial, medical} < classified. financial and medical are kinds of
+    personal data, so either replaces personal; together they are "financial+medical" (Path A's
+    data_class_in matches either), not classified. classified absorbs everything. A floor never
+    lowers a claim, and a claim never lowers a floor. ``claimed`` may itself be "financial+medical".
     """
-    if claimed not in DATA_CLASSES or floor not in DATA_CLASSES:
+    parts = set(claimed.split(DATA_CLASS_SEP)) | {floor}
+    if not parts <= set(DATA_CLASSES):
         raise DeriveError("data_class_unreadable")
-    if claimed == floor:
-        return claimed
-    middle = {"personal", "medical", "financial"}
-    if claimed in middle and floor in middle:
+    if "classified" in parts:
         return "classified"
-    rank = {"public": 0, "personal": 1, "medical": 1, "financial": 1, "classified": 2}
-    return claimed if rank[claimed] > rank[floor] else floor
+    specific = parts & set(SPECIFIC_DATA_CLASSES)
+    if specific:
+        return DATA_CLASS_SEP.join(sorted(specific))
+    return "personal" if "personal" in parts else "public"
 
 
 def blocked_from_rules(rules: list) -> set[str]:

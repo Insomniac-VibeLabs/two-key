@@ -115,7 +115,7 @@ class B5(unittest.TestCase):
     def test_local_aliases_are_one_endpoint(self):
         agent = {"id": "agent", "model": "llama3.1:8b", "provider": "ollama", "base_url": "http://localhost:11434",
                  "credential": "none", "upstream": "localhost:11434"}
-        hosts = ["0.0.0.0", "127.1", "127.0.0.2", "localhost.localdomain", "[::1]", "[::]", "LOCALHOST"]
+        hosts = ["0.0.0.0", "127.1", "127.0.0.2", "localhost.localdomain", "[::1]", "[::]", "LOCALHOST"]  # skipcq: BAN-B104 -- hostname fixture for the address classifier, not a bind
         own = sorted(a for a in _own_addresses() if ":" not in a and not a.startswith("127."))
         hosts += own[:1]
         for host in hosts:

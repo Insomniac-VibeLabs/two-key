@@ -1,7 +1,7 @@
 # Scope
 
-`two-key-concept` is the first working cut. Package version 0.3.0. Tag
-`v0.3.0` on `main` is the tagged release. Tag `v0.2.4` stays on `fc836bb`.
+`two-key-concept` is beta (pre-1.0). Package version 0.3.1. Tag
+`v0.3.1` on `main` is the tagged release. Tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
 Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
 is on `main`. `v0.1.6` stays on the previous tree.
 

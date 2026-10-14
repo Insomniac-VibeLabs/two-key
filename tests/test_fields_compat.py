@@ -32,7 +32,8 @@ GOLDEN = {
 
 class ExampleConstitutionUnchanged(unittest.TestCase):
     def setUp(self):
-        self.prose, rules, specs = load_unsigned(ROOT / "examples" / "constitution.md",
+        # A frozen copy of the 0.2 example prose: the example itself may change, the golden input may not.
+        self.prose, rules, specs = load_unsigned(ROOT / "tests" / "fixtures" / "v1_constitution.md",
                                                  ROOT / "examples" / "hard_rules.yaml")
         self.key = generate_private_key()
         self.rules, self.specs = rules, specs

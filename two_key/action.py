@@ -27,6 +27,29 @@ from typing import Any, Mapping
 from .agent_meta import type_tag
 
 DATA_CLASSES = ("public", "personal", "medical", "financial", "classified")
+# A call may carry both specific kinds of personal data: "financial+medical" (sorted, joined by "+").
+DATA_CLASS_SEP = "+"
+SPECIFIC_DATA_CLASSES = ("financial", "medical")
+
+
+def data_class_parts(value: str) -> tuple[str, ...]:
+    """The classes in a data_class value: "medical" -> ("medical",), "financial+medical" -> both."""
+    return tuple(value.split(DATA_CLASS_SEP))
+
+
+def canonical_data_class(value: str) -> str:
+    """Validate a claim: one known class, or financial and medical joined by "+" in either order.
+
+    A repeated class ("financial+financial") is refused, like a repeated JSON key: it is not a claim
+    any honest caller writes. Returns the class, or "financial+medical" sorted.
+    """
+    listed = data_class_parts(value)
+    parts = set(listed)
+    if len(listed) == 1 and value in DATA_CLASSES:
+        return value
+    if len(listed) == len(parts) and parts == set(SPECIFIC_DATA_CLASSES):
+        return DATA_CLASS_SEP.join(sorted(parts))
+    raise ActionValidationError("data_class: not a known class")
 
 # Conservative defaults for missing high-impact fields (the missing-field rule).
 DEFAULT_IRREVERSIBLE = True
@@ -92,6 +115,8 @@ class Action:
 
     def field_value(self, name: str) -> Any:
         """A built-in field. Any other name is a ``KeyError``: ``raw`` is the agent's, never a field."""
+        if name == "data_class":     # Path A sees each class the call carries (data_class_in matches any)
+            return data_class_parts(self.data_class)
         if name in LOADABLE_FIELDS:
             return getattr(self, name)
         raise KeyError("not a built-in field")
@@ -140,9 +165,7 @@ def normalize_action(proposed: Action | Mapping[str, Any]) -> Action:
     counterparty = canon_str(src.get("counterparty", ""), "counterparty")
     destination = canon_str(src.get("destination", ""), "destination")
 
-    data_class = canon_str(src.get("data_class", DEFAULT_DATA_CLASS), "data_class")
-    if data_class not in DATA_CLASSES:
-        raise ActionValidationError("data_class: not a known class")
+    data_class = canonical_data_class(canon_str(src.get("data_class", DEFAULT_DATA_CLASS), "data_class"))
 
     irreversible = src.get("irreversible", DEFAULT_IRREVERSIBLE)
     if not isinstance(irreversible, bool):

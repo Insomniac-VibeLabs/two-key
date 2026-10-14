@@ -1,9 +1,11 @@
 # Roadmap
 
-This is the plan for taking `two-key-concept` from the 0.2.4 prototype to a
+This is the plan for taking `two-key-concept` from 0.2.4 to a
 1.0 release. It states intent, not a promise. The order may change, and
 version numbers are targets, not dates. 0.3.0 (key backup) is released as
-tag `v0.3.0` on `main`. Nothing listed here after 0.3 exists yet, except the custom field
+tag `v0.3.0`, and 0.3.1 (live-test fixes; the status moves from prototype to
+beta) as tag `v0.3.1` on `main`. On 2026-10-14 the maintainer moved 0.6
+(MCP adapter, the reference wrapper, #89) ahead of 0.4 and 0.5; it is next. Nothing listed here after 0.3 exists yet, except the custom field
 types that 0.3.0 added ahead of order (see "After 1.0"). 0.11 may ship before the
 phases numbered under it; its number is not an order claim.
 

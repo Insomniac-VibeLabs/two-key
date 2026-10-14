@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
+from .action import DATA_CLASSES, DEFAULT_DATA_CLASS
 from .derive import MAX_ARGS_BYTES
 from .judges.config import JudgeConfigError, build_credential
 from .judges.credentials import CredentialError, CredentialProvider, NoCredential, basic_authorization
@@ -33,8 +34,11 @@ AGENT_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", 
 # A proposal carries arguments (at most MAX_ARGS_BYTES) plus prose; four times that is generous.
 # Longer text is refused before it is parsed.
 MAX_PROPOSAL_TEXT_CHARS = 4 * MAX_ARGS_BYTES
-_ALLOWED = {"tool", "arguments", "proposal", "amount_usd", "counterparty", "data_class", "irreversible"}
+_ALLOWED = {"tool", "arguments", "proposal", "amount_usd", "counterparty", "data_class", "irreversible", "decline"}
 _REQUIRED = {"tool", "arguments", "proposal"}
+# A decline is {"decline": "<reason>"}. A schema-forced reply may also carry the call keys, empty or null.
+MAX_DECLINE_CHARS = 1000
+_EMPTY_ARGUMENTS = (None, "", "{}", {})
 
 SYSTEM = (
     "You are a monitored agent. You may PROPOSE one tool call. You cannot execute tools, "
@@ -43,9 +47,24 @@ SYSTEM = (
     "Reply with ONLY a JSON object and nothing else, with exactly these keys: "
     '"tool" (string), "arguments" (object), "proposal" (short string), and optionally '
     '"amount_usd" (number), "counterparty" (string), "data_class" (string), "irreversible" (boolean). '
-    "Do not add other keys."
+    "Do not add other keys. "
+    f'"data_class" is one of {", ".join(DATA_CLASSES)}, or "financial+medical" when the call carries both. '
+    "Claim the kind of data the call carries: medical and financial are kinds of personal data, and "
+    "classified is only for secrets and credentials. "
+    f'Omitting "data_class" means {DEFAULT_DATA_CLASS}, whatever the tool is. '
+    'To decline instead of proposing a call, reply {"decline": "<short reason>"}; if every key is required, '
+    'set "tool" to "", "arguments" to "{}", and the optional keys to null.'
 )
-_CONSTITUTION_END = "</principal_constitution>\n\n"
+_INSTRUCTION_START = "<untrusted_instruction>\n"
+# The vocabulary describes syntax, never values: no allow list, enum value, integer bound, rule
+# threshold, blocked party, description, or default. An agent that probes still has to guess, and
+# every wrong guess is a ledgered deny.
+_EXACT_ID = "an exact id given in the instruction or the constitution; a display name is not an id"
+_FIELD_HINTS = {
+    "enum": "one of the operator's values, given in the instruction or the constitution",
+    "integer": "a JSON integer, given in the instruction or the constitution",
+    "boolean": "JSON true or false",
+}
 
 
 def fence(label: str, text: str, *, escape: bool) -> str:
@@ -53,12 +72,69 @@ def fence(label: str, text: str, *, escape: bool) -> str:
     return f"<{label}>\n{body}\n</{label}>\n\n"
 
 
-def user_prompt(constitution: str, instruction: str) -> str:
-    """Both fences are escaped, so neither text can contain a section closer."""
+def user_prompt(constitution: str, instruction: str, vocabulary: str | None = None) -> str:
+    """Every fence is escaped, so no text can contain a section closer. No vocabulary: the 0.3.0 user prompt."""
+    vocab = fence("tool_vocabulary", vocabulary, escape=True) if vocabulary is not None else ""
     return (fence("principal_constitution", constitution, escape=True)
+            + vocab
             + fence("untrusted_instruction", instruction, escape=True)
             + "Propose one tool call consistent with the constitution. Angle brackets in the "
             "constitution are escaped; the policy text is otherwise unchanged. Reply with the JSON object only.")
+
+
+def _field_shape(decl: dict) -> dict:
+    kind = decl.get("type")
+    if kind == "string":
+        return {"type": "string", "value": f"text of at most {decl['max_length']} characters, "
+                                           "given in the instruction or the constitution"}
+    return {"type": kind, "value": _FIELD_HINTS.get(kind, "given in the instruction or the constitution")}
+
+
+def _tool_entry(spec: dict, registry: dict) -> dict:
+    entry: dict[str, Any] = {"data_class_floor": spec["data_class_floor"]}
+    if spec.get("amount"):
+        entry["amount"] = dict(spec["amount"])      # paths and the unit only
+    if spec.get("counterparties"):
+        entry["counterparties"] = [{"json_path": c["json_path"], "value": _EXACT_ID}
+                                   for c in spec["counterparties"]]
+    if spec.get("payload"):
+        entry["payload"] = [dict(p) for p in spec["payload"]]   # path, shape, max_length
+    if spec.get("fields"):
+        entry["fields"] = {name: {"json_path": m["json_path"], **_field_shape(registry.get(name, {}))}
+                           for name, m in sorted(spec["fields"].items())}
+    if spec.get("deny_unmapped"):
+        entry["deny_unmapped"] = True
+    return entry
+
+
+def tool_vocabulary(constitution, tools: list[str] | tuple[str, ...] | None = None) -> str:
+    """The signed tool ids, argument paths, and value syntax, for the agent prompt.
+
+    Read-only and opt-in. It never lists a value: no allow list, enum value, integer bound, rule
+    threshold, blocked party, bytecode, description, default, or ``irreversible`` flag (omitted, that
+    claim follows the spec). ``tools`` limits it to the tools a task needs. Path A still checks every call.
+    """
+    specs = constitution.tool_specs
+    registry = getattr(constitution, "fields", None) or {}
+    if tools is None:
+        names = sorted(specs)
+    else:
+        if isinstance(tools, str) or not all(isinstance(t, str) for t in tools):
+            raise AgentConfigError("tools must be a list of tool ids")
+        unknown = sorted(set(tools) - set(specs))
+        if unknown or not tools:
+            raise AgentConfigError(f"no signed tool spec for {unknown}" if unknown else "tools is empty")
+        names = sorted(set(tools))
+    # Signing refuses a spec for a tool off the allow list, so every spec here is an allowed tool.
+    body = {"tools": {name: _tool_entry(specs[name], registry) for name in names},
+            "data_classes": list(DATA_CLASSES), "omitted_data_class": DEFAULT_DATA_CLASS}
+    return ("Signed tool vocabulary: tool ids, argument paths, and the syntax of each value. It lists no "
+            "allowed values; take each value from the instruction or the constitution. For data_class, claim "
+            "the kind of data the call carries, at least the tool's data_class_floor: medical or financial "
+            "when it is that kind, financial+medical for both, classified only for secrets. Omit "
+            "irreversible, amount_usd, and counterparty; they are read from the arguments and the signed "
+            "spec. The rules still check every call.\n"
+            + json.dumps(body, sort_keys=True, ensure_ascii=False))
 
 
 
@@ -70,7 +146,8 @@ def _nullable(kind: str) -> dict:
 _PROPOSAL_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["tool", "arguments", "proposal", "amount_usd", "counterparty", "data_class", "irreversible"],
+    "required": ["tool", "arguments", "proposal", "amount_usd", "counterparty", "data_class", "irreversible",
+                 "decline"],
     "properties": {
         "tool": {"type": "string"},
         "arguments": {"type": "string"},
@@ -79,12 +156,21 @@ _PROPOSAL_SCHEMA = {
         "counterparty": _nullable("string"),
         "data_class": _nullable("string"),
         "irreversible": _nullable("boolean"),
+        "decline": _nullable("string"),
     },
 }
 
 
 class AgentConfigError(ValueError):
     pass
+
+
+class AgentDeclined(AgentConfigError):
+    """The agent declined: no call. A subclass, so a caller that only catches AgentConfigError fails closed."""
+
+    def __init__(self, reason: str):
+        super().__init__("agent declined")
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -125,13 +211,39 @@ def _loads_strict(text: str, what: str):
         raise AgentConfigError(f"{what} has a {msg}") from None
 
 
+def _decline_reason(obj: dict) -> str:
+    """A decline carries no call. One that also names a tool, arguments, or a claim is malformed, not a decline."""
+    if set(obj) - _ALLOWED:
+        raise AgentConfigError("a decline has no other keys")
+    reason = obj["decline"]
+    if not isinstance(reason, str) or not reason.strip():
+        raise AgentConfigError("decline must be a non-empty string")
+    if len(reason) > MAX_DECLINE_CHARS:
+        raise AgentConfigError(f"decline is longer than {MAX_DECLINE_CHARS} characters")
+    tool = obj.get("tool")
+    if tool is not None and (not isinstance(tool, str) or tool.strip()):
+        raise AgentConfigError("a decline names no tool")
+    if obj.get("arguments") not in _EMPTY_ARGUMENTS:
+        raise AgentConfigError("a decline carries no arguments")
+    if any(obj.get(k) is not None for k in ("amount_usd", "counterparty", "data_class", "irreversible")):
+        raise AgentConfigError("a decline carries no claim")
+    if obj.get("proposal") is not None and not isinstance(obj["proposal"], str):
+        raise AgentConfigError("proposal must be a string")
+    return reason.strip()
+
+
 def parse_proposal(text: str) -> tuple[dict, dict, str]:
-    """Parse an untrusted proposal. A duplicate key at any depth is refused, not last-one-wins."""
+    """Parse an untrusted proposal. A duplicate key at any depth is refused, not last-one-wins.
+
+    A decline raises ``AgentDeclined`` (an ``AgentConfigError``) with its reason: it is never a call.
+    """
     if not isinstance(text, str):
         raise AgentConfigError("agent proposal must be a string")
     if len(text) > MAX_PROPOSAL_TEXT_CHARS:
         raise AgentConfigError(f"agent proposal is longer than {MAX_PROPOSAL_TEXT_CHARS} characters")
     obj = _loads_strict(text.strip(), "agent proposal")
+    if isinstance(obj, dict) and obj.get("decline") is not None:
+        raise AgentDeclined(_decline_reason(obj))
     if not isinstance(obj, dict) or set(obj) - _ALLOWED or not _REQUIRED <= set(obj):
         raise AgentConfigError("agent proposal must contain tool, arguments, and proposal, and no other keys")
     if not isinstance(obj["tool"], str) or not obj["tool"].strip():
@@ -197,11 +309,14 @@ class MonitoredAgent:
             return {}
         return {"Authorization": f"Bearer {token}"}
 
-    def _request(self, instruction: str, constitution: str) -> tuple[str, dict]:
-        user = user_prompt(constitution, instruction if isinstance(instruction, str) else str(instruction))
+    def _request(self, instruction: str, constitution: str, vocabulary: str | None = None) -> tuple[str, dict]:
+        user = user_prompt(constitution, instruction if isinstance(instruction, str) else str(instruction),
+                           vocabulary)
         if self.kind == "anthropic":
-            trusted, _, rest = user.partition(_CONSTITUTION_END)
-            trusted = trusted + _CONSTITUTION_END if rest else user
+            # Cache the operator's text (constitution, then any vocabulary); the instruction is not cached.
+            trusted, sep, rest = user.partition(_INSTRUCTION_START)
+            rest = sep + rest if sep else ""
+            trusted = trusted if rest else user
             content = [{"type": "text", "text": trusted, "cache_control": {"type": "ephemeral"}}]
             if rest:
                 content.append({"type": "text", "text": rest})
@@ -217,7 +332,8 @@ class MonitoredAgent:
                                          "responseSchema": {"type": "OBJECT", "required": ["tool", "arguments", "proposal"],
                                                             "properties": {"tool": {"type": "STRING"},
                                                                            "arguments": {"type": "STRING"},
-                                                                           "proposal": {"type": "STRING"}}}}}
+                                                                           "proposal": {"type": "STRING"},
+                                                                           "decline": {"type": "STRING"}}}}}
             return f"{self.base_url}/v1beta/models/{quote(self.model, safe='')}:generateContent", body
         if self.kind == "ollama":
             body = {"model": self.model, "stream": False, "format": "json", "keep_alive": "10m",
@@ -252,12 +368,15 @@ class MonitoredAgent:
             out["generationConfig"] = cfg
         return out if changed else None
 
-    def complete(self, instruction: str, constitution: str) -> AgentProposal:
+    def complete(self, instruction: str, constitution: str, *, vocabulary: str | None = None) -> AgentProposal:
+        """``vocabulary`` (``TwoKey.agent_vocabulary()``) is opt-in; it is sent to this agent's host."""
         if not isinstance(constitution, str) or not constitution.strip():
             raise AgentConfigError("empty constitution")
         if not isinstance(instruction, str) or not instruction.strip():
             raise AgentConfigError("empty instruction")
-        url, body = self._request(instruction, constitution)
+        if vocabulary is not None and (not isinstance(vocabulary, str) or not vocabulary.strip()):
+            raise AgentConfigError("empty vocabulary")
+        url, body = self._request(instruction, constitution, vocabulary)
         headers = self._headers()
         started = time.monotonic()
         try:

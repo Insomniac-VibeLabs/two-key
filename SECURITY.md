@@ -1,13 +1,14 @@
 # Security
 
-This is a prototype and a public concept. It has had no independent review and
-has no production use. Security findings are welcome as public issues on this
-repository: the project would rather have them seen and argued over than
-hidden. State what the code does, what the docs claim, and how you checked.
+Status: beta (pre-1.0). The maintainer reviews changes with live LLM testing
+(a refereed functional harness) and automated scanners (Semgrep, DeepSource,
+Bandit, CodeQL). There has been no independent or paid audit, and no
+production use is claimed.
 
-Private vulnerability reporting (the repository's Security tab, "Report a
-vulnerability") will become the channel once the product is more mature and in
-use. This file will say so when that happens.
+Report a vulnerability privately: the repository's Security tab, "Report a
+vulnerability". State what the code does, what the docs claim, and how you
+checked. Hardening ideas and documentation errors that do not expose users
+are welcome as public issues.
 
 The threat model is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). This file
 is how to report a vulnerability. It is not the model.
@@ -21,6 +22,7 @@ is how to report a vulnerability. It is not the model.
   key other than the one pinned in the ledger or configured outside it
 - Judge credential sent to a redirected host
 - Agent proposal that causes tool execution inside `authorize_from_agent`
+- An agent decline that issues a token, runs either path, or is read as a call
 - A redeeming gateway that can mint a token it will accept
 - A judge that is the monitored agent being accepted at start-up: a judge
   holding the agent's credential (the same API token, or the same username
@@ -32,6 +34,11 @@ is how to report a vulnerability. It is not the model.
 
 - Malware or DLP scanning of tool payloads. It is intentionally absent here.
 - FIPS validation. Algorithms are Ed25519 and SHA-256 from `cryptography`.
+- Code run from operator configuration. `judges.yaml` and `agents.yaml` are
+  trusted: an `auth: {type: callback, callback: "module:function"}` entry
+  imports that module when the file loads. Whoever can write those files
+  can run code in the `TwoKey` process. A way to run code from a file the
+  docs do not call trusted is in scope.
 
 Ledger entries and the head are AES-256-GCM ciphertext. The data key is
 wrapped by a ledger key stored outside the ledger directory. The head needs

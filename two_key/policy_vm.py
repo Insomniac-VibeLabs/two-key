@@ -128,7 +128,8 @@ class PolicyVM:
                     hay, needle = pop(), pop()
                     if not isinstance(hay, (list, tuple)):
                         raise VMFault("IN haystack is not a list")
-                    stack.append(needle in hay)
+                    # A tuple needle is only data_class's parts (Action.field_value): any part matches.
+                    stack.append(any(n in hay for n in needle) if isinstance(needle, tuple) else needle in hay)
                 elif op == Op.CONTAINS:
                     needle, hay = pop(), pop()
                     if not isinstance(hay, (list, tuple, str)):

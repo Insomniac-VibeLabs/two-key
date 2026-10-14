@@ -53,7 +53,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-from ..quorum import QuorumConfigError, QuorumPolicy, check_judge_set
+from ..quorum import QuorumConfigError, QuorumPolicy, check_judge_set, unmeetable_floor
 from ..strict import StrictParseError, load_file_strict
 from .anthropic import AnthropicJudge
 from .base import Judge
@@ -211,8 +211,11 @@ def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
     except QuorumConfigError as e:
         raise JudgeConfigError(str(e)) from e
     policy = policy.resolved(len(judges))  # required_yes omitted: min(2, number of judges)
-    if policy.required_yes > len(judges):
-        raise JudgeConfigError(f"required_yes={policy.required_yes} exceeds number of judges {len(judges)}")
+    # The same reason TwoKey and convene give (HOWTO "Quorum policy"), so a config file reports it too.
+    floor = unmeetable_floor(judges, policy)
+    if floor:
+        raise JudgeConfigError(f"{floor} (required_yes={policy.required_yes}, "
+                               f"min_responding={policy.effective_min_responding}, judges={len(judges)})")
     if policy.timeout_seconds is None:
         raise JudgeConfigError("quorum timeout_seconds must be a positive number (a hard deadline), not null")
     try:

@@ -1476,10 +1476,115 @@ On branch `working`. Package version stays 0.3.0. No behavior changes.
   `skipcq: BAN-B103` comment saying so.
 
 
+## DeepSource test-fixture findings — 2026-10-14
+
+Package version stays 0.3.0. No behavior changes, tests only.
+
+- BAN-B103 (`tests/test_issue_fixes.py`, `tests/test_capability_key.py`): the
+  two `os.chmod(..., 0o755)` calls deliberately loosen a directory to prove
+  the code under test tightens it back to 0o700. They carry a
+  `skipcq: BAN-B103` comment saying so, as `tests/test_key_backup.py` does.
+- BAN-B104 (`tests/test_netloc_allowlist.py`, `tests/test_b5_local_proxy.py`):
+  `"0.0.0.0"` appears only as a hostname string in a fixture list for the
+  address classifier. Nothing binds a socket. Both lines carry a
+  `skipcq: BAN-B104` comment.
+
+## Live-test findings: docs — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. No behavior changes.
+From the live functional test on `test/live-functional-2026-10-13` (0 of 9
+legitimate calls allowed; every safety check held).
+
+- HOWTO "Designing a constitution": point 4 says an omitted `data_class` is
+  `classified` whatever the floor is. New point 6: the monitored agent
+  sees only the prose, so name tool ids, argument keys, counterparty ids,
+  and the class to claim. New point 7: one vocabulary everywhere, ids with
+  optional display names; no display-name mapping or fuzzy matching.
+- HOWTO "Judges": judges do not enforce allow lists or data classes; Path A
+  does. `judges.yaml` and `agents.yaml` are trusted operator config (a
+  `callback` auth entry imports its module). Same note in README,
+  SECURITY.md, and THREAT_MODEL.
+- HOWTO "Authorize from Python": `decision.reason` names one cause (parse,
+  limit, or derive deny, then Path A, then Path B); read
+  `path_a["reason"]` and `path_b["reason"]` too.
+- HOWTO "Monitored agents": the agent is not sent `tool_specs`; an omitted
+  `data_class` is `classified`; there is no decline reply yet.
+- README: the agent is not sent `tool_specs`. The cloud-judge sentence now
+  says a `:cloud` or `-cloud` model counts as cloud on any host, as the code
+  does (`LLMJudge.is_cloud`).
+- `examples/constitution.md` names tools and parties by id. The golden v1
+  hash test reads a frozen copy of the old prose
+  (`tests/fixtures/v1_constitution.md`); its hashes are unchanged.
+- AGENTS.md: keep the `classified` default; no display-name mapping.
+
+## Agent prompt names the data classes — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. The agent system prompt
+changes; nothing Path A or Path B checks changes.
+
+- `two_key.agents.SYSTEM` lists the five data classes (`DATA_CLASSES`) and
+  says that omitting `data_class` means `classified`, whatever the tool is.
+  The `classified` default stays: it is not lowered to the tool's floor.
+- `tests/test_agent_prompt.py` pins both, and that the user prompt still
+  carries only the prose and the instruction.
+
+## Opt-in tool vocabulary for the monitored agent — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Neither path changes; a
+prompt changes only when the caller opts in.
+
+- `TwoKey.agent_vocabulary()` (and `two_key.agents.tool_vocabulary`) builds
+  read-only text from the signed constitution: each tool id, its
+  `irreversible` flag and `data_class_floor`, its amount, counterparty,
+  payload, and custom field paths, each `allow` list, each custom field's
+  type and values or bounds, and the five data classes. It leaves out rule
+  thresholds, `deny_counterparties`, bytecode, field descriptions, and
+  defaults.
+- `MonitoredAgent.complete(instruction, constitution, vocabulary=...)`
+  sends it in an escaped `<tool_vocabulary>` fence between the
+  constitution and the instruction. Without `vocabulary`, the prompt is
+  byte-for-byte the 0.3.0 user prompt (the system prompt gained the data-class line in the entry above). An empty vocabulary is refused. The
+  Anthropic agent now splits its cached block at the instruction, so the
+  vocabulary is cached with the constitution and the instruction is not;
+  without a vocabulary the two blocks are what they were.
+- Allowed for local and cloud agents alike (operator decision): it grants
+  nothing. HOWTO "Known trade-offs" has a privacy note: cloud judges and a
+  cloud agent read their prompts at the vendor, HTTPS protects them only
+  in transit, and the vocabulary sends every allowed party on every call.
+- HOWTO, README, THREAT_MODEL, and llms.txt describe it.
+  `tests/test_agent_prompt.py` covers the contents, the exclusions, the
+  escaping, the unchanged default prompt, and that a guessed id still
+  denies.
+
+## Tool vocabulary lists syntax, never values — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Neither path changes.
+Supersedes the contents listed under "Opt-in tool vocabulary for the
+monitored agent": an agent doing reconnaissance should learn the shape of
+a call, not which payee, value, or amount would pass.
+
+- `tool_vocabulary` / `TwoKey.agent_vocabulary()` no longer list `allow`
+  lists, enum values, integer `min`/`max`, or the `irreversible` flag. A
+  counterparty path says "an exact id given in the instruction or the
+  constitution"; a custom field gives its type (and a string's
+  `max_length`). Still listed: tool ids, the floor, amount path, unit, and
+  currency path, payload paths with shape and `max_length`, and
+  `deny_unmapped` when set. The header tells the agent to take values from
+  the instruction or the prose and to omit `irreversible`, `amount_usd`,
+  and `counterparty`, which come from the arguments and the spec.
+- No full mode: there is no option that sends the allow lists.
+- `agent_vocabulary(tools=[...])` limits the text to one task's tools. An
+  unknown, empty, or non-list `tools` is `AgentConfigError`.
+- HOWTO "Designing a constitution" points 6 and 7: put the exact values a
+  call needs in the instruction; ids written in the prose reach the
+  monitored agent's host too. HOWTO "Monitored agents", "Known trade-offs"
+  (privacy), README, THREAT_MODEL, and llms.txt match.
+
 ## README request-flow diagram renders again — 2026-10-14
 
-Package version stays 0.3.0. Docs and a test only. On `main` before tag
-`v0.3.0`.
+On branch `working`. Package version stays 0.3.0. Docs and a test only.
+The same fix reached `main` through PR #86 (`fix/readme-diagram`), and tag
+`v0.3.0` is on that merge (`e44be56`); `main` was merged back into `working`.
 
 - README's request-flow sequence diagram did not render on GitHub: the
   note `same process as TwoKey; verifies with ...` contains `;`, which
@@ -1488,3 +1593,211 @@ Package version stays 0.3.0. Docs and a test only. On `main` before tag
   JUDGES_AND_QUORUM was rendered with Mermaid 11.4.1 and parses.
 - `tests/test_doc_diagrams.py` fails on a `;` in any sequence diagram in
   the top-level or `docs/` Markdown files.
+
+## Docs: agent vocabulary diagram and trust boundary — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Docs only, plus one
+docstring.
+
+- HOWTO "Monitored agents": a sequence diagram of the vocabulary exchange
+  (what `agent_vocabulary()` keeps and drops, values carried by the
+  instruction, Path A checking them against signed lists the agent never
+  saw, deny on a guessed value).
+- README architecture diagram: the agent edge no longer says "constitution
+  prose only"; an opt-in `agent_vocabulary()` node feeds the agent. The
+  request-flow diagram's first step names the opt-in vocabulary.
+- THREAT_MODEL "Trust boundaries": new first item, caller to monitored
+  agent (what it gets, what it never gets).
+- AGENTS.md: the vocabulary never lists a value; do not add a mode that
+  sends one.
+- Correction: without `vocabulary=`, the agent *user* prompt is the 0.3.0
+  prompt; the system prompt gained the data-class line (entry "Agent
+  prompt names the data classes"). AGENTS.md, the "Opt-in tool vocabulary"
+  entry above, and the `user_prompt` docstring now say so.
+- Every Mermaid block in README and HOWTO renders with Mermaid 11.4.1.
+
+## Agent declines — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Changes
+`authorize_from_agent` and the agent reply format; reviewed and approved by
+the maintainer before the change (AGENTS.md "Crypto and security changes").
+From the run-2 live test: 8 refusals arrived as `tool: "none"` calls.
+
+- An agent may reply `{"decline": "<reason>"}`. A schema-forced reply
+  (OpenAI and xAI strict schema) may carry the call keys too, empty:
+  `"tool": ""`, `"arguments": "{}"`, optional keys `null`. The strict and
+  Gemini response schemas gain a `decline` key; the system prompt says how
+  to decline.
+- `parse_proposal` raises `AgentDeclined` (a subclass of
+  `AgentConfigError`, so older callers fail closed); `MonitoredAgent.complete`
+  raises it too. `authorize_from_agent` returns a deny with reason
+  `agent_declined`: neither path runs, no token is issued, and the ledger
+  `decision` keeps the reason (at most `MAX_DECLINE_CHARS`, 1,000) plus the
+  reply's size and digest.
+- A decline that also names a tool, carries arguments or a claim, has an
+  unknown key, or has an empty, non-string, or over-long reason is
+  `malformed_proposal`. `"decline": null` is an ordinary call.
+- `tests/test_agent_decline.py`: no token, no path, no judge call, ledger
+  body, mixed replies, strict-schema shape, `complete()` raising.
+- HOWTO "Monitored agents" has a "Declines" section (replacing "there is no
+  decline reply yet"). README (text and request-flow diagram),
+  THREAT_MODEL, SECURITY.md (in scope), AGENTS.md, and llms.txt match.
+- HOWTO "Designing a constitution": point 4 suggests `deny_unmapped: true`
+  for send tools (a hidden `bcc` becomes a Path A deny); point 7 says an
+  agent may repair a mistyped address to an allowed one, how to forbid that
+  in the prose, and that only the agent can apply it (judges never see the
+  instruction).
+
+## Data classes combine as a set — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Changes what Path A sees
+for `data_class`; approved by the maintainer as the security review
+(AGENTS.md "Crypto and security changes"). From live test run 3: honest
+claims (`medical` for a dentist entry on a `personal` calendar, `financial`
+for a CPA email on a `personal` email tool) became `classified` and were
+denied by the writer's `no-classified-data` rule, while the judge voted yes.
+
+- `join_data_class`: `public` < `personal` < `financial`, `medical` <
+  `classified`. `financial` or `medical` replaces `personal`; together they
+  are `financial+medical`; `classified` absorbs everything. Only a claim or
+  floor of `classified`, or an omitted claim, gives `classified`. A floor
+  never lowers a claim.
+- Path A: `Action.field_value("data_class")` returns each class the call
+  carries, and `IN` with that tuple matches any part, so
+  `data_class_in: [medical]` denies `financial+medical`. The compiled
+  bytecode is unchanged (`tests/test_fields_compat.py` hashes hold); only
+  the data_class value and the VM's `IN` on a tuple needle change.
+- A claim may be `financial+medical` (`canonical_data_class`, sorted); any
+  other `+` join or unknown class is `malformed_action`.
+- Agent system prompt and vocabulary: claim the kind of data the call
+  carries; `classified` is only for secrets and credentials. The old
+  vocabulary sentence ("or a stricter class if the data is more
+  sensitive") steered agents into the old join.
+- Tests: `tests/test_data_class_sets.py` (every pair, never lower, classified
+  only when said, combined claims, a medical bill through Path A and the
+  gateway, rules naming either class); `tests/test_problem_f.py`'s pinned
+  `personal`+`medical` case now expects `medical`; `tests/test_agent_prompt.py`
+  pins the new guidance.
+- HOWTO has a "Data classes" section; README, THREAT_MODEL, AGENTS.md,
+  llms.txt, and the `--data-class` help match.
+
+Upgrading: a call whose claim and floor were two different classes among
+`personal`, `medical`, and `financial` used to be `classified`. It is now
+`medical`, `financial`, or `financial+medical`, so a rule that denies only
+`classified` now allows it. To keep refusing those calls, add `medical`
+and/or `financial` to the rule's `data_class_in`. An outstanding token
+issued before the upgrade for such a call fails the gateway's form check
+(the recomputed `data_class` differs); tokens live at most 300 seconds.
+
+## Live test run 5 (blind) fixes — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. From GrokBot's blind run 5
+(new domain, constitution, agent, and two judges; files in
+`tests/live/run5/` on the test branch at `4672a37`). Item 1 tightens claim
+parsing (maintainer-approved); items 2 and 3 change a message and add a
+warning; item 4 is docs.
+
+1. A repeated data class (`financial+financial`, `medical+medical`, ...) is
+   `malformed_action`, as HOWTO already said (C36: it was accepted as
+   `financial` and a payment was redeemed). `financial` and `medical` are
+   accepted in either order (C24); HOWTO now says so.
+   `tests/test_data_class_sets.py` replaces the test that expected
+   `medical+medical` to collapse.
+2. The judges config loader reports an unmeetable quorum with the
+   documented reason (C45): it now raises `too_few_judges_configured:2<3
+   (required_yes=3, min_responding=..., judges=2)` from `unmeetable_floor`,
+   the same check `TwoKey` and `convene` use, instead of `required_yes=3
+   exceeds number of judges 2`. `min_responding` above the number of judges,
+   and too few distinct providers (`insufficient_distinct_providers:`), are
+   now also refused when the file loads.
+3. `two-key sign-constitution` warns on stderr for each tool that does not
+   map a field a `deny_if_fields` rule reads, and whether the rule then
+   always denies that tool, never denies it, or reads the default
+   (`two_key.fields.unmapped_rule_field_warnings`). Signing still succeeds.
+   Run 5's first attempt had every non-payment tool denied by a strict
+   `po_matched` default; a permissive default instead turns the rule off for
+   a payment tool that forgets the mapping.
+   `tests/test_unmapped_field_warnings.py`.
+4. HOWTO "Designing a constitution" point 8: say what is allowed as plainly
+   as what is refused; a broad "refuse anything out of the ordinary" line
+   with judges that must all agree denied an ordinary verification lookup
+   (C38). Custom fields and "Known trade-offs" describe the new warning.
+
+## Docs: what Two-Key verifies (live run 5c) — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Docs only. From GrokBot's
+run 5c (`tests/live/run5c/` on the test branch at `cb5dd11`), which
+confirmed the run-5 fixes live.
+
+- HOWTO "What Two-Key verifies, and what it does not": Two-Key verifies
+  that the call that runs is the call both keys approved; it does not verify
+  facts the agent asserts. The agent writes the arguments, so a custom field
+  is what the call says, not a fact. Run 5c C05: `po_matched: true` on a
+  mismatched invoice passed both keys and was paid. Facts must be checked
+  by the tool, or supplied by the integration (no input for that yet).
+- The same limit in README "Known limits", THREAT_MODEL, AGENTS.md (do not
+  describe fields as verification), llms.txt, and HOWTO "What happens to a
+  call".
+- HOWTO "Designing a constitution" point 8 now uses the sentence run 5c
+  tested ("Staff may run lookups that verify a claimed payee or billing
+  change; such a lookup only checks and authorizes nothing."), which turned
+  a judge's false deny into an approval.
+
+## Release v0.3.1 — 2026-10-14
+
+Package version 0.3.1 (`pyproject.toml`, `two_key.__version__`, `uv.lock`
+regenerated with uv 0.13.0). To be tagged `v0.3.1` on `main` after this
+merges. Tag `v0.3.0` stays on `e44be56`. Not published to PyPI.
+
+Status: **beta (pre-1.0)**, no longer "prototype". The maintainer reviewed
+the changes with a refereed live functional harness (GrokBot; runs 1 to 5c
+on `test/live-functional-2026-10-13`) and automated scanners (Semgrep,
+DeepSource, Bandit, CodeQL). There has been no independent audit. SECURITY.md
+now asks for private vulnerability reports (Security tab); README, ROADMAP,
+SCOPE, FIT, THREAT_MODEL, JUDGES_AND_QUORUM, AGENTS.md, and llms.txt carry
+the new status. ROADMAP: the maintainer moved 0.6 (MCP adapter, reference
+wrapper, #89) ahead of 0.4 and 0.5.
+
+0.3.1 is the sum of the sections since "Release v0.3.0": live-test docs,
+data classes in the agent prompt, the syntax-only agent vocabulary, agent
+declines, data classes that combine as a set, the run-5 fixes (repeated
+class refused, quorum reason, unmapped-field warning), and "what Two-Key
+verifies".
+
+### Upgrading from 0.3.0
+
+- **Data classes combine as a set.** A claim and floor that were two
+  different classes among `personal`, `medical`, and `financial` used to
+  become `classified`; they are now `medical`, `financial`, or
+  `financial+medical`. A rule that denies only `classified` now allows those
+  calls. Add `medical` and/or `financial` to its `data_class_in` to keep
+  refusing them. A repeated class (`financial+financial`) is now
+  `malformed_action`.
+- **Agent declines.** An agent reply `{"decline": "..."}` is an
+  `agent_declined` deny. `MonitoredAgent.complete` raises `AgentDeclined`, a
+  subclass of `AgentConfigError`, so code that catches that still fails
+  closed. The agent system prompt and the strict response schemas changed
+  (a `decline` key, the data-class guidance).
+- **Judges config.** A quorum the judges can never meet now fails to load
+  with `too_few_judges_configured:` (and `insufficient_distinct_providers:`)
+  instead of `required_yes=... exceeds number of judges ...`; a
+  `min_responding` above the number of judges is now refused at load, not at
+  start.
+- **Signing** may print `two-key: WARNING:` lines for tools that do not map
+  a field a `deny_if_fields` rule reads. Signing still succeeds.
+- Existing ledgers, keys, and signed constitutions open unchanged; a
+  constitution without custom fields is still byte-for-byte v1.
+- An outstanding token issued by 0.3.0 for a call whose data class now
+  combines differently fails the gateway's form check; tokens live at most
+  300 seconds.
+
+## PR #90 DeepSource fixes — 2026-10-14
+
+On branch `working`. Package version stays 0.3.1. Tests only.
+
+- DeepSource PYL-W0102 (critical, "dangerous default value"): the test
+  helpers `signed()` in `tests/test_agent_prompt.py` and `warnings_for()` in
+  `tests/test_unmapped_field_warnings.py` took the module-level `RULES`,
+  `SPECS`, and `FIELDS` as default arguments. They now default to `None` and
+  pick the module value inside. No helper mutated them, so no test result
+  changes.

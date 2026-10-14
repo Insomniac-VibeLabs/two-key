@@ -394,6 +394,17 @@ class ConceptTests(unittest.TestCase):
         with self.assertRaisesRegex(JudgeConfigError, "quorum profile must be one of"):
             load_config({"judges": [judge], "quorum": {"profile": "paranoid"}})
 
+    def test_unmeetable_quorum_in_config_names_the_documented_reason(self):
+        # Live run 5 (C45): the loader said "required_yes=3 exceeds number of judges 2", not the
+        # documented too_few_judges_configured reason.
+        from two_key.judges.config import load_config
+        judges = [{"id": "a", "type": "ollama", "model": "qwen2.5:7b"},
+                  {"id": "b", "type": "ollama", "model": "llama3.1:8b", "base_url": "http://localhost:11435"}]
+        with self.assertRaisesRegex(JudgeConfigError, r"^too_few_judges_configured:2<3 "):
+            load_config({"judges": judges, "quorum": {"required_yes": 3}})
+        with self.assertRaisesRegex(JudgeConfigError, r"^too_few_judges_configured:2<3 "):
+            load_config({"judges": judges, "quorum": {"required_yes": 1, "min_responding": 3}})
+
     def test_section4_does_not_skip_path_b(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, tk = _engine(tmp, quorum=QuorumPolicy.section4(required_yes=2))

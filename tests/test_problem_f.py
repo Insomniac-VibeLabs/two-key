@@ -225,7 +225,7 @@ class ProblemFTests(unittest.TestCase):
     def test_join_never_lowers_the_floor(self):
         self.assertEqual(join_data_class("public", "medical"), "medical")
         self.assertEqual(join_data_class("classified", "public"), "classified")
-        self.assertEqual(join_data_class("personal", "medical"), "classified")
+        self.assertEqual(join_data_class("personal", "medical"), "medical")   # was classified before class sets
         self.assertEqual(join_data_class("financial", "financial"), "financial")
 
     def test_omitted_tool_specs_are_refused(self):

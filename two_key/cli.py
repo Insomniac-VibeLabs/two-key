@@ -56,6 +56,7 @@ import sys
 from pathlib import Path
 
 from .constitution import ENVELOPE_FORMATS, load_unsigned_with_fields, save_envelope, sign_constitution
+from .fields import unmapped_rule_field_warnings
 from .keys import generate_private_key, load_private_key_file, load_public_key, save_private_key, save_public_key
 
 
@@ -75,8 +76,11 @@ def _init_key(args) -> int:
 def _sign(args) -> int:
     key = load_private_key_file(args.key)
     prose, rules, specs, fields = load_unsigned_with_fields(args.prose, args.rules)
-    save_envelope(args.out, sign_constitution(prose, rules, key, specs, fields=fields,
-                                              envelope_format=args.envelope_format))
+    envelope = sign_constitution(prose, rules, key, specs, fields=fields, envelope_format=args.envelope_format)
+    save_envelope(args.out, envelope)
+    signed = envelope["signed"]
+    for line in unmapped_rule_field_warnings(signed["hard_rules"], signed["tool_specs"], signed.get("fields") or {}):
+        print(f"two-key: WARNING: {line}", file=sys.stderr)
     print(f"wrote {args.out}")
     return 0
 
@@ -372,7 +376,8 @@ def main(argv: list[str] | None = None) -> int:
     auth.add_argument("--amount-usd", type=float, default=None,
                       help="claim this USD amount; omit it and the amount is read from the argument bytes")
     auth.add_argument("--data-class", default=None,
-                      help="claim this data class; omit it and a missing class is classified, then the tool floor")
+                      help="claim this data class (or financial+medical); omit it and a missing class is "
+                           "classified, then the tool floor")
     auth.add_argument("--irreversible", action=argparse.BooleanOptionalAction, default=None,
                       help="claim irreversible, or --no-irreversible for reversible; omit it and the tool spec decides")
     auth.add_argument("--counterparty", default=None,

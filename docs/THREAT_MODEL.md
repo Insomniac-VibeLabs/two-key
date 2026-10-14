@@ -1,8 +1,9 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.3.0. Tag `v0.3.0` on `main` is the tagged release. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
-It is not a penetration test and it is not an independent review. The package is a
-prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
+This is the design model for `two-key-concept` 0.3.1. Tag `v0.3.1` on `main` is the tagged release. Tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+It is not a penetration test and it is not an independent review. The package is
+beta (pre-1.0): maintainer-reviewed with live LLM testing and automated
+scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
 
 How to report a vulnerability is [SECURITY.md](../SECURITY.md). The longer
@@ -57,8 +58,16 @@ the code wins, then this file should be corrected.
 
 ## Trust boundaries
 
-- Agent to `authorize_from_agent`. The reply is a proposal. The method does
-  not execute a tool. A cloud judge must not reuse an agent credential.
+- Caller to the monitored agent. The agent gets the system prompt, the
+  constitution prose, the instruction, and, only when the caller passes
+  it, the syntax-only `agent_vocabulary()`. It never gets bytecode, an
+  `allow` list, a rule, a threshold, or a credential. Ids written in the
+  prose or the instruction do reach it and its host.
+- Agent to `authorize_from_agent`. The reply is a proposal or a decline. The
+  method does not execute a tool. A decline (`agent_declined`) runs neither
+  path and issues no token; a decline mixed with a call is
+  `malformed_proposal`. A hostile agent can decline to deny service, as it
+  already could with a bad proposal; it cannot turn a decline into an allow. A cloud judge must not reuse an agent credential.
   A missing session is a deny (`cloud_judge_session_required`).
 - Caller to Path A. The VM sees the normalized action record, not the proposal.
 - Caller to Path B. Judges see the constitution prose and the normalized
@@ -157,6 +166,12 @@ the code wins, then this file should be corrected.
   fields (`fields:`, `deny_if_fields`) are read the same way: from the
   argument path the signed spec names, never from the agent's claim. A tool
   that does not map a field gets that field's signed default.
+- Two-Key does not verify facts about the world. The agent writes the
+  arguments, so a custom field such as `po_matched` is the agent's
+  assertion; a rule on it checks consistency, not truth (live run 5c, C05:
+  `po_matched: true` on a mismatched invoice was paid). The tool, or the
+  integration calling Two-Key, must check such facts against the system of
+  record. There is no input for caller-supplied facts yet.
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are off by default; `high_assurance`
   turns them on. A judge that is not the same agent may still share a
@@ -200,9 +215,11 @@ claims to close.
   the bytes is a deny (`amount_mismatch`, `counterparty_mismatch`,
   `irreversible_mismatch`). An omitted amount or counterparty is filled from
   the bytes. A missing amount path, a non-numeric amount, or a currency path
-  that is not `usd` denies. `data_class` is the stricter of the claim and
-  `data_class_floor`. Two different middle classes (`personal`, `medical`,
-  `financial`) join to `classified`. The token binds `spec_hash` and that
+  that is not `usd` denies. `data_class` combines the claim and
+  `data_class_floor`: `public` < `personal` < `financial`, `medical` <
+  `classified`; `financial` and `medical` together are `financial+medical`,
+  which a `data_class_in` rule naming either matches. Only a claim or floor
+  of `classified`, or an omitted claim, is `classified`. The token binds `spec_hash` and that
   form. The gateway recomputes the form from the same bytes and refuses a
   mismatch. Changing a spec changes `spec_hash`, so outstanding tokens fail
   at the gateway. This package does not classify free text and does not
@@ -316,6 +333,24 @@ claims to close.
 - There is no TEE. OAuth device-code judge auth is rejected. A username and
   password is accepted only as HTTP Basic over HTTPS (`type: basic`). Use
   `env`, `keyring`, `callback`, or `basic`.
+- `judges.yaml` and `agents.yaml` are trusted operator configuration. A
+  `callback` auth entry names `module:function`, and that module is
+  imported when the file loads. An attacker who can write either file can
+  run code in the `TwoKey` process, which holds every key. Protect them
+  like the code.
+- By default the monitored agent is not given `tool_specs`. It learns
+  tool ids, argument keys, counterparty ids, and data classes only from
+  the signed prose. An agent that guesses them is denied, which is
+  fail-closed but makes legitimate calls fail when the prose leaves them
+  out. The opt-in `TwoKey.agent_vocabulary()` sends tool ids, argument
+  paths, value syntax, floors, and data classes, and grants nothing. It
+  never lists a value (no `allow` list, enum value, integer bound, rule,
+  threshold, `deny_counterparties`, description, default, or
+  `irreversible` flag), so an agent doing reconnaissance learns the shape
+  of a call, not which payee or amount would pass; each wrong guess is a
+  ledgered deny. Ids written in the prose do reach the agent and its
+  host. Two-Key does not map display names to ids and does no fuzzy
+  matching.
 - The signatures are not quantum resistant. Ed25519 signs the constitution,
   the ledger head (principal and witness), and capability tokens. A
   sufficiently capable quantum computer could forge an Ed25519 signature.
@@ -326,7 +361,7 @@ claims to close.
 
 ## Out of scope
 
-- The prototype status itself and missing FIPS validation. A planned
+- The lack of an independent audit, and missing FIPS validation. A planned
   approved mode (see [ROADMAP.md](../ROADMAP.md)) would run on a validated
   module. It would not validate this package.
 - Prompt injection that Path A denies because the structured record tripped

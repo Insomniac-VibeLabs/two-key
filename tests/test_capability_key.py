@@ -57,7 +57,7 @@ class KeyFile(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tk = engine(Path(tmp, "l"), generate_private_key())
             cap_dir = tk.ledger.capability_key_path().parent
-            os.chmod(cap_dir, 0o755)
+            os.chmod(cap_dir, 0o755)  # skipcq: BAN-B103 -- the test loosens the mode to check it is tightened to 0o700
             engine(Path(tmp, "l"), tk.ledger.private_key)
             self.assertEqual(mode(cap_dir), 0o700)
 

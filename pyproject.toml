@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "two-key-concept"
-version = "0.3.0"
+version = "0.3.1"
 description = "Initial Two-Key concept: ledger, Path A, Path B, and judge/agent hooks. No scanning."
 requires-python = ">=3.10"
 license = "Apache-2.0"

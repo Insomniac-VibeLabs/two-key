@@ -23,7 +23,7 @@ from .action import Action, ActionValidationError, normalize_action
 from .audit import identities_digest, policy_digest
 from .canonical import (MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, canonical_hash, digest_hex,
                         to_plain)
-from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal
+from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, AgentDeclined, parse_proposal, tool_vocabulary
 from .agent_meta import (AgentMetadataError, REASON_LEDGER_BODY, cap_ledger_text, check_agent_meta_field,
                          concept_agent_record, normalize_origin, type_tag)
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
@@ -188,6 +188,12 @@ class TwoKey:
             "same_model_tenant_optin_pairs": list(self.separation.tenant_optin_pairs),
         })
         self.ledger.checkpoint()
+
+    def agent_vocabulary(self, tools: list[str] | None = None) -> str:
+        """Text for ``MonitoredAgent.complete(vocabulary=...)``: signed tool ids, argument paths, value
+        syntax, floors, and data classes; never a value. ``tools`` limits it to one task's tools.
+        Opt-in; it goes to the agent's host. It grants nothing and changes neither path."""
+        return tool_vocabulary(self.constitution, tools)
 
     def gateway(self, tools: dict | None = None, **kw) -> ToolGateway:
         """The supported way to build the gateway: in this process, on this ledger object (#45).
@@ -491,6 +497,11 @@ class TwoKey:
                                   size_record(proposal_text, "proposal_text"))
             try:
                 action, arguments, proposal = parse_proposal(proposal_text)
+            except AgentDeclined as d:
+                # Not a call: neither path runs and no token exists. The reason is agent text, kept like a
+                # proposal string (at most MAX_DECLINE_CHARS) and never used as the decision reason.
+                return self._deny(origin, "agent_declined", record, None, None,
+                                  {"decline": d.reason, **size_record(proposal_text, "proposal_text")})
             except (AgentConfigError, RecursionError):   # the message may quote a key name: not in the reason
                 return self._deny(origin, "malformed_proposal", record, None, None,
                                   {**size_record(proposal_text, "proposal_text"),

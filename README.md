@@ -1,7 +1,7 @@
 # Two-Key concept
 
 [![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/releases)
-[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.3.0/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept/)
+[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.3.1/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept/)
 
 Two independent keys must turn before an AI agent can act.
 
@@ -101,7 +101,9 @@ flowchart TD
   compile --> bytecode["Path A bytecode"]
   compile --> judgeText["Path B judge text"]
   instruction["Untrusted instruction"] --> agent["MonitoredAgent.complete<br/>Grok, ChatGPT, Claude, Gemini, or local Ollama"]
-  judgeText -->|"constitution prose only"| agent
+  judgeText -->|"constitution prose"| agent
+  constitution -.->|"opt-in"| vocab["agent_vocabulary()<br/>tool ids, paths, value syntax<br/>never a value or a rule"]
+  vocab -.-> agent
   agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
   bytecode --> pathA["Path A Policy VM"]
   authorize --> pathA
@@ -124,9 +126,20 @@ flowchart TD
 ```
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
-It does not receive Path A bytecode, judge credentials, or tool credentials.
+It does not receive Path A bytecode, judge credentials, or tool
+credentials. It receives `tool_specs` only as the opt-in, read-only
+`vocabulary=tk.agent_vocabulary(tools=[...])`: tool ids, argument paths,
+value syntax, floors, and data classes, never a value (no `allow` list,
+enum value, bound, or rule). The exact values a call needs, such as the
+payee id, come from the instruction or the prose (HOWTO "Designing a
+constitution"). Either way Path A checks every call.
 Its reply is data: `tool`, `arguments`, `proposal`, and optional structured
-fields. Extra keys are rejected. `authorize_from_agent` parses that JSON,
+fields, or a decline (`{"decline": "<reason>"}`), which is a ledgered
+`agent_declined` deny with no token and neither path run. Omitting
+`data_class` means `classified`, whatever the tool's floor is. Classes
+combine as a set: `medical` or `financial` on a `personal` tool stays
+`medical` or `financial`, both together are `financial+medical`, and only
+`classified` is `classified` (HOWTO "Data classes"). Extra keys are rejected. `authorize_from_agent` parses that JSON,
 records `agent id`, `hosting`, and `trusted: false`, and does not call the
 model again. Those fields are operator/library metadata (str, at most 256
 characters after strip); non-str or oversize is a deny. Hosting is local or
@@ -181,9 +194,10 @@ timed-out ballot is an abstention, and an abstention is not a yes. No
 judge, no deadline, or two judges with the same id does not start. Each
 ballot is paired with its judge by position and takes its judge id from
 the judge; a ballot that names another judge abstains
-(`judge_id_mismatch`). A judge
-that is not on a loopback host makes the round deny when `agent_session`
-is missing. If that string equals the credential of any judge, local or
+(`judge_id_mismatch`). A cloud judge makes the round deny when
+`agent_session` is missing. A judge is cloud when it is not on a loopback
+host, or when its model name ends in `:cloud` or `-cloud`, on any host
+(an Ollama cloud model served through `localhost` is still cloud). If that string equals the credential of any judge, local or
 cloud, wherever it connects, the ballot abstains with
 `cloud_judge_reused_agent_session` and the round denies. The credential
 named for the monitored agent is compared the same way on every call, so a
@@ -194,6 +208,11 @@ session at the model host.
 
 Without a local judge, the constitution prose, the action record, and any
 attached tool arguments go to the cloud judges' vendors.
+
+Judges do not enforce the `allow` lists or the data class; Path A does.
+`judges.yaml` and `agents.yaml` are trusted operator configuration: a
+`callback` auth entry imports the module it names, so whoever can write
+those files can run code in the `TwoKey` process.
 
 Every `decision` in the ledger records `policy_digest`, the digest of the
 quorum policy in effect (opt-outs included, written in full once in
@@ -223,9 +242,13 @@ sequenceDiagram
   participant Gateway
   participant Tool
 
-  Caller->>Agent: instruction and constitution prose
-  Agent-->>Caller: JSON proposal, no tool call
+  Caller->>Agent: instruction, constitution prose, opt-in vocabulary (syntax only)
+  Agent-->>Caller: JSON proposal or decline, no tool call
   Caller->>TwoKey: proposal and agent_session
+  alt agent declined
+    TwoKey->>Ledger: decision agent_declined, with the decline reason
+    TwoKey-->>Caller: deny, neither path runs, no token
+  end
   alt malformed or over a size limit
     Note over TwoKey: malformed_proposal, proposal_too_large, action_too_large, malformed_action, args_too_large, invalid_call
     TwoKey->>Ledger: decision with size and digest only
@@ -326,11 +349,18 @@ operator also gives the witness public key as configuration
 where whoever writes the ledger directory cannot change it. With that pin,
 forging a head needs the principal, witness, and ledger keys together. The
 witness key changes only by a ledgered rotation (`two-key rotate-witness`).
-It is a prototype. It is not a FIPS 140-3 validated module.
+Status: beta (pre-1.0). It is maintainer-reviewed with live LLM testing and
+automated scanners (Semgrep, DeepSource, Bandit, CodeQL), not independently
+audited. It is not a FIPS 140-3 validated module.
 
 ## Known limits
 
 - No independent review and no production deployment.
+- Two-Key verifies that the call that runs is the call both keys approved.
+  It does not verify facts the agent asserts: a custom field read from the
+  arguments (for example `po_matched: true`) is the agent's word. The tool
+  or the integration must check such facts against the system of record
+  (HOWTO "What Two-Key verifies").
 - No external anchor for the ledger. Someone holding the principal and
   ledger keys can rewrite a ledger that never leaves the machine, unless
   the witness public key is configured outside the ledger
@@ -358,10 +388,11 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Roadmap
 
-The plan from the 0.2.4 prototype to a 1.0 release. It states intent, not a
+The plan from 0.2.4 to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-0.3.0 (key backup) is released: tag `v0.3.0` on `main`. Nothing after 0.3 in
-that plan exists yet.
+0.3.0 (key backup) and 0.3.1 (live-test fixes, beta) are released; tag
+`v0.3.1` on `main` is current. The MCP adapter (0.6) moves ahead of 0.4 and
+0.5. Nothing after 0.3 in that plan exists yet.
 The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
@@ -395,8 +426,9 @@ flowchart LR
 | 0.11, any time before 1.0 | Optional reputation halt. Off unless configured. Not a change to `revoke` |
 | After 1.0, not scheduled | More spec field types (decimal, URL, path, email, opaque bytes), and `amount` / `counterparty` as ordinary typed fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped in 0.3.0 |
 
-Install from git. It is not published to PyPI. Package version is 0.3.0.
-Tag `v0.3.0` on `main` is the tagged release. Tag `v0.2.4` stays on
+Install from git. It is not published to PyPI. Package version is 0.3.1.
+Tag `v0.3.1` on `main` is the tagged release. Tag `v0.3.0` stays on
+`e44be56`. Tag `v0.2.4` stays on
 `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
 commit `2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
 some judges 0.2.2 accepted (one holding the agent's credential without
@@ -409,19 +441,22 @@ directory: read "Upgrading from 0.2.3". 0.3.0 adds key backup, custom Path
 A fields, and `TwoKey.gateway()` (#45). Existing ledgers and constitutions
 open unchanged: read "Upgrading from 0.2.4". A constitution that declares
 custom fields signs as v2, which installs before 0.3.0 refuse: read
-"Custom Path A fields" > "Upgrading" in CHANGES.md.
+"Custom Path A fields" > "Upgrading" in CHANGES.md. 0.3.1 changes how data
+classes combine and adds agent declines: read "Release v0.3.1" > "Upgrading".
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.0"
+pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.1"
 ```
 
-That ref is the tagged 0.3.0 release (key backup, custom Path A fields, and
-the #45 gateway boundary). `main` is that release. `working` is where the
-next changes land. For the previous release, use `@v0.2.4`.
+That ref is the tagged 0.3.1 release (0.3.0's key backup, custom Path A
+fields, and #45 gateway boundary, plus the live-test fixes: agent declines,
+the syntax-only agent vocabulary, and data classes that combine as a set).
+`main` is that release. `working` is where the next changes land. For the
+previous release, use `@v0.3.0`.
 
 ## Run the offline demo
 
@@ -470,7 +505,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, custom fields, judges, agents |
-| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.0 is tagged `v0.3.0` |
+| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.1 is tagged `v0.3.1` |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/JUDGES_AND_QUORUM.md` | How judges vote and how Path A and Path B combine |
 | `docs/FIT.md` | Whether this package is the right control |

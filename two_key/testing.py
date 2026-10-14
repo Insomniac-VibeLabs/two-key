@@ -28,7 +28,7 @@ class HeuristicJudge(Judge):
             flags += 2; why.append("large outbound value")
         if action.irreversible and action.amount_usd > 20:
             flags += 1; why.append("irreversible value transfer")
-        if action.data_class in {"medical", "classified"}:
+        if {"medical", "classified"} & set(action.data_class.split("+")):
             flags += 2; why.append("sensitive data class")
         if any(w in text for w in ("ignore previous", "jailbreak", "do anything now")):
             flags += 5; why.append("injection language")

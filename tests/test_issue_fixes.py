@@ -203,7 +203,7 @@ class KeyFiles(unittest.TestCase):
 
     def test_new_witness_directory_is_private(self):
         self.assertEqual(stat.S_IMODE(self.tk.ledger.witness_path.parent.stat().st_mode), 0o700)
-        os.chmod(self.tk.ledger.witness_path.parent, 0o755)
+        os.chmod(self.tk.ledger.witness_path.parent, 0o755)  # skipcq: BAN-B103 -- the test loosens the mode to check it is tightened to 0o700
         Ledger(self.path, self.key)                         # the default directory is set back to 0700
         self.assertEqual(stat.S_IMODE(self.tk.ledger.witness_path.parent.stat().st_mode), 0o700)
 

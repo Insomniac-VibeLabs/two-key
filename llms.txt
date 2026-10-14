@@ -1,13 +1,14 @@
 # Two-Key concept
 
 Authorization layer for AI agents. A tool call runs only if Path A (a policy VM)
-and Path B (a judge quorum) both allow. Prototype. Apache-2.0.
+and Path B (a judge quorum) both allow. Beta (pre-1.0): maintainer-reviewed with live LLM
+testing and automated scanners, not independently audited. Apache-2.0.
 
 Package: two-key-concept
 Import: two_key
-Package version: 0.3.0. Tag v0.3.0 is on main. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
+Package version: 0.3.1. Tag v0.3.1 is on main. Tag v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-Not on PyPI. Install the tagged release from git ref v0.3.0 (two-key-concept[yaml] for YAML configs).
+Not on PyPI. Install the tagged release from git ref v0.3.1 (two-key-concept[yaml] for YAML configs).
 uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
@@ -80,7 +81,9 @@ Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer
 string; up to 64), each with a signed default and an optional description. A tool spec maps
 a field to an argument path; a mapped field is required, an unmapped tool gets the default.
 Rules name them with deny_if_fields (eq, neq, gt, gte, lt, lte, in, not_in by type). Values
-come from the argument bytes only; an agent cannot claim them. Enum and string values are
+come from the argument bytes only; an agent cannot claim them, but the agent writes the
+arguments, so a field is the call's content, not a verified fact (po_matched: true is an
+assertion). Facts about the world must be checked by the tool or supplied by the integration. Enum and string values are
 printable ASCII by default, or Unicode with a declared script (charset: unicode, scripts:).
 A description is never compiled, sent to a judge, or used in a reason. A rules file with
 fields signs as a v2 constitution; --envelope-format v2 forces v2 without fields.
@@ -88,6 +91,22 @@ Ledger deny/error type labels use type_tag (≤32 chars); derive_failed and Enco
 two-key authorize omits claim fields the operator did not pass. An omitted
 amount or counterparty is read from the argument bytes. An omitted
 irreversible follows the tool spec. An omitted data_class is classified,
-then the tool floor, which never lowers it. --amount-usd, --counterparty,
+then the tool floor, which never lowers it. Classes combine: public < personal < financial,
+medical < classified; financial and medical together are financial+medical (a data_class_in rule
+naming either matches), never an invented classified. A claim may be financial+medical in either order;
+a repeated class (financial+financial) is malformed_action. sign-constitution warns on stderr for each tool
+that does not map a field a deny_if_fields rule reads (always denies / never denies / reads the default). --amount-usd, --counterparty,
 --data-class, and --irreversible / --no-irreversible set a claim. A claim
 that disagrees with the bytes or the spec is a deny.
+MonitoredAgent.complete sends the agent the constitution prose and the instruction. It sends
+tool_specs only with the opt-in vocabulary=tk.agent_vocabulary(tools=None|[...]) (tool ids,
+argument paths, value syntax, floors, field types, data classes; never a value: no allow list,
+enum value, integer bound, rule, threshold, blocked party, description, default, or
+irreversible flag; grants nothing). Exact values (payee id, enum value) come from the
+instruction or the prose; ids in the prose reach the agent too. An agent proposal that omits data_class is classified, whatever the floor.
+No display-name-to-id mapping or fuzzy matching. An agent declines with {"decline": "<reason>"}
+(call keys may be present only if empty): authorize_from_agent denies agent_declined, neither path
+runs, no token; complete() raises AgentDeclined. A decline mixed with a call is malformed_proposal. Judges do not enforce allow lists or data classes; Path A does.
+decision.reason names one cause (parse/limit/derive deny, then Path A, then Path B); read
+path_a.reason and path_b.reason too. judges.yaml and agents.yaml are trusted operator config:
+a callback auth entry imports the module it names.

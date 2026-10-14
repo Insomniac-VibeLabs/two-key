@@ -10,7 +10,8 @@ any LLM reader is in [llms.txt](llms.txt). Do not replace one with the other.
 
 Concept line only: signed constitution, Path A bytecode, Path B judge hooks,
 monitored-agent hooks, encrypted ledger, single-use capability token, and a
-verify-only gateway. Prototype. Apache-2.0.
+verify-only gateway. Beta (pre-1.0), maintainer-reviewed, not independently
+audited. Apache-2.0.
 
 Do **not** add a scanning or antivirus engine, chain anchoring, or seed
 phrases here. The items in [ROADMAP.md](ROADMAP.md) are in scope: key backup
@@ -21,8 +22,9 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.3.0 is tag `v0.3.0` on `main`. Tag `v0.2.4` stays on `fc836bb`.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.3.0` or `v0.2.0`
+- Package 0.3.1 is tag `v0.3.1` on `main`. Tag `v0.3.0` stays on `e44be56`.
+  Tag `v0.2.4` stays on `fc836bb`.
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.3.1`, `v0.3.0`, or `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
   where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
@@ -33,7 +35,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key-concept`, import name `two_key`,
-version `0.3.0`, tag `v0.3.0` on `main`. Not on PyPI.
+version `0.3.1`, tag `v0.3.1` on `main`. Not on PyPI.
 
 ```bash
 python3 -m venv .venv
@@ -57,7 +59,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 
 Git install:  
-`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.0"`
+`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.1"`
 
 ## Tests and docs
 
@@ -80,15 +82,17 @@ live outside the ledger directory. The gateway must verify only; it must not
 mint.
 
 Before changing authorization, tokens, the gateway, the ledger, or judge ≠
-agent identity checks: get a security review from the maintainer. While this is
-a prototype, report security findings as public issues, per
-[SECURITY.md](SECURITY.md).
+agent identity checks: get a security review from the maintainer. Report
+security findings privately, per [SECURITY.md](SECURITY.md).
 
 ## Fail-closed defaults to preserve
 
 - A missing ballot is not a yes.
 - Both paths run once the call is well-formed and within limits.
 - `authorize_from_agent` does not execute a tool.
+- A decline (`{"decline": ...}`) is not a call: `agent_declined` deny,
+  neither path runs, never a token. A decline that also carries a tool,
+  arguments, or a claim is `malformed_proposal` (`tests/test_agent_decline.py`).
 - `require_path_a_first` is not a skip.
 - JSON/YAML inputs refuse duplicate keys and YAML merge keys. Oversized or malformed calls deny
   before either path.
@@ -102,11 +106,26 @@ a prototype, report security findings as public issues, per
   `QuorumPolicy.without_diversity_floors()` explicitly defaults
   `required_yes` to `2`.
 - `tool_specs` is required. A disagreeing claim is a deny.
+- An omitted `data_class` is `classified`, before the floor. Do not
+  default it to the tool's floor. Classes combine as a set
+  (`join_data_class`): `financial` and `medical` replace `personal`,
+  together they are `financial+medical`, and only `classified` (claimed,
+  floored, or omitted) is `classified` (`tests/test_data_class_sets.py`).
+  A `data_class_in` rule matches any class the call carries. Do not map display names to
+  counterparty ids or fuzzy-match them.
+- `agent_vocabulary()` is opt-in and lists syntax, never a value: no
+  `allow` list, enum value, integer bound, rule, threshold,
+  `deny_counterparties`, description, default, or `irreversible` flag
+  (`tests/test_agent_prompt.py`). Do not add a mode that sends them.
+  Without `vocabulary=`, the agent user prompt stays byte-for-byte the 0.3.0
+  prompt.
 - Path A evaluates five built-in structured fields (`tool`, `amount_usd`,
   `data_class`, `counterparty`, `irreversible`) and the operator's custom
   fields (`two_key/fields.py`). Custom field values come from argument
   paths in the signed spec only, never from the agent's claim or
-  `Action.raw`; `LOAD` refuses any name but a built-in field, and custom
+  `Action.raw`. The agent writes the arguments, so a field is what the call
+  says, not a verified fact; do not describe fields as verification
+  (HOWTO "What Two-Key verifies"); `LOAD` refuses any name but a built-in field, and custom
   fields load with `LOAD_FIELD`. A mapped field is required; an unmapped
   tool gets the signed default. A description is never compiled, sent to a
   judge, or used in a reason. A constitution with no custom fields must

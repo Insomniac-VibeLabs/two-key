@@ -28,6 +28,7 @@ constitution refuse to load. See HOWTO "Changing a limit".
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from typing import Any, Mapping
@@ -431,3 +432,40 @@ def validate_condition(body: Any, registry: Mapping[str, Mapping[str, Any]], whe
     if count > MAX_CONDITIONS:
         raise FieldError(f"{where}: more than {MAX_CONDITIONS} conditions")
     return out
+
+
+_HOLDS = {
+    "eq": lambda v, lit: v == lit, "neq": lambda v, lit: v != lit,
+    "gt": lambda v, lit: v > lit, "gte": lambda v, lit: v >= lit,
+    "lt": lambda v, lit: v < lit, "lte": lambda v, lit: v <= lit,
+    "in": lambda v, lit: v in lit, "not_in": lambda v, lit: v not in lit,
+}
+
+
+def unmapped_rule_field_warnings(rules: list, tool_specs: Mapping[str, Mapping[str, Any]],
+                                 registry: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """Advice for the signer, not a check: each tool that does not map a field a deny_if_fields rule reads.
+
+    That tool gets the field's signed default. When every condition of the rule reads a default, the rule
+    either always or never denies the tool, and a forgotten mapping is otherwise silent (HOWTO "Known
+    trade-offs by configuration"). Takes the canonical rules, specs, and registry of a signed document.
+    """
+    out: list[str] = []
+    for rule in rules:
+        body = rule.get("deny_if_fields") if isinstance(rule, Mapping) else None
+        if not body:
+            continue
+        for tool in sorted(tool_specs):
+            missing = sorted(set(body) - set(tool_specs[tool].get("fields") or {}))
+            if not missing:
+                continue
+            given = ", ".join(f"{n}={json.dumps(registry[n]['default'])}" for n in missing)
+            if len(missing) == len(body):
+                denies = all(_HOLDS[op](registry[n]["default"], lit) for n in body for op, lit in body[n].items())
+                effect = "always denies it" if denies else "never denies it"
+            else:
+                effect = "reads that default"
+            out.append(f"rule {rule.get('id')!r}: tool {tool!r} does not map {', '.join(missing)} "
+                       f"(default {given}), so the rule {effect}")
+    return out
+
