@@ -32,6 +32,11 @@ is how to report a vulnerability. It is not the model.
 
 - Malware or DLP scanning of tool payloads. It is intentionally absent here.
 - FIPS validation. Algorithms are Ed25519 and SHA-256 from `cryptography`.
+- Code run from operator configuration. `judges.yaml` and `agents.yaml` are
+  trusted: an `auth: {type: callback, callback: "module:function"}` entry
+  imports that module when the file loads. Whoever can write those files
+  can run code in the `TwoKey` process. A way to run code from a file the
+  docs do not call trusted is in scope.
 
 Ledger entries and the head are AES-256-GCM ciphertext. The data key is
 wrapped by a ledger key stored outside the ledger directory. The head needs

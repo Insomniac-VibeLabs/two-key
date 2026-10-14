@@ -102,6 +102,9 @@ a prototype, report security findings as public issues, per
   `QuorumPolicy.without_diversity_floors()` explicitly defaults
   `required_yes` to `2`.
 - `tool_specs` is required. A disagreeing claim is a deny.
+- An omitted `data_class` is `classified`, before the floor. Do not
+  default it to the tool's floor. Do not map display names to
+  counterparty ids or fuzzy-match them.
 - Path A evaluates five built-in structured fields (`tool`, `amount_usd`,
   `data_class`, `counterparty`, `irreversible`) and the operator's custom
   fields (`two_key/fields.py`). Custom field values come from argument

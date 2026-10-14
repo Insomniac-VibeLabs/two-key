@@ -1488,3 +1488,31 @@ Package version stays 0.3.0. No behavior changes, tests only.
   `"0.0.0.0"` appears only as a hostname string in a fixture list for the
   address classifier. Nothing binds a socket. Both lines carry a
   `skipcq: BAN-B104` comment.
+
+## Live-test findings: docs — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. No behavior changes.
+From the live functional test on `test/live-functional-2026-10-13` (0 of 9
+legitimate calls allowed; every safety check held).
+
+- HOWTO "Designing a constitution": point 4 says an omitted `data_class` is
+  `classified` whatever the floor is. New point 6: the monitored agent
+  sees only the prose, so name tool ids, argument keys, counterparty ids,
+  and the class to claim. New point 7: one vocabulary everywhere, ids with
+  optional display names; no display-name mapping or fuzzy matching.
+- HOWTO "Judges": judges do not enforce allow lists or data classes; Path A
+  does. `judges.yaml` and `agents.yaml` are trusted operator config (a
+  `callback` auth entry imports its module). Same note in README,
+  SECURITY.md, and THREAT_MODEL.
+- HOWTO "Authorize from Python": `decision.reason` names one cause (parse,
+  limit, or derive deny, then Path A, then Path B); read
+  `path_a["reason"]` and `path_b["reason"]` too.
+- HOWTO "Monitored agents": the agent is not sent `tool_specs`; an omitted
+  `data_class` is `classified`; there is no decline reply yet.
+- README: the agent is not sent `tool_specs`. The cloud-judge sentence now
+  says a `:cloud` or `-cloud` model counts as cloud on any host, as the code
+  does (`LLMJudge.is_cloud`).
+- `examples/constitution.md` names tools and parties by id. The golden v1
+  hash test reads a frozen copy of the old prose
+  (`tests/fixtures/v1_constitution.md`); its hashes are unchanged.
+- AGENTS.md: keep the `classified` default; no display-name mapping.

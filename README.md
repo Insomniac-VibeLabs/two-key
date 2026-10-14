@@ -124,9 +124,13 @@ flowchart TD
 ```
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
-It does not receive Path A bytecode, judge credentials, or tool credentials.
+It does not receive Path A bytecode, `tool_specs`, judge credentials, or
+tool credentials, so the prose must name the tool ids, argument keys,
+counterparty ids, and data classes the agent should use (HOWTO "Designing
+a constitution").
 Its reply is data: `tool`, `arguments`, `proposal`, and optional structured
-fields. Extra keys are rejected. `authorize_from_agent` parses that JSON,
+fields. Omitting `data_class` means `classified`, whatever the tool's floor
+is. Extra keys are rejected. `authorize_from_agent` parses that JSON,
 records `agent id`, `hosting`, and `trusted: false`, and does not call the
 model again. Those fields are operator/library metadata (str, at most 256
 characters after strip); non-str or oversize is a deny. Hosting is local or
@@ -181,9 +185,10 @@ timed-out ballot is an abstention, and an abstention is not a yes. No
 judge, no deadline, or two judges with the same id does not start. Each
 ballot is paired with its judge by position and takes its judge id from
 the judge; a ballot that names another judge abstains
-(`judge_id_mismatch`). A judge
-that is not on a loopback host makes the round deny when `agent_session`
-is missing. If that string equals the credential of any judge, local or
+(`judge_id_mismatch`). A cloud judge makes the round deny when
+`agent_session` is missing. A judge is cloud when it is not on a loopback
+host, or when its model name ends in `:cloud` or `-cloud`, on any host
+(an Ollama cloud model served through `localhost` is still cloud). If that string equals the credential of any judge, local or
 cloud, wherever it connects, the ballot abstains with
 `cloud_judge_reused_agent_session` and the round denies. The credential
 named for the monitored agent is compared the same way on every call, so a
@@ -194,6 +199,11 @@ session at the model host.
 
 Without a local judge, the constitution prose, the action record, and any
 attached tool arguments go to the cloud judges' vendors.
+
+Judges do not enforce the `allow` lists or the data class; Path A does.
+`judges.yaml` and `agents.yaml` are trusted operator configuration: a
+`callback` auth entry imports the module it names, so whoever can write
+those files can run code in the `TwoKey` process.
 
 Every `decision` in the ledger records `policy_digest`, the digest of the
 quorum policy in effect (opt-outs included, written in full once in
