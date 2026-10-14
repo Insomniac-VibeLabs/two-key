@@ -49,8 +49,15 @@ SYSTEM = (
     f'Omitting "data_class" means {DEFAULT_DATA_CLASS}, whatever the tool is.'
 )
 _INSTRUCTION_START = "<untrusted_instruction>\n"
-# What the vocabulary copies from a custom field's declaration. Never its description or default.
-_FIELD_SCHEMA_KEYS = ("type", "values", "min", "max", "max_length")
+# The vocabulary describes syntax, never values: no allow list, enum value, integer bound, rule
+# threshold, blocked party, description, or default. An agent that probes still has to guess, and
+# every wrong guess is a ledgered deny.
+_EXACT_ID = "an exact id given in the instruction or the constitution; a display name is not an id"
+_FIELD_HINTS = {
+    "enum": "one of the operator's values, given in the instruction or the constitution",
+    "integer": "a JSON integer, given in the instruction or the constitution",
+    "boolean": "JSON true or false",
+}
 
 
 def fence(label: str, text: str, *, escape: bool) -> str:
@@ -68,39 +75,57 @@ def user_prompt(constitution: str, instruction: str, vocabulary: str | None = No
             "constitution are escaped; the policy text is otherwise unchanged. Reply with the JSON object only.")
 
 
+def _field_shape(decl: dict) -> dict:
+    kind = decl.get("type")
+    if kind == "string":
+        return {"type": "string", "value": f"text of at most {decl['max_length']} characters, "
+                                           "given in the instruction or the constitution"}
+    return {"type": kind, "value": _FIELD_HINTS.get(kind, "given in the instruction or the constitution")}
+
+
 def _tool_entry(spec: dict, registry: dict) -> dict:
-    entry: dict[str, Any] = {"irreversible": spec["irreversible"], "data_class_floor": spec["data_class_floor"]}
+    entry: dict[str, Any] = {"data_class_floor": spec["data_class_floor"]}
     if spec.get("amount"):
-        entry["amount"] = dict(spec["amount"])
+        entry["amount"] = dict(spec["amount"])      # paths and the unit only
     if spec.get("counterparties"):
-        entry["counterparties"] = [{"json_path": c["json_path"], "allow": list(c["allow"])}
+        entry["counterparties"] = [{"json_path": c["json_path"], "value": _EXACT_ID}
                                    for c in spec["counterparties"]]
     if spec.get("payload"):
-        entry["payload"] = [dict(p) for p in spec["payload"]]
+        entry["payload"] = [dict(p) for p in spec["payload"]]   # path, shape, max_length
     if spec.get("fields"):
-        entry["fields"] = {
-            name: {"json_path": m["json_path"],
-                   **{k: registry[name][k] for k in _FIELD_SCHEMA_KEYS if k in registry.get(name, {})}}
-            for name, m in sorted(spec["fields"].items())}
+        entry["fields"] = {name: {"json_path": m["json_path"], **_field_shape(registry.get(name, {}))}
+                           for name, m in sorted(spec["fields"].items())}
     if spec.get("deny_unmapped"):
         entry["deny_unmapped"] = True
     return entry
 
 
-def tool_vocabulary(constitution) -> str:
-    """The signed tool ids, argument paths, allowed parties, and classes, for the agent prompt.
+def tool_vocabulary(constitution, tools: list[str] | tuple[str, ...] | None = None) -> str:
+    """The signed tool ids, argument paths, and value syntax, for the agent prompt.
 
-    Read-only and opt-in. It copies schema from ``tool_specs`` and the field registry: never a rule
-    threshold, a blocked party, bytecode, a description, or a default. Path A still checks every call.
+    Read-only and opt-in. It never lists a value: no allow list, enum value, integer bound, rule
+    threshold, blocked party, bytecode, description, default, or ``irreversible`` flag (omitted, that
+    claim follows the spec). ``tools`` limits it to the tools a task needs. Path A still checks every call.
     """
     specs = constitution.tool_specs
     registry = getattr(constitution, "fields", None) or {}
+    if tools is None:
+        names = sorted(specs)
+    else:
+        if isinstance(tools, str) or not all(isinstance(t, str) for t in tools):
+            raise AgentConfigError("tools must be a list of tool ids")
+        unknown = sorted(set(tools) - set(specs))
+        if unknown or not tools:
+            raise AgentConfigError(f"no signed tool spec for {unknown}" if unknown else "tools is empty")
+        names = sorted(set(tools))
     # Signing refuses a spec for a tool off the allow list, so every spec here is an allowed tool.
-    tools = {name: _tool_entry(spec, registry) for name, spec in sorted(specs.items())}
-    body = {"tools": tools, "data_classes": list(DATA_CLASSES), "omitted_data_class": DEFAULT_DATA_CLASS}
-    return ("Signed tool vocabulary. Use these tool ids, argument paths, and counterparty ids exactly; "
-            "a display name is not an id. Claim the tool's data_class_floor as data_class, or a stricter "
-            "class if the data is more sensitive. The rules still check every call.\n"
+    body = {"tools": {name: _tool_entry(specs[name], registry) for name in names},
+            "data_classes": list(DATA_CLASSES), "omitted_data_class": DEFAULT_DATA_CLASS}
+    return ("Signed tool vocabulary: tool ids, argument paths, and the syntax of each value. It lists no "
+            "allowed values; take each value from the instruction or the constitution. Claim the tool's "
+            "data_class_floor as data_class, or a stricter class if the data is more sensitive. Omit "
+            "irreversible, amount_usd, and counterparty; they are read from the arguments and the signed "
+            "spec. The rules still check every call.\n"
             + json.dumps(body, sort_keys=True, ensure_ascii=False))
 
 

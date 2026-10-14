@@ -1555,3 +1555,27 @@ prompt changes only when the caller opts in.
   `tests/test_agent_prompt.py` covers the contents, the exclusions, the
   escaping, the unchanged default prompt, and that a guessed id still
   denies.
+
+## Tool vocabulary lists syntax, never values — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Neither path changes.
+Supersedes the contents listed under "Opt-in tool vocabulary for the
+monitored agent": an agent doing reconnaissance should learn the shape of
+a call, not which payee, value, or amount would pass.
+
+- `tool_vocabulary` / `TwoKey.agent_vocabulary()` no longer list `allow`
+  lists, enum values, integer `min`/`max`, or the `irreversible` flag. A
+  counterparty path says "an exact id given in the instruction or the
+  constitution"; a custom field gives its type (and a string's
+  `max_length`). Still listed: tool ids, the floor, amount path, unit, and
+  currency path, payload paths with shape and `max_length`, and
+  `deny_unmapped` when set. The header tells the agent to take values from
+  the instruction or the prose and to omit `irreversible`, `amount_usd`,
+  and `counterparty`, which come from the arguments and the spec.
+- No full mode: there is no option that sends the allow lists.
+- `agent_vocabulary(tools=[...])` limits the text to one task's tools. An
+  unknown, empty, or non-list `tools` is `AgentConfigError`.
+- HOWTO "Designing a constitution" points 6 and 7: put the exact values a
+  call needs in the instruction; ids written in the prose reach the
+  monitored agent's host too. HOWTO "Monitored agents", "Known trade-offs"
+  (privacy), README, THREAT_MODEL, and llms.txt match.

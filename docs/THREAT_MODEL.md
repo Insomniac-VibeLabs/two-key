@@ -325,11 +325,15 @@ claims to close.
   tool ids, argument keys, counterparty ids, and data classes only from
   the signed prose. An agent that guesses them is denied, which is
   fail-closed but makes legitimate calls fail when the prose leaves them
-  out. The opt-in `TwoKey.agent_vocabulary()` sends the signed ids,
-  paths, allow lists, floors, and classes to the agent; it grants nothing,
-  and for a cloud agent it discloses every allowed party to that vendor
-  on every call. It leaves out rule thresholds and `deny_counterparties`.
-  Two-Key does not map display names to ids and does no fuzzy matching.
+  out. The opt-in `TwoKey.agent_vocabulary()` sends tool ids, argument
+  paths, value syntax, floors, and data classes, and grants nothing. It
+  never lists a value (no `allow` list, enum value, integer bound, rule,
+  threshold, `deny_counterparties`, description, default, or
+  `irreversible` flag), so an agent doing reconnaissance learns the shape
+  of a call, not which payee or amount would pass; each wrong guess is a
+  ledgered deny. Ids written in the prose do reach the agent and its
+  host. Two-Key does not map display names to ids and does no fuzzy
+  matching.
 - The signatures are not quantum resistant. Ed25519 signs the constitution,
   the ledger head (principal and witness), and capability tokens. A
   sufficiently capable quantum computer could forge an Ed25519 signature.

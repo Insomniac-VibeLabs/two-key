@@ -69,32 +69,46 @@ class UserPrompt(unittest.TestCase):
 
 
 class Vocabulary(unittest.TestCase):
-    def test_lists_ids_paths_parties_and_classes(self):
+    def test_lists_ids_paths_and_syntax(self):
         _key, con = signed()
         body = vocab_json(tool_vocabulary(con))
         self.assertEqual(sorted(body["tools"]), ["pay_bill", "search"])
         pay = body["tools"]["pay_bill"]
-        self.assertEqual(pay["counterparties"], [{"json_path": "to", "allow": ["power-co.example"]}])
-        self.assertEqual(pay["amount"]["json_path"], "amount")
+        self.assertEqual([c["json_path"] for c in pay["counterparties"]], ["to"])
+        self.assertIn("exact id", pay["counterparties"][0]["value"])
+        self.assertEqual(pay["amount"], {"json_path": "amount", "unit": "usd", "currency_path": "currency"})
         self.assertEqual(pay["data_class_floor"], "financial")
-        self.assertIs(pay["irreversible"], True)
         self.assertEqual(body["data_classes"], list(DATA_CLASSES))
         self.assertEqual(body["omitted_data_class"], "classified")
 
-    def test_leaves_out_rules_and_blocked_parties(self):
+    def test_never_lists_a_value(self):
         _key, con = signed()
         text = tool_vocabulary(con)
-        for absent in ("4321", "mule.example", "wire_transfer", "spend-cap", "no-wires"):
+        for absent in ("power-co.example", "\"allow\"", "irreversible\"", "4321", "mule.example",
+                       "wire_transfer", "spend-cap", "no-wires"):
             self.assertNotIn(absent, text)
 
-    def test_custom_fields_carry_schema_but_never_description_or_default(self):
-        _key, con = signed(rules=[{"id": "tools", "allow_only_tools": ["deploy"]}], specs=FIELD_SPECS,
-                           fields=FIELDS)
+    def test_custom_fields_carry_type_but_no_values_bounds_description_or_default(self):
+        fields = {**FIELDS, "replicas": {"type": "integer", "min": 0, "max": 777, "default": 3},
+                  "ticket": {"type": "string", "max_length": 32, "default": "zz_default_zz"}}
+        specs = {"deploy": {**FIELD_SPECS["deploy"], "fields": {
+            "environment": {"json_path": "target.env"}, "replicas": {"json_path": "target.replicas"},
+            "ticket": {"json_path": "ticket"}}}}
+        _key, con = signed(rules=[{"id": "tools", "allow_only_tools": ["deploy"]}], specs=specs, fields=fields)
         text = tool_vocabulary(con)
-        env = vocab_json(text)["tools"]["deploy"]["fields"]["environment"]
-        self.assertEqual(env, {"json_path": "target.env", "type": "enum", "values": ["dev", "prod"]})
-        self.assertNotIn("zz_description_zz", text)
-        self.assertNotIn("default", text)
+        got = vocab_json(text)["tools"]["deploy"]["fields"]
+        self.assertEqual(got["environment"]["type"], "enum")
+        self.assertEqual(got["replicas"]["type"], "integer")
+        self.assertIn("32 characters", got["ticket"]["value"])
+        for absent in ("prod", "777", "zz_description_zz", "zz_default_zz", "default"):
+            self.assertNotIn(absent, text)
+
+    def test_tools_limits_it_to_one_task(self):
+        _key, con = signed()
+        self.assertEqual(sorted(vocab_json(tool_vocabulary(con, ["search"]))["tools"]), ["search"])
+        for bad in (["send_payment"], [], "search", [1]):
+            with self.assertRaises(AgentConfigError):
+                tool_vocabulary(con, bad)
 
     def test_two_key_method_matches(self):
         key, con = signed()
@@ -103,6 +117,7 @@ class Vocabulary(unittest.TestCase):
                         private_key=key, quorum=QuorumPolicy(required_yes=1), allow_test_doubles=True,
                         monitored_agent=TEST_AGENT)
             self.assertEqual(tk.agent_vocabulary(), tool_vocabulary(con))
+            self.assertEqual(tk.agent_vocabulary(["pay_bill"]), tool_vocabulary(con, ["pay_bill"]))
             # The vocabulary grants nothing: an invented tool id and a display-name payee still deny.
             d = tk.authorize({"tool": "send_payment"}, {}, "pay")
             self.assertFalse(d.allowed)

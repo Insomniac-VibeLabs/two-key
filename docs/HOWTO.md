@@ -111,8 +111,8 @@ The commands above sign a constitution. They do not design one. The operator own
 3. Specify tool arguments and their schemas in `tool_specs`. Path A derives the built-in structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`) from the argument bytes according to those specs. A claim that disagrees with the derived values is a deny. For facts the built-in fields do not cover (an environment, a region, a count, a flag), declare [custom fields](#custom-path-a-fields) and rules that name them.
 4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class. Omitting `data_class` means `classified`, whatever the floor is: if a rule denies `classified`, every call that does not claim a class is denied. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package.
 5. Decide how many judges are needed and what their agreement threshold should be. At least one judge must be configured. The default approval threshold is `min(2, number_of_judges)`: one affirmative vote with one judge, or two affirmative votes with two or more judges. This is not a general majority rule. Set `required_yes` explicitly if you want a different threshold, such as a majority or unanimity. Consider the `high_assurance` profile for destructive, irreversible, financial, or external-send tools. Missing, malformed, errored, or timed-out ballots never count as yes.
-6. Write the prose for the monitored agent too. By default the agent sees only the prose and the instruction, not `tool_specs` (pass `vocabulary=tk.agent_vocabulary()` to `MonitoredAgent.complete` to send the signed ids as well; see [Monitored agents](#monitored-agents)). Name each tool by its id, its argument keys, the exact counterparty ids on each `allow` list, and the `data_class` to claim (`public`, `personal`, `medical`, `financial`, or `classified`). An agent that guesses `send_email` for `email_send`, or `Power Co` for `power-co.example`, is denied every time.
-7. Use one vocabulary everywhere. Write each party as its exact id, optionally with a display name: "the power company (`power-co.example`)". A judge that reads only a company name cannot tie it to the id in the call, and denying is correct for that judge. Two-Key does not map display names to ids and does no fuzzy matching: that would let a look-alike payee pass.
+6. Give the monitored agent the syntax, and each call its values. The agent sees the prose and the instruction, not `tool_specs`. Pass `vocabulary=tk.agent_vocabulary()` to `MonitoredAgent.complete` to send the tool ids, argument paths, and value syntax (see [Monitored agents](#monitored-agents)); it never lists a value. Put the exact values a call needs (the counterparty id, an enum value) in the instruction, for example "pay `power-co.example` $64.12": the agent then learns one id per task, not the whole `allow` list. An agent that guesses `send_email` for `email_send`, or `Power Co` for `power-co.example`, is denied every time.
+7. Use one vocabulary everywhere. Where the prose names a party, write its exact id, optionally with a display name: "the power company (`power-co.example`)". A judge that reads only a company name cannot tie it to the id in the call, and denying is correct for that judge. The same prose goes to the monitored agent, so every id in it reaches the agent's host; name in the prose only the parties you are content for the agent to know, and pass the rest in the instruction. Two-Key does not map display names to ids and does no fuzzy matching: that would let a look-alike payee pass.
 8. Test allowed, denied, ambiguous, and adversarial examples before trusting the constitution. Confirm that Path A denies the cases the hard rules are meant to catch, that Path B receives the intended context, and that the gateway drops or denies unmapped keys as configured (`deny_unmapped` defaults off).
 
 The signed constitution remains the authority. A future GUI constitution maker (planned later) should help construct and validate choices, but the principal must still sign the resulting constitution. The GUI must not silently weaken the rules.
@@ -824,23 +824,34 @@ prose (see [Designing a constitution](#designing-a-constitution), point 6).
 The system prompt lists the five data classes and says that omitting
 `data_class` means `classified`.
 
-To send the signed vocabulary as well, opt in per call:
+To send the signed vocabulary as well, opt in per call, and name the
+tools the task needs:
 
 ```python
-prop = agent.complete(instruction, constitution_prose, vocabulary=tk.agent_vocabulary())
+instruction = "Pay power-co.example 64.12 USD for the March bill."
+prop = agent.complete(instruction, constitution_prose,
+                      vocabulary=tk.agent_vocabulary(tools=["pay_bill"]))
 decision = tk.authorize(prop.action, prop.tool_args, prop.proposal,
                         agent_id=prop.agent_id, hosting=prop.hosting, agent_session=session)
 ```
 
-`tk.agent_vocabulary()` lists each signed tool id, its `irreversible`
-flag and `data_class_floor`, its amount, counterparty, payload, and custom
-field paths, each counterparty `allow` list, each custom field's type and
-allowed values or bounds, and the five data classes. It leaves out rule
-thresholds, `deny_counterparties`, bytecode, field descriptions, and
-defaults. It grants nothing: Path A and Path B check the call exactly as
-before, and a guessed id or a display name is still denied. The text goes
-to the agent's host on every call; see
-[Known trade-offs](#known-trade-offs-by-configuration).
+`tk.agent_vocabulary()` describes syntax, never values. For each signed
+tool (or only those in `tools`) it gives the id, the `data_class_floor`,
+the amount path, unit, and currency path, each counterparty path ("an
+exact id given in the instruction or the constitution"), each payload
+path with its shape and `max_length`, each custom field's path and type
+(and a string field's `max_length`), and `deny_unmapped` when set. It
+also lists the five data classes and tells the agent to omit
+`irreversible`, `amount_usd`, and `counterparty`, which are read from the
+arguments and the spec.
+
+It never lists an `allow` list, an enum value, an integer bound, a rule
+or its threshold, `deny_counterparties`, bytecode, a field description, a
+default, or a tool's `irreversible` flag. An agent that probes for an
+allowed payee still has to guess, and every wrong guess is a ledgered
+deny (`counterparty_not_allowed`), so probing shows in the ledger. It
+grants nothing: Path A and Path B check the call exactly as before. A
+tool id in `tools` without a signed spec is refused (`AgentConfigError`).
 
 `authorize_from_agent` parses the proposal (`tool`, `arguments`, `proposal`,
 and optional structured fields) and runs both paths. It does not call the
@@ -1264,10 +1275,11 @@ names the setting or declaration that controls it.
 - Privacy: every cloud judge and a cloud monitored agent receive their
   prompt in readable form at the vendor. Judges get the prose, the action
   record (including the derived counterparty), and, unless withheld, the
-  tool arguments. The agent gets the prose and the instruction, plus the
-  whole signed tool vocabulary on every call when you pass
-  `vocabulary=tk.agent_vocabulary()`: every allowed payee and contact, not
-  only the one the call needs. Off-machine connections use HTTPS (plain
+  tool arguments. The agent gets the prose and the instruction, and, when
+  you pass `vocabulary=`, the tool ids, argument paths, and value syntax
+  (no allowed values). Every id written in the prose reaches both. Put a
+  private payee's id in that call's instruction rather than the prose, so
+  the agent's host sees one id per task, not the whole list. Off-machine connections use HTTPS (plain
   HTTP is refused unless the host is loopback, or a judge sets
   `allow_insecure_http`), which protects the text in transit, not at the
   vendor; what the vendor logs or keeps is its policy, not this package's.

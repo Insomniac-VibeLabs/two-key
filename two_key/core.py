@@ -189,11 +189,11 @@ class TwoKey:
         })
         self.ledger.checkpoint()
 
-    def agent_vocabulary(self) -> str:
-        """Text for ``MonitoredAgent.complete(vocabulary=...)``: the signed tool ids, argument paths,
-        allowed counterparty ids, floors, and data classes. Opt-in; it goes to the agent's host.
-        It grants nothing and changes neither path."""
-        return tool_vocabulary(self.constitution)
+    def agent_vocabulary(self, tools: list[str] | None = None) -> str:
+        """Text for ``MonitoredAgent.complete(vocabulary=...)``: signed tool ids, argument paths, value
+        syntax, floors, and data classes; never a value. ``tools`` limits it to one task's tools.
+        Opt-in; it goes to the agent's host. It grants nothing and changes neither path."""
+        return tool_vocabulary(self.constitution, tools)
 
     def gateway(self, tools: dict | None = None, **kw) -> ToolGateway:
         """The supported way to build the gateway: in this process, on this ledger object (#45).
