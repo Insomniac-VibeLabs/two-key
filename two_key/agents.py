@@ -66,7 +66,7 @@ def fence(label: str, text: str, *, escape: bool) -> str:
 
 
 def user_prompt(constitution: str, instruction: str, vocabulary: str | None = None) -> str:
-    """Every fence is escaped, so no text can contain a section closer. No vocabulary: the 0.3.0 prompt."""
+    """Every fence is escaped, so no text can contain a section closer. No vocabulary: the 0.3.0 user prompt."""
     vocab = fence("tool_vocabulary", vocabulary, escape=True) if vocabulary is not None else ""
     return (fence("principal_constitution", constitution, escape=True)
             + vocab

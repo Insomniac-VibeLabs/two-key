@@ -1543,7 +1543,7 @@ prompt changes only when the caller opts in.
 - `MonitoredAgent.complete(instruction, constitution, vocabulary=...)`
   sends it in an escaped `<tool_vocabulary>` fence between the
   constitution and the instruction. Without `vocabulary`, the prompt is
-  byte-for-byte the 0.3.0 prompt. An empty vocabulary is refused. The
+  byte-for-byte the 0.3.0 user prompt (the system prompt gained the data-class line in the entry above). An empty vocabulary is refused. The
   Anthropic agent now splits its cached block at the instruction, so the
   vocabulary is cached with the constitution and the instruction is not;
   without a vocabulary the two blocks are what they were.
@@ -1591,3 +1591,25 @@ On branch `working`. Package version stays 0.3.0. Docs and a test only.
   JUDGES_AND_QUORUM was rendered with Mermaid 11.4.1 and parses.
 - `tests/test_doc_diagrams.py` fails on a `;` in any sequence diagram in
   the top-level or `docs/` Markdown files.
+
+## Docs: agent vocabulary diagram and trust boundary — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Docs only, plus one
+docstring.
+
+- HOWTO "Monitored agents": a sequence diagram of the vocabulary exchange
+  (what `agent_vocabulary()` keeps and drops, values carried by the
+  instruction, Path A checking them against signed lists the agent never
+  saw, deny on a guessed value).
+- README architecture diagram: the agent edge no longer says "constitution
+  prose only"; an opt-in `agent_vocabulary()` node feeds the agent. The
+  request-flow diagram's first step names the opt-in vocabulary.
+- THREAT_MODEL "Trust boundaries": new first item, caller to monitored
+  agent (what it gets, what it never gets).
+- AGENTS.md: the vocabulary never lists a value; do not add a mode that
+  sends one.
+- Correction: without `vocabulary=`, the agent *user* prompt is the 0.3.0
+  prompt; the system prompt gained the data-class line (entry "Agent
+  prompt names the data classes"). AGENTS.md, the "Opt-in tool vocabulary"
+  entry above, and the `user_prompt` docstring now say so.
+- Every Mermaid block in README and HOWTO renders with Mermaid 11.4.1.

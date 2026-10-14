@@ -101,7 +101,9 @@ flowchart TD
   compile --> bytecode["Path A bytecode"]
   compile --> judgeText["Path B judge text"]
   instruction["Untrusted instruction"] --> agent["MonitoredAgent.complete<br/>Grok, ChatGPT, Claude, Gemini, or local Ollama"]
-  judgeText -->|"constitution prose only"| agent
+  judgeText -->|"constitution prose"| agent
+  constitution -.->|"opt-in"| vocab["agent_vocabulary()<br/>tool ids, paths, value syntax<br/>never a value or a rule"]
+  vocab -.-> agent
   agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
   bytecode --> pathA["Path A Policy VM"]
   authorize --> pathA
@@ -236,7 +238,7 @@ sequenceDiagram
   participant Gateway
   participant Tool
 
-  Caller->>Agent: instruction and constitution prose
+  Caller->>Agent: instruction, constitution prose, opt-in vocabulary (syntax only)
   Agent-->>Caller: JSON proposal, no tool call
   Caller->>TwoKey: proposal and agent_session
   alt malformed or over a size limit

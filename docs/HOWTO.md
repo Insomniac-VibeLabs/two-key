@@ -835,6 +835,39 @@ decision = tk.authorize(prop.action, prop.tool_args, prop.proposal,
                         agent_id=prop.agent_id, hosting=prop.hosting, agent_session=session)
 ```
 
+The exchange, step by step. The vocabulary carries the shape of a call; the
+instruction carries this task's values; Path A checks those values against
+the signed lists the agent never saw.
+
+```mermaid
+sequenceDiagram
+  participant Signed as Signed constitution
+  participant Caller as Caller (your app)
+  participant TwoKey
+  participant Agent as Monitored agent host
+  participant PathA as Path A VM
+  participant PathB as Path B judges
+  participant Ledger
+
+  Caller->>TwoKey: agent_vocabulary(tools=[pay_bill])
+  TwoKey->>Signed: read tool_specs and the field registry
+  Note over TwoKey: keeps tool ids, argument paths, value syntax, floors, data classes<br/>drops allow lists, enum values, bounds, rules, thresholds,<br/>blocked parties, descriptions, defaults, irreversible flags
+  TwoKey-->>Caller: vocabulary text, syntax only
+  Note over Caller: puts this task's exact values in the instruction,<br/>for example pay power-co.example 64.12 USD
+  Caller->>Agent: system prompt, prose, vocabulary, instruction
+  Agent-->>Caller: JSON proposal (tool, arguments, data_class)
+  Caller->>TwoKey: authorize the proposal
+  TwoKey->>PathA: values from the argument bytes vs the signed allow lists and rules
+  TwoKey->>PathB: prose and the action record
+  alt both paths allow
+    TwoKey->>Ledger: decision and capability token
+    TwoKey-->>Caller: single-use token for the gateway
+  else a guessed or wrong value
+    TwoKey->>Ledger: deny, for example counterparty_not_allowed
+    TwoKey-->>Caller: deny, no token
+  end
+```
+
 `tk.agent_vocabulary()` describes syntax, never values. For each signed
 tool (or only those in `tools`) it gives the id, the `data_class_floor`,
 the amount path, unit, and currency path, each counterparty path ("an

@@ -105,6 +105,12 @@ a prototype, report security findings as public issues, per
 - An omitted `data_class` is `classified`, before the floor. Do not
   default it to the tool's floor. Do not map display names to
   counterparty ids or fuzzy-match them.
+- `agent_vocabulary()` is opt-in and lists syntax, never a value: no
+  `allow` list, enum value, integer bound, rule, threshold,
+  `deny_counterparties`, description, default, or `irreversible` flag
+  (`tests/test_agent_prompt.py`). Do not add a mode that sends them.
+  Without `vocabulary=`, the agent user prompt stays byte-for-byte the 0.3.0
+  prompt.
 - Path A evaluates five built-in structured fields (`tool`, `amount_usd`,
   `data_class`, `counterparty`, `irreversible`) and the operator's custom
   fields (`two_key/fields.py`). Custom field values come from argument

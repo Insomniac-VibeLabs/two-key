@@ -57,6 +57,11 @@ the code wins, then this file should be corrected.
 
 ## Trust boundaries
 
+- Caller to the monitored agent. The agent gets the system prompt, the
+  constitution prose, the instruction, and, only when the caller passes
+  it, the syntax-only `agent_vocabulary()`. It never gets bytecode, an
+  `allow` list, a rule, a threshold, or a credential. Ids written in the
+  prose or the instruction do reach it and its host.
 - Agent to `authorize_from_agent`. The reply is a proposal. The method does
   not execute a tool. A cloud judge must not reuse an agent credential.
   A missing session is a deny (`cloud_judge_session_required`).
