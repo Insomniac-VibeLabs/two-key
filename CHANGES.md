@@ -1475,3 +1475,16 @@ On branch `working`. Package version stays 0.3.0. No behavior changes.
   deliberately loosen permissions, to prove export refuses them, carry a
   `skipcq: BAN-B103` comment saying so.
 
+
+## README request-flow diagram renders again — 2026-10-14
+
+Package version stays 0.3.0. Docs and a test only. On `main` before tag
+`v0.3.0`.
+
+- README's request-flow sequence diagram did not render on GitHub: the
+  note `same process as TwoKey; verifies with ...` contains `;`, which
+  ends a statement in a Mermaid sequence diagram. It now reads `, verifies`.
+  Every other Mermaid block in README, ROADMAP, HOWTO, and
+  JUDGES_AND_QUORUM was rendered with Mermaid 11.4.1 and parses.
+- `tests/test_doc_diagrams.py` fails on a `;` in any sequence diagram in
+  the top-level or `docs/` Markdown files.
