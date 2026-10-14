@@ -38,11 +38,16 @@ def data_class_parts(value: str) -> tuple[str, ...]:
 
 
 def canonical_data_class(value: str) -> str:
-    """Validate a claim: one known class, or financial and medical joined by "+" (returned sorted)."""
-    parts = set(data_class_parts(value))
-    if len(parts) == 1 and parts <= set(DATA_CLASSES):
-        return next(iter(parts))
-    if parts == set(SPECIFIC_DATA_CLASSES):
+    """Validate a claim: one known class, or financial and medical joined by "+" in either order.
+
+    A repeated class ("financial+financial") is refused, like a repeated JSON key: it is not a claim
+    any honest caller writes. Returns the class, or "financial+medical" sorted.
+    """
+    listed = data_class_parts(value)
+    parts = set(listed)
+    if len(listed) == 1 and value in DATA_CLASSES:
+        return value
+    if len(listed) == len(parts) and parts == set(SPECIFIC_DATA_CLASSES):
         return DATA_CLASS_SEP.join(sorted(parts))
     raise ActionValidationError("data_class: not a known class")
 

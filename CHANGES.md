@@ -1688,3 +1688,37 @@ Upgrading: a call whose claim and floor were two different classes among
 and/or `financial` to the rule's `data_class_in`. An outstanding token
 issued before the upgrade for such a call fails the gateway's form check
 (the recomputed `data_class` differs); tokens live at most 300 seconds.
+
+## Live test run 5 (blind) fixes — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. From GrokBot's blind run 5
+(new domain, constitution, agent, and two judges; files in
+`tests/live/run5/` on the test branch at `4672a37`). Item 1 tightens claim
+parsing (maintainer-approved); items 2 and 3 change a message and add a
+warning; item 4 is docs.
+
+1. A repeated data class (`financial+financial`, `medical+medical`, ...) is
+   `malformed_action`, as HOWTO already said (C36: it was accepted as
+   `financial` and a payment was redeemed). `financial` and `medical` are
+   accepted in either order (C24); HOWTO now says so.
+   `tests/test_data_class_sets.py` replaces the test that expected
+   `medical+medical` to collapse.
+2. The judges config loader reports an unmeetable quorum with the
+   documented reason (C45): it now raises `too_few_judges_configured:2<3
+   (required_yes=3, min_responding=..., judges=2)` from `unmeetable_floor`,
+   the same check `TwoKey` and `convene` use, instead of `required_yes=3
+   exceeds number of judges 2`. `min_responding` above the number of judges,
+   and too few distinct providers (`insufficient_distinct_providers:`), are
+   now also refused when the file loads.
+3. `two-key sign-constitution` warns on stderr for each tool that does not
+   map a field a `deny_if_fields` rule reads, and whether the rule then
+   always denies that tool, never denies it, or reads the default
+   (`two_key.fields.unmapped_rule_field_warnings`). Signing still succeeds.
+   Run 5's first attempt had every non-payment tool denied by a strict
+   `po_matched` default; a permissive default instead turns the rule off for
+   a payment tool that forgets the mapping.
+   `tests/test_unmapped_field_warnings.py`.
+4. HOWTO "Designing a constitution" point 8: say what is allowed as plainly
+   as what is refused; a broad "refuse anything out of the ordinary" line
+   with judges that must all agree denied an ordinary verification lookup
+   (C38). Custom fields and "Known trade-offs" describe the new warning.

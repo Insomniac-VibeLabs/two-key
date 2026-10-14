@@ -62,7 +62,15 @@ class Claim(unittest.TestCase):
     def test_combined_claim_is_canonical(self):
         self.assertEqual(normalize_action({"tool": "t", "data_class": "Medical+Financial"}).data_class,
                          "financial+medical")
-        self.assertEqual(normalize_action({"tool": "t", "data_class": "medical+medical"}).data_class, "medical")
+        self.assertEqual(normalize_action({"tool": "t", "data_class": "financial+medical"}).data_class,
+                         "financial+medical")
+
+    def test_repeated_class_is_refused(self):
+        # Live run 5 (C36): "financial+financial" was accepted as financial, contrary to the docs.
+        for bad in ("financial+financial", "medical+medical", "personal+personal", "public+public",
+                    "classified+classified", "financial+medical+financial", "medical+financial+medical"):
+            with self.subTest(bad=bad), self.assertRaises(ActionValidationError):
+                normalize_action({"tool": "t", "data_class": bad})
 
     def test_unknown_part_is_refused(self):
         for bad in ("medical+secret", "+medical", "medical+", "", "medical,financial", "personal+medical",

@@ -90,7 +90,9 @@ amount or counterparty is read from the argument bytes. An omitted
 irreversible follows the tool spec. An omitted data_class is classified,
 then the tool floor, which never lowers it. Classes combine: public < personal < financial,
 medical < classified; financial and medical together are financial+medical (a data_class_in rule
-naming either matches), never an invented classified. --amount-usd, --counterparty,
+naming either matches), never an invented classified. A claim may be financial+medical in either order;
+a repeated class (financial+financial) is malformed_action. sign-constitution warns on stderr for each tool
+that does not map a field a deny_if_fields rule reads (always denies / never denies / reads the default). --amount-usd, --counterparty,
 --data-class, and --irreversible / --no-irreversible set a claim. A claim
 that disagrees with the bytes or the spec is a deny.
 MonitoredAgent.complete sends the agent the constitution prose and the instruction. It sends
