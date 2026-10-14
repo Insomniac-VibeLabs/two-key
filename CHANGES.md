@@ -1583,6 +1583,8 @@ a call, not which payee, value, or amount would pass.
 ## README request-flow diagram renders again — 2026-10-14
 
 On branch `working`. Package version stays 0.3.0. Docs and a test only.
+The same fix reached `main` through PR #86 (`fix/readme-diagram`), and tag
+`v0.3.0` is on that merge (`e44be56`); `main` was merged back into `working`.
 
 - README's request-flow sequence diagram did not render on GitHub: the
   note `same process as TwoKey; verifies with ...` contains `;`, which
