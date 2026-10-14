@@ -1475,3 +1475,16 @@ On branch `working`. Package version stays 0.3.0. No behavior changes.
   deliberately loosen permissions, to prove export refuses them, carry a
   `skipcq: BAN-B103` comment saying so.
 
+
+## DeepSource test-fixture findings — 2026-10-14
+
+Package version stays 0.3.0. No behavior changes, tests only.
+
+- BAN-B103 (`tests/test_issue_fixes.py`, `tests/test_capability_key.py`): the
+  two `os.chmod(..., 0o755)` calls deliberately loosen a directory to prove
+  the code under test tightens it back to 0o700. They carry a
+  `skipcq: BAN-B103` comment saying so, as `tests/test_key_backup.py` does.
+- BAN-B104 (`tests/test_netloc_allowlist.py`, `tests/test_b5_local_proxy.py`):
+  `"0.0.0.0"` appears only as a hostname string in a fixture list for the
+  address classifier. Nothing binds a socket. Both lines carry a
+  `skipcq: BAN-B104` comment.

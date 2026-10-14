@@ -15,7 +15,7 @@ NOT_LOCAL = {
     "link-local": ["169.254.169.254", "fe80::1"],
     "NAT64": ["64:ff9b::a00:1", "64:ff9b::7f00:1", "64:ff9b:1::1"],
     "6to4/Teredo": ["2002:a00:1::1", "2001::1"],
-    "unspecified/multicast": ["0.0.0.0", "::", "224.0.0.1", "ff02::1"],
+    "unspecified/multicast": ["0.0.0.0", "::", "224.0.0.1", "ff02::1"],  # skipcq: BAN-B104 -- hostname fixture for the address classifier, not a bind
     "outside RFC 1918": ["172.32.0.1", "172.15.255.1", "11.0.0.1"],
     "public": ["8.8.8.8", "2606:4700::1111"],
     "names": ["example.local", "localhost.example.com", "my-gpu-box"],
