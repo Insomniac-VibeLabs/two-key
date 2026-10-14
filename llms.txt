@@ -80,7 +80,9 @@ Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer
 string; up to 64), each with a signed default and an optional description. A tool spec maps
 a field to an argument path; a mapped field is required, an unmapped tool gets the default.
 Rules name them with deny_if_fields (eq, neq, gt, gte, lt, lte, in, not_in by type). Values
-come from the argument bytes only; an agent cannot claim them. Enum and string values are
+come from the argument bytes only; an agent cannot claim them, but the agent writes the
+arguments, so a field is the call's content, not a verified fact (po_matched: true is an
+assertion). Facts about the world must be checked by the tool or supplied by the integration. Enum and string values are
 printable ASCII by default, or Unicode with a declared script (charset: unicode, scripts:).
 A description is never compiled, sent to a judge, or used in a reason. A rules file with
 fields signs as a v2 constitution; --envelope-format v2 forces v2 without fields.

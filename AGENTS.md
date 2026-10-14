@@ -122,7 +122,9 @@ a prototype, report security findings as public issues, per
   `data_class`, `counterparty`, `irreversible`) and the operator's custom
   fields (`two_key/fields.py`). Custom field values come from argument
   paths in the signed spec only, never from the agent's claim or
-  `Action.raw`; `LOAD` refuses any name but a built-in field, and custom
+  `Action.raw`. The agent writes the arguments, so a field is what the call
+  says, not a verified fact; do not describe fields as verification
+  (HOWTO "What Two-Key verifies"); `LOAD` refuses any name but a built-in field, and custom
   fields load with `LOAD_FIELD`. A mapped field is required; an unmapped
   tool gets the signed default. A description is never compiled, sent to a
   judge, or used in a reason. A constitution with no custom fields must

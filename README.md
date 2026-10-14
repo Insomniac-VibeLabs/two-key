@@ -354,6 +354,11 @@ It is a prototype. It is not a FIPS 140-3 validated module.
 ## Known limits
 
 - No independent review and no production deployment.
+- Two-Key verifies that the call that runs is the call both keys approved.
+  It does not verify facts the agent asserts: a custom field read from the
+  arguments (for example `po_matched: true`) is the agent's word. The tool
+  or the integration must check such facts against the system of record
+  (HOWTO "What Two-Key verifies").
 - No external anchor for the ledger. Someone holding the principal and
   ledger keys can rewrite a ledger that never leaves the machine, unless
   the witness public key is configured outside the ledger

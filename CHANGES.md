@@ -1722,3 +1722,23 @@ warning; item 4 is docs.
    as what is refused; a broad "refuse anything out of the ordinary" line
    with judges that must all agree denied an ordinary verification lookup
    (C38). Custom fields and "Known trade-offs" describe the new warning.
+
+## Docs: what Two-Key verifies (live run 5c) — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Docs only. From GrokBot's
+run 5c (`tests/live/run5c/` on the test branch at `cb5dd11`), which
+confirmed the run-5 fixes live.
+
+- HOWTO "What Two-Key verifies, and what it does not": Two-Key verifies
+  that the call that runs is the call both keys approved; it does not verify
+  facts the agent asserts. The agent writes the arguments, so a custom field
+  is what the call says, not a fact. Run 5c C05: `po_matched: true` on a
+  mismatched invoice passed both keys and was paid. Facts must be checked
+  by the tool, or supplied by the integration (no input for that yet).
+- The same limit in README "Known limits", THREAT_MODEL, AGENTS.md (do not
+  describe fields as verification), llms.txt, and HOWTO "What happens to a
+  call".
+- HOWTO "Designing a constitution" point 8 now uses the sentence run 5c
+  tested ("Staff may run lookups that verify a claimed payee or billing
+  change; such a lookup only checks and authorizes nothing."), which turned
+  a judge's false deny into an approval.

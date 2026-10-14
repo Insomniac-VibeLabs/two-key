@@ -165,6 +165,12 @@ the code wins, then this file should be corrected.
   fields (`fields:`, `deny_if_fields`) are read the same way: from the
   argument path the signed spec names, never from the agent's claim. A tool
   that does not map a field gets that field's signed default.
+- Two-Key does not verify facts about the world. The agent writes the
+  arguments, so a custom field such as `po_matched` is the agent's
+  assertion; a rule on it checks consistency, not truth (live run 5c, C05:
+  `po_matched: true` on a mismatched invoice was paid). The tool, or the
+  integration calling Two-Key, must check such facts against the system of
+  record. There is no input for caller-supplied facts yet.
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are off by default; `high_assurance`
   turns them on. A judge that is not the same agent may still share a
