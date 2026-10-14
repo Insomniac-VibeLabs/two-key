@@ -1527,3 +1527,31 @@ changes; nothing Path A or Path B checks changes.
   The `classified` default stays: it is not lowered to the tool's floor.
 - `tests/test_agent_prompt.py` pins both, and that the user prompt still
   carries only the prose and the instruction.
+
+## Opt-in tool vocabulary for the monitored agent — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Neither path changes; a
+prompt changes only when the caller opts in.
+
+- `TwoKey.agent_vocabulary()` (and `two_key.agents.tool_vocabulary`) builds
+  read-only text from the signed constitution: each tool id, its
+  `irreversible` flag and `data_class_floor`, its amount, counterparty,
+  payload, and custom field paths, each `allow` list, each custom field's
+  type and values or bounds, and the five data classes. It leaves out rule
+  thresholds, `deny_counterparties`, bytecode, field descriptions, and
+  defaults.
+- `MonitoredAgent.complete(instruction, constitution, vocabulary=...)`
+  sends it in an escaped `<tool_vocabulary>` fence between the
+  constitution and the instruction. Without `vocabulary`, the prompt is
+  byte-for-byte the 0.3.0 prompt. An empty vocabulary is refused. The
+  Anthropic agent now splits its cached block at the instruction, so the
+  vocabulary is cached with the constitution and the instruction is not;
+  without a vocabulary the two blocks are what they were.
+- Allowed for local and cloud agents alike (operator decision): it grants
+  nothing. HOWTO "Known trade-offs" has a privacy note: cloud judges and a
+  cloud agent read their prompts at the vendor, HTTPS protects them only
+  in transit, and the vocabulary sends every allowed party on every call.
+- HOWTO, README, THREAT_MODEL, and llms.txt describe it.
+  `tests/test_agent_prompt.py` covers the contents, the exclusions, the
+  escaping, the unchanged default prompt, and that a guessed id still
+  denies.

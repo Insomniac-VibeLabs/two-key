@@ -91,9 +91,11 @@ irreversible follows the tool spec. An omitted data_class is classified,
 then the tool floor, which never lowers it. --amount-usd, --counterparty,
 --data-class, and --irreversible / --no-irreversible set a claim. A claim
 that disagrees with the bytes or the spec is a deny.
-MonitoredAgent.complete sends the agent the constitution prose and the instruction, not
-tool_specs: the prose must name tool ids, argument keys, exact counterparty ids, and the
-data_class to claim. An agent proposal that omits data_class is classified, whatever the floor.
+MonitoredAgent.complete sends the agent the constitution prose and the instruction. It sends
+tool_specs only with the opt-in vocabulary=tk.agent_vocabulary() (tool ids, argument paths,
+allow lists, floors, field types, data classes; no rule thresholds, blocked parties,
+descriptions, or defaults; grants nothing). Without it the prose must name tool ids, argument
+keys, exact counterparty ids, and the data_class to claim. An agent proposal that omits data_class is classified, whatever the floor.
 No display-name-to-id mapping or fuzzy matching. There is no decline reply; a refusal shows up
 as a denied call. Judges do not enforce allow lists or data classes; Path A does.
 decision.reason names one cause (parse/limit/derive deny, then Path A, then Path B); read

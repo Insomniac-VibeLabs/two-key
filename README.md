@@ -124,10 +124,12 @@ flowchart TD
 ```
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
-It does not receive Path A bytecode, `tool_specs`, judge credentials, or
-tool credentials, so the prose must name the tool ids, argument keys,
-counterparty ids, and data classes the agent should use (HOWTO "Designing
-a constitution").
+It does not receive Path A bytecode, judge credentials, or tool
+credentials. It receives `tool_specs` only as the opt-in, read-only
+`vocabulary=tk.agent_vocabulary()` (tool ids, argument paths, allowed
+counterparty ids, floors, data classes; no rule thresholds). Without it,
+the prose must name the ids the agent should use (HOWTO "Designing a
+constitution"). Either way Path A checks every call.
 Its reply is data: `tool`, `arguments`, `proposal`, and optional structured
 fields. Omitting `data_class` means `classified`, whatever the tool's floor
 is. Extra keys are rejected. `authorize_from_agent` parses that JSON,

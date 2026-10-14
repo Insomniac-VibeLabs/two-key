@@ -23,7 +23,7 @@ from .action import Action, ActionValidationError, normalize_action
 from .audit import identities_digest, policy_digest
 from .canonical import (MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, canonical_hash, digest_hex,
                         to_plain)
-from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal
+from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal, tool_vocabulary
 from .agent_meta import (AgentMetadataError, REASON_LEDGER_BODY, cap_ledger_text, check_agent_meta_field,
                          concept_agent_record, normalize_origin, type_tag)
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
@@ -188,6 +188,12 @@ class TwoKey:
             "same_model_tenant_optin_pairs": list(self.separation.tenant_optin_pairs),
         })
         self.ledger.checkpoint()
+
+    def agent_vocabulary(self) -> str:
+        """Text for ``MonitoredAgent.complete(vocabulary=...)``: the signed tool ids, argument paths,
+        allowed counterparty ids, floors, and data classes. Opt-in; it goes to the agent's host.
+        It grants nothing and changes neither path."""
+        return tool_vocabulary(self.constitution)
 
     def gateway(self, tools: dict | None = None, **kw) -> ToolGateway:
         """The supported way to build the gateway: in this process, on this ledger object (#45).

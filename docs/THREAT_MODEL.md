@@ -321,11 +321,15 @@ claims to close.
   imported when the file loads. An attacker who can write either file can
   run code in the `TwoKey` process, which holds every key. Protect them
   like the code.
-- The monitored agent is not given `tool_specs`. It learns tool ids,
-  argument keys, counterparty ids, and data classes only from the signed
-  prose. An agent that guesses them is denied, which is fail-closed but
-  makes legitimate calls fail when the prose leaves them out. Two-Key does
-  not map display names to ids and does no fuzzy matching.
+- By default the monitored agent is not given `tool_specs`. It learns
+  tool ids, argument keys, counterparty ids, and data classes only from
+  the signed prose. An agent that guesses them is denied, which is
+  fail-closed but makes legitimate calls fail when the prose leaves them
+  out. The opt-in `TwoKey.agent_vocabulary()` sends the signed ids,
+  paths, allow lists, floors, and classes to the agent; it grants nothing,
+  and for a cloud agent it discloses every allowed party to that vendor
+  on every call. It leaves out rule thresholds and `deny_counterparties`.
+  Two-Key does not map display names to ids and does no fuzzy matching.
 - The signatures are not quantum resistant. Ed25519 signs the constitution,
   the ledger head (principal and witness), and capability tokens. A
   sufficiently capable quantum computer could forge an Ed25519 signature.

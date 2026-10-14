@@ -48,7 +48,9 @@ SYSTEM = (
     f'"data_class" is one of {", ".join(DATA_CLASSES)}. '
     f'Omitting "data_class" means {DEFAULT_DATA_CLASS}, whatever the tool is.'
 )
-_CONSTITUTION_END = "</principal_constitution>\n\n"
+_INSTRUCTION_START = "<untrusted_instruction>\n"
+# What the vocabulary copies from a custom field's declaration. Never its description or default.
+_FIELD_SCHEMA_KEYS = ("type", "values", "min", "max", "max_length")
 
 
 def fence(label: str, text: str, *, escape: bool) -> str:
@@ -56,12 +58,50 @@ def fence(label: str, text: str, *, escape: bool) -> str:
     return f"<{label}>\n{body}\n</{label}>\n\n"
 
 
-def user_prompt(constitution: str, instruction: str) -> str:
-    """Both fences are escaped, so neither text can contain a section closer."""
+def user_prompt(constitution: str, instruction: str, vocabulary: str | None = None) -> str:
+    """Every fence is escaped, so no text can contain a section closer. No vocabulary: the 0.3.0 prompt."""
+    vocab = fence("tool_vocabulary", vocabulary, escape=True) if vocabulary is not None else ""
     return (fence("principal_constitution", constitution, escape=True)
+            + vocab
             + fence("untrusted_instruction", instruction, escape=True)
             + "Propose one tool call consistent with the constitution. Angle brackets in the "
             "constitution are escaped; the policy text is otherwise unchanged. Reply with the JSON object only.")
+
+
+def _tool_entry(spec: dict, registry: dict) -> dict:
+    entry: dict[str, Any] = {"irreversible": spec["irreversible"], "data_class_floor": spec["data_class_floor"]}
+    if spec.get("amount"):
+        entry["amount"] = dict(spec["amount"])
+    if spec.get("counterparties"):
+        entry["counterparties"] = [{"json_path": c["json_path"], "allow": list(c["allow"])}
+                                   for c in spec["counterparties"]]
+    if spec.get("payload"):
+        entry["payload"] = [dict(p) for p in spec["payload"]]
+    if spec.get("fields"):
+        entry["fields"] = {
+            name: {"json_path": m["json_path"],
+                   **{k: registry[name][k] for k in _FIELD_SCHEMA_KEYS if k in registry.get(name, {})}}
+            for name, m in sorted(spec["fields"].items())}
+    if spec.get("deny_unmapped"):
+        entry["deny_unmapped"] = True
+    return entry
+
+
+def tool_vocabulary(constitution) -> str:
+    """The signed tool ids, argument paths, allowed parties, and classes, for the agent prompt.
+
+    Read-only and opt-in. It copies schema from ``tool_specs`` and the field registry: never a rule
+    threshold, a blocked party, bytecode, a description, or a default. Path A still checks every call.
+    """
+    specs = constitution.tool_specs
+    registry = getattr(constitution, "fields", None) or {}
+    # Signing refuses a spec for a tool off the allow list, so every spec here is an allowed tool.
+    tools = {name: _tool_entry(spec, registry) for name, spec in sorted(specs.items())}
+    body = {"tools": tools, "data_classes": list(DATA_CLASSES), "omitted_data_class": DEFAULT_DATA_CLASS}
+    return ("Signed tool vocabulary. Use these tool ids, argument paths, and counterparty ids exactly; "
+            "a display name is not an id. Claim the tool's data_class_floor as data_class, or a stricter "
+            "class if the data is more sensitive. The rules still check every call.\n"
+            + json.dumps(body, sort_keys=True, ensure_ascii=False))
 
 
 
@@ -200,11 +240,14 @@ class MonitoredAgent:
             return {}
         return {"Authorization": f"Bearer {token}"}
 
-    def _request(self, instruction: str, constitution: str) -> tuple[str, dict]:
-        user = user_prompt(constitution, instruction if isinstance(instruction, str) else str(instruction))
+    def _request(self, instruction: str, constitution: str, vocabulary: str | None = None) -> tuple[str, dict]:
+        user = user_prompt(constitution, instruction if isinstance(instruction, str) else str(instruction),
+                           vocabulary)
         if self.kind == "anthropic":
-            trusted, _, rest = user.partition(_CONSTITUTION_END)
-            trusted = trusted + _CONSTITUTION_END if rest else user
+            # Cache the operator's text (constitution, then any vocabulary); the instruction is not cached.
+            trusted, sep, rest = user.partition(_INSTRUCTION_START)
+            rest = sep + rest if sep else ""
+            trusted = trusted if rest else user
             content = [{"type": "text", "text": trusted, "cache_control": {"type": "ephemeral"}}]
             if rest:
                 content.append({"type": "text", "text": rest})
@@ -255,12 +298,15 @@ class MonitoredAgent:
             out["generationConfig"] = cfg
         return out if changed else None
 
-    def complete(self, instruction: str, constitution: str) -> AgentProposal:
+    def complete(self, instruction: str, constitution: str, *, vocabulary: str | None = None) -> AgentProposal:
+        """``vocabulary`` (``TwoKey.agent_vocabulary()``) is opt-in; it is sent to this agent's host."""
         if not isinstance(constitution, str) or not constitution.strip():
             raise AgentConfigError("empty constitution")
         if not isinstance(instruction, str) or not instruction.strip():
             raise AgentConfigError("empty instruction")
-        url, body = self._request(instruction, constitution)
+        if vocabulary is not None and (not isinstance(vocabulary, str) or not vocabulary.strip()):
+            raise AgentConfigError("empty vocabulary")
+        url, body = self._request(instruction, constitution, vocabulary)
         headers = self._headers()
         started = time.monotonic()
         try:

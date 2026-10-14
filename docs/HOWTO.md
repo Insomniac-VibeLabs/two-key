@@ -111,7 +111,7 @@ The commands above sign a constitution. They do not design one. The operator own
 3. Specify tool arguments and their schemas in `tool_specs`. Path A derives the built-in structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`) from the argument bytes according to those specs. A claim that disagrees with the derived values is a deny. For facts the built-in fields do not cover (an environment, a region, a count, a flag), declare [custom fields](#custom-path-a-fields) and rules that name them.
 4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class. Omitting `data_class` means `classified`, whatever the floor is: if a rule denies `classified`, every call that does not claim a class is denied. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package.
 5. Decide how many judges are needed and what their agreement threshold should be. At least one judge must be configured. The default approval threshold is `min(2, number_of_judges)`: one affirmative vote with one judge, or two affirmative votes with two or more judges. This is not a general majority rule. Set `required_yes` explicitly if you want a different threshold, such as a majority or unanimity. Consider the `high_assurance` profile for destructive, irreversible, financial, or external-send tools. Missing, malformed, errored, or timed-out ballots never count as yes.
-6. Write the prose for the monitored agent too. The agent sees only the prose and the instruction, never `tool_specs`. Name each tool by its id, its argument keys, the exact counterparty ids on each `allow` list, and the `data_class` to claim (`public`, `personal`, `medical`, `financial`, or `classified`). An agent that guesses `send_email` for `email_send`, or `Power Co` for `power-co.example`, is denied every time.
+6. Write the prose for the monitored agent too. By default the agent sees only the prose and the instruction, not `tool_specs` (pass `vocabulary=tk.agent_vocabulary()` to `MonitoredAgent.complete` to send the signed ids as well; see [Monitored agents](#monitored-agents)). Name each tool by its id, its argument keys, the exact counterparty ids on each `allow` list, and the `data_class` to claim (`public`, `personal`, `medical`, `financial`, or `classified`). An agent that guesses `send_email` for `email_send`, or `Power Co` for `power-co.example`, is denied every time.
 7. Use one vocabulary everywhere. Write each party as its exact id, optionally with a display name: "the power company (`power-co.example`)". A judge that reads only a company name cannot tie it to the id in the call, and denying is correct for that judge. Two-Key does not map display names to ids and does no fuzzy matching: that would let a look-alike payee pass.
 8. Test allowed, denied, ambiguous, and adversarial examples before trusting the constitution. Confirm that Path A denies the cases the hard rules are meant to catch, that Path B receives the intended context, and that the gateway drops or denies unmapped keys as configured (`deny_unmapped` defaults off).
 
@@ -818,11 +818,29 @@ you fix a denied call.
 model. Hosting is recorded. It is not trust.
 
 `MonitoredAgent.complete` sends the agent the constitution prose and the
-instruction. It does not send `tool_specs`, so the agent learns tool ids,
-argument keys, counterparty ids, and data classes only from the prose
-(see [Designing a constitution](#designing-a-constitution), point 6).
+instruction. By default it does not send `tool_specs`, so the agent learns
+tool ids, argument keys, counterparty ids, and data classes only from the
+prose (see [Designing a constitution](#designing-a-constitution), point 6).
 The system prompt lists the five data classes and says that omitting
 `data_class` means `classified`.
+
+To send the signed vocabulary as well, opt in per call:
+
+```python
+prop = agent.complete(instruction, constitution_prose, vocabulary=tk.agent_vocabulary())
+decision = tk.authorize(prop.action, prop.tool_args, prop.proposal,
+                        agent_id=prop.agent_id, hosting=prop.hosting, agent_session=session)
+```
+
+`tk.agent_vocabulary()` lists each signed tool id, its `irreversible`
+flag and `data_class_floor`, its amount, counterparty, payload, and custom
+field paths, each counterparty `allow` list, each custom field's type and
+allowed values or bounds, and the five data classes. It leaves out rule
+thresholds, `deny_counterparties`, bytecode, field descriptions, and
+defaults. It grants nothing: Path A and Path B check the call exactly as
+before, and a guessed id or a display name is still denied. The text goes
+to the agent's host on every call; see
+[Known trade-offs](#known-trade-offs-by-configuration).
 
 `authorize_from_agent` parses the proposal (`tool`, `arguments`, `proposal`,
 and optional structured fields) and runs both paths. It does not call the
@@ -1243,6 +1261,18 @@ names the setting or declaration that controls it.
   cannot be read refuses to start. At call time it is read to compare with
   `agent_session` and with the credential named for the monitored agent.
   Remove `auth:` from a connector that does not send it.
+- Privacy: every cloud judge and a cloud monitored agent receive their
+  prompt in readable form at the vendor. Judges get the prose, the action
+  record (including the derived counterparty), and, unless withheld, the
+  tool arguments. The agent gets the prose and the instruction, plus the
+  whole signed tool vocabulary on every call when you pass
+  `vocabulary=tk.agent_vocabulary()`: every allowed payee and contact, not
+  only the one the call needs. Off-machine connections use HTTPS (plain
+  HTTP is refused unless the host is loopback, or a judge sets
+  `allow_insecure_http`), which protects the text in transit, not at the
+  vendor; what the vendor logs or keeps is its policy, not this package's.
+  Use a local judge or a local agent for data that must not leave the
+  machine.
 - A key backup uses PBKDF2-HMAC-SHA256 (600,000 iterations). It is not
   memory-hard. Three bundles with three passphrases, stored apart, are what
   keeps one stolen file from being every key a head needs. Two bundles that
