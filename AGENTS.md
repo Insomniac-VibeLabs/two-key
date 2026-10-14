@@ -106,7 +106,11 @@ a prototype, report security findings as public issues, per
   `required_yes` to `2`.
 - `tool_specs` is required. A disagreeing claim is a deny.
 - An omitted `data_class` is `classified`, before the floor. Do not
-  default it to the tool's floor. Do not map display names to
+  default it to the tool's floor. Classes combine as a set
+  (`join_data_class`): `financial` and `medical` replace `personal`,
+  together they are `financial+medical`, and only `classified` (claimed,
+  floored, or omitted) is `classified` (`tests/test_data_class_sets.py`).
+  A `data_class_in` rule matches any class the call carries. Do not map display names to
   counterparty ids or fuzzy-match them.
 - `agent_vocabulary()` is opt-in and lists syntax, never a value: no
   `allow` list, enum value, integer bound, rule, threshold,

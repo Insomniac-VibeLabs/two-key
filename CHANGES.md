@@ -1647,3 +1647,44 @@ From the run-2 live test: 8 refusals arrived as `tool: "none"` calls.
   agent may repair a mistyped address to an allowed one, how to forbid that
   in the prose, and that only the agent can apply it (judges never see the
   instruction).
+
+## Data classes combine as a set — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Changes what Path A sees
+for `data_class`; approved by the maintainer as the security review
+(AGENTS.md "Crypto and security changes"). From live test run 3: honest
+claims (`medical` for a dentist entry on a `personal` calendar, `financial`
+for a CPA email on a `personal` email tool) became `classified` and were
+denied by the writer's `no-classified-data` rule, while the judge voted yes.
+
+- `join_data_class`: `public` < `personal` < `financial`, `medical` <
+  `classified`. `financial` or `medical` replaces `personal`; together they
+  are `financial+medical`; `classified` absorbs everything. Only a claim or
+  floor of `classified`, or an omitted claim, gives `classified`. A floor
+  never lowers a claim.
+- Path A: `Action.field_value("data_class")` returns each class the call
+  carries, and `IN` with that tuple matches any part, so
+  `data_class_in: [medical]` denies `financial+medical`. The compiled
+  bytecode is unchanged (`tests/test_fields_compat.py` hashes hold); only
+  the data_class value and the VM's `IN` on a tuple needle change.
+- A claim may be `financial+medical` (`canonical_data_class`, sorted); any
+  other `+` join or unknown class is `malformed_action`.
+- Agent system prompt and vocabulary: claim the kind of data the call
+  carries; `classified` is only for secrets and credentials. The old
+  vocabulary sentence ("or a stricter class if the data is more
+  sensitive") steered agents into the old join.
+- Tests: `tests/test_data_class_sets.py` (every pair, never lower, classified
+  only when said, combined claims, a medical bill through Path A and the
+  gateway, rules naming either class); `tests/test_problem_f.py`'s pinned
+  `personal`+`medical` case now expects `medical`; `tests/test_agent_prompt.py`
+  pins the new guidance.
+- HOWTO has a "Data classes" section; README, THREAT_MODEL, AGENTS.md,
+  llms.txt, and the `--data-class` help match.
+
+Upgrading: a call whose claim and floor were two different classes among
+`personal`, `medical`, and `financial` used to be `classified`. It is now
+`medical`, `financial`, or `financial+medical`, so a rule that denies only
+`classified` now allows it. To keep refusing those calls, add `medical`
+and/or `financial` to the rule's `data_class_in`. An outstanding token
+issued before the upgrade for such a call fails the gateway's form check
+(the recomputed `data_class` differs); tokens live at most 300 seconds.

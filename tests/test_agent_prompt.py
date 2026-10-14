@@ -52,6 +52,20 @@ class AgentSystemPrompt(unittest.TestCase):
         self.assertIn('Omitting "data_class" means classified', SYSTEM)
 
 
+class DataClassGuidance(unittest.TestCase):
+    """Run 3 (C05, C18): "claim a stricter class" sent honest medical/financial labels to classified."""
+
+    def test_system_prompt_names_the_combined_class_and_what_classified_means(self):
+        self.assertIn('"financial+medical"', SYSTEM)
+        self.assertIn("classified is only for secrets", SYSTEM)
+
+    def test_vocabulary_says_claim_the_kind_of_data(self):
+        _key, con = signed()
+        text = tool_vocabulary(con)
+        self.assertIn("financial+medical for both", text)
+        self.assertNotIn("stricter class", text)
+
+
 class UserPrompt(unittest.TestCase):
     def test_without_vocabulary_it_is_the_030_prompt(self):
         self.assertEqual(

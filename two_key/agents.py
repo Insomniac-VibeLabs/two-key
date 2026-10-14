@@ -48,7 +48,9 @@ SYSTEM = (
     '"tool" (string), "arguments" (object), "proposal" (short string), and optionally '
     '"amount_usd" (number), "counterparty" (string), "data_class" (string), "irreversible" (boolean). '
     "Do not add other keys. "
-    f'"data_class" is one of {", ".join(DATA_CLASSES)}. '
+    f'"data_class" is one of {", ".join(DATA_CLASSES)}, or "financial+medical" when the call carries both. '
+    "Claim the kind of data the call carries: medical and financial are kinds of personal data, and "
+    "classified is only for secrets and credentials. "
     f'Omitting "data_class" means {DEFAULT_DATA_CLASS}, whatever the tool is. '
     'To decline instead of proposing a call, reply {"decline": "<short reason>"}; if every key is required, '
     'set "tool" to "", "arguments" to "{}", and the optional keys to null.'
@@ -127,8 +129,9 @@ def tool_vocabulary(constitution, tools: list[str] | tuple[str, ...] | None = No
     body = {"tools": {name: _tool_entry(specs[name], registry) for name in names},
             "data_classes": list(DATA_CLASSES), "omitted_data_class": DEFAULT_DATA_CLASS}
     return ("Signed tool vocabulary: tool ids, argument paths, and the syntax of each value. It lists no "
-            "allowed values; take each value from the instruction or the constitution. Claim the tool's "
-            "data_class_floor as data_class, or a stricter class if the data is more sensitive. Omit "
+            "allowed values; take each value from the instruction or the constitution. For data_class, claim "
+            "the kind of data the call carries, at least the tool's data_class_floor: medical or financial "
+            "when it is that kind, financial+medical for both, classified only for secrets. Omit "
             "irreversible, amount_usd, and counterparty; they are read from the arguments and the signed "
             "spec. The rules still check every call.\n"
             + json.dumps(body, sort_keys=True, ensure_ascii=False))

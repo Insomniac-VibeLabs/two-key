@@ -61,8 +61,9 @@ A bare rule list, a missing
 key, `null`, and an empty mapping are refused. `examples/hard_rules.yaml`
 has a spec for every allow-listed tool. Amount, counterparty, and
 irreversible are read from the argument bytes, and a claim that disagrees
-is a deny. `data_class` is the stricter of the claim and the tool's
-`data_class_floor`. This package does not classify free text. A tool that
+is a deny. `data_class` combines the claim and the tool's
+`data_class_floor` (see [Data classes](#data-classes)). This package does
+not classify free text. A tool that
 carries text the rules must treat as sensitive needs that class as its
 `data_class_floor`. A missing amount path, a non-numeric amount, or a
 currency other than `usd` on `pay_bill` is a deny. A value that cannot be
@@ -102,6 +103,36 @@ allowed after the floor, and pass `--no-irreversible` only for a tool the
 spec marks reversible.
 
 
+## Data classes
+
+A call's `data_class` combines the agent's claim with the tool's signed
+`data_class_floor`. The order is `public` < `personal` < `financial`,
+`medical` < `classified`. `financial` and `medical` are kinds of personal
+data, so either one replaces `personal`. Together they are
+`financial+medical`: a call that carries both, not a secret.
+
+| Claim | Floor | `data_class` |
+| --- | --- | --- |
+| `medical` | `personal` (calendar) | `medical` |
+| `financial` | `personal` (email) | `financial` |
+| `medical` | `financial` (`pay_bill`) | `financial+medical` |
+| `public` | `financial` | `financial` |
+| `classified`, or omitted | any | `classified` |
+| any | `classified` | `classified` |
+
+- A rule `deny_if: {data_class_in: [...]}` denies when any class the call
+  carries is listed: `[medical]` denies `financial+medical`.
+- Only a claim or floor of `classified`, or an omitted claim, gives
+  `classified`. Deny `classified` to refuse secrets and unlabelled calls;
+  deny `medical` or `financial` to refuse those kinds.
+- An agent may claim `financial+medical` itself. Any other `+` join, or an
+  unknown class, is `malformed_action`.
+- A floor never lowers a claim, and a claim never lowers a floor.
+
+Before this release, two different classes among `personal`, `medical`,
+and `financial` became `classified`, so an honest `medical` claim on a
+`personal` tool was denied by a rule against `classified` (live test run 3).
+
 ## Designing a constitution
 
 The commands above sign a constitution. They do not design one. The operator owns the signed constitution; Two-Key enforces only what is signed. A weak or incomplete constitution is the most common way the dual-path control fails to protect the intended actions. The points below are advisory, not a guarantee that a constitution is correct.
@@ -109,7 +140,7 @@ The commands above sign a constitution. They do not design one. The operator own
 1. Define the tools and actions the agent is allowed to perform. Use an `allow_only_tools` rule. An allow-list is required by default so unknown tools fail closed.
 2. Define the actions it must never perform. Use `deny_if`, `deny_counterparties`, or `deny_if_irreversible_over` rules for the cases that must be hard denials.
 3. Specify tool arguments and their schemas in `tool_specs`. Path A derives the built-in structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`) from the argument bytes according to those specs. A claim that disagrees with the derived values is a deny. For facts the built-in fields do not cover (an environment, a region, a count, a flag), declare [custom fields](#custom-path-a-fields) and rules that name them.
-4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class. Omitting `data_class` means `classified`, whatever the floor is: if a rule denies `classified`, every call that does not claim a class is denied. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package. For a tool that sends data out (email, payments), consider `deny_unmapped: true`: a call that carries a key the spec does not name, such as a hidden `bcc`, is then a Path A deny, rather than resting on a judge's vote and the gateway dropping the key.
+4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class; `medical` or `financial` on a `personal` tool stays `medical` or `financial` (see [Data classes](#data-classes)). Omitting `data_class` means `classified`, whatever the floor is: if a rule denies `classified`, every call that does not claim a class is denied. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package. For a tool that sends data out (email, payments), consider `deny_unmapped: true`: a call that carries a key the spec does not name, such as a hidden `bcc`, is then a Path A deny, rather than resting on a judge's vote and the gateway dropping the key.
 5. Decide how many judges are needed and what their agreement threshold should be. At least one judge must be configured. The default approval threshold is `min(2, number_of_judges)`: one affirmative vote with one judge, or two affirmative votes with two or more judges. This is not a general majority rule. Set `required_yes` explicitly if you want a different threshold, such as a majority or unanimity. Consider the `high_assurance` profile for destructive, irreversible, financial, or external-send tools. Missing, malformed, errored, or timed-out ballots never count as yes.
 6. Give the monitored agent the syntax, and each call its values. The agent sees the prose and the instruction, not `tool_specs`. Pass `vocabulary=tk.agent_vocabulary()` to `MonitoredAgent.complete` to send the tool ids, argument paths, and value syntax (see [Monitored agents](#monitored-agents)); it never lists a value. Put the exact values a call needs (the counterparty id, an enum value) in the instruction, for example "pay `power-co.example` $64.12": the agent then learns one id per task, not the whole `allow` list. An agent that guesses `send_email` for `email_send`, or `Power Co` for `power-co.example`, is denied every time.
 7. Use one vocabulary everywhere. Where the prose names a party, write its exact id, optionally with a display name: "the power company (`power-co.example`)". A judge that reads only a company name cannot tie it to the id in the call, and denying is correct for that judge. The same prose goes to the monitored agent, so every id in it reaches the agent's host; name in the prose only the parties you are content for the agent to know, and pass the rest in the instruction. Two-Key does not map display names to ids and does no fuzzy matching: that would let a look-alike payee pass. An agent may still repair a mistyped address to an allowed one (`ana@mailbox.exmaple` to `ana@mailbox.example`): the `allow` list keeps the result to an approved party. If you want it to decline instead, say so in the prose ("use only the exact address in my request; never correct or guess one"). Only the agent can apply that rule: judges never see the instruction, so they cannot compare the recipient with the request.

@@ -135,8 +135,11 @@ payee id, come from the instruction or the prose (HOWTO "Designing a
 constitution"). Either way Path A checks every call.
 Its reply is data: `tool`, `arguments`, `proposal`, and optional structured
 fields, or a decline (`{"decline": "<reason>"}`), which is a ledgered
-`agent_declined` deny with no token and neither path run. Omitting `data_class` means `classified`, whatever the tool's floor
-is. Extra keys are rejected. `authorize_from_agent` parses that JSON,
+`agent_declined` deny with no token and neither path run. Omitting
+`data_class` means `classified`, whatever the tool's floor is. Classes
+combine as a set: `medical` or `financial` on a `personal` tool stays
+`medical` or `financial`, both together are `financial+medical`, and only
+`classified` is `classified` (HOWTO "Data classes"). Extra keys are rejected. `authorize_from_agent` parses that JSON,
 records `agent id`, `hosting`, and `trusted: false`, and does not call the
 model again. Those fields are operator/library metadata (str, at most 256
 characters after strip); non-str or oversize is a deny. Hosting is local or

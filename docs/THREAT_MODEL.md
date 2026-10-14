@@ -208,9 +208,11 @@ claims to close.
   the bytes is a deny (`amount_mismatch`, `counterparty_mismatch`,
   `irreversible_mismatch`). An omitted amount or counterparty is filled from
   the bytes. A missing amount path, a non-numeric amount, or a currency path
-  that is not `usd` denies. `data_class` is the stricter of the claim and
-  `data_class_floor`. Two different middle classes (`personal`, `medical`,
-  `financial`) join to `classified`. The token binds `spec_hash` and that
+  that is not `usd` denies. `data_class` combines the claim and
+  `data_class_floor`: `public` < `personal` < `financial`, `medical` <
+  `classified`; `financial` and `medical` together are `financial+medical`,
+  which a `data_class_in` rule naming either matches. Only a claim or floor
+  of `classified`, or an omitted claim, is `classified`. The token binds `spec_hash` and that
   form. The gateway recomputes the form from the same bytes and refuses a
   mismatch. Changing a spec changes `spec_hash`, so outstanding tokens fail
   at the gateway. This package does not classify free text and does not

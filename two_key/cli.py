@@ -372,7 +372,8 @@ def main(argv: list[str] | None = None) -> int:
     auth.add_argument("--amount-usd", type=float, default=None,
                       help="claim this USD amount; omit it and the amount is read from the argument bytes")
     auth.add_argument("--data-class", default=None,
-                      help="claim this data class; omit it and a missing class is classified, then the tool floor")
+                      help="claim this data class (or financial+medical); omit it and a missing class is "
+                           "classified, then the tool floor")
     auth.add_argument("--irreversible", action=argparse.BooleanOptionalAction, default=None,
                       help="claim irreversible, or --no-irreversible for reversible; omit it and the tool spec decides")
     auth.add_argument("--counterparty", default=None,
