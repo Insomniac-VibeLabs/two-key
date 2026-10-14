@@ -33,7 +33,9 @@ FIELD_SPECS = {"deploy": {"irreversible": True, "data_class_floor": "public",
                           "fields": {"environment": {"json_path": "target.env"}}}}
 
 
-def signed(prose=PROSE, rules=RULES, specs=SPECS, fields=None):
+def signed(prose=PROSE, rules=None, specs=None, fields=None):
+    rules = RULES if rules is None else rules
+    specs = SPECS if specs is None else specs
     key = generate_private_key()
     return key, verify_signed(sign_constitution(prose, rules, key, specs, fields=fields), key.public_key())
 

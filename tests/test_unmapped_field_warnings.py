@@ -20,7 +20,8 @@ FIELDS = {"po_matched": {"type": "boolean", "default": False},
 RULE = {"id": "po-mismatch", "deny_if_fields": {"po_matched": {"eq": False}}}
 
 
-def warnings_for(rules, specs, fields=FIELDS):
+def warnings_for(rules, specs, fields=None):
+    fields = FIELDS if fields is None else fields
     allow = {"id": "tools", "allow_only_tools": sorted(specs)}
     signed = sign_constitution("p", [allow, *rules], generate_private_key(), specs, fields=fields)["signed"]
     return unmapped_rule_field_warnings(signed["hard_rules"], signed["tool_specs"], signed["fields"])

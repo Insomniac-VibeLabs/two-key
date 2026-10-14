@@ -1790,3 +1790,14 @@ verifies".
 - An outstanding token issued by 0.3.0 for a call whose data class now
   combines differently fails the gateway's form check; tokens live at most
   300 seconds.
+
+## PR #90 DeepSource fixes — 2026-10-14
+
+On branch `working`. Package version stays 0.3.1. Tests only.
+
+- DeepSource PYL-W0102 (critical, "dangerous default value"): the test
+  helpers `signed()` in `tests/test_agent_prompt.py` and `warnings_for()` in
+  `tests/test_unmapped_field_warnings.py` took the module-level `RULES`,
+  `SPECS`, and `FIELDS` as default arguments. They now default to `None` and
+  pick the module value inside. No helper mutated them, so no test result
+  changes.
