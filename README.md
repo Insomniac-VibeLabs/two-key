@@ -256,7 +256,7 @@ sequenceDiagram
     TwoKey->>Ledger: capability_issued, then decision
     TwoKey-->>Caller: single-use token
     Caller->>Gateway: token, tool, arguments
-    Note over Gateway: same process as TwoKey; verifies with the capability public key only
+    Note over Gateway: same process as TwoKey, verifies with the capability public key only
     opt authenticated token refused
       Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
     end

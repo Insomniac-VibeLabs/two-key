@@ -1579,3 +1579,15 @@ a call, not which payee, value, or amount would pass.
   call needs in the instruction; ids written in the prose reach the
   monitored agent's host too. HOWTO "Monitored agents", "Known trade-offs"
   (privacy), README, THREAT_MODEL, and llms.txt match.
+
+## README request-flow diagram renders again — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Docs and a test only.
+
+- README's request-flow sequence diagram did not render on GitHub: the
+  note `same process as TwoKey; verifies with ...` contains `;`, which
+  ends a statement in a Mermaid sequence diagram. It now reads `, verifies`.
+  Every other Mermaid block in README, ROADMAP, HOWTO, and
+  JUDGES_AND_QUORUM was rendered with Mermaid 11.4.1 and parses.
+- `tests/test_doc_diagrams.py` fails on a `;` in any sequence diagram in
+  the top-level or `docs/` Markdown files.
