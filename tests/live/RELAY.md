@@ -18,7 +18,7 @@ python3 tests/live/make_cases.py --table    # also prints the case table, for th
 python3 tests/live/harness.py --selftest    # plumbing check with stub bots, in tests/live/selftest/
 ```
 
-44 cases (run 7). Every case should pass the self-test. In run 6 the two cases only a judge could catch (a diagnosis
+46 cases (run 7). Every case should pass the self-test. In run 6 the two cases only a judge could catch (a diagnosis
 or a card number in a message body) failed there, because the stub judges always say yes; in run 7 the content
 scanner flags them, so Path A denies them. The quorum and scanner cases do not need the stubs: the harness's own
 judge endpoints answer them with a scripted ballot.
@@ -30,8 +30,10 @@ Run 7 adds Two-Key's content scanner (0.6.0, docs/SCANNERS.md) to the same clini
 - The proxy's `scan:` block points at a toy ICAP scanner the harness serves on loopback (port 18465). It stands in
   for an antivirus or DLP product: it flags the EICAR test file, a Luhn-valid card number, and a word from a short
   diagnosis list. It is not a classifier, and it never logs content.
-- `send_message` is scanned, and its new `attachments[].content` argument is a declared base64 file. The other
-  tools mark `scan` not applicable.
+- `send_message` is scanned, and its new `attachments[].content` argument is a declared base64 file with
+  `max_bytes: 65536`. The other tools mark `scan` not applicable. Two host cases send an attachment over that
+  limit and one that is not base64, under the monitor stance: both are denied before the scanner and both keys
+  (`file_too_large`, `file_unreadable`).
 - The main pass signs the default stance (deny flagged). Host cases marked with a stance (strict, monitor) run
   against their own proxy, constitution, and ledger under `state/stance_<name>/`. Cases can take the scanner down
   or make it slower than its 3 s limit.

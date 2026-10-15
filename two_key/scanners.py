@@ -36,8 +36,8 @@ from urllib.parse import quote, urlparse
 
 from ._platform import WINDOWS, resolve_program
 from .judges.config import HOOK
-from .scan import CATEGORIES, DEFAULT_FIELD, DEFAULT_MAX_FILE_BYTES, DEFAULT_TIMEOUT_SECONDS, ScanConfigError, \
-    ScanRequest, ScanResult, Scanner, combine
+from .scan import CATEGORIES, DEFAULT_FIELD, DEFAULT_TIMEOUT_SECONDS, ScanConfigError, ScanRequest, \
+    ScanResult, Scanner, combine
 
 MAX_REPLY_BYTES = 64 * 1024
 CHUNK_BYTES = 64 * 1024
@@ -461,7 +461,7 @@ def hook_inspector(spec: str, label: str | None = None) -> HookInspector:
 TYPES = ("clamd", "icap", "command", "python")
 _TYPE_KEYS = {"clamd": {"address"}, "icap": {"url", "method"}, "command": {"command", "env"}, "python": {"hook"}}
 _REQUIRED = {"clamd": "address", "icap": "url", "command": "command", "python": "hook"}
-_COMMON = {"type", "timeout_seconds", "max_file_bytes", "field", "label"}
+_COMMON = {"type", "timeout_seconds", "field", "label"}
 
 
 def check_scan_block(data: Any, where: str = "scan") -> dict:
@@ -471,6 +471,9 @@ def check_scan_block(data: Any, where: str = "scan") -> dict:
     kind = data.get("type")
     if kind not in TYPES:
         raise ScanConfigError(f"{where}.type: expected one of {list(TYPES)}")
+    if "max_file_bytes" in data:
+        raise ScanConfigError(f"{where}.max_file_bytes: replaced by max_bytes on each file under tools.<tool>.files, "
+                              "the largest file that tool needs (docs/SCANNERS.md)")
     allowed = _COMMON | _TYPE_KEYS[kind]
     extra = sorted(str(k) for k in set(data) - allowed)
     if extra:
@@ -503,7 +506,6 @@ def scanner_from_config(data: Mapping[str, Any], files: Mapping[str, Iterable[An
     inspector = inspector_from_config(data, where)
     return Scanner(inspector, files=files or {},
                    timeout_seconds=data.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS),
-                   max_file_bytes=data.get("max_file_bytes", DEFAULT_MAX_FILE_BYTES),
                    field=data.get("field", DEFAULT_FIELD), label=data.get("label") or inspector.label)
 
 

@@ -1075,6 +1075,14 @@ with `invalid_call:tool args are nested too deeply`; the ledger keeps
 `tool_args_omitted: true` and `tool_args_error`. Encoding runs before the
 size check, so the reason is the same on Python 3.10, 3.11, and 3.12.
 
+With a content scanner (0.6.0), the files a scanned tool's call carries are
+held to limits too, before the scanner and both paths and under every
+stance: each declared file's `max_bytes`, 32 files, and 100 MiB of files in
+one call (`file_too_large`, `too_many_files`, `call_files_too_large`), and a
+declared file Two-Key cannot read is `file_unreadable`. The ledger keeps the
+file's argument path and sizes in `file_denied`, never content. See
+[docs/SCANNERS.md](SCANNERS.md#file-size-limits).
+
 Custom-field limits (field count, name, description, enum, string, and
 path sizes) are listed under [Changing a limit](#changing-a-limit).
 
@@ -1485,18 +1493,25 @@ is a rules file to start from.
 3. **Declare the arguments that hold a file**, so they are decoded and
    scanned as files rather than as text: `base64` (or `base64url`) for the
    file's bytes inside the call, `path` for a file in a folder you name.
-   The path must lie under a `payload` path of the tool.
+   The path must lie under a `payload` path of the tool. Each file states
+   `max_bytes`, the largest file the tool needs (required; at most 196,608
+   for base64, which travels inside the 256 KiB call, and 100 MiB for a
+   path). Use the base64 kind where the tool offers it.
 
    ```yaml
    # proxy.yaml
    tools:
      send_email:
        files:
-         - {path: "attachments[].content", kind: base64}
+         - {path: "attachments[].content", kind: base64, max_bytes: 65536}
    ```
 
    `two-key mcp-draft-specs` suggests these from the upstream schema, and
-   the proxy warns at start about one it thinks you missed.
+   the proxy warns at start about one it thinks you missed. A file over its
+   `max_bytes`, more than 32 files or 100 MiB in one call, or a file
+   Two-Key cannot read is denied before the scanner and both keys under
+   every stance (`file_too_large`, `too_many_files`, `call_files_too_large`,
+   `file_unreadable`).
 
 4. **Connect the scanner.** In `proxy.yaml`:
 
@@ -1515,7 +1530,8 @@ is a rules file to start from.
    from two_key.scanners import ClamdInspector
 
    scanner = Scanner(ClamdInspector("127.0.0.1:3310"),
-                     files={"send_email": [{"path": "attachments[].content", "kind": "base64"}]})
+                     files={"send_email": [{"path": "attachments[].content", "kind": "base64",
+                                             "max_bytes": 65536}]})
    tk = TwoKey.load(ledger, key.public_key(), load_envelope("constitution.signed.json"),
                     judges, private_key=key, quorum=policy, monitored_agent=agent, scanner=scanner)
    ```
@@ -1771,8 +1787,8 @@ refused. Relative paths are relative to the file.
 | `tools.<id>.proposal` | no | Fixed proposal text (default `MCP tools/call <id>`); judges see it only with `judge_inputs: record_and_proposal` |
 | `tools.<id>.upstream_name` | no | The upstream's name for a signed tool whose name is not a lower-case id |
 | `tools.<id>.facts` | for caller-supplied fields | `{field: {hook: "module:function"}}`, one per `source: caller` field the tool maps. Trusted operator code, imported at start |
-| `tools.<id>.files` | no | Arguments that hold a file, for the content scanner: `[{path: "attachments[].content", kind: base64}]`, `kind: base64url`, or `{path: file_path, kind: path, folder: /srv/outbox}`. Needs `scan` (0.6.0) |
-| `scan` | no | The content scanner (antivirus or DLP): `type: clamd`, `icap`, `command`, or `python`, with `timeout_seconds` (default 15) and `max_file_bytes` (default 25 MiB). See [docs/SCANNERS.md](SCANNERS.md) (0.6.0) |
+| `tools.<id>.files` | no | Arguments that hold a file, for the content scanner: `[{path: "attachments[].content", kind: base64, max_bytes: 65536}]`, `kind: base64url`, or `{path: file_path, kind: path, folder: /srv/outbox, max_bytes: 20971520}`. `max_bytes` is required (base64 at most 196608, path at most 100 MiB). Needs `scan` (0.6.0) |
+| `scan` | no | The content scanner (antivirus or DLP): `type: clamd`, `icap`, `command`, or `python`, with `timeout_seconds` (default 15). The size limit is `max_bytes` on each declared file. See [docs/SCANNERS.md](SCANNERS.md) (0.6.0) |
 
 The claim is the only thing the proxy says about a call, and the agent
 writes none of it. Amount, counterparty, and irreversible are never
@@ -1863,6 +1879,8 @@ an argument value.
 | `fact_mismatch` | The hook's answer changed between authorize and the tool call, so the token no longer fits |
 | `rule_denied:<scan rule id>` | The content scanner flagged the call (or, under the strict stance, could not answer). The agent is not told what was found |
 | `file_changed` | A file sent by path changed after it was scanned |
+| `file_too_large`, `too_many_files`, `call_files_too_large` | A declared file is over its `max_bytes`, or the call carries more than 32 files or 100 MiB of them. Denied before the scanner and both keys, under every stance |
+| `file_unreadable` | A declared file could not be read: bad base64, a value of the wrong type, a path outside its folder, a link, a missing file. Denied the same way |
 | any `two-key authorize` reason | `rule_denied:<rule id>`, `counterparty_not_allowed`, `derive_failed:...`, `insufficient_yes:...`, `cloud_judge_session_required`, `args_too_large`, and the others in "Parsing and limits" and "Quorum policy" |
 | `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`. After a timeout the server may still have done the work. The proxy does not retry |
 | `upstream_result_unreadable` | The upstream returned something that is not a tool result |
@@ -2210,7 +2228,9 @@ names the setting or declaration that controls it.
 - The scan stance. Default lets calls through to the two keys while the
   scanner is down (the judges are told, and the ledger records it once);
   strict denies them, so a scanner outage stops those tools. Monitor never
-  blocks, not even a file outside its folder. The stance is the signed
+  blocks on the verdict; a file that is too large or cannot be read (one
+  outside its folder, for example) is denied under every stance. The
+  stance is the signed
   `scan` rule (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)).
 
 - `tool_args_on_scan_flag` (default false): the judges do not see the
@@ -2223,6 +2243,12 @@ names the setting or declaration that controls it.
   and the tool opening it. Declare a folder only the guarded tools can
   write to. Which arguments are files is set in `proxy.yaml` or
   `Scanner(files=...)`, not signed.
+
+- `max_bytes` on each declared file: a low limit keeps an agent from
+  pushing large files through a tool (and holds Two-Key's memory per call
+  to 100 MiB of files), but a legitimate file over it is denied. Set it to
+  the largest file the tool really needs. The limits hold per call, so a
+  tool that saves files still needs its own disk quota.
 
 - `tool_args_on_derive_deny` (default false): a call that cannot be read
   under its spec is denied without asking the judges, so no judge cost or

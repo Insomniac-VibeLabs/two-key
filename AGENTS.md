@@ -222,8 +222,15 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   the verdict; nothing the agent writes turns it on or off, and `scan` in
   `facts=` is refused (`scan_fact_supplied`). Unavailable is never clean: a
   timeout, an exception, or an invalid result is `unavailable`.
-  Could-not-finish (`limits_exceeded`) is flagged, and so is a declared file
-  Two-Key cannot read. The stance is the signed rule. Content never reaches
+  Could-not-finish (`limits_exceeded`) is flagged. A declared file Two-Key
+  cannot read (`file_unreadable`), one over its `max_bytes`
+  (`file_too_large`), more than 32 files (`too_many_files`), or more than
+  100 MiB of files in one call (`call_files_too_large`) is denied before
+  the scanner and both paths under every stance, monitor included
+  (maintainer's decision, 2026-10-15); nothing past a limit is read. Every
+  declared file states `max_bytes`, with no default (base64 at most
+  196608). Do not make these denies depend on the stance or give
+  `max_bytes` a default. The stance is the signed rule. Content never reaches
   the ledger or a reason code, and file content never reaches a judge; a
   flagged call's arguments and proposal reach the judges only with
   `tool_args_on_scan_flag`. The gateway never scans: it checks the token's

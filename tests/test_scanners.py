@@ -341,16 +341,22 @@ class Config(unittest.TestCase):
 
     def test_scanner_from_config(self):
         sc = scanner_from_config({"type": "clamd", "address": "127.0.0.1:3310", "timeout_seconds": 5,
-                                  "max_file_bytes": 1000, "label": "clamav-prod"},
-                                 {"send_email": [{"path": "attachments[].content", "kind": "base64"}]})
+                                  "label": "clamav-prod"},
+                                 FILES)
         self.assertIsInstance(sc, Scanner)
         self.assertIsInstance(sc.inspector, ClamdInspector)
-        self.assertEqual((sc.timeout_seconds, sc.max_file_bytes, sc.label), (5.0, 1000, "clamav-prod"))
-        self.assertEqual(sc.files["send_email"][0].path, "attachments[].content")
+        self.assertEqual((sc.timeout_seconds, sc.label), (5.0, "clamav-prod"))
+        self.assertEqual((sc.files["send_email"][0].path, sc.files["send_email"][0].max_bytes),
+                         ("attachments[].content", 65536))
+        with self.assertRaisesRegex(ScanConfigError, "replaced by max_bytes on each file"):
+            scanner_from_config({"type": "clamd", "address": "127.0.0.1:3310", "max_file_bytes": 1000})
         self.assertIsInstance(scanner_from_config({"type": "icap", "url": "icap://h/s"}).inspector, IcapInspector)
         self.assertIsInstance(scanner_from_config({"type": "command", "command": ["x"]}).inspector, CommandInspector)
         self.assertEqual(scanner_from_config({"type": "python", "hook": "scan_hook_fixture:inspect"}).label,
                          "inspect")
+
+
+FILES = {"send_email": [{"path": "attachments[].content", "kind": "base64", "max_bytes": 65536}]}
 
 
 class EndToEnd(unittest.TestCase):
@@ -370,7 +376,7 @@ class EndToEnd(unittest.TestCase):
                            "source": "caller"}}
         env = sign_constitution("Never send malware.", rules, key, specs, fields=fields)
         scanner = scanner_from_config({"type": "clamd", "address": f"{host}:{port}", "timeout_seconds": 3},
-                                      {"send_email": [{"path": "attachments[].content", "kind": "base64"}]})
+                                      FILES)
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(io.StringIO()) as err:
             tk = TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
                         [FixedJudge("a", "yes")], private_key=key, quorum=QuorumPolicy(required_yes=1),
@@ -406,7 +412,7 @@ class ExampleFile(unittest.TestCase):
         env = sign_constitution(prose, rules, key, specs, fields=fields)
         self.assertEqual(env["format"], "two-key-constitution-v3")
         scanner = scanner_from_config({"type": "python", "hook": "scan_hook_fixture:inspect"},
-                                      {"send_email": [{"path": "attachments[].content", "kind": "base64"}]})
+                                      FILES)
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(io.StringIO()) as err:
             tk = TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
                         [FixedJudge("a", "yes")], private_key=key, quorum=QuorumPolicy(required_yes=1),

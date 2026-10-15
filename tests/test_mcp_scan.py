@@ -83,8 +83,8 @@ class Config(unittest.TestCase):
 
     def test_scan_block_and_files(self):
         c = config(self.base, scan={"type": "clamd", "address": "127.0.0.1:3310"},
-                   tools={"send_email": {"files": [{"path": "attachments[].content", "kind": "base64"}]},
-                          "print_doc": {"files": [{"path": "file_path", "kind": "path", "folder": "outbox"}]}})
+                   tools={"send_email": {"files": [{"path": "attachments[].content", "kind": "base64", "max_bytes": 4096}]},
+                          "print_doc": {"files": [{"path": "file_path", "kind": "path", "folder": "outbox", "max_bytes": 1024}]}})
         self.assertEqual(c.scan["type"], "clamd")
         self.assertEqual(c.tools["send_email"].files[0].path, "attachments[].content")
         # A relative folder is relative to the directory of proxy.yaml.
@@ -94,22 +94,27 @@ class Config(unittest.TestCase):
         scan = {"type": "clamd", "address": "127.0.0.1:3310"}
         bad = {
             "declare files, which are for the content scanner":
-                {"tools": {"send_email": {"files": [{"path": "attachments[].content"}]}}},
+                {"tools": {"send_email": {"files": [{"path": "attachments[].content", "max_bytes": 4096}]}}},
             r"scan.type: expected one of": {"scan": {"type": "antivirus"}},
             r"unknown key\(s\) \['url'\] for type clamd": {"scan": dict(scan, url="icap://x")},
             r"scan.address: required": {"scan": {"type": "clamd"}},
             r"kind: expected one of": {"scan": scan, "tools": {"send_email": {"files": [
                 {"path": "attachments[].content", "kind": "zip"}]}}},
             r"a path file needs the folder": {"scan": scan, "tools": {"print_doc": {"files": [
-                {"path": "file_path", "kind": "path"}]}}},
+                {"path": "file_path", "kind": "path", "max_bytes": 1024}]}}},
             r"is not a directory": {"scan": scan, "tools": {"print_doc": {"files": [
-                {"path": "file_path", "kind": "path", "folder": "missing"}]}}},
+                {"path": "file_path", "kind": "path", "folder": "missing", "max_bytes": 1024}]}}},
             r"only a kind: path file has a folder": {"scan": scan, "tools": {"send_email": {"files": [
-                {"path": "attachments[].content", "folder": "outbox"}]}}},
+                {"path": "attachments[].content", "folder": "outbox", "max_bytes": 4096}]}}},
             r"a path is declared twice": {"scan": scan, "tools": {"send_email": {"files": [
-                {"path": "attachments[].content"}, {"path": "attachments[].content"}]}}},
+                {"path": "attachments[].content", "max_bytes": 4096}, {"path": "attachments[].content", "max_bytes": 4096}]}}},
+            r"max_bytes: required": {"scan": scan, "tools": {"send_email": {"files": [
+                {"path": "attachments[].content"}]}}},
+            r"so at most 196608 bytes": {"scan": scan, "tools": {"send_email": {"files": [
+                {"path": "attachments[].content", "max_bytes": 1000000}]}}},
+            r"replaced by max_bytes": {"scan": dict(scan, max_file_bytes=1000)},
             r"is not an argument path": {"scan": scan, "tools": {"send_email": {"files": [
-                {"path": "attachments[0].content"}]}}},
+                {"path": "attachments[0].content", "max_bytes": 4096}]}}},
         }
         for message, over in bad.items():
             with self.subTest(message), self.assertRaisesRegex(ProxyConfigError, message):
@@ -142,9 +147,9 @@ class Hints(unittest.TestCase):
         self.assertIn("send_email: attachments[].content looks like a file", lines[1])
         self.assertIn("scanned as text, not as a file", lines[1])
         with tempfile.TemporaryDirectory() as folder:
-            declared = Scanner(Marker(), files={"send_email": [{"path": "attachments[].content"}],
+            declared = Scanner(Marker(), files={"send_email": [{"path": "attachments[].content", "max_bytes": 4096}],
                                                 "print_doc": [{"path": "file_path", "kind": "path",
-                                                               "folder": folder}]})
+                                                               "folder": folder, "max_bytes": 1024}]})
             self.assertEqual(undeclared_file_inputs(selection, SPECS, declared), [])
 
     def test_the_drafter_hints_files_and_never_declares_them(self):
@@ -153,8 +158,10 @@ class Hints(unittest.TestCase):
         self.assertTrue(any("looks like a file" in n for n in t.notes), t.notes)
         draft = draft_specs(UPSTREAM)
         tools = render_proxy_tools(draft)
-        self.assertIn('#   - {path: "attachments[].content", kind: base64}', tools)
-        self.assertIn('#   - {path: "file_path", kind: path, folder: REPLACE_WITH_FOLDER}', tools)
+        self.assertIn('#   - {path: "attachments[].content", kind: base64, max_bytes: REPLACE_WITH_BYTES}', tools)
+        self.assertIn('#   - {path: "file_path", kind: path, folder: REPLACE_WITH_FOLDER, max_bytes: REPLACE_WITH_BYTES}',
+                      tools)
+        self.assertIn("base64: at most 196608", tools)
         parsed = load_yaml(tools)                       # commented: the drafted proxy.yaml declares no file
         self.assertNotIn("files", parsed["tools"]["send_email"])
         rules = render_rules(draft, ["mail-mcp"])
@@ -180,14 +187,14 @@ class Calls(unittest.TestCase):
         key = generate_private_key()
         env = sign_constitution("Email ops. Never send malware.", RULES, key, SPECS, fields=FIELDS)
         self.marker = Marker()
-        scanner = Scanner(self.marker, files={"send_email": [{"path": "attachments[].content"}]})
+        scanner = Scanner(self.marker, files={"send_email": [{"path": "attachments[].content", "max_bytes": 4096}]})
         self.judge = FixedJudge("a", judge)
         with contextlib.redirect_stderr(io.StringIO()):
             tk = TwoKey(Ledger(self.dir / "ledger", key), key.public_key(), verify_signed(env, key.public_key()),
                         [self.judge], private_key=key, quorum=QuorumPolicy(required_yes=1),
                         allow_test_doubles=True, monitored_agent=TEST_AGENT, scanner=scanner)
         cfg = config(self.dir, scan={"type": "python", "hook": "scan_hook_fixture:inspect"},
-                     tools={"send_email": {"claim": "floor", "files": [{"path": "attachments[].content"}]}})
+                     tools={"send_email": {"claim": "floor", "files": [{"path": "attachments[].content", "max_bytes": 4096}]}})
         check_tools_signed(cfg, tk)
         return ProxyCore(tk, cfg, select_tools(UPSTREAM, SPECS, cfg.tools), self.upstream)
 
@@ -215,6 +222,17 @@ class Calls(unittest.TestCase):
         self.assertFalse(out.allowed)
         self.assertEqual(out.reason, "rule_denied:scan")
         self.assertEqual(self.calls, [])
+
+    def test_an_oversized_or_unreadable_file_is_denied_before_the_scanner_and_never_sent(self):
+        core = self.core()
+        out = core.call_tool("send_email", self.email(b"x" * 4097))
+        self.assertEqual((out.allowed, out.reason), (False, "file_too_large"))
+        bad = dict(self.email(b""), attachments=[{"filename": "r.txt", "content": "not base64!"}])
+        out = core.call_tool("send_email", bad)
+        self.assertEqual((out.allowed, out.reason), (False, "file_unreadable"))
+        self.assertEqual((self.calls, self.marker.parts), ([], []))
+        denied = [e.body for e in core.two_key.ledger.entries if e.kind == "decision"][-2:]
+        self.assertEqual([d["file_denied"].get("why") for d in denied], [None, "bad_base64"])
 
     def test_the_agent_cannot_supply_the_verdict(self):
         core = self.core()

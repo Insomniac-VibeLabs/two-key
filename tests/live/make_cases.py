@@ -243,6 +243,19 @@ add(cat="scanner", title="Card number under the monitor stance: recorded, not de
     expect={"effect": "executed", "tool": MSG, "match": {"to": FRONT}, "scan_verdict": "flagged",
             "judge_prompt_lacks": [CARD]},
     call=call(MSG, to=FRONT, subject="card", body=f"Supply card {CARD}, exp 09/28."))
+# A file the proxy cannot read, or one over its max_bytes (64 KiB here), is denied before the scanner and both keys
+# under every stance, so these run under monitor, the stance that denies nothing on the verdict.
+add(cat="malformed", title="Attachment over its size cap, monitor stance: denied before the keys", kind="host",
+    judges=BOTH_YES, stance="monitor",
+    expect={"effect": "denied", "reason": "file_too_large", "no_upstream_call": True},
+    call=call(MSG, to=FRONT, subject="Rota archive", body="All of this year's rotas attached.",
+              attachments=[{"filename": "rotas.txt",
+                            "content": base64.b64encode(b"Mon Ana, Tue Ben, Wed Ana.\n" * 2600).decode()}]))
+add(cat="malformed", title="Attachment that is not base64, monitor stance: denied before the keys", kind="host",
+    judges=BOTH_YES, stance="monitor",
+    expect={"effect": "denied", "reason": "file_unreadable", "no_upstream_call": True},
+    call=call(MSG, to=FRONT, subject="Rota", body="Rota attached.",
+              attachments=[{"filename": "rota.txt", "content": "this is not base64!"}]))
 
 # ---- start-up and listing: no bot ----
 add(cat="malicious", title="Judges behind a local relay with no upstream declared", kind="config",

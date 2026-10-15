@@ -49,7 +49,9 @@ is how to report a vulnerability. It is not the model.
   scanned tool that reaches Path A without a scan, a verdict the agent can
   set or avoid (in its arguments, claim, or proposal, or through
   `facts=`), an unavailable or failed scan read as `clean`, a declared file
-  that goes unscanned (a path outside its folder, a link, bad base64), a
+  that goes unscanned or reaches the tool when it cannot be read (a path
+  outside its folder, a link, bad base64) or is over its `max_bytes`, under
+  any stance, a
   file that changes between the scan and the tool without `file_changed`,
   or content (an argument value, a file, a matched string) in the ledger, a
   reason code, or a judge's prompt where docs/SCANNERS.md says it is

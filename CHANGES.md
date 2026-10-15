@@ -88,6 +88,7 @@
 - [Content scanning, part 2: adapters and the proxy (0.6.0 Phase 4) — 2026-10-15](#content-scanning-part-2-adapters-and-the-proxy-060-phase-4--2026-10-15)
 - [Content scanning, part 3: docs (0.6.0 Phase 6) — 2026-10-15](#content-scanning-part-3-docs-060-phase-6--2026-10-15)
 - [Live run 7 harness: content scanning (0.6.0 Phase 7) — 2026-10-15](#live-run-7-harness-content-scanning-060-phase-7--2026-10-15)
+- [File size limits; unreadable files denied under every stance (0.6.0) — 2026-10-15](#file-size-limits-unreadable-files-denied-under-every-stance-060--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3037,3 +3038,42 @@ changes except one start-up note's wording.
 - The report checks each scan case's judge prompts: the `<scan_result>`
   verdict, and no flagged content. RELAY.md describes run 7.
 - The start-up note now reads `not scanned (they do not map scan): ...`.
+
+## File size limits; unreadable files denied under every stance (0.6.0) — 2026-10-15
+
+On branch `working`. The maintainer's decisions of 2026-10-15: the operator
+states the file size each tool needs, and an agent cannot push an oversized
+or unreadable file through any stance.
+
+- Every declared file states `max_bytes`, the largest file the tool needs,
+  with no default: `Scanner(files=)` and `proxy.yaml` `tools.<id>.files`
+  refuse a file without it. A `base64` or `base64url` file is at most
+  196608 bytes (it travels inside the 256 KiB call; the error says a tool
+  that needs larger files takes a path), a `path` file at most 100 MiB.
+  The scanner-wide `max_file_bytes` (from earlier on `working`) is
+  removed, and a `scan:` block that sets it is refused with a pointer to
+  `max_bytes`.
+- A call is held to its files' `max_bytes`, 32 files, and 100 MiB of files
+  together. Two-Key counts the files before reading any, does not open a
+  path file whose size is over its limit, and stops reading one that grows
+  past it. This also closes a memory exhaustion: a list of paths could name
+  one large file thousands of times in a single call.
+- A declared file Two-Key cannot read (bad base64, a value of the wrong
+  type, a path outside its folder, a link, a missing file, not a regular
+  file) was a `flagged` verdict, which the monitor stance let through. It
+  is now denied, like a call over a file limit, before the scanner and
+  both paths under every stance: `file_unreadable`, `file_too_large`,
+  `too_many_files`, `call_files_too_large`. The judges are not asked. The
+  `decision` entry records `file_denied` (the argument path, why, and
+  sizes, never content); the agent gets the reason code. The gateway
+  denies a file it cannot read again, or one over its limit, as
+  `file_changed`.
+- `two-key mcp-draft-specs` drafts `max_bytes: REPLACE_WITH_BYTES` on each
+  commented file entry.
+- Docs: docs/SCANNERS.md "File size limits", HOWTO (scanning steps, proxy
+  reasons, parsing limits, trade-offs), THREAT_MODEL, SECURITY, AGENTS.md,
+  llms.txt, ROADMAP, and examples/scanning.yaml.
+- Live run 7: `send_message` attachments declare `max_bytes: 65536`; two
+  host cases under the monitor stance (an attachment over the limit, and
+  one that is not base64) expect `file_too_large` and `file_unreadable`
+  (46 cases).

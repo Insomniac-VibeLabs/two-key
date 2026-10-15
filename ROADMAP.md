@@ -124,7 +124,9 @@ built, apart from the maintainer's own actions in step 1; live run 7 and the
 release remain. The scanner follows the decisions below and the approved
 design note, with the maintainer's additions: Two-Key alone starts a scan
 (the agent never proposes, skips, or answers one), a call can carry a file
-(base64, or a path in a folder the operator declares), and
+(base64, or a path in a folder the operator declares, each with a required
+`max_bytes`; an oversized or unreadable file is denied before both keys
+under every stance), and
 [docs/SCANNERS.md](docs/SCANNERS.md) shows with diagrams how ClamAV, ICAP
 products, a command, or Python code connect. The first bullets below are
 the original sketch; where they differ (a deny on every error,

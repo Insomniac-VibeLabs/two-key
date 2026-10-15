@@ -132,7 +132,8 @@ REVIEW = {
 CLAIMS = {"pay_vendor": {"claim": "floor", "proposal": "Pay a vendor invoice",
                          "facts": {"po_matched": {"hook": "live_facts:po_matches"}}},
           "send_message": {"claim": "floor", "proposal": "Send a message from the front desk",
-                           "files": [{"path": "attachments[].content", "kind": "base64"}]},
+                           # run 7: a front desk sends small documents; larger ones are denied before the keys
+                           "files": [{"path": "attachments[].content", "kind": "base64", "max_bytes": 65536}]},
           "book_appointment": {"claim": "floor", "proposal": "Book a patient visit"},
           "lookup": {"claim": "floor", "proposal": "Run a public lookup"}}
 

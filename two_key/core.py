@@ -40,7 +40,7 @@ from .gateway import ToolGateway, mark_two_key_ledger
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, check_judge_set, convene, lone_judge_warning, unmeetable_floor
-from .scan import CLIENT_BUDGET_SECONDS, Outcome, ScanConfigError, Scanner
+from .scan import CLIENT_BUDGET_SECONDS, FileDeniedError, Outcome, ScanConfigError, Scanner
 
 
 class TwoKeyConfigError(ValueError):
@@ -261,7 +261,8 @@ class TwoKey:
 
     def _scan(self, tool: str, arguments: Any, proposal: Any) -> tuple[Outcome, tuple[str, dict] | None]:
         """Scan one call (Two-Key starts it; the agent cannot). Also returns the ledger entry for the scanner
-        going down or coming back, said once each on stderr, never once per call."""
+        going down or coming back, said once each on stderr, never once per call. Raises ``FileDeniedError``
+        before the scanner is called when a declared file cannot be read or the call is over a file limit."""
         scanner = self.scanner
         outcome = scanner.run(tool, scanner.prepare(tool, arguments, proposal))
         change = scanner.transition(outcome.available)
@@ -454,6 +455,13 @@ class TwoKey:
                     scanned, scanner_change = self._scan(normalized.tool, arguments, proposal)
                     facts = {**(facts or {}), self.scanner.field: scanned.verdict}
                 derived = derive(spec, arguments, self.compiled.fields, facts)
+            except FileDeniedError as exc:
+                # A declared file Two-Key cannot read, or over a file limit, is not a well-formed call within
+                # limits: denied before the scanner and both paths, whatever the stance. The ledger gets the
+                # file's argument path, why, and sizes; the agent gets the code.
+                return self._deny(origin, exc.reason, agent, None, None,
+                                  {"tool": normalized.tool, "file_denied": exc.record,
+                                   "tool_args_digest": f"sha256:{frozen_digest}"})
             except DeriveError as exc:
                 deny_reason = f"derive_failed:{cap_ledger_text(exc.reason)}"
                 # No custom field values were derived, so a deny_if_fields rule reaches LOAD_FIELD with

@@ -17,8 +17,14 @@ Two-Key sends the scanner (an ``Inspector``):
 The answer is ``clean``, ``flagged``, or ``unavailable``. Two-Key, not the adapter, sets it when the scan
 fails: a timeout, an exception, or an invalid result is ``unavailable``, so the fact is never missing and
 never ``clean`` by accident. A result that names ``limits_exceeded`` (the scanner could not finish) or
-``unreadable`` is ``flagged``, and so is any call with a declared file Two-Key could not read (bad base64,
-a path outside its folder, a link, a missing file, one over ``max_file_bytes``).
+``unreadable`` is ``flagged``.
+
+Every declared file states ``max_bytes``, the largest file the tool needs. A call whose files Two-Key cannot
+read, or that is over a file limit, is not well-formed and within limits, so it is denied before the scanner
+and both paths, under every stance (monitor too), and nothing is read past a limit: ``file_unreadable`` (bad
+base64, a value of the wrong type, a path outside its folder, a link, a missing file, not a regular file),
+``file_too_large`` (a file above its ``max_bytes``), ``too_many_files`` (more than ``MAX_FILES_PER_CALL``),
+``call_files_too_large`` (more than ``MAX_CALL_FILE_BYTES`` together).
 
 The judges get the verdict, never content: each file is replaced by its digest and size, and when the
 verdict is ``flagged`` the arguments and proposal are withheld unless ``tool_args_on_scan_flag`` is set. The
@@ -45,7 +51,7 @@ from . import _platform
 from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
 from .agent_meta import type_tag
 from .canonical import canonical_bytes, digest_hex
-from .derive import caller_fields
+from .derive import MAX_ARGS_BYTES, caller_fields
 from .fields import FIELD_NAME
 
 VERDICTS = ("clean", "flagged", "unavailable")
@@ -59,8 +65,11 @@ STANCES = ("strict", "default", "monitor")
 DEFAULT_FIELD = "scan"
 DEFAULT_TIMEOUT_SECONDS = 15.0
 MAX_TIMEOUT_SECONDS = 300.0
-DEFAULT_MAX_FILE_BYTES = 25 * 1024 * 1024
-MAX_FILE_BYTES = 100 * 1024 * 1024
+MAX_FILE_BYTES = 100 * 1024 * 1024           # the most a path file's max_bytes may be
+# A base64 file arrives inside the call, which is at most MAX_ARGS_BYTES (256 KiB): 196608 decoded bytes.
+MAX_INLINE_FILE_BYTES = MAX_ARGS_BYTES * 3 // 4
+MAX_FILES_PER_CALL = 32
+MAX_CALL_FILE_BYTES = 100 * 1024 * 1024      # every declared file in one call, together
 MAX_LABEL_CHARS = 64
 MAX_FILES_PER_TOOL = 32
 # Above this, scan time plus the judges' deadline can outlast an MCP client's tool-call timeout.
@@ -75,10 +84,31 @@ class ScanConfigError(ValueError):
     """Two-Key refuses this scanner configuration."""
 
 
+class FileDeniedError(Exception):
+    """A call with a declared file Two-Key cannot read, or over a file limit: denied before the scanner and
+    both paths, under every stance. ``reason`` is the deny code; ``record`` (the file's argument path, why,
+    and sizes, never content) goes to the ledger."""
+
+    def __init__(self, reason: str, record: dict):
+        super().__init__(reason)
+        self.reason = reason
+        self.record = record
+
+
 class _Unreadable(Exception):
-    def __init__(self, category: str = "unreadable"):
-        super().__init__(category)
-        self.category = category
+    """A declared file Two-Key cannot read. ``why`` is for the ledger: never the value."""
+
+    def __init__(self, why: str):
+        super().__init__(why)
+        self.why = why
+
+
+class _Over(Exception):
+    """A file larger than the bytes left for it. ``size`` is what Two-Key saw: exact, or at least that."""
+
+    def __init__(self, size: int):
+        super().__init__(size)
+        self.size = size
 
 
 @dataclass(frozen=True)
@@ -168,10 +198,13 @@ def _label(value: Any) -> str:
 class FileArg:
     """An argument that holds a file. ``path`` is a dotted argument path where ``[]`` means each item of a
     list (``attachments[].content``). ``kind``: ``base64``, ``base64url``, or ``path`` (a file path the tool
-    reads, which must lie in ``folder``, an absolute directory the operator names)."""
+    reads, which must lie in ``folder``, an absolute directory the operator names). ``max_bytes`` (required)
+    is the largest file the tool needs: at most ``MAX_INLINE_FILE_BYTES`` for base64, which arrives inside
+    the call, and ``MAX_FILE_BYTES`` for a path."""
     path: str
     kind: str = "base64"
     folder: str | None = None
+    max_bytes: int | None = None
 
     def segments(self) -> list[tuple[str, bool]]:
         return [(seg[:-2], True) if seg.endswith("[]") else (seg, False) for seg in self.path.split(".")]
@@ -181,23 +214,27 @@ class FileArg:
         return ".".join(name for name, _ in self.segments())
 
     def to_record(self) -> dict:
-        rec = {"path": self.path, "kind": self.kind}
+        rec = {"path": self.path, "kind": self.kind, "max_bytes": self.max_bytes}
         if self.folder is not None:
             rec["folder"] = self.folder
         return rec
 
 
+_FILE_KEYS = ("folder", "kind", "max_bytes", "path")
+
+
 def file_arg(value: Any, where: str) -> FileArg:
-    """A checked ``FileArg`` from a ``FileArg`` or ``{path, kind, folder}``. Raises ``ScanConfigError``."""
+    """A checked ``FileArg`` from a ``FileArg`` or ``{path, kind, folder, max_bytes}``. Raises
+    ``ScanConfigError``."""
     if isinstance(value, FileArg):
         item = value
     elif isinstance(value, Mapping):
-        extra = sorted(str(k) for k in set(value) - {"path", "kind", "folder"})
+        extra = sorted(str(k) for k in set(value) - set(_FILE_KEYS))
         if extra:
-            raise ScanConfigError(f"{where}: unknown key(s) {extra}; allowed: ['folder', 'kind', 'path']")
-        item = FileArg(value.get("path"), value.get("kind", "base64"), value.get("folder"))
+            raise ScanConfigError(f"{where}: unknown key(s) {extra}; allowed: {list(_FILE_KEYS)}")
+        item = FileArg(value.get("path"), value.get("kind", "base64"), value.get("folder"), value.get("max_bytes"))
     else:
-        raise ScanConfigError(f"{where}: expected {{path: ..., kind: base64|base64url|path}}")
+        raise ScanConfigError(f"{where}: expected {{path: ..., kind: base64|base64url|path, max_bytes: ...}}")
     if not isinstance(item.path, str) or not item.path or len(item.path) > 512:
         raise ScanConfigError(f"{where}.path: expected an argument path such as attachments[].content")
     if not all(_SEGMENT.fullmatch(seg) for seg in item.path.split(".")) or item.path.count(".") >= 16:
@@ -213,9 +250,23 @@ def file_arg(value: Any, where: str) -> FileArg:
             raise ScanConfigError(f"{where}.folder: expected an absolute path")
         if not os.path.isdir(folder):
             raise ScanConfigError(f"{where}.folder: {folder} is not a directory")
-        item = FileArg(item.path, item.kind, os.path.normpath(folder))
+        item = FileArg(item.path, item.kind, os.path.normpath(folder), item.max_bytes)
     elif item.folder is not None:
         raise ScanConfigError(f"{where}.folder: only a kind: path file has a folder")
+    # Required, with no default: the operator says how large a file the tool needs.
+    limit = MAX_FILE_BYTES if item.kind == "path" else MAX_INLINE_FILE_BYTES
+    size = item.max_bytes
+    if size is None:
+        raise ScanConfigError(f"{where}.max_bytes: required: the largest file this argument needs, in bytes "
+                              f"(at most {limit} for kind {item.kind})")
+    if isinstance(size, bool) or not isinstance(size, int) or size < 1:
+        raise ScanConfigError(f"{where}.max_bytes: expected a whole number of bytes from 1 to {limit}")
+    if size > limit:
+        if item.kind == "path":
+            raise ScanConfigError(f"{where}.max_bytes: at most {MAX_FILE_BYTES} (100 MiB) for a path file")
+        raise ScanConfigError(f"{where}.max_bytes: a {item.kind} file arrives inside the call, which is at most "
+                              f"{MAX_ARGS_BYTES // 1024} KiB, so at most {MAX_INLINE_FILE_BYTES} bytes; a tool that "
+                              "needs larger files takes a path (kind: path)")
     return item
 
 
@@ -259,7 +310,6 @@ class Prepared:
     parts: tuple[ScanPart, ...]
     judge_args: Any
     files: list[dict]
-    forced: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -297,28 +347,24 @@ class Outcome:
 class Scanner:
     """The scanner Two-Key calls, and how: ``TwoKey(..., scanner=Scanner(inspector, files=...))``.
 
-    ``files`` maps a signed tool id to its file arguments (``FileArg`` or ``{path, kind, folder}``).
-    ``timeout_seconds`` bounds each scan (15 by default); ``max_file_bytes`` bounds a file read from a
-    folder (25 MiB by default, 100 MiB at most). ``field`` names the caller-supplied enum field that holds
-    the verdict (``scan``). ``label`` names the scanner in the ledger when its results do not.
+    ``files`` maps a signed tool id to its file arguments (``FileArg`` or ``{path, kind, folder,
+    max_bytes}``); each states ``max_bytes``. ``timeout_seconds`` bounds each scan (15 by default).
+    ``field`` names the caller-supplied enum field that holds the verdict (``scan``). ``label`` names the
+    scanner in the ledger when its results do not.
     """
 
     def __init__(self, inspector: Inspector, *, files: Mapping[str, Iterable[Any]] | None = None,
-                 timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS, max_file_bytes: int = DEFAULT_MAX_FILE_BYTES,
-                 field: str = DEFAULT_FIELD, label: str | None = None):
+                 timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS, field: str = DEFAULT_FIELD,
+                 label: str | None = None):
         if not callable(getattr(inspector, "inspect", None)):
             raise ScanConfigError("scanner: the inspector needs an inspect(request) method")
         if (isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float))
                 or not 0 < timeout_seconds <= MAX_TIMEOUT_SECONDS):
             raise ScanConfigError(f"timeout_seconds: expected a number in (0, {MAX_TIMEOUT_SECONDS:g}]")
-        if isinstance(max_file_bytes, bool) or not isinstance(max_file_bytes, int) or \
-                not 1 <= max_file_bytes <= MAX_FILE_BYTES:
-            raise ScanConfigError(f"max_file_bytes: expected an integer from 1 to {MAX_FILE_BYTES}")
         if not isinstance(field, str) or not FIELD_NAME.fullmatch(field):
             raise ScanConfigError("field: expected a field name")
         self.inspector = inspector
         self.timeout_seconds = float(timeout_seconds)
-        self.max_file_bytes = max_file_bytes
         self.field = field
         self.label = _label(label if label is not None else getattr(inspector, "label", type(inspector).__name__))
         self.files: dict[str, tuple[FileArg, ...]] = {}
@@ -384,13 +430,13 @@ class Scanner:
     def to_record(self) -> dict:
         """For ``constitution_loaded``: the configuration, never a secret (an adapter's address is not one)."""
         return {"field": self.field, "label": self.label, "stance": self._stance,
-                "timeout_seconds": self.timeout_seconds, "max_file_bytes": self.max_file_bytes,
+                "timeout_seconds": self.timeout_seconds,
                 "files": {tool: [f.to_record() for f in items] for tool, items in sorted(self.files.items())}}
 
     # -- one call ------------------------------------------------------------------------------------------
     def _occurrences(self, arguments: Any, item: FileArg) -> list[tuple[str, Any, list]]:
         """Each value at ``item.path``: (concrete name, value, location to replace it). A missing key is no
-        file; a value of the wrong kind on the way (a list where a name is expected) is unreadable."""
+        file; a value of the wrong type on the way (a list where a name is expected) is unreadable."""
         found: list[tuple[str, Any, list]] = []
 
         def walk(node: Any, segs: list[tuple[str, bool]], name: str, parent: Any, key: Any) -> None:
@@ -399,7 +445,7 @@ class Scanner:
                 return
             seg, each = segs[0]
             if not isinstance(node, dict):
-                found.append((name, _Unreadable(), [parent, key]))
+                found.append((name, _Unreadable("not_an_object"), [parent, key]))
                 return
             if seg not in node:
                 return
@@ -409,7 +455,7 @@ class Scanner:
                 walk(child, segs[1:], child_name, node, seg)
                 return
             if not isinstance(child, list):
-                found.append((child_name, _Unreadable(), [node, seg]))
+                found.append((child_name, _Unreadable("not_a_list"), [node, seg]))
                 return
             for i, value in enumerate(child):
                 walk(value, segs[1:], f"{child_name}[{i}]", child, i)
@@ -419,96 +465,107 @@ class Scanner:
 
     def _decode(self, value: Any, kind: str) -> bytes:
         if not isinstance(value, str):
-            raise _Unreadable()
+            raise _Unreadable("not_a_string")
         text = value.replace("\r", "").replace("\n", "")
         pattern = _BASE64URL if kind == "base64url" else _BASE64
         if not pattern.fullmatch(text) or len(text.rstrip("=")) % 4 == 1:
-            raise _Unreadable()
+            raise _Unreadable(f"bad_{kind}")
         text += "=" * (-len(text) % 4)
         try:
             data = (base64.urlsafe_b64decode(text) if kind == "base64url"
                     else base64.b64decode(text, validate=True))
         except (binascii.Error, ValueError):
-            raise _Unreadable() from None
-        if len(data) > self.max_file_bytes:
-            raise _Unreadable("limits_exceeded")
+            raise _Unreadable(f"bad_{kind}") from None
         return data
 
-    def read_confined(self, value: Any, folder: str) -> bytes:
+    def read_confined(self, value: Any, folder: str, limit: int) -> bytes:
         """The file at ``value``, which must be an absolute path inside ``folder`` with no link or junction
-        below the folder. Opened without following a link; a regular file of at most ``max_file_bytes``."""
+        below the folder. Opened without following a link; a regular file of at most ``limit`` bytes (``_Over``
+        past it: nothing beyond ``limit`` is kept, and a file whose size says it is larger is not read)."""
         if not isinstance(value, str) or not value or "\x00" in value or len(value) > 4096:
-            raise _Unreadable()
+            raise _Unreadable("not_a_path")
         if not os.path.isabs(value) or any(p in (".", "..") for p in re.split(r"[\\/]", value)):
-            raise _Unreadable()
+            raise _Unreadable("not_absolute")
         norm = os.path.normpath(value)
         base = os.path.normpath(folder)
         if os.path.normcase(norm) == os.path.normcase(base) or not os.path.normcase(norm).startswith(
                 os.path.normcase(base).rstrip("\\/") + os.sep):
-            raise _Unreadable()
+            raise _Unreadable("outside_folder")
         expected = os.path.join(os.path.realpath(base), os.path.relpath(norm, base))
         if os.path.normcase(os.path.realpath(norm)) != os.path.normcase(expected):
-            raise _Unreadable()      # a link or junction inside the folder: the tool could be sent elsewhere
+            raise _Unreadable("link")      # a link or junction inside the folder: the tool could be sent elsewhere
         try:
             fd = _platform.open_nofollow(norm)
         except OSError:
-            raise _Unreadable() from None
+            raise _Unreadable("cannot_open") from None
         try:
             st = os.fstat(fd)
             if not stat.S_ISREG(st.st_mode):
-                raise _Unreadable()
-            if st.st_size > self.max_file_bytes:
-                raise _Unreadable("limits_exceeded")
+                raise _Unreadable("not_a_file")
+            if st.st_size > limit:
+                raise _Over(st.st_size)
             chunks, total = [], 0
             while True:
-                chunk = os.read(fd, min(1024 * 1024, self.max_file_bytes + 1 - total))
+                chunk = os.read(fd, min(1024 * 1024, limit + 1 - total))
                 if not chunk:
                     break
                 chunks.append(chunk)
                 total += len(chunk)
-                if total > self.max_file_bytes:
-                    raise _Unreadable("limits_exceeded")
+                if total > limit:      # it grew after fstat
+                    raise _Over(total)
             return b"".join(chunks)
         except OSError:
-            raise _Unreadable() from None
+            raise _Unreadable("cannot_read") from None
         finally:
             os.close(fd)
 
-    def _files(self, tool: str, arguments: Any) -> list[tuple[str, FileArg, Any, bytes | None, str | None, list]]:
-        """(name, declaration, raw value, bytes or None, problem category or None, location) per file."""
+    def _files(self, tool: str, arguments: Any) -> list[tuple[str, FileArg, Any, bytes, list]]:
+        """(name, declaration, raw value, bytes, location) per declared file in the call.
+
+        Raises ``FileDeniedError`` for a file Two-Key cannot read or a call over a file limit. The files are
+        counted before any is read, and each read stops at the smaller of its ``max_bytes`` and what the call
+        has left."""
+        found = [(item, occ) for item in self.files.get(tool, ()) for occ in self._occurrences(arguments, item)]
+        if len(found) > MAX_FILES_PER_CALL:
+            raise FileDeniedError("too_many_files", {"files": len(found), "max_files": MAX_FILES_PER_CALL})
         out = []
-        for item in self.files.get(tool, ()):
-            for name, value, where in self._occurrences(arguments, item):
+        total = 0
+        for item, (name, value, where) in found:
+            limit = min(item.max_bytes, MAX_CALL_FILE_BYTES - total)
+            try:
                 if isinstance(value, _Unreadable):
-                    out.append((name, item, None, None, value.category, where))
-                    continue
-                try:
-                    data = (self.read_confined(value, item.folder) if item.kind == "path"
-                            else self._decode(value, item.kind))
-                except _Unreadable as e:
-                    out.append((name, item, value, None, e.category, where))
-                    continue
-                out.append((name, item, value, data, None, where))
+                    raise value
+                if item.kind == "path":
+                    data = self.read_confined(value, item.folder, limit)
+                else:
+                    data = self._decode(value, item.kind)
+                    if len(data) > limit:
+                        raise _Over(len(data))
+            except _Unreadable as e:
+                raise FileDeniedError("file_unreadable", {"file": name, "kind": item.kind, "why": e.why}) from None
+            except _Over as over:
+                if over.size > item.max_bytes:
+                    raise FileDeniedError("file_too_large", {"file": name, "bytes": over.size,
+                                                             "max_bytes": item.max_bytes}) from None
+                raise FileDeniedError("call_files_too_large", {"file": name, "bytes": total + over.size,
+                                                               "max_bytes": MAX_CALL_FILE_BYTES}) from None
+            total += len(data)
+            out.append((name, item, value, data, where))
         return out
 
     def prepare(self, tool: str, arguments: Any, proposal: Any) -> Prepared:
-        """Build the parts for one call. ``arguments`` and ``proposal`` are Two-Key's plain copies."""
+        """Build the parts for one call. ``arguments`` and ``proposal`` are Two-Key's plain copies. Raises
+        ``FileDeniedError`` when a declared file cannot be read or the call is over a file limit."""
         judge_args = _deep_copy(arguments)
         files = self._files(tool, judge_args)
         parts: list[ScanPart] = []
         records: list[dict] = []
-        forced: list[str] = []
-        for name, item, value, data, problem, where in files:
-            if data is None:
-                descriptor = {"unreadable": True}
-                forced.append(problem or "unreadable")
-                records.append({"part": name, "sha256": None})
-            else:
-                part = ScanPart(f"file:{name}", data)
-                parts.append(part)
-                descriptor = {"sha256": part.sha256, "bytes": len(data)}
-                records.append({"part": name, "sha256": part.sha256})
-            if item.kind == "path" and isinstance(value, str):
+        for name, item, value, data, where in files:
+            part = ScanPart(f"file:{name}", data)
+            parts.append(part)
+            descriptor = {"sha256": part.sha256, "bytes": len(data)}
+            records.append({"part": name, "sha256": part.sha256})
+            if item.kind == "path":
                 descriptor["path"] = value
             parent, key = where
             if parent is not None:
@@ -520,7 +577,7 @@ class Scanner:
                 head.append(ScanPart("proposal", proposal.encode("utf-8", "surrogatepass")))
         elif proposal is not None:
             head.append(ScanPart("proposal", canonical_bytes(proposal)))
-        return Prepared(tuple(head + parts), judge_args, records, tuple(sorted(set(forced))))
+        return Prepared(tuple(head + parts), judge_args, records)
 
     def _inspect(self, request: ScanRequest) -> tuple[ScanResult | None, str | None]:
         """Run the inspector under the deadline. (result, None) or (None, why it is unavailable)."""
@@ -543,7 +600,7 @@ class Scanner:
         return _valid(box.get("result"))
 
     def run(self, tool: str, prepared: Prepared) -> Outcome:
-        """Scan one call. Never raises: every failure is an ``unavailable`` (or a ``flagged``) outcome."""
+        """Scan one call. Never raises: every scanner failure is an ``unavailable`` outcome."""
         started = time.monotonic()
         request = ScanRequest(tool, prepared.parts, started + self.timeout_seconds)
         try:
@@ -557,9 +614,6 @@ class Scanner:
         verdict, categories = result.verdict, set(result.categories)
         if categories & set(_INCOMPLETE):
             verdict = "flagged"           # the scanner could not finish: flagged, not clean or unavailable
-        if prepared.forced:
-            verdict = "flagged"           # a declared file Two-Key could not read is flagged, whatever the scanner said
-            categories |= set(prepared.forced)
         if verdict != "flagged":
             categories = set()
         elif not categories:
@@ -581,10 +635,12 @@ class Scanner:
         return None
 
     def file_digests(self, tool: str, arguments: Any) -> list[dict]:
-        """Each declared file's digest, read again (for the gateway, just before the tool runs)."""
+        """Each declared file's digest, read again (for the gateway, just before the tool runs). A file it cannot
+        read, or one over a limit, raises, and the gateway denies ``file_changed``: not the file that was
+        scanned."""
         out = []
-        for name, _item, _value, data, _problem, _where in self._files(tool, _deep_copy(arguments)):
-            out.append({"part": name, "sha256": None if data is None else "sha256:" + digest_hex(data)})
+        for name, _item, _value, data, _where in self._files(tool, _deep_copy(arguments)):
+            out.append({"part": name, "sha256": "sha256:" + digest_hex(data)})
         return out
 
 
@@ -614,5 +670,5 @@ def warn(message: str) -> None:
     print(f"two-key: {message}", file=sys.stderr)
 
 
-__all__ = ["CATEGORIES", "FILE_KINDS", "FileArg", "file_arg", "Inspector", "Outcome", "ScanConfigError", "ScanPart",
+__all__ = ["CATEGORIES", "FILE_KINDS", "FileArg", "FileDeniedError", "file_arg", "Inspector", "Outcome", "ScanConfigError", "ScanPart",
            "ScanRequest", "ScanResult", "Scanner", "VERDICTS", "combine", "stance_of"]

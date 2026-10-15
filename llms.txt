@@ -24,7 +24,9 @@ Does not: a scanning, antivirus, or DLP engine of its own, PKI, chain anchoring,
 On branch working (0.6.0, unreleased): Windows support, and optional content scanning that calls
 your antivirus or DLP product (clamd, ICAP, a command, or Python; docs/SCANNERS.md). Two-Key
 starts every scan of a tool the constitution marks; the agent cannot ask for, skip, or answer
-one. The signed rule on the scan field (clean, flagged, unavailable) is the stance.
+one. The signed rule on the scan field (clean, flagged, unavailable) is the stance. Each declared
+file states max_bytes; a file over it, more than 32 files or 100 MiB in a call, or a file Two-Key
+cannot read is denied before the scanner and both paths under every stance.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests

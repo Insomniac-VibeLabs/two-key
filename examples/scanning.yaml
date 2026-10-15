@@ -7,7 +7,7 @@
 #   tools:
 #     send_email:
 #       files:
-#         - {path: "attachments[].content", kind: base64}
+#         - {path: "attachments[].content", kind: base64, max_bytes: 65536}   # the largest file it needs
 # Two-Key starts every scan and fills the scan field itself; the agent cannot. See docs/SCANNERS.md.
 fields:
   scan:

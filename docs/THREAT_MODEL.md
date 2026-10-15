@@ -144,8 +144,12 @@ the code wins, then this file should be corrected.
   in its arguments is `caller_field_in_arguments`, and in `facts=` it is
   `scan_fact_supplied`. The scanner is trusted to answer, not to decide: a
   timeout, an exception, or an answer Two-Key cannot read is
-  `unavailable`; a result it could not finish, or a declared file Two-Key
-  could not read, is `flagged`. The signed rule on the verdict decides.
+  `unavailable`; a result it could not finish is `flagged`. The signed rule
+  on the verdict decides. A declared file Two-Key cannot read (bad base64,
+  a path outside its folder, a link, a missing file), or a call over a file
+  limit (each file's required `max_bytes`, 32 files, 100 MiB together), is
+  denied before the scanner and both paths under every stance, and nothing
+  past a limit is read.
   The scanner sees content, so it is a new audience for it, as cloud judges
   are; its adapters get no keys, and a command scanner gets a minimal
   environment. Judges get the verdict in a trusted section, file digests in
@@ -507,7 +511,9 @@ claims to close.
   operator's product and its signatures. Under the default stance a
   scanner that is down lets calls through to the two keys (ledgered once,
   told to the judges); only the strict stance denies them. Monitor blocks
-  nothing, not even a file outside its folder. Which arguments are files
+  nothing on the verdict (an unreadable or oversized file is still denied).
+  The file limits hold per call, not over time: many calls can still fill
+  a disk a tool writes to. Which arguments are files
   is operator configuration (`proxy.yaml` or `Scanner(files=...)`), not
   signed: an undeclared file is scanned as text, not decoded (the proxy
   warns at start about inputs that look like files). A URL is scanned as

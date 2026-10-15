@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from ..action import MAX_TOOL_NAME_CHARS, TOOL_NAME
+from ..scan import MAX_INLINE_FILE_BYTES
 from .core import file_like_inputs, pinned_view, schema_digest, undescribed_advice
 
 FACT_LIKE = re.compile(r"(^|_)(matched|verified|approved|confirmed|validated)$")
@@ -264,11 +265,14 @@ def render_proxy_tools(draft: Draft) -> str:
         lines.append("    claim: none")
         if t.upstream_name != t.tool_id:
             lines.append(f"    upstream_name: {_yaml_value(t.upstream_name)}")
-        if t.files:      # commented: a scan: block is needed first, and a path file needs its folder
-            lines.append("    # files:   # for the content scanner; review each kind (docs/SCANNERS.md)")
+        if t.files:      # commented: a scan: block is needed first, and each file needs its size (and folder)
+            lines.append("    # files:   # for the content scanner; review each kind, and set max_bytes to the")
+            lines.append(f"    #          # largest file the tool needs (base64: at most {MAX_INLINE_FILE_BYTES}); "
+                         "docs/SCANNERS.md")
             for path, kind in t.files:
                 folder = ", folder: REPLACE_WITH_FOLDER" if kind == "path" else ""
-                lines.append(f"    #   - {{path: {_yaml_value(path)}, kind: {kind}{folder}}}")
+                lines.append(f"    #   - {{path: {_yaml_value(path)}, kind: {kind}{folder}, "
+                             "max_bytes: REPLACE_WITH_BYTES}")
     return "\n".join(lines) + "\n"
 
 

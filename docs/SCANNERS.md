@@ -49,7 +49,9 @@ or a judge's prompt.
 
 The agent does not ask for a scan and cannot avoid one. It sends an ordinary
 tool call, with whatever file the tool needs, and never sees or sets the
-result.
+result. You set the largest file each tool takes; a file that is too large,
+or that Two-Key cannot read, is refused before the scan and before either
+key, whatever the stance.
 
 ## Where the scanner sits
 
@@ -70,7 +72,9 @@ flowchart LR
 ```
 
 The scan runs inside `authorize`, after the call reads under its signed spec
-and before Path A. A call that cannot be read is denied before any scan.
+and before Path A. A call that cannot be read is denied before any scan, and
+so is a call with a declared file Two-Key cannot read or one over a size
+limit ([File size limits](#file-size-limits)).
 
 ## What the agent can and cannot do
 
@@ -82,7 +86,8 @@ whether, what, or how a call is scanned.
 | Which tools are scanned | The principal | Signed constitution: the tool maps the `scan` field |
 | What the rules do with the verdict (the stance) | The principal | Signed constitution: the `scan` rule |
 | Which arguments hold a file, and how | The operator | `proxy.yaml` `tools.<id>.files`, or `Scanner(files=...)` |
-| Which scanner, its time limit, its size limit | The operator | `proxy.yaml` `scan:`, or `TwoKey(scanner=...)` |
+| Which scanner, and its time limit | The operator | `proxy.yaml` `scan:`, or `TwoKey(scanner=...)` |
+| The largest file each file argument takes | The operator | `max_bytes` on each declared file |
 | Starting the scan | Two-Key | Every call to a scanned tool, from every entry point |
 | The verdict | The scanner, through Two-Key | Two-Key fills the `scan` fact itself |
 
@@ -100,8 +105,12 @@ whether, what, or how a call is scanned.
   tool will not receive (the judges can see them), each declared file
   decoded, and the proposal text.
 - **It cannot slip a file past unscanned.** A declared file that cannot be
-  read is flagged, not skipped: base64 that does not decode, a path outside
-  its folder, a link, a missing file, or one over the size limit.
+  read is denied, not skipped, under every stance: base64 that does not
+  decode, a value of the wrong type, a path outside its folder, a link, a
+  missing file (`file_unreadable`).
+- **It cannot fill a disk or memory through a call.** A file over its
+  `max_bytes`, more than 32 files, or more than 100 MiB of files in one call
+  is denied under every stance, and nothing past the limit is read.
 - **It learns** the tool's result, or a reason code naming the rule (for
   example `rule_denied:scan`). Never the categories, the scanner, or any
   matched text.
@@ -123,6 +132,7 @@ sequenceDiagram
   participant T as Tool
   Ag->>TK: tools/call send_email with to, body, attachments[0].content as base64
   TK->>TK: copy, size check, read the call under the signed spec
+  TK->>TK: read each declared file within its max_bytes (unreadable or too large: deny here)
   TK->>S: argument text (each file as its digest), each file decoded, proposal text
   S-->>TK: clean, flagged, or unavailable, with categories and a label
   TK->>A: the form, with scan set to the verdict
@@ -143,32 +153,60 @@ A file travels as an ordinary argument from every entry point:
 | Guard (LangChain, the OpenAI Agents SDK, your own loop) | The framework calls the guarded function with the arguments |
 | `authorize_from_agent` | The proposal JSON's `arguments` |
 
-A tool takes a file in one of two ways. You declare which, per argument:
+A tool takes a file in one of two ways, fixed by the tool's own schema. You
+declare which, per argument, with the largest file the tool needs:
 
-| `kind` | The argument holds | Size | What binds it |
+| `kind` | The argument holds | `max_bytes` | What binds it |
 | --- | --- | --- | --- |
-| `base64` or `base64url` | The file's bytes, encoded | Within the 256 KiB argument cap, about 190 KB of file | The bytes are inside the token-bound arguments |
-| `path` | A path to a file in a folder you declare | Up to `max_file_bytes` (25 MiB by default, 100 MiB at most) | Two-Key reads the file and binds its SHA-256 into the token; the gateway hashes it again just before the tool runs |
+| `base64` or `base64url` | The file's bytes, encoded | Required, at most 196,608 (the call is at most 256 KiB) | The bytes are inside the token-bound arguments |
+| `path` | A path to a file in a folder you declare | Required, at most 104,857,600 (100 MiB) | Two-Key reads the file and binds its SHA-256 into the token; the gateway hashes it again just before the tool runs |
 
 ```yaml
 # proxy.yaml
 tools:
   send_email:
     files:
-      - {path: "attachments[].content", kind: base64}   # [] means each item of the list
+      - {path: "attachments[].content", kind: base64, max_bytes: 65536}   # [] means each item of the list
   print_document:
     files:
-      - {path: file_path, kind: path, folder: /srv/print-queue}
+      - {path: file_path, kind: path, folder: /srv/print-queue, max_bytes: 20971520}
 ```
+
+Where a tool offers both (the content or a path), declare and use the
+content: a file inside the call cannot change after the scan and cannot
+point outside a folder ([Files sent by path](#files-sent-by-path)).
 
 A `files` path must lie under an argument the signed spec passes to the tool
 (a `payload` path), and its tool must map `scan`; otherwise Two-Key refuses
 to start. `two-key mcp-draft-specs` suggests these entries from the
 upstream schema (a string with `contentEncoding: base64`, `format: byte` or
 `binary`, a `contentMediaType`, or a file-like name such as `file_path`),
-commented out for you to review. The proxy warns at start about an input of
-a scanned tool that looks like a file but is not declared: it is scanned as
-text, not decoded.
+commented out for you to review, with `max_bytes: REPLACE_WITH_BYTES`. The
+proxy warns at start about an input of a scanned tool that looks like a file
+but is not declared: it is scanned as text, not decoded.
+
+### File size limits
+
+You know what size of file each tool needs, so you state it: every declared
+file has a `max_bytes`, with no default, and Two-Key refuses to start
+without one. Each call is also held to fixed limits:
+
+| Limit | Value | Deny |
+| --- | --- | --- |
+| One file | its `max_bytes` | `file_too_large` |
+| Files in one call (each item of a list counts) | 32 | `too_many_files` |
+| All files in one call together | 100 MiB | `call_files_too_large` |
+
+These are checks on the call, like the 256 KiB argument cap, not on the
+verdict. A call over a limit is denied before the scanner and both keys,
+under every stance (monitor too), and the judges are not asked. Two-Key
+counts the files before reading any, does not open a path file whose size
+is over its limit, and stops reading one that grows past it. The ledger's
+`decision` entry records the file's argument path and the sizes
+(`file_denied`), never content; the agent gets the reason code.
+
+The limits hold per call. Many calls can still add up, so a tool that saves
+what it receives needs its own disk quota.
 
 Who gets what:
 
@@ -176,7 +214,7 @@ Who gets what:
 | --- | --- | --- |
 | Scanner | All argument text, each declared file's bytes, the proposal text | Keys, the ledger, other calls |
 | Path A | The form: tool, amount, data class, counterparty, irreversible, custom fields, and `scan` | Any text or file content |
-| Path B (judges) | The constitution; the action record, each file replaced by `{"two_key_file": {"sha256": ..., "bytes": ...}}` (and the path for a path file); a trusted `<scan_result>` section with the scanner label, verdict, and categories | File content, ever. When flagged: no arguments and no proposal text, unless the quorum sets `tool_args_on_scan_flag: true` |
+| Path B (judges) | The constitution; the action record, each file replaced by `{"two_key_file": {"sha256": ..., "bytes": ...}}` (and the path for a path file); a trusted `<scan_result>` section with the scanner label, verdict, and categories | File content, ever. When flagged: no arguments and no proposal text, unless the quorum sets `tool_args_on_scan_flag: true`. A call with an unreadable or oversized file never reaches them |
 | Ledger | Each part's size and SHA-256, the verdict, categories, scanner label and version, elapsed time | Content |
 | Tool | The arguments the signed spec passes, the file as sent | The verdict, unless its spec delivers the field |
 | Agent | The tool's result, or a reason code | The verdict details, the scanner, matched text |
@@ -207,7 +245,7 @@ flowchart TD
   call["Call to a scanned tool"] --> scan["Two-Key sends the parts to the scanner"]
   scan --> answer{"What came back?"}
   answer -->|"timeout, exception,<br/>invalid answer"| unavailable["unavailable"]
-  answer -->|"could not finish,<br/>or a file Two-Key could not read"| flagged["flagged"]
+  answer -->|"could not finish"| flagged["flagged"]
   answer -->|"found something"| flagged
   answer -->|"nothing found"| clean["clean"]
   clean --> both["Path A and Path B decide as usual"]
@@ -233,10 +271,10 @@ Two-Key, not the adapter, settles the edge cases:
   never `clean`.
 - A result naming `limits_exceeded` or `unreadable` (the scanner could not
   finish, or could not look inside) is `flagged`.
-- A declared file Two-Key itself could not read makes the call `flagged`,
-  whatever the scanner said.
-- Monitor never blocks, not even a file outside its folder. Use it to tune
-  your product's policy, then sign default or strict.
+- A declared file Two-Key itself cannot read, or one over a size limit, is
+  denied before the scan under every stance; it never becomes a verdict.
+- Monitor never blocks on the verdict. Use it to tune your product's
+  policy, then sign default or strict.
 - `high_assurance` without the strict stance prints a warning at start.
 
 ## ClamAV
@@ -250,7 +288,6 @@ scan:
   type: clamd
   address: 127.0.0.1:3310          # or unix:/run/clamav/clamd.ctl on Linux and macOS
   timeout_seconds: 15
-  max_file_bytes: 26214400
 ```
 
 In code: `Scanner(ClamdInspector("127.0.0.1:3310"), files=...)` from
@@ -322,7 +359,7 @@ socket, check `LocalSocketGroup` and `LocalSocketMode` in `clamd.conf`.
 | Line | Why |
 | --- | --- |
 | `TCPSocket 3310` and `TCPAddr 127.0.0.1` | `clamd` has no authentication. Listen on loopback, or on a private network only Two-Key can reach. |
-| `StreamMaxLength` | The largest stream `clamd` accepts. Set it at least to `max_file_bytes`. Over it, `clamd` replies `INSTREAM size limit exceeded`, which is `flagged` (`limits_exceeded`). |
+| `StreamMaxLength` | The largest stream `clamd` accepts. Set it at least to your largest `max_bytes`. Over it, `clamd` replies `INSTREAM size limit exceeded`, which is `flagged` (`limits_exceeded`). |
 | `MaxFileSize`, `MaxScanSize` | Past these, `clamd` stops looking inside a file. |
 | `AlertExceedsMax yes` | Reports a file it stopped scanning as `Heuristics.Limits.Exceeded`, which is `flagged` (`limits_exceeded`). Without it, a partly scanned file is `OK`. Recommended. |
 | `AlertEncrypted yes` | Reports an encrypted archive or document as `Heuristics.Encrypted`, which is `flagged` (`unreadable`). Recommended. |
@@ -452,7 +489,7 @@ detail, or the body.
 - [ ] Signals a finding with one of the answers in the table above.
 - [ ] Answers within the operator's `timeout_seconds` (15 s by default),
       counting every part of the call.
-- [ ] Accepts a body up to the operator's `max_file_bytes`, or answers a
+- [ ] Accepts a body up to the operator's largest `max_bytes`, or answers a
       size problem with a block, not with `204`.
 - [ ] Sends a `Server` header and an `ISTag` that identify the product and
       its signature version.
@@ -546,10 +583,11 @@ uploader). A `kind: path` file is confined to a folder you name:
 - The agent's path must be absolute and inside the folder, with no `.` or
   `..` segment and no link anywhere below the folder, and must name a
   regular file. Two-Key opens it without following links, on Linux, macOS,
-  and Windows. Anything else is `flagged` (`unreadable`).
-- Two-Key reads it once, up to `max_file_bytes`; a larger file is `flagged`
-  (`limits_exceeded`). It scans those bytes and binds their SHA-256 into the
-  token.
+  and Windows. Anything else is denied under every stance
+  (`file_unreadable`).
+- Two-Key reads it once, up to its `max_bytes`; a larger file is denied
+  under every stance (`file_too_large`). It scans those bytes and binds
+  their SHA-256 into the token.
 - Just before the tool runs, the gateway hashes the file again. A different
   file is `file_changed`, and the tool does not run. There is no second
   scan.
@@ -563,8 +601,6 @@ What it gives up:
   disk (a container, a different mount, its own working directory) could
   open a different file than the one scanned. Run the tool on the same
   host and filesystem as Two-Key.
-- Under the monitor stance nothing blocks, so a path outside the folder is
-  only recorded.
 - The agent can tell whether a file exists in the folder (the call runs or
   is denied).
 
@@ -587,7 +623,11 @@ when the scanner did not answer. Also:
   cannot answer, and `scanner_recovered` when it answers again. Never one
   per call.
 - `constitution_loaded` carries the scanner configuration: field, label,
-  stance, time limit, size limit, and declared files.
+  stance, time limit, and declared files with their `max_bytes`.
+- A call denied for a file has a `decision` entry with `file_denied`: the
+  file's argument path, and the sizes or why it could not be read
+  (`bad_base64`, `not_a_string`, `outside_folder`, `link`, `cannot_open`,
+  `not_a_file`, and the like). Never content.
 - The token's `scan` claim carries the verdict and each file's digest.
 
 Without a scanner, the ledger, the tokens, and the judge prompts are the
@@ -606,6 +646,9 @@ same as before 0.6.0.
 | `the content scanner is answering again` | Once, when it recovers | Nothing |
 | `scan_field_missing` or `scan_field_invalid` at start | The constitution has no usable `scan` field | Declare the enum field with exactly `clean`, `flagged`, `unavailable` and `source: caller` |
 | `files.<tool>: the tool does not map 'scan'` or `is not under a payload path` | A declared file would not be scanned or would not reach the tool | Map `scan` on the tool, or fix the path |
+| `files.<tool>[i].max_bytes: required` | A declared file has no size limit | Set the largest file the tool needs, in bytes |
+| `max_bytes: a base64 file arrives inside the call ... at most 196608 bytes` | A base64 file cannot be larger than the call | Lower it; a tool that needs larger files takes a path |
+| `scan.max_file_bytes: replaced by max_bytes` | The scanner-wide limit from an early 0.6.0 build | Set `max_bytes` on each file instead |
 
 Denies an operator sees in the ledger:
 
@@ -614,6 +657,8 @@ Denies an operator sees in the ledger:
 | `rule_denied:scan` | The signed stance denied the verdict (the rule id is yours) |
 | `derive_failed:caller_field_in_arguments:scan` | The agent wrote `scan` in the arguments |
 | `derive_failed:scan_fact_supplied` | An integration passed `scan` in `facts=` |
+| `file_unreadable` | A declared file could not be read (see `file_denied.why`) |
+| `file_too_large`, `too_many_files`, `call_files_too_large` | A call over a file limit |
 | `file_changed` | A file sent by path changed between the scan and the tool |
 | `scan_mismatch` | A token's scan claim is missing or does not fit the tool |
 
@@ -626,8 +671,8 @@ permissions), and that `timeout_seconds` covers every part of a call.
 - It does not download. A URL argument is scanned as text only. A tool that
   fetches content should scan what it fetches, or sit behind a scanning web
   proxy.
-- Path A does not read content. It rules on the verdict. A rule on file
-  size or type needs a fact hook.
+- Path A does not read content. It rules on the verdict. A file's size is
+  held by `max_bytes`; a rule on its type needs a fact hook.
 - It does not scan the tool's result, only the call.
 - A signature update between authorization and redemption (2 minutes by
   default) is not applied to that call: the gateway does not scan again.

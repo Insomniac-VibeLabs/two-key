@@ -12,6 +12,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from two_key import core
 from two_key.canonical import canonical_bytes
@@ -125,8 +126,9 @@ class Base(unittest.TestCase):
                                 SPECS, fields=FIELDS)
         self.inspector = inspector if inspector is not None else Pattern()
         if files is None:
-            files = {"send_email": [{"path": "attachments[].content", "kind": "base64"}],
-                     "print_doc": [{"path": "file_path", "kind": "path", "folder": str(self.folder)}]}
+            files = {"send_email": [{"path": "attachments[].content", "kind": "base64", "max_bytes": 4096}],
+                     "print_doc": [{"path": "file_path", "kind": "path", "folder": str(self.folder),
+                                    "max_bytes": 1024}]}
         sc = Scanner(self.inspector, files=files, **kw) if scanner else None
         self.judge = Recording("a", "yes")
         self.startup = io.StringIO()
@@ -143,6 +145,17 @@ class Base(unittest.TestCase):
 
     def entries(self, kind):
         return [e.body for e in self.tk.ledger.entries if e.kind == kind]
+
+    def assert_file_denied(self, d, reason, record, tool="send_email"):
+        """Denied before the scanner and both keys, with the file's path, why, and sizes on the ledger."""
+        self.assertEqual((d.allowed, d.reason), (False, reason))
+        self.assertEqual(self.inspector.requests, [])
+        self.assertEqual(self.judge.seen, [])
+        self.assertEqual(self.entries("scan"), [])
+        decision = self.entries("decision")[-1]
+        self.assertEqual((decision["reason"], decision["tool"]), (reason, tool))
+        self.assertEqual(decision["file_denied"], record)
+        self.assertNotIn("eHh4", str(decision))      # base64 of "xxx": no content
 
     def email(self, body="hello", attachments=None, **extra):
         args = {"to": "ops@example.org", "body": body, **extra}
@@ -331,23 +344,25 @@ class Files(Base):
         names = [p.name for p in self.inspector.requests[-1].parts]
         self.assertEqual(names[2:], ["file:attachments[0].content", "file:attachments[1].content"])
 
-    def test_a_file_that_cannot_be_read_is_flagged_whatever_the_scanner_says(self):
-        cases = {"bad base64": [{"content": "not base64!"}],
-                 "not a string": [{"content": 12}],
-                 "a dict where a list is declared": {"content": b64(b"x")},
-                 "an item that is not an object": ["abc"]}
-        for name, attachments in cases.items():
-            with self.subTest(name):
-                self.make(Fixed(ScanResult.clean("fake")))
-                d, _ = self.email(attachments=attachments)
-                self.assertFalse(d.allowed)
-                scan = self.entries("scan")[-1]
-                self.assertEqual((scan["verdict"], scan["categories"]), ("flagged", ["unreadable"]))
+    def test_a_file_that_cannot_be_read_is_denied_under_every_stance(self):
+        cases = {"bad base64": ([{"content": "not base64!"}], "attachments[0].content", "bad_base64"),
+                 "not a string": ([{"content": 12}], "attachments[0].content", "not_a_string"),
+                 "a dict where a list is declared": ({"content": b64(b"x")}, "attachments", "not_a_list"),
+                 "an item that is not an object": (["abc"], "attachments[0]", "not_an_object")}
+        for stance in STANCE_RULES:
+            for name, (attachments, part, why) in cases.items():
+                with self.subTest(stance=stance, case=name):
+                    self.make(Fixed(ScanResult.clean("fake")), stance=stance)
+                    d, _ = self.email(attachments=[{"content": b64(b"xxx")}] + attachments
+                                      if isinstance(attachments, list) else attachments)
+                    if isinstance(attachments, list):
+                        part = part.replace("[0]", "[1]")
+                    self.assert_file_denied(d, "file_unreadable", {"file": part, "kind": "base64", "why": why})
 
     def test_base64url_and_line_breaks(self):
         data = bytes(range(256))
         url = base64.urlsafe_b64encode(data).decode().rstrip("=")
-        self.make(files={"send_email": [{"path": "attachments[].content", "kind": "base64url"}]})
+        self.make(files={"send_email": [{"path": "attachments[].content", "kind": "base64url", "max_bytes": 4096}]})
         self.email(attachments=[{"content": url}])
         self.assertEqual(self.inspector.requests[-1].parts[-1].data, data)
         self.make()
@@ -355,11 +370,11 @@ class Files(Base):
         self.email(attachments=[{"content": wrapped}])
         self.assertEqual(self.inspector.requests[-1].parts[-1].data, data)
 
-    def test_a_file_over_the_limit_is_flagged(self):
-        self.make(Fixed(), max_file_bytes=10)
-        d, _ = self.email(attachments=[{"content": b64(b"x" * 11)}])
-        self.assertFalse(d.allowed)
-        self.assertEqual(self.entries("scan")[-1]["categories"], ["limits_exceeded"])
+    def test_a_file_at_its_max_bytes_is_scanned(self):
+        self.make(Fixed())
+        d, _ = self.email(attachments=[{"content": b64(b"x" * 4096)}])
+        self.assertTrue(d.allowed, d.reason)
+        self.assertEqual(len(self.inspector.requests[-1].parts[-1].data), 4096)
 
 
 class PathFiles(Base):
@@ -391,25 +406,30 @@ class PathFiles(Base):
         self.assertEqual((r.allowed, r.reason), (False, "file_changed"))
         self.assertEqual(self.ran, [])
 
-    def test_paths_the_agent_could_steer_are_flagged(self):
-        self.make(Fixed())
+    def test_paths_the_agent_could_steer_are_denied_under_every_stance(self):
         outside = self.dir / "secret.txt"
         outside.write_bytes(b"x")
         sub = self.folder / "sub"
         sub.mkdir()
-        cases = {"outside": str(outside), "relative": "doc.txt", "dotdot": str(self.folder / ".." / "secret.txt"),
-                 "the folder itself": str(self.folder), "a directory": str(sub), "missing": str(self.folder / "no"),
-                 "empty": "", "not a string": 5}
+        cases = {"outside": (str(outside), {"outside_folder"}), "relative": ("doc.txt", {"not_absolute"}),
+                 "dotdot": (str(self.folder / ".." / "secret.txt"), {"not_absolute"}),
+                 "the folder itself": (str(self.folder), {"outside_folder"}),
+                 "a directory": (str(sub), {"not_a_file", "cannot_open"}),   # Windows will not open one
+                 "missing": (str(self.folder / "no"), {"cannot_open"}),
+                 "empty": ("", {"not_a_path"})}     # a number is not a string: the spec's shape denies it first
         self.put()
-        for name, value in cases.items():
-            with self.subTest(name):
-                with quiet():
-                    d = self.tk.authorize(PRINT, {"file_path": value}, "p")
-                self.assertFalse(d.allowed, name)
-                self.assertEqual(self.entries("scan")[-1]["verdict"], "flagged")
+        for stance in STANCE_RULES:
+            for name, (value, whys) in cases.items():
+                with self.subTest(stance=stance, case=name):
+                    self.make(Fixed(), stance=stance)
+                    with quiet():
+                        d = self.tk.authorize(PRINT, {"file_path": value}, "p")
+                    why = self.entries("decision")[-1].get("file_denied", {}).get("why")
+                    self.assertIn(why, whys)
+                    self.assert_file_denied(d, "file_unreadable", {"file": "file_path", "kind": "path", "why": why},
+                                            tool="print_doc")
 
-    def test_a_link_inside_the_folder_is_flagged(self):
-        self.make(Fixed())
+    def test_a_link_inside_the_folder_is_denied_under_every_stance(self):
         outside = self.dir / "secret.txt"
         outside.write_bytes(b"x")
         link = self.folder / "link.txt"
@@ -417,13 +437,80 @@ class PathFiles(Base):
             os.symlink(outside, link)
         except (OSError, NotImplementedError) as e:
             self.skipTest(f"cannot create a symlink here: {e}")
-        self.assertFalse(self.print_call(link).allowed)
-        self.assertEqual(self.entries("scan")[-1]["categories"], ["unreadable"])
+        for stance in STANCE_RULES:
+            with self.subTest(stance=stance):
+                self.make(Fixed(), stance=stance)
+                self.assert_file_denied(self.print_call(link), "file_unreadable",
+                                        {"file": "file_path", "kind": "path", "why": "link"}, tool="print_doc")
 
-    def test_a_file_over_the_limit_is_flagged(self):
-        self.make(Fixed(), max_file_bytes=4)
-        self.assertFalse(self.print_call(self.put()).allowed)
-        self.assertEqual(self.entries("scan")[-1]["categories"], ["limits_exceeded"])
+    def test_a_file_over_its_max_bytes_is_not_read(self):
+        self.make(Fixed())
+        path = self.put(data=b"x" * 1025)
+        inside, read = [], []
+        real_read, real_confined = os.read, Scanner.read_confined
+
+        def confined(scanner, *a):
+            inside.append(True)
+            try:
+                return real_confined(scanner, *a)
+            finally:
+                inside.pop()
+
+        def counted(fd, n):
+            if inside:
+                read.append(n)
+            return real_read(fd, n)
+
+        with mock.patch.object(Scanner, "read_confined", confined), mock.patch("os.read", counted):
+            d = self.print_call(path)
+        self.assertEqual((d.allowed, d.reason), (False, "file_too_large"))
+        self.assertEqual(read, [])        # its size says it is too large: not one byte is read
+        self.assertEqual(self.entries("decision")[-1]["file_denied"],
+                         {"file": "file_path", "bytes": 1025, "max_bytes": 1024})
+        self.assertEqual(self.inspector.requests, [])
+
+    def test_a_file_that_grows_past_its_max_bytes_is_file_changed(self):
+        self.make()
+        path = self.put()
+        d = self.print_call(path)
+        path.write_bytes(b"x" * 2000)
+        r = self.gw.invoke(d.token, "print_doc", {"file_path": str(path)})
+        self.assertEqual((r.allowed, r.reason), (False, "file_changed"))
+        self.assertEqual(self.ran, [])
+
+
+class FileLimits(Base):
+    """Over a file limit is not within limits: denied before the scanner and both keys, under every stance,
+    with the file's argument path and sizes on the ledger, never its content."""
+
+    def test_a_file_over_its_max_bytes_is_denied_under_every_stance(self):
+        for stance in STANCE_RULES:
+            with self.subTest(stance=stance):
+                self.make(Fixed(), stance=stance)
+                d, _ = self.email(attachments=[{"content": b64(b"x" * 10)}, {"content": b64(b"x" * 4097)}])
+                self.assert_file_denied(d, "file_too_large",
+                                  {"file": "attachments[1].content", "bytes": 4097, "max_bytes": 4096})
+
+    def test_more_than_32_files_is_denied_before_any_is_read(self):
+        self.make(Fixed(), stance="monitor")
+        d, _ = self.email(attachments=[{"content": b64(b"x")}] * 33)
+        self.assert_file_denied(d, "too_many_files", {"files": 33, "max_files": 32})
+        self.make(Fixed(), stance="monitor")
+        d, _ = self.email(attachments=[{"content": b64(b"x")}] * 32)
+        self.assertTrue(d.allowed, d.reason)
+
+    def test_files_over_the_call_total_are_denied(self):
+        self.make(Fixed(), stance="monitor")
+        with mock.patch("two_key.scan.MAX_CALL_FILE_BYTES", 25):
+            d, _ = self.email(attachments=[{"content": b64(b"x" * 20)}, {"content": b64(b"x" * 6)}])
+        self.assert_file_denied(d, "call_files_too_large", {"file": "attachments[1].content", "bytes": 26,
+                                                      "max_bytes": 25})
+
+    def test_the_agent_cannot_raise_a_limit(self):
+        self.make(Fixed(), stance="monitor")
+        d, _ = self.email(attachments=[{"content": b64(b"x" * 4097), "max_bytes": 10 ** 6}],
+                          max_bytes=10 ** 6)
+        self.assertEqual((d.allowed, d.reason), (False, "file_too_large"))
 
 
 class Judges(Base):
@@ -534,23 +621,37 @@ class Configuration(Base):
 
     def test_files_must_belong_to_a_scanned_tool_and_a_payload_path(self):
         with self.assertRaisesRegex(TwoKeyConfigError, "not scanned"):
-            self.make(files={"lookup": [{"path": "query", "kind": "base64"}]})
+            self.make(files={"lookup": [{"path": "query", "kind": "base64", "max_bytes": 10}]})
         with self.assertRaisesRegex(TwoKeyConfigError, "not under a payload path"):
-            self.make(files={"send_email": [{"path": "to", "kind": "base64"}]})
+            self.make(files={"send_email": [{"path": "to", "kind": "base64", "max_bytes": 10}]})
         with self.assertRaisesRegex(TwoKeyConfigError, "not a tool"):
-            self.make(files={"nope": [{"path": "x"}]})
+            self.make(files={"nope": [{"path": "x", "max_bytes": 10}]})
 
     def test_file_declarations_are_checked(self):
-        bad = [{"path": "a b"}, {"path": "x", "kind": "zip"}, {"path": "x", "kind": "path"},
-               {"path": "x", "kind": "path", "folder": "relative"}, {"path": "x", "folder": "/tmp"},
-               {"path": "x", "extra": 1}, "x"]
+        folder = str(self.folder)
+        bad = [{"path": "a b", "max_bytes": 1}, {"path": "x", "kind": "zip", "max_bytes": 1},
+               {"path": "x", "kind": "path", "max_bytes": 1},
+               {"path": "x", "kind": "path", "folder": "relative", "max_bytes": 1},
+               {"path": "x", "folder": "/tmp", "max_bytes": 1}, {"path": "x", "extra": 1, "max_bytes": 1}, "x"]
         for item in bad:
             with self.subTest(item=item), self.assertRaises(ScanConfigError):
                 Scanner(Fixed(), files={"t": [item]})
-        for kw in ({"timeout_seconds": 0}, {"timeout_seconds": True}, {"max_file_bytes": 0},
-                   {"max_file_bytes": 10 ** 12}, {"field": "Bad"}):
+        sizes = {"required": [{"path": "x"}, {"path": "x", "kind": "path", "folder": folder}],
+                 "a whole number": [{"path": "x", "max_bytes": v} for v in (0, -1, True, 1.5, "10")],
+                 "a path file": [{"path": "x", "kind": "path", "folder": folder, "max_bytes": 100 * 1024 * 1024 + 1}],
+                 "takes a path": [{"path": "x", "kind": k, "max_bytes": 196609} for k in ("base64", "base64url")]}
+        for message, items in sizes.items():
+            for item in items:
+                with self.subTest(item=item), self.assertRaisesRegex(ScanConfigError, message):
+                    Scanner(Fixed(), files={"t": [item]})
+        for item in ({"path": "x", "max_bytes": 196608},
+                     {"path": "x", "kind": "path", "folder": folder, "max_bytes": 100 * 1024 * 1024}):
+            self.assertEqual(Scanner(Fixed(), files={"t": [item]}).files["t"][0].max_bytes, item["max_bytes"])
+        for kw in ({"timeout_seconds": 0}, {"timeout_seconds": True}, {"field": "Bad"}):
             with self.subTest(kw=kw), self.assertRaises(ScanConfigError):
                 Scanner(Fixed(), **kw)
+        with self.assertRaises(TypeError):         # replaced by max_bytes on each file
+            Scanner(Fixed(), max_file_bytes=10)
         with self.assertRaises(ScanConfigError):
             Scanner(object())
         self.assertEqual(FileArg("a[].b").key_path(), "a.b")
