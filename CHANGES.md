@@ -1898,6 +1898,15 @@ authorization decision, refusal, or warning.
 - Tests: `test_open_weight_gpt_oss_is_not_served_by_the_openai_api`, and the
   record test checks that `refusals` is empty.
 
+## Semgrep workflow permission — 2026-10-15
+
+On branch `working`. Package version stays 0.4.0. CI only.
+
+- `semgrep.yml` grants `actions: read`, as `codeql.yml` does: the SARIF
+  upload reads the workflow run and failed with "Resource not accessible by
+  integration" without it. The upload still needs code scanning (Advanced
+  Security) enabled in the repository settings (#3), as the CodeQL job does.
+
 ## MCP proxy, part 1: skeleton without caller facts (#2 P2) — 2026-10-15
 
 On branch `mcp-proxy` (cut from `working` at 9cc1a65, so `working` stays the

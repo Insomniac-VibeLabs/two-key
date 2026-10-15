@@ -7,6 +7,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
+  actions: read            # upload-sarif reads the workflow run (needed in a private repository)
   contents: read
   security-events: write   # so findings can appear in the Security tab
 
