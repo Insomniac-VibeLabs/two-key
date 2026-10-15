@@ -1,7 +1,7 @@
 # Contributing
 
-This repository is the concept line. Changes should stay inside the initial
-two-key: ledger, Path A, Path B, judge hooks, monitored-agent hooks. Work on
+Changes should stay inside the core of
+Two-Key: ledger, Path A, Path B, judge hooks, monitored-agent hooks. Work on
 the items in [ROADMAP.md](ROADMAP.md) is also in scope, in the order and with
 the limits given there.
 

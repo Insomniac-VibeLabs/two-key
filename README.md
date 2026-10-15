@@ -1,15 +1,17 @@
-# Two-Key concept
+# Two-Key
 
-[![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/releases)
-[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.3.1/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/semgrep.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key-concept/)
+[![tests](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key)](https://github.com/Insomniac-VibeLabs/two-key/releases)
+[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key)](https://github.com/Insomniac-VibeLabs/two-key/blob/main/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key/)
 
 Two independent keys must turn before an AI agent can act.
 
-This repository is the initial concept, kept small on purpose. It has a
+This repository is the Two-Key authorization layer, kept small on purpose. It has a
 working ledger, Path A, Path B, and the judge and monitored-agent hooks. It does
 not scan payloads and it has no antivirus or DLP hooks today. Hooks for
 them, and the rest of the path to a 1.0 release, are on the
-[roadmap](#roadmap).
+[roadmap](#roadmap). Development moved here from the archived
+[two-key-concept](https://github.com/Insomniac-VibeLabs/two-key-concept)
+repository at 0.3.1; its history is preserved in this repository.
 
 Apache License 2.0. See [LICENSE](LICENSE).
 
@@ -301,7 +303,7 @@ or changed key refuses to start. Its fingerprint is recorded in
 The gateway runs in the `TwoKey` process, on the ledger object `TwoKey`
 uses. Build it with `TwoKey.gateway()`. A gateway in another process or on
 another host is not supported
-([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)):
+([#45](https://github.com/Insomniac-VibeLabs/two-key/issues/45)):
 a `Ledger` opened elsewhere does not see tokens issued after it opened, so
 it refuses them, and it would hold the principal, witness, and ledger keys
 anyway. A gateway built on a ledger no `TwoKey` in the process opened emits
@@ -390,8 +392,8 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 The plan from 0.2.4 to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-0.3.0 (key backup) and 0.3.1 (live-test fixes, beta) are released; tag
-`v0.3.1` on `main` is current. The MCP adapter (0.6) moves ahead of 0.4 and
+0.3.0 (key backup), 0.3.1 (live-test fixes, beta), and 0.3.2 (the move to
+this repository and the package rename to `two-key`) are released. The MCP adapter (0.6) moves ahead of 0.4 and
 0.5. Nothing after 0.3 in that plan exists yet.
 The detail is in [ROADMAP.md](ROADMAP.md).
 
@@ -426,8 +428,9 @@ flowchart LR
 | 0.11, any time before 1.0 | Optional reputation halt. Off unless configured. Not a change to `revoke` |
 | After 1.0, not scheduled | More spec field types (decimal, URL, path, email, opaque bytes), and `amount` / `counterparty` as ordinary typed fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped in 0.3.0 |
 
-Install from git. It is not published to PyPI. Package version is 0.3.1.
-Tag `v0.3.1` on `main` is the tagged release. Tag `v0.3.0` stays on
+Install from git. It is not published to PyPI. Package version is 0.3.2,
+the first release from this repository: tag `v0.3.2` on `main`. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. In
+that repository tag `v0.3.0` stays on
 `e44be56`. Tag `v0.2.4` stays on
 `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
 commit `2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
@@ -449,10 +452,10 @@ that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.1"
+pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.3.2"
 ```
 
-That ref is the tagged 0.3.1 release (0.3.0's key backup, custom Path A
+That ref is the tagged 0.3.2 release: 0.3.1 under the new package name `two-key` (0.3.0's key backup, custom Path A
 fields, and #45 gateway boundary, plus the live-test fixes: agent declines,
 the syntax-only agent vocabulary, and data classes that combine as a set).
 `main` is that release. `working` is where the next changes land. For the
@@ -505,7 +508,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, custom fields, judges, agents |
-| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.1 is tagged `v0.3.1` |
+| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.2 is tagged `v0.3.2` |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/JUDGES_AND_QUORUM.md` | How judges vote and how Path A and Path B combine |
 | `docs/FIT.md` | Whether this package is the right control |

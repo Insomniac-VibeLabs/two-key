@@ -1801,3 +1801,31 @@ On branch `working`. Package version stays 0.3.1. Tests only.
   `SPECS`, and `FIELDS` as default arguments. They now default to `None` and
   pick the module value inside. No helper mutated them, so no test result
   changes.
+
+## Release v0.3.2: new repository, package `two-key` — 2026-10-15
+
+Package version 0.3.2. Development moved from
+`Insomniac-VibeLabs/two-key-concept` (to be archived) to
+`Insomniac-VibeLabs/two-key`, with the full history of `main` (259 commits,
+through `dd2f341`, the 0.3.1 merge). To be tagged `v0.3.2` on `main` here;
+tags `v0.3.1` and earlier stay in `two-key-concept`.
+
+- The package is renamed `two-key-concept` to `two-key` (`pyproject.toml`,
+  `uv.lock` regenerated with uv 0.13.0). The import name stays `two_key`.
+  Install with `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.3.2"`.
+- Repository URLs, badges, and the SonarCloud project key
+  (`Insomniac-VibeLabs_two-key`) point to the new repository. "Concept"
+  wording is gone from README, HOWTO, AGENTS.md, CONTRIBUTING, llms.txt,
+  and the package description.
+- **Unchanged on purpose:** the wire and file format identifiers keep their
+  `two-key-concept-` prefix (`two-key-concept-constitution-v1`/`-v2`, the
+  ledger wrap, record, anchor, and witness-rotation formats, the HKDF salt,
+  and the key-backup formats). They are signed or encrypted into existing
+  constitutions, ledgers, and backups; renaming them would make every one
+  unreadable.
+
+### Upgrading from 0.3.1
+
+- Uninstall `two-key-concept` and install `two-key`; both provide the
+  `two_key` module, so do not keep both. Code that imports `two_key` does not
+  change. Keys, ledgers, signed constitutions, and backups open unchanged.

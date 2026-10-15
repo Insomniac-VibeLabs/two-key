@@ -3,9 +3,9 @@ requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "two-key-concept"
-version = "0.3.1"
-description = "Initial Two-Key concept: ledger, Path A, Path B, and judge/agent hooks. No scanning."
+name = "two-key"
+version = "0.3.2"
+description = "Two-Key: a dual-authorization layer for AI agents (policy VM, judge quorum, single-use tokens, encrypted ledger)."
 requires-python = ">=3.10"
 license = "Apache-2.0"
 keywords = ["ai-agents", "authorization", "policy-engine", "capability-tokens"]
@@ -16,8 +16,8 @@ dependencies = ["cryptography>=41"]
 yaml = ["pyyaml>=6"]
 
 [project.urls]
-Homepage = "https://github.com/Insomniac-VibeLabs/two-key-concept"
-Repository = "https://github.com/Insomniac-VibeLabs/two-key-concept"
+Homepage = "https://github.com/Insomniac-VibeLabs/two-key"
+Repository = "https://github.com/Insomniac-VibeLabs/two-key"
 
 [project.scripts]
 two-key = "two_key.cli:main"

@@ -23,7 +23,7 @@ try:
     HAVE_YAML = True
 except ImportError:
     HAVE_YAML = False
-NEEDS_YAML = unittest.skipUnless(HAVE_YAML, "PyYAML is not installed (pip install two-key-concept[yaml])")
+NEEDS_YAML = unittest.skipUnless(HAVE_YAML, "PyYAML is not installed (pip install two-key[yaml])")
 
 
 PROSE = "Never wire money. Cap spend at 200. No medical or classified data."

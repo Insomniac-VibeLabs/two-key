@@ -1,14 +1,14 @@
 # AGENTS.md
 
 Guidance for coding agents working in this clone of
-[Insomniac-VibeLabs/two-key-concept](https://github.com/Insomniac-VibeLabs/two-key-concept).
+[Insomniac-VibeLabs/two-key](https://github.com/Insomniac-VibeLabs/two-key).
 
 This file is a short contributor guide for agents. Product and API context for
 any LLM reader is in [llms.txt](llms.txt). Do not replace one with the other.
 
 ## Scope
 
-Concept line only: signed constitution, Path A bytecode, Path B judge hooks,
+Core only: signed constitution, Path A bytecode, Path B judge hooks,
 monitored-agent hooks, encrypted ledger, single-use capability token, and a
 verify-only gateway. Beta (pre-1.0), maintainer-reviewed, not independently
 audited. Apache-2.0.
@@ -22,9 +22,10 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.3.1 is tag `v0.3.1` on `main`. Tag `v0.3.0` stays on `e44be56`.
+- Package 0.3.2 (package name `two-key`) is tag `v0.3.2` on `main`, the first
+  release from this repository. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`.
   Tag `v0.2.4` stays on `fc836bb`.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.3.1`, `v0.3.0`, or `v0.2.0`
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.3.2`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
   where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
@@ -34,8 +35,8 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Install and version matrix
 
-Requires Python ≥ 3.10. Package name `two-key-concept`, import name `two_key`,
-version `0.3.1`, tag `v0.3.1` on `main`. Not on PyPI.
+Requires Python ≥ 3.10. Package name `two-key`, import name `two_key`,
+version `0.3.2`, tag `v0.3.2` on `main`. Not on PyPI.
 
 ```bash
 python3 -m venv .venv
@@ -59,7 +60,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 
 Git install:  
-`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.3.1"`
+`pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.3.2"`
 
 ## Tests and docs
 

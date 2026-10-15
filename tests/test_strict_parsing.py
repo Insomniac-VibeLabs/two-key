@@ -16,7 +16,7 @@ try:
     HAVE_YAML = True
 except ImportError:
     HAVE_YAML = False
-NEEDS_YAML = unittest.skipUnless(HAVE_YAML, "PyYAML is not installed (pip install two-key-concept[yaml])")
+NEEDS_YAML = unittest.skipUnless(HAVE_YAML, "PyYAML is not installed (pip install two-key[yaml])")
 
 JUDGES = """judges:
   - id: a

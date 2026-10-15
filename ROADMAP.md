@@ -1,6 +1,6 @@
 # Roadmap
 
-This is the plan for taking `two-key-concept` from 0.2.4 to a
+This is the plan for taking `two-key` from 0.2.4 to a
 1.0 release. It states intent, not a promise. The order may change, and
 version numbers are targets, not dates. 0.3.0 (key backup) is released as
 tag `v0.3.0`, and 0.3.1 (live-test fixes; the status moves from prototype to

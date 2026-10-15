@@ -1,4 +1,4 @@
-# How to run the concept
+# How to run Two-Key
 
 Whether this package is the right control is [FIT.md](FIT.md). What it is
 not a substitute for is [COMPARISON.md](COMPARISON.md). Boundaries and
@@ -1064,7 +1064,7 @@ the tool runs also blocks a retry.
 The gateway runs in the same process as `TwoKey`, on the ledger object
 `TwoKey` uses. Build it with `TwoKey.gateway()`. A gateway in another
 process or on another host is not supported
-([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)),
+([#45](https://github.com/Insomniac-VibeLabs/two-key/issues/45)),
 and this package has no gateway-only ledger role, remote gateway, or
 cross-process protocol.
 
