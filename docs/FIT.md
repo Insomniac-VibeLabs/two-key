@@ -7,7 +7,9 @@ Apache-2.0.
 Crypto is Ed25519 and SHA-256.
 
 This package has a ledger, Path A, Path B, and judge and
-monitored-agent hooks. It does not scan payloads. It has no PKI or
+monitored-agent hooks. It has no scanning engine; from 0.6.0 (on
+`working`) it can call your antivirus or DLP product for the tools you
+mark ([SCANNERS.md](SCANNERS.md)). It has no PKI or
 external anchor, and no seed phrase. A local head anchor can detect a
 rollback or wipe of the ledger directory alone, but it is not an external
 anchor and does not protect against someone who can also delete or roll
@@ -64,8 +66,9 @@ That backup is not a seed phrase.
 - You need user login or MCP session authorization.
 - You need a validated cryptographic module, or a control that has had an
   independent review. This release has not.
-- You need DLP, antivirus, PKI, permissioned anchoring, a seed phrase, or
-  hybrid ML-DSA. Those are not here.
+- You need Two-Key itself to be the DLP or antivirus product, or you need
+  PKI, permissioned anchoring, a seed phrase, or hybrid ML-DSA. Those are
+  not here. (0.6.0 can call a DLP or antivirus product you run.)
 
 ## Smallest working shape
 

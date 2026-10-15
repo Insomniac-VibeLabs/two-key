@@ -45,10 +45,21 @@ is how to report a vulnerability. It is not the model.
   and password) at any address, whether or not either side sends it, or
   both sides keyless on one address. Other overlaps start with a warning
   by design.
+- With a content scanner configured (0.6.0, branch `working`): a call to a
+  scanned tool that reaches Path A without a scan, a verdict the agent can
+  set or avoid (in its arguments, claim, or proposal, or through
+  `facts=`), an unavailable or failed scan read as `clean`, a declared file
+  that goes unscanned (a path outside its folder, a link, bad base64), a
+  file that changes between the scan and the tool without `file_changed`,
+  or content (an argument value, a file, a matched string) in the ledger, a
+  reason code, or a judge's prompt where docs/SCANNERS.md says it is
+  withheld
 
 ## Out of scope for this repository
 
-- Malware or DLP scanning of tool payloads. It is intentionally absent here.
+- A malware or DLP scanning engine. Two-Key has none; from 0.6.0 it can
+  call your antivirus or DLP product (docs/SCANNERS.md). What that product
+  detects, or misses, is a matter for its vendor.
 - FIPS validation. Algorithms are Ed25519 and SHA-256 from `cryptography`.
 - An agent that reaches an MCP server directly, around the proxy, and an
   upstream server run as the proxy's OS user. Both are deployment

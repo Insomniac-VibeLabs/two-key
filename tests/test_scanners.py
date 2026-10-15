@@ -127,6 +127,12 @@ class IcapHandler(socketserver.BaseRequestHandler):
                      + http)
         elif b"ERRORME" in data:
             reply = b"ICAP/1.0 500 Server Error\r\n\r\n"
+        elif b"REDACT" in data or b"UNCHANGED" in data:
+            # A 200 that returns the request: unchanged (clean), or with the content replaced (flagged).
+            req_head, body = data.split(b"\r\n\r\n", 1)[1].split(b"\r\n\r\n", 1)
+            body = body.replace(b"REDACT-ME", b"XXXXXXXXX")
+            reply = (b"ICAP/1.0 200 OK\r\n" + tag + f"Encapsulated: req-hdr=0, req-body={len(req_head) + 4}\r\n\r\n"
+                     .encode() + req_head + b"\r\n\r\n" + body)
         elif head.startswith(b"RESPMOD") and b"ECHO" in data:
             http = b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\n"
             reply = (b"ICAP/1.0 200 OK\r\n" + tag + f"Encapsulated: res-hdr=0, res-body={len(http)}\r\n\r\n".encode()
@@ -188,6 +194,7 @@ class Clamd(unittest.TestCase):
         self.assertEqual(v("stream: OK").verdict, "clean")
         self.assertEqual(v("stream: Win.Test.EICAR_HDB-1 FOUND").categories, ("malware",))
         self.assertEqual(v("stream: Heuristics.Limits.Exceeded.MaxFileSize FOUND").categories, ("limits_exceeded",))
+        self.assertEqual(v("stream: Heuristics.Encrypted.Zip FOUND").categories, ("unreadable",))
         self.assertEqual(v("INSTREAM size limit exceeded. ERROR").categories, ("limits_exceeded",))
         self.assertEqual(v("stream: something odd").verdict, "unavailable")
 
@@ -215,6 +222,12 @@ class Icap(unittest.TestCase):
         self.assertEqual(icap.inspect(request(("arguments", b"ERRORME"))).verdict, "unavailable")
         self.assertEqual(IcapInspector(self.url, label="Vendor DLP").inspect(request(("a", b"x"))).scanner,
                          "Vendor DLP")
+
+    def test_a_200_is_clean_only_when_unchanged(self):
+        icap = IcapInspector(self.url)
+        self.assertEqual(icap.inspect(request(("arguments", b"UNCHANGED " * 3000))).verdict, "clean")
+        out = icap.inspect(request(("arguments", b"REDACT-ME please"), ("file:a", b"fine")))
+        self.assertEqual((out.verdict, out.categories), ("flagged", ("policy",)))
 
     def test_what_two_key_sends(self):
         icap = IcapInspector(self.url)
@@ -378,6 +391,37 @@ class EndToEnd(unittest.TestCase):
             self.assertEqual([s["verdict"] for s in scans], ["clean", "flagged", "unavailable"])
             self.assertEqual(scans[0]["version"], "1.4.1/27400")
             self.assertIn("content scanner is unavailable", err.getvalue())
+
+
+
+class ExampleFile(unittest.TestCase):
+    """examples/scanning.yaml signs, and its default stance denies what the scanner flags."""
+
+    def test_examples_scanning_yaml(self):
+        from two_key.constitution import load_unsigned_with_fields
+        root = Path(__file__).resolve().parent.parent
+        prose, rules, specs, fields = load_unsigned_with_fields(root / "examples" / "constitution.md",
+                                                               root / "examples" / "scanning.yaml")
+        key = generate_private_key()
+        env = sign_constitution(prose, rules, key, specs, fields=fields)
+        self.assertEqual(env["format"], "two-key-constitution-v3")
+        scanner = scanner_from_config({"type": "python", "hook": "scan_hook_fixture:inspect"},
+                                      {"send_email": [{"path": "attachments[].content", "kind": "base64"}]})
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(io.StringIO()) as err:
+            tk = TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
+                        [FixedJudge("a", "yes")], private_key=key, quorum=QuorumPolicy(required_yes=1),
+                        allow_test_doubles=True, monitored_agent=TEST_AGENT, scanner=scanner)
+            self.assertEqual(scanner.stance, "default")
+            self.assertIn("not scanned (no scan mapping): lookup", err.getvalue())
+            claim = {"tool": "send_email", "data_class": "personal"}
+
+            def send(data):
+                return tk.authorize(claim, {"to": "ops@example.org", "subject": "report", "body": "attached",
+                                            "attachments": [{"content": base64.b64encode(data).decode()}]}, "p")
+            self.assertTrue(send(b"quarterly numbers").allowed)
+            d = send(b"key=FAKE-SECRET-NOT-REAL-0000")
+            self.assertEqual((d.allowed, d.reason), (False, "rule_denied:scan"))
+            self.assertTrue(tk.authorize({"tool": "lookup", "data_class": "public"}, {"query": "x"}, "p").allowed)
 
 
 if __name__ == "__main__":

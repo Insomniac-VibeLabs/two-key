@@ -1,0 +1,49 @@
+# Content scanning (0.6.0): an antivirus or DLP product checks each call to a scanned tool before the two
+# keys decide. Sign it with examples/constitution.md or your own prose:
+#   python -m two_key sign-constitution --key ./keys/principal.pem \
+#     --prose examples/constitution.md --rules examples/scanning.yaml --out scanning.signed.json
+# Then configure the scanner and the file arguments (proxy.yaml, or Scanner(...) in code):
+#   scan: {type: clamd, address: 127.0.0.1:3310, timeout_seconds: 15}
+#   tools:
+#     send_email:
+#       files:
+#         - {path: "attachments[].content", kind: base64}
+# Two-Key starts every scan and fills the scan field itself; the agent cannot. See docs/SCANNERS.md.
+fields:
+  scan:
+    type: enum
+    values: [clean, flagged, unavailable]   # exactly these three
+    default: clean
+    source: caller                          # filled by Two-Key from the scanner, never by the agent
+
+hard_rules:
+  - id: tool-allowlist
+    allow_only_tools: [send_email, lookup]
+  # The stance. Default: deny what the scanner flags; while it is down, calls go on to the two keys.
+  - id: scan
+    deny_if_fields:
+      scan: {eq: flagged}
+  # Strict, instead (deny while the scanner is down too):
+  #   scan: {in: [flagged, unavailable]}
+  # Monitor: no rule at all; the verdict is recorded and shown to the judges.
+
+tool_specs:
+  send_email:
+    irreversible: true
+    data_class_floor: personal
+    counterparties:
+      - json_path: to
+        allow: [ops@example.org]
+    payload:
+      - {json_path: subject, shape: string, max_length: 200}
+      - {json_path: body, shape: string, max_length: 8000}
+      - {json_path: attachments}            # files must lie under a payload path
+    fields:
+      scan: {source: caller}                # scanned
+  lookup:
+    irreversible: false
+    data_class_floor: public
+    payload:
+      - {json_path: query, shape: string, max_length: 200}
+    fields:
+      scan: not_applicable                  # not scanned; listed at start

@@ -205,8 +205,10 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
    `ttl_seconds` (default 120, at most 300). Redemption writes an intent before the tool
    runs, so a crash cannot run that token twice.
 4. The gateway redeems that token with the public half of the capability
-   key. It does not hold the minting key, and it does not inspect file
-   contents, mail, or tool output for DLP or malware.
+   key. It does not hold the minting key, and it never scans. With a
+   content scanner configured (0.6.0, on `working`), Two-Key scans the call
+   before the two keys decide, and the gateway checks the verdict and file
+   digests the token binds. Tool output is not scanned.
 
 Both paths answer once the call is well-formed, within limits, and readable
 under its spec. A Path A deny does not skip Path B, so the ledger has both
@@ -451,15 +453,16 @@ behind a service of their own.
 
 Not in this repository:
 
-- payload scanning, antivirus, and DLP hooks
+- a scanning, antivirus, or DLP engine of its own
 - enterprise deployment modes and permissioned-chain anchoring
 - X.509 / PKI identities and agent assertions
 - seed-phrase backup
 - hybrid ML-DSA-65
 
 Some of this is planned as optional additions. See the
-[roadmap](#roadmap): DLP and antivirus hooks next (0.6.0, an interface that
-calls external scanners, not a scanning engine), and, after 1.0, PKI with
+[roadmap](#roadmap): DLP and antivirus hooks, built on `working` for 0.6.0
+(an interface that calls your antivirus or DLP product, not a scanning
+engine: [docs/SCANNERS.md](docs/SCANNERS.md)), and, after 1.0, PKI with
 certificate recovery and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
 backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
 phrases are not planned.
@@ -509,7 +512,10 @@ audited. It is not a FIPS 140-3 validated module.
   are on the roadmap.
 - Identities are bare keys. There is no certificate chain, expiry, or
   revocation. PKI with certificate recovery is on the roadmap.
-- It does not scan payloads, and it is not an antivirus or DLP product.
+- It is not an antivirus or DLP product. From 0.6.0 (on `working`) it can
+  call one you run ([docs/SCANNERS.md](docs/SCANNERS.md)). Without one, a
+  content leak in free text rests on the judges. Tool results are never
+  scanned.
 - Behind the MCP proxy, an agent that can reach the upstream server directly
   bypasses it, and an upstream server running as the proxy's OS user can
   read the proxy's keys. Run each as its own user (HOWTO "Key custody").
@@ -524,9 +530,10 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Roadmap
 
-The MCP adapter shipped in 0.5.0. Next come DLP and antivirus hooks
-(0.6.0) and a ledger export for a SIEM (0.7.0), then a public review and the
-1.0 release.
+The MCP adapter shipped in 0.5.0. 0.6.0 is being built on `working`:
+Windows support, DLP and antivirus hooks, and judge connection reuse. Then
+come a ledger export for a SIEM (0.7.0), a public review, and the 1.0
+release.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
@@ -544,7 +551,7 @@ flowchart LR
 | --- | --- | --- |
 | 0.4.0 | This repository and the package name `two-key` | Released, tag `v0.4.0` |
 | 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | Released, tag `v0.5.0` |
-| 0.6.0 | DLP and antivirus hooks that call external scanners (ClamAV, a secret scanner); judge connection reuse (#6) | Next: planned (ROADMAP "Plan to 0.6.0") |
+| 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners (ClamAV, ICAP products, a command, Python); judge connection reuse (#6) | Built on `working`; live run 7 and the release remain (ROADMAP "Plan to 0.6.0") |
 | 0.7.0 | Ledger export for a SIEM: verified, decrypted locally, no argument values | Planned |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI. Described as community-reviewed, not audited | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |

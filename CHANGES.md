@@ -86,6 +86,7 @@
 - [Judge connection reuse (#6, 0.6.0 Phase 5) — 2026-10-15](#judge-connection-reuse-6-060-phase-5--2026-10-15)
 - [Content scanning, part 1: the core (0.6.0 Phase 3) — 2026-10-15](#content-scanning-part-1-the-core-060-phase-3--2026-10-15)
 - [Content scanning, part 2: adapters and the proxy (0.6.0 Phase 4) — 2026-10-15](#content-scanning-part-2-adapters-and-the-proxy-060-phase-4--2026-10-15)
+- [Content scanning, part 3: docs (0.6.0 Phase 6) — 2026-10-15](#content-scanning-part-3-docs-060-phase-6--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2985,3 +2986,32 @@ scanning engine is added. All four are standard library only.
   `tests/test_mcp_scan.py` (the config, the hints, and a `tools/call` with an
   attached file through the scanner, both paths, and the gateway).
 - HOWTO: the `proxy.yaml` table lists `scan` and `tools.<id>.files`.
+
+## Content scanning, part 3: docs (0.6.0 Phase 6) — 2026-10-15
+
+On branch `working`.
+
+- `docs/SCANNERS.md` (new): how to connect an antivirus or DLP product,
+  for operators and vendors. Five diagrams: where the scanner sits, a call
+  with an attached file (agent to scanner, Path A, Path B, gateway, tool),
+  verdict and stance, the `clamd` `INSTREAM` exchange, and the ICAP
+  exchange. ClamAV setup on Linux, macOS, and Windows, the `clamd.conf`
+  lines that matter, and an EICAR test; the exact ICAP request Two-Key
+  sends, how each answer maps, and a vendor checklist; the command
+  contract; a Python Inspector; files by path and what they give up; the
+  ledger entries, warnings, and troubleshooting.
+- HOWTO: "Scan content with an antivirus or DLP product" (field, stance,
+  tools, files, adapter, test), the proxy's scan refusals and warnings,
+  the gateway's scan checks, and three entries in "Known trade-offs by
+  configuration" (stance, `tool_args_on_scan_flag`, files by path).
+- `examples/scanning.yaml`: a rules file with the scan field, the default
+  stance, a scanned tool, and one marked `not_applicable` (signed and run
+  in `tests/test_scanners.py`).
+- The "no scanning" lines in README, SECURITY (a new in-scope item for the
+  scanner), llms.txt, COMPARISON, SCOPE, THREAT_MODEL (the scanner as a
+  trust boundary, and its residual risks), FIT, JUDGES_AND_QUORUM,
+  CONTRIBUTING, and ROADMAP now say what is built on `working`.
+- ICAP: a `200` whose body differs from the part sent (the product
+  redacted or replaced something) is flagged, as the design note says; an
+  unchanged `200` is still clean. `clamd`: `Heuristics.Encrypted` (with
+  `AlertEncrypted yes`) is flagged `unreadable`.

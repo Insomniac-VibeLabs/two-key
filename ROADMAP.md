@@ -91,7 +91,11 @@ in the same release.
   setup after the move) has maintainer settings left to confirm.
 - **Branches**: `main` and `working`. `mcp-proxy` is merged into `main`
   and can be deleted.
-- **Platforms** (first `portability.yml` run): Linux is supported and tested.
+- **0.6.0 on `working`**: Windows support (Phase 2), judge connection reuse
+  (#6), and content scanning (core, adapters, proxy wiring, and
+  docs/SCANNERS.md) are built, with CI on Linux, macOS, and Windows. Live
+  run 7 and the release remain.
+- **Platforms** (first `portability.yml` run, before 0.6.0's Windows work): Linux is supported and tested.
   macOS passes 721 of 722 tests and the demo; the one failure was a test
   assumption, since fixed. Windows does not run: the key-file check refuses
   every key there (Python reports Windows files as mode 0666), so no ledger
@@ -114,6 +118,18 @@ in the same release.
   no external anchor, not FIPS validated, signatures not quantum resistant.
 
 ## 0.6.0: DLP and AV hooks
+
+**Status on `working` (2026-10-15):** steps 1 to 6 of the plan below are
+built, apart from the maintainer's own actions in step 1; live run 7 and the
+release remain. The scanner follows the decisions below and the approved
+design note, with the maintainer's additions: Two-Key alone starts a scan
+(the agent never proposes, skips, or answers one), a call can carry a file
+(base64, or a path in a folder the operator declares), and
+[docs/SCANNERS.md](docs/SCANNERS.md) shows with diagrams how ClamAV, ICAP
+products, a command, or Python code connect. The first bullets below are
+the original sketch; where they differ (a deny on every error,
+allow/deny/abstain, `tools.<id>.inspect`), the decisions and
+docs/SCANNERS.md win.
 
 - One interface: `inspect(args_projection)` returns allow, deny, or abstain,
   with a reason code. An error, timeout, or missing result is a deny.
@@ -206,7 +222,8 @@ AGENTS.md requires.
    - the diagnosis and card-number cases (C35, C36) should be denied by
      Path A, not left to the judges;
    - add a file payload carrying EICAR;
-   - add a scanner that is down or slow, which must deny.
+   - add a scanner that is down or slow, which must deny under the strict
+     stance and be ledgered and told to the judges under the default one.
 8. **Release 0.6.0**: version, `uv.lock` (uv 0.13.0), a PR into `main`
    once every check passes, then the `v0.6.0` tag and release notes.
 

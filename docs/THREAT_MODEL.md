@@ -132,7 +132,26 @@ the code wins, then this file should be corrected.
   bytes, then `redemption_started` is checkpointed, then the registered
   function is called with declared paths only. Unnamed keys are not passed
   in. A counterparty path is the canonical party, not the raw spelling.
-  Nothing in this package scans those bytes.
+  The gateway never scans: with a content scanner configured, it takes the
+  verdict from the token and hashes each file sent by path again
+  (`file_changed`).
+- Two-Key to the content scanner (0.6.0, on `working`; docs/SCANNERS.md).
+  Optional. For each call to a tool the signed constitution marks (it maps
+  the `scan` field), Two-Key sends the scanner every argument (keys the
+  tool will not receive included), each declared file decoded or read from
+  its folder, and the proposal text, after the call reads under its spec
+  and before Path A. The agent cannot start, skip, or answer a scan: `scan`
+  in its arguments is `caller_field_in_arguments`, and in `facts=` it is
+  `scan_fact_supplied`. The scanner is trusted to answer, not to decide: a
+  timeout, an exception, or an answer Two-Key cannot read is
+  `unavailable`; a result it could not finish, or a declared file Two-Key
+  could not read, is `flagged`. The signed rule on the verdict decides.
+  The scanner sees content, so it is a new audience for it, as cloud judges
+  are; its adapters get no keys, and a command scanner gets a minimal
+  environment. Judges get the verdict in a trusted section, file digests in
+  place of files, and, when flagged, no arguments or proposal unless
+  `tool_args_on_scan_flag`. The ledger gets digests, sizes, the verdict,
+  categories, and the scanner's label and version, never content.
 - Agent host to the MCP proxy (stdio). The host sees the signed tools only,
   under their signed ids, with the pinned fields (`name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`). Each
@@ -371,8 +390,8 @@ claims to close.
   `shape` of `string`, `number`, or `list` (strings only) refuses a
   different kind. `max_length` bounds a string or a list. A boolean is not
   a number. `payload_shape` is a derive deny. Shape does not read contents.
-  Meaning stays with Path B. A DLP hook is planned (see
-  [ROADMAP.md](../ROADMAP.md)). The token still binds
+  Meaning stays with Path B, or, from 0.6.0, with a content scanner the
+  operator connects (see "Trust boundaries"). The token still binds
   the caller's original argument bytes. Redeem with those same bytes. The
   function is called with the projection. Missing `data_class` still becomes
   `classified` before the floor, and the floor cannot lower that default.
@@ -484,6 +503,24 @@ claims to close.
   `FILE_FLAG_OPEN_REPARSE_POINT`, so a symlink or junction as the last part
   of the path is refused, as `O_NOFOLLOW` does on POSIX; a link earlier in
   the path is followed on every platform.
+- **Content scanning** (0.6.0, on `working`) is only as good as the
+  operator's product and its signatures. Under the default stance a
+  scanner that is down lets calls through to the two keys (ledgered once,
+  told to the judges); only the strict stance denies them. Monitor blocks
+  nothing, not even a file outside its folder. Which arguments are files
+  is operator configuration (`proxy.yaml` or `Scanner(files=...)`), not
+  signed: an undeclared file is scanned as text, not decoded (the proxy
+  warns at start about inputs that look like files). A URL is scanned as
+  text; Two-Key does not download it. Tool results are not scanned. A file
+  sent by path is hashed again just before the tool runs, but a writer
+  outside Two-Key can swap it between that check and the tool opening it;
+  declare a folder only the guarded tools can write to. Two-Key passes the
+  path, not the bytes, so a tool with another view of the disk (a
+  container, another mount) could open a different file than the one
+  scanned; run it on the same host and filesystem. The gateway does
+  not scan again, so a signature update between authorization and
+  redemption (at most 300 s) does not apply to that call. A scanner that
+  is still running when its time limit passes is abandoned, not stopped.
 - There is no TEE. OAuth device-code judge auth is rejected. A username and
   password is accepted only as HTTP Basic over HTTPS (`type: basic`). Use
   `env`, `keyring`, `callback`, or `basic`.
@@ -522,14 +559,14 @@ claims to close.
   a rule.
 - A vulnerability in a judge vendor's API.
 - Using this package as an MCP server, as user login, or as a DLP or
-  antivirus product. It is none of those. An optional MCP adapter and
-  scanner hooks are planned (see [ROADMAP.md](../ROADMAP.md)). They would sit
-  in front of or beside the gateway, and they would not make this package a
-  server or a scanner.
+  antivirus product. It is none of those. The MCP proxy (0.5.0) sits in
+  front of the gateway, and the scanner hooks (0.6.0, on `working`) call
+  the operator's own product; neither makes this package a server or a
+  scanner. What a connected product detects or misses is out of scope.
 - Full per-value information-flow tracking, and a content classifier. A
   tool-spec floor is not a taint label. Scanning engines, external or
   permissioned-chain anchoring, and seed phrases are not here and are not
-  planned. Planned scanner hooks, PKI with certificate recovery, and hybrid
+  planned. Scanner hooks (0.6.0, on `working`), PKI with certificate recovery, and hybrid
   signatures are in [ROADMAP.md](../ROADMAP.md). Key backup shipped in
   0.3.0. See [SCOPE.md](SCOPE.md).
 
@@ -549,12 +586,12 @@ above, not here.
   the release. HTTP transports come later. A `tool_specs` draft made from
   MCP schemas stays a proposal for the principal to review and sign, not
   trusted input.
-- Inspection hooks for DLP and antivirus (0.6.0, next). New trust boundary:
-  the scanner. A scanner error, timeout, or missing result is meant to be a
-  deny. A scanner sees only what the tool spec lets through, so a payload
-  value it cannot read stays a residual risk. Where the hook runs relative to
-  the judges is an open choice, because cloud judges receive `tool_args`
-  today.
+- Inspection hooks for DLP and antivirus (0.6.0). Built on `working` and
+  described above ("Trust boundaries", "Residual risks"); they move out of
+  this list when 0.6.0 is released. The maintainer's decisions replaced the
+  earlier sketch: a scanner error is `unavailable`, which the signed stance
+  decides (strict denies it), and the scan runs before the judges, which
+  get no arguments for a flagged call.
 - Ledger export for SIEM (0.7.0). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.

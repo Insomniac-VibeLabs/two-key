@@ -7,11 +7,12 @@ library only; Linux, macOS, and Windows.
 
 - ``ClamdInspector("127.0.0.1:3310")``: ``INSTREAM`` over TCP, or ``unix:/path/clamd.sock`` on Linux and
   macOS. ``OK`` is clean; ``FOUND`` is flagged (``malware``, or ``limits_exceeded`` for
-  ``Heuristics.Limits.Exceeded``); the stream size limit is flagged ``limits_exceeded``; anything else is
-  unavailable.
+  ``Heuristics.Limits.Exceeded``, or ``unreadable`` for ``Heuristics.Encrypted``); the stream size limit is
+  flagged ``limits_exceeded``; anything else is unavailable.
 - ``IcapInspector("icap://host:1344/service")``: RFC 3507 ``REQMOD`` (or ``RESPMOD``), one request per part,
-  with ``Allow: 204``. 204 is clean; a 200 carrying an infection or violation header, a block response, or an
-  ICAP 403 is flagged; anything else is unavailable. ``icaps://`` uses TLS with the system's certificate
+  with ``Allow: 204``. 204, or a 200 that returns the part unchanged, is clean; a 200 carrying an infection or
+  violation header, a block response, or a changed body, or an ICAP 403, is flagged; anything else is
+  unavailable. ``icaps://`` uses TLS with the system's certificate
   checks.
 - ``CommandInspector(["scanner", "--stdin"])``: the part on stdin, no shell, a minimal environment. Exit 0 is
   clean, 1 flagged, anything else (or the time limit) unavailable. A first stdout line
@@ -77,6 +78,42 @@ def _recv_until(sock: socket.socket, end: bytes, limit: int = MAX_REPLY_BYTES) -
     return data
 
 
+_CHUNK_SIZE = re.compile(rb"[0-9A-Fa-f]{1,16}")
+
+
+def _dechunk(data: bytes) -> bytes | None:
+    """The body of a chunked encoding (as ICAP encapsulates it), or None while it is incomplete."""
+    out, i = bytearray(), 0
+    while True:
+        end = data.find(b"\r\n", i)
+        if end < 0:
+            return None
+        size_text = data[i:end].split(b";", 1)[0].strip()       # a chunk extension such as "; ieof" is ignored
+        if not _CHUNK_SIZE.fullmatch(size_text):
+            raise _Unanswered("bad chunk size")
+        size = int(size_text, 16)
+        if size == 0:
+            return bytes(out) if data[end:end + 4] == b"\r\n\r\n" else None
+        start = end + 2
+        if len(data) < start + size + 2:
+            return None
+        if data[start + size:start + size + 2] != b"\r\n":
+            raise _Unanswered("bad chunk")
+        out += data[start:start + size]
+        i = start + size + 2
+
+
+def _offsets(encapsulated: str) -> dict[str, int]:
+    """``req-hdr=0, req-body=123`` as a mapping. Raises ``_Unanswered`` when it cannot be read."""
+    out = {}
+    for item in encapsulated.split(","):
+        name, sep, value = item.strip().partition("=")
+        if not sep or not value.strip().isdigit():
+            raise _Unanswered("bad Encapsulated header")
+        out[name.strip().casefold()] = int(value)
+    return out
+
+
 def _timeout(request: ScanRequest) -> float:
     left = request.remaining()
     if left <= 0:
@@ -133,8 +170,11 @@ class ClamdInspector:
             return ScanResult.clean()
         if text.endswith(" FOUND"):
             name = text[:-len(" FOUND")]
-            return ScanResult.flagged("limits_exceeded" if name.startswith("Heuristics.Limits.Exceeded")
-                                      else "malware")
+            if name.startswith("Heuristics.Limits.Exceeded"):       # AlertExceedsMax: it could not finish
+                return ScanResult.flagged("limits_exceeded")
+            if name.startswith("Heuristics.Encrypted"):             # AlertEncrypted: it could not look inside
+                return ScanResult.flagged("unreadable")
+            return ScanResult.flagged("malware")
         if "size limit exceeded" in text:
             return ScanResult.flagged("limits_exceeded")
         return ScanResult.unavailable()
@@ -228,8 +268,9 @@ class IcapInspector:
             sock.close()
             raise
 
-    def verdict(self, response: bytes) -> tuple[ScanResult, str, str]:
-        """(result, server label, ISTag) from an ICAP response head and the start of what it encapsulates."""
+    def verdict(self, response: bytes, sent: bytes | None = None) -> tuple[ScanResult, str, str]:
+        """(result, server label, ISTag) from an ICAP response. ``sent`` is the part's bytes: a 200 whose body
+        differs from them (the product changed or removed content) is flagged."""
         head, _, rest = response.partition(b"\r\n\r\n")
         lines = head.decode("latin-1").split("\r\n")
         status = lines[0].split(" ", 2)
@@ -252,27 +293,62 @@ class IcapInspector:
             return ScanResult.flagged("malware"), server, istag
         if any(h in headers for h in _VIOLATION_HEADERS):
             return ScanResult.flagged("policy"), server, istag
-        encapsulated = headers.get("encapsulated", "")
-        if "res-hdr" in encapsulated:
+        offsets = _offsets(headers.get("encapsulated", "null-body=0"))
+        if "res-hdr" in offsets:
             if self.method == "reqmod":     # a response instead of the request: the product blocked it
                 return ScanResult.flagged("policy"), server, istag
-            http_status = rest.split(b"\r\n", 1)[0].split(b" ")
+            http_status = rest[offsets["res-hdr"]:].split(b"\r\n", 1)[0].split(b" ")
             if len(http_status) >= 2 and http_status[1].isdigit() and int(http_status[1]) >= 400:
                 return ScanResult.flagged("policy"), server, istag
+        if sent is not None:
+            body_key = "req-body" if self.method == "reqmod" else "res-body"
+            if body_key in offsets:
+                body = _dechunk(rest[offsets[body_key]:])
+                if body is None:
+                    raise _Unanswered("body cut short")
+            elif "null-body" in offsets:
+                body = b""
+            else:
+                raise _Unanswered("no body in a 200")
+            if body != sent:                # a modified 200: the product redacted or replaced something
+                return ScanResult.flagged("policy"), server, istag
         return ScanResult.clean(), server, istag
+
+    @staticmethod
+    def _read_response(sock: socket.socket, sent: int) -> bytes:
+        """The ICAP response head and, for a 200, everything it encapsulates (at most the part's size plus
+        64 KiB), so a modified body can be told from an unchanged one."""
+        response = _recv_until(sock, b"\r\n\r\n")
+        head, sep, rest = response.partition(b"\r\n\r\n")
+        if not sep:
+            raise _Unanswered("no reply" if not response else "reply cut short")
+        status = head.split(b"\r\n", 1)[0].split(b" ")
+        if len(status) < 2 or status[1] != b"200":
+            return response
+        encapsulated = next((line.split(b":", 1)[1] for line in head.split(b"\r\n")[1:]
+                             if line.split(b":", 1)[0].strip().lower() == b"encapsulated"), b"null-body=0")
+        offsets = _offsets(encapsulated.decode("latin-1"))
+        body = next((k for k in ("req-body", "res-body") if k in offsets), None)
+        limit = sent + MAX_REPLY_BYTES
+        while True:
+            if body is None:
+                if len(rest) >= offsets.get("null-body", 0):
+                    break
+            elif rest.endswith(b"\r\n\r\n") and _dechunk(rest[offsets[body]:]) is not None:
+                break
+            chunk = sock.recv(65536)
+            if not chunk:
+                raise _Unanswered("reply cut short")
+            rest += chunk
+            if len(rest) > limit:
+                raise _Unanswered("reply too long")
+        return head + sep + rest
 
     def _scan(self, tool: str, part: str, data: bytes, request: ScanRequest) -> tuple[ScanResult, str, str]:
         with self._connect(_timeout(request)) as sock:
             sock.sendall(self.request_bytes(tool, part, data))
-            response = _recv_until(sock, b"\r\n\r\n")
-            if b"\r\n\r\n" in response and b"res-hdr" in response.split(b"\r\n\r\n", 1)[0].lower():
-                try:       # the encapsulated HTTP status line, for RESPMOD
-                    response += _recv_until(sock, b"\r\n", MAX_REPLY_BYTES - len(response))
-                except (OSError, _Unanswered):
-                    pass
-        if not response:
-            raise _Unanswered("no reply")
-        return self.verdict(response)
+            response = self._read_response(sock, len(data))
+        return self.verdict(response, data)
 
     def inspect(self, request: ScanRequest) -> ScanResult:
         results, server, istag = [], "", ""
@@ -328,7 +404,9 @@ class CommandInspector:
     def _scan(self, tool: str, part: str, data: bytes, request: ScanRequest) -> ScanResult:
         argv = [resolve_program(self.argv[0])] + self.argv[1:]
         try:
-            done = subprocess.run(argv, input=data, capture_output=True, timeout=_timeout(request),  # nosec B603
+            # The operator's own argv from its configuration (trusted, like a fact hook), run without a shell;
+            # the agent's bytes reach it only on stdin, never as an argument.
+            done = subprocess.run(argv, input=data, capture_output=True, timeout=_timeout(request),  # nosec B603  # nosemgrep: python.django.security.injection.command.subprocess-injection.subprocess-injection
                                   env=self._environ(tool, part), check=False)
         except subprocess.TimeoutExpired:
             return ScanResult.unavailable()

@@ -67,6 +67,15 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   (`skipped:derive_failed`); a start-up warning when one judge can approve
   alone; and a drafter warning for a payee or amount with no upstream
   description
+- in 0.6.0, on `working` (not yet released): Windows support
+  (`two_key/_platform.py`), judge connection reuse (#6), and optional
+  content scanning. A scanner (`two_key/scan.py`; adapters for ClamAV
+  `clamd`, ICAP, a command, and Python in `two_key/scanners.py`) calls the
+  operator's antivirus or DLP product for each call to a tool the signed
+  constitution marks, files included (base64, or a path in a declared
+  folder). Two-Key starts every scan; the verdict is a caller-supplied
+  enum fact that a signed rule decides on, told to the judges and recorded
+  without content (docs/SCANNERS.md)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
@@ -74,8 +83,9 @@ Modules that carry these rules include `two_key/fields.py` (custom Path A fields
 digest checks), `two_key/backup.py` (key backup), and the per-install fingerprint key beside the ledger
 (`*.ledger-key/fingerprint.key`).
 
-It does not include scanning, antivirus, DLP, PKI, permissioned-chain
-anchoring, seed phrases, or hybrid ML-DSA.
+It does not include a scanning, antivirus, or DLP engine (the 0.6.0 hooks
+call the operator's product), PKI, permissioned-chain anchoring, seed
+phrases, or hybrid ML-DSA.
 
 ## Planned additions
 
@@ -88,11 +98,10 @@ in the same release.
 - MCP adapter (0.5.0): the proxy, the drafter, caller-supplied facts,
   and the framework-neutral guard core are built (above) and go through
   live test run 6 before the release. HTTP transports come later. The proxy offers no tools of its own.
-- Inspection hooks for DLP and antivirus (0.6.0, next): an interface that
-  calls external scanners. This package still does not scan or classify
-  content itself.
-- Judge connection reuse (#6, 0.6.0): judge connections are not reused
-  today; each quorum round opens new ones.
+- Inspection hooks for DLP and antivirus (0.6.0): built on `working`
+  (above). This package still does not scan or classify content itself.
+- Judge connection reuse (#6, 0.6.0): built on `working`; a lock-guarded
+  pool keyed by origin.
 - Ledger export for SIEM (0.7.0): a command that verifies and decrypts
   the ledger locally and writes events without argument values. A field
   allowlist leaves out the proposal text and the derived amount and

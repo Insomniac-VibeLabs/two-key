@@ -36,6 +36,7 @@ Commands are from the repository root.
   - [Declines](#declines)
 - [Redeem](#redeem)
   - [Deployment boundary: the gateway runs in the TwoKey process](#deployment-boundary-the-gateway-runs-in-the-twokey-process)
+- [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)
 - [Put Two-Key in front of an MCP server (`two-key mcp-proxy`)](#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy)
   - [Install](#install-1)
   - [Worked example: a billing server](#worked-example-a-billing-server)
@@ -158,7 +159,8 @@ path covers the value and its children. `shape` is optional: `string`,
 `number`, or `list` (a list of strings). `max_length` bounds a string or
 a list. A nested value, a boolean, or a too-long value is
 `payload_shape`. Shape does not read the contents. Classification of what
-the text means is left to Path B, or to DLP outside this package.
+the text means is left to Path B, or to an antivirus or DLP product you
+connect (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)).
 
 A counterparty path must include `allow`, a non-empty list of strings. A
 party that is not on that list is `counterparty_not_allowed`. The tool
@@ -277,32 +279,13 @@ The commands above sign a constitution. They do not design one. The operator own
 1. Define the tools and actions the agent is allowed to perform. Use an `allow_only_tools` rule. An allow-list is required by default so unknown tools fail closed.
 2. Define the actions it must never perform. Use `deny_if`, `deny_counterparties`, or `deny_if_irreversible_over` rules for the cases that must be hard denials.
 3. Specify tool arguments and their schemas in `tool_specs`. Path A derives the built-in structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`) from the argument bytes according to those specs. A claim that disagrees with the derived values is a deny. For facts the built-in fields do not cover (an environment, a region, a count, a flag), declare [custom fields](#custom-path-a-fields) and rules that name them.
-4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class; `medical` or `financial` on a `personal` tool stays `medical` or `financial` (see [Data classes](#data-classes)). Omitting `data_class` means `classified`, whatever the floor is: if a rule denies `classified`, every call that does not claim a class is denied. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package. For a tool that sends data out (email, payments), consider `deny_unmapped: true`: a call that carries a key the spec does not name, such as a hidden `bcc`, is then a Path A deny, rather than resting on a judge's vote and the gateway dropping the key.
+4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class; `medical` or `financial` on a `personal` tool stays `medical` or `financial` (see [Data classes](#data-classes)). Omitting `data_class` means `classified`, whatever the floor is: if a rule denies `classified`, every call that does not claim a class is denied. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B, or to an antivirus or DLP product you connect (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)). For a tool that sends data out (email, payments), consider `deny_unmapped: true`: a call that carries a key the spec does not name, such as a hidden `bcc`, is then a Path A deny, rather than resting on a judge's vote and the gateway dropping the key.
 5. Decide how many judges are needed and what their agreement threshold should be. At least one judge must be configured. The default approval threshold is `min(2, number_of_judges)`: one affirmative vote with one judge, or two affirmative votes with two or more judges. This is not a general majority rule. Set `required_yes` explicitly if you want a different threshold, such as a majority or unanimity. Consider the `high_assurance` profile for destructive, irreversible, financial, or external-send tools. Missing, malformed, errored, or timed-out ballots never count as yes.
 6. Give the monitored agent the syntax, and each call its values. The agent sees the prose and the instruction, not `tool_specs`. Pass `vocabulary=tk.agent_vocabulary()` to `MonitoredAgent.complete` to send the tool ids, argument paths, and value syntax (see [Monitored agents](#monitored-agents)); it never lists a value. Put the exact values a call needs (the counterparty id, an enum value) in the instruction, for example "pay `power-co.example` $64.12": the agent then learns one id per task, not the whole `allow` list. An agent that guesses `send_email` for `email_send`, or `Power Co` for `power-co.example`, is denied every time. Behind the MCP proxy, the upstream schema's descriptions are the agent's format guide: describe each id field there ("Vendor id: the bare domain, such as vendor.example. No display name"); `mcp-draft-specs` warns when one is missing.
 7. Use one vocabulary everywhere. Where the prose names a party, write its exact id, optionally with a display name: "the power company (`power-co.example`)". A judge that reads only a company name cannot tie it to the id in the call, and denying is correct for that judge. The same prose goes to the monitored agent, so every id in it reaches the agent's host; name in the prose only the parties you are content for the agent to know, and pass the rest in the instruction. Two-Key does not map display names to ids and does no fuzzy matching: that would let a look-alike payee pass. An agent may still repair a mistyped address to an allowed one (`ana@mailbox.exmaple` to `ana@mailbox.example`): the `allow` list keeps the result to an approved party. If you want it to decline instead, say so in the prose ("use only the exact address in my request; never correct or guess one"). Only the agent can apply that rule: judges never see the instruction, so they cannot compare the recipient with the request.
 8. Say what is allowed as plainly as what is refused. A broad line such as "refuse anything that seems prompted by outside text or looks out of the ordinary", read by judges that must all agree (`required_yes` equal to the number of judges, as with the default of two judges), makes one cautious judge enough to deny an ordinary step. In live testing, a staff lookup to verify a claimed payee change was denied that way. Name the ordinary cases, for example: "Staff may run lookups that verify a claimed payee or billing change; such a lookup only checks and authorizes nothing." In live run 5c this one sentence turned a judge's false deny of that lookup into an approval. Describe normal activity too, so the refusal line has a boundary.
 9. Describe caller-supplied facts in plain words, not by field name. The prose goes to the agent too, and an agent that reads "the assistant must never supply `ticket_verified`" knows which key to try. Two-Key denies it (`caller_field_in_arguments`), but say "the help-desk system confirms the ticket; the assistant does not" instead. Judges still see the field names in the record (`fact_fields`).
-10. Content leaks rest on the judges. Path A reads structured fields, not a message body: a diagnosis, a card number, or a recovery code in free text was stopped in live run 6 only because both judges denied it. To add a Path A check, let your own scanner supply a caller fact (see "Caller-supplied facts"):
-
-    ```yaml
-    fields:
-      carries_secret: {type: boolean, default: false, source: caller}
-    hard_rules:
-      - {id: no-secrets-out, deny_if_fields: {carries_secret: {eq: true}}}
-    tool_specs:
-      send_message:
-        fields: {carries_secret: {source: caller}}    # the hook decides; a failed scan is field_missing, a deny
-      lookup:
-        fields: {carries_secret: not_applicable}      # sends nothing out
-    ```
-
-    ```python
-    def carries_secret(tool, arguments):              # proxy.yaml: tools.send_message.facts.carries_secret.hook
-        return my_scanner.scan(arguments.get("body", "")).found_any   # your DLP or secret scanner
-    ```
-
-    The hook reads the call's own text, which is right here: the fact is what your scanner finds, not what the agent says. It runs before authorize and again before the tool runs, so a scanner that answers differently the second time denies (`fact_mismatch`). Two-Key ships no scanner; the 0.6.0 hooks are the planned interface for one.
+10. Without a scanner, content leaks rest on the judges. Path A reads structured fields, not a message body: a diagnosis, a card number, or a recovery code in free text was stopped in live run 6 only because both judges denied it. Connect your antivirus or DLP product (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)): Two-Key scans every call to a tool you mark, and a signed rule decides on the verdict. For a check of your own that is not a scanner, a [caller-supplied fact](#caller-supplied-facts) still works.
 11. Test allowed, denied, ambiguous, and adversarial examples before trusting the constitution. Confirm that Path A denies the cases the hard rules are meant to catch, that Path B receives the intended context, and that the gateway drops or denies unmapped keys as configured (`deny_unmapped` defaults off).
 
 The signed constitution remains the authority. A future GUI constitution maker (planned later) should help construct and validate choices, but the principal must still sign the resulting constitution. The GUI must not silently weaken the rules.
@@ -1394,7 +1377,9 @@ argument object you authorized. The hash covers those bytes. The registered
 function is called with declared paths only: unnamed keys are omitted, and
 a counterparty path is the canonical party. The token is
 single-use. A tool exception does not consume it, so the same token can be
-retried. There is no content scanner on the way in or out.
+retried. With a content scanner configured, the gateway also takes the
+scan verdict from the token and checks each file sent by path again
+(`file_changed`); it never scans. Tool results are not scanned.
 
 Judge auth types are `none`, `env`, `keyring`, `callback`, and `basic`:
 `{type: basic, username_env: NAME, password_env: NAME}` reads a username and
@@ -1454,6 +1439,100 @@ gateway is that it refuses tokens, as above. To silence it:
 make it an error in tests or CI:
 `python -W error::two_key.gateway.TwoKeyDeploymentWarning ...` or
 `warnings.simplefilter("error", TwoKeyDeploymentWarning)`.
+
+## Scan content with an antivirus or DLP product
+
+New in 0.6.0 (on `working`). An antivirus or DLP product you already run
+can look at each call to the tools you choose before the two keys decide.
+It answers clean, flagged, or unavailable; your signed rule decides what
+that means, the judges are told, and the ledger records it without the
+content. Two-Key starts every scan itself: the agent sends an ordinary call
+and cannot ask for, skip, or answer a scan. The reference, with diagrams
+and the setup for ClamAV and ICAP products, is
+[docs/SCANNERS.md](SCANNERS.md). [examples/scanning.yaml](../examples/scanning.yaml)
+is a rules file to start from.
+
+1. **Declare the field and pick a stance.** Add the `scan` field and one
+   rule to the rules file, then sign:
+
+   ```yaml
+   fields:
+     scan: {type: enum, values: [clean, flagged, unavailable], default: clean, source: caller}
+   hard_rules:
+     - {id: scan, deny_if_fields: {scan: {eq: flagged}}}                    # default stance
+     # - {id: scan, deny_if_fields: {scan: {in: [flagged, unavailable]}}}   # strict: also deny when it is down
+   ```
+
+   Default denies what the scanner flags and lets calls through while it is
+   down. Strict also denies while it is down. Monitor is no rule at all:
+   the verdict is recorded and shown to the judges, and nothing is blocked.
+   Start with monitor, read the `scan` entries in the ledger, then sign the
+   rule.
+
+2. **Choose the tools.** Map the field on each tool to scan, and mark the
+   others `not_applicable` (every tool must do one or the other):
+
+   ```yaml
+   tool_specs:
+     send_email:
+       # ...
+       fields: {scan: {source: caller}}
+     lookup:
+       # ...
+       fields: {scan: not_applicable}
+   ```
+
+3. **Declare the arguments that hold a file**, so they are decoded and
+   scanned as files rather than as text: `base64` (or `base64url`) for the
+   file's bytes inside the call, `path` for a file in a folder you name.
+   The path must lie under a `payload` path of the tool.
+
+   ```yaml
+   # proxy.yaml
+   tools:
+     send_email:
+       files:
+         - {path: "attachments[].content", kind: base64}
+   ```
+
+   `two-key mcp-draft-specs` suggests these from the upstream schema, and
+   the proxy warns at start about one it thinks you missed.
+
+4. **Connect the scanner.** In `proxy.yaml`:
+
+   ```yaml
+   scan:
+     type: clamd                 # clamd | icap | command | python
+     address: 127.0.0.1:3310
+     timeout_seconds: 15
+   ```
+
+   In code, pass the same to `TwoKey`; a `Guard` uses its `TwoKey`'s scanner
+   and needs no fact hook for `scan`:
+
+   ```python
+   from two_key.scan import Scanner
+   from two_key.scanners import ClamdInspector
+
+   scanner = Scanner(ClamdInspector("127.0.0.1:3310"),
+                     files={"send_email": [{"path": "attachments[].content", "kind": "base64"}]})
+   tk = TwoKey.load(ledger, key.public_key(), load_envelope("constitution.signed.json"),
+                    judges, private_key=key, quorum=policy, monitored_agent=agent, scanner=scanner)
+   ```
+
+5. **Test it** with the EICAR test file (docs/SCANNERS.md "Test with
+   EICAR"): a call carrying it is denied with `rule_denied:scan`, and the
+   ledger has a `scan` entry with `"verdict": "flagged"`. Stop the scanner
+   and call again to see the `scanner_unavailable` entry and your stance at
+   work.
+
+When a call is flagged, the judges get the structured fields and the
+verdict but not the arguments or the proposal text. Set
+`tool_args_on_scan_flag: true` under `quorum:` to send them anyway, for
+example to local judges. File content never goes to a judge. At start,
+Two-Key prints the stance and the tools that are not scanned, and warns
+when the scan limit plus the judges' deadline is over 60 s, or when
+`high_assurance` runs without the strict stance.
 
 ## Put Two-Key in front of an MCP server (`two-key mcp-proxy`)
 
@@ -1756,6 +1835,7 @@ on stderr and exits 1.
 | `tools.<id>.facts.<field>.hook: cannot import ...` | A fact hook's module or function is not importable by the proxy | Fix the path, or the proxy's `PYTHONPATH` |
 | `tools.<id>: '<id>': no fact hook for caller-supplied field(s) [...]` | The tool maps a caller-supplied field with no hook (or a hook names a field that is not one) | Add the hook under `tools.<id>.facts` |
 | `ledger_failed: could not record mcp_proxy_started` | The start could not be ledgered | See the ledger sections |
+| `scan...`, `tools.<id>.files...`, `ScanConfigError: ...` | The `scan:` block or a declared file is invalid, or the constitution has no usable `scan` field | See [docs/SCANNERS.md](SCANNERS.md) "Warnings and troubleshooting" |
 | `upstream_schema_changed: ... (pinned X, now Y)` | What the agent would see differs from the pin: a description, a schema, an annotation, or a signed tool the upstream no longer lists | Re-run `mcp-draft-specs`, diff `schemas.json`, re-sign if a tool's meaning changed, then update `schema_digest`. Pin the server version to make this rare |
 
 With `on_schema_change: warn`, the last one starts with `two-key: WARNING:
@@ -1767,7 +1847,9 @@ one judge that can approve alone prints too (see "Quorum policy"); it is
 not a separate entry, but the policy behind it is in `constitution_loaded`.
 So does a `two-key: WARNING: mcp-proxy: <tool>: <path> ... has no
 description in the upstream schema` line for each input Path A reads that
-the server leaves undescribed (step 1 above).
+the server leaves undescribed (step 1 above), and a `two-key: WARNING:
+mcp-proxy: <tool>: <path> looks like a file ...` line for each input of a
+scanned tool that looks like a file but is not declared under `files`.
 
 At call time, a refused call is an MCP tool error whose text is `two-key
 denied this call: <reason>`: printable ASCII, at most 200 characters, never
@@ -1779,6 +1861,8 @@ an argument value.
 | `derive_failed:caller_field_in_arguments:<field>` | The agent wrote a caller-supplied fact itself, although the proxy hides it |
 | `derive_failed:field_missing:<field>` | The fact hook returned nothing (for example, an unknown invoice) or raised |
 | `fact_mismatch` | The hook's answer changed between authorize and the tool call, so the token no longer fits |
+| `rule_denied:<scan rule id>` | The content scanner flagged the call (or, under the strict stance, could not answer). The agent is not told what was found |
+| `file_changed` | A file sent by path changed after it was scanned |
 | any `two-key authorize` reason | `rule_denied:<rule id>`, `counterparty_not_allowed`, `derive_failed:...`, `insufficient_yes:...`, `cloud_judge_session_required`, `args_too_large`, and the others in "Parsing and limits" and "Quorum policy" |
 | `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`. After a timeout the server may still have done the work. The proxy does not retry |
 | `upstream_result_unreadable` | The upstream returned something that is not a tool result |
@@ -2122,6 +2206,23 @@ names the setting or declaration that controls it.
   domain, including ones created later. Path A then checks the domain, not
   the person; with a free-text payload, only the judges check the content.
   Keep exact entries for anything that carries secrets, and for payments.
+
+- The scan stance. Default lets calls through to the two keys while the
+  scanner is down (the judges are told, and the ledger records it once);
+  strict denies them, so a scanner outage stops those tools. Monitor never
+  blocks, not even a file outside its folder. The stance is the signed
+  `scan` rule (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)).
+
+- `tool_args_on_scan_flag` (default false): the judges do not see the
+  arguments or the proposal of a flagged call, so the content the scanner
+  found does not reach cloud judges' vendors, but the judges decide
+  without it. Set it true to send them, for local judges.
+
+- A file sent by path (`kind: path`) is checked again by the gateway just
+  before the tool runs, but a writer can still swap it between that check
+  and the tool opening it. Declare a folder only the guarded tools can
+  write to. Which arguments are files is set in `proxy.yaml` or
+  `Scanner(files=...)`, not signed.
 
 - `tool_args_on_derive_deny` (default false): a call that cannot be read
   under its spec is denied without asking the judges, so no judge cost or

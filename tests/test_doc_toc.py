@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # Document -> the deepest heading level its table lists. Short documents (SECURITY, SCOPE, COMPARISON,
 # CONTRIBUTING) have none.
 DOCS = {"README.md": 2, "ROADMAP.md": 3, "CHANGES.md": 2, "AGENTS.md": 2, "docs/HOWTO.md": 3,
-        "docs/THREAT_MODEL.md": 2, "docs/JUDGES_AND_QUORUM.md": 2, "docs/FIT.md": 2}
+        "docs/THREAT_MODEL.md": 2, "docs/JUDGES_AND_QUORUM.md": 2, "docs/FIT.md": 2, "docs/SCANNERS.md": 2}
 TITLE = "Contents"
 START, END = "<!-- toc -->", "<!-- /toc -->"
 FENCE = re.compile(r"^\s*(```|~~~)")

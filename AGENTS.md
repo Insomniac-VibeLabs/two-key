@@ -229,8 +229,13 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   `tool_args_on_scan_flag`. The gateway never scans: it checks the token's
   verdict and file digests (`file_changed`). Without a scanner, the judge
   prompts, tokens, and ledger stay byte for byte as before
-  (`tests/test_scan.py`). Do not add a scanning engine; adapters call
-  external products.
+  (`tests/test_scan.py`). Do not add a scanning engine; adapters
+  (`two_key/scanners.py`, standard library only) call external products,
+  never keep a threat name or matched text, and read an answer they cannot
+  parse as `unavailable`; an ICAP 200 that changes the body is flagged
+  (`tests/test_scanners.py`). A `kind: path` file stays inside its declared
+  folder (no `..`, no link below it, a regular file), opened through
+  `_platform`; do not widen that.
 - The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
   (`TwoKey.gateway()`). A gateway in another process or host is not
   supported (#45); do not add a gateway-only ledger role, remote gateway,
