@@ -1,5 +1,65 @@
 # Changes
 
+## Contents
+
+<!-- toc -->
+- [0.1.0 — 2026-10-02](#010--2026-10-02)
+- [0.1.1 — 2026-10-02](#011--2026-10-02)
+- [0.1.2 — 2026-10-02](#012--2026-10-02)
+- [Docs — 2026-10-02](#docs--2026-10-02)
+- [0.1.3 — 2026-10-02](#013--2026-10-02)
+- [0.1.4 — 2026-10-03](#014--2026-10-03)
+- [Docs — 2026-10-03](#docs--2026-10-03)
+- [Fixes — 2026-10-03](#fixes--2026-10-03)
+- [0.1.6 — 2026-10-03](#016--2026-10-03)
+- [0.1.7 — 2026-10-03](#017--2026-10-03)
+- [0.1.8 — 2026-10-03](#018--2026-10-03)
+- [0.1.9 — 2026-10-03](#019--2026-10-03)
+- [0.1.10 — 2026-10-03](#0110--2026-10-03)
+- [0.1.11 — 2026-10-03](#0111--2026-10-03)
+- [0.1.12 — 2026-10-03](#0112--2026-10-03)
+- [0.2.0 — 2026-10-03](#020--2026-10-03)
+- [Cyber fail-closed pass — 2026-10-06 (in v0.2.0)](#cyber-fail-closed-pass--2026-10-06-in-v020)
+- [0.2.1 — 2026-10-07](#021--2026-10-07)
+- [0.2.2 — 2026-10-09](#022--2026-10-09)
+- [0.2.3 — 2026-10-09](#023--2026-10-09)
+- [0.2.4 — 2026-10-10](#024--2026-10-10)
+- [0.3.0 — 2026-10-10](#030--2026-10-10)
+- [Fixes — 2026-10-11](#fixes--2026-10-11)
+- [CI — 2026-10-11](#ci--2026-10-11)
+- [Gateway deployment boundary (#45) — 2026-10-13](#gateway-deployment-boundary-45--2026-10-13)
+- [Custom Path A fields — 2026-10-13](#custom-path-a-fields--2026-10-13)
+- [Docs match the code — 2026-10-13](#docs-match-the-code--2026-10-13)
+- [Release v0.3.0 — 2026-10-13](#release-v030--2026-10-13)
+- [PR #85 check fixes — 2026-10-13](#pr-85-check-fixes--2026-10-13)
+- [DeepSource test-fixture findings — 2026-10-14](#deepsource-test-fixture-findings--2026-10-14)
+- [Live-test findings: docs — 2026-10-14](#live-test-findings-docs--2026-10-14)
+- [Agent prompt names the data classes — 2026-10-14](#agent-prompt-names-the-data-classes--2026-10-14)
+- [Opt-in tool vocabulary for the monitored agent — 2026-10-14](#opt-in-tool-vocabulary-for-the-monitored-agent--2026-10-14)
+- [Tool vocabulary lists syntax, never values — 2026-10-14](#tool-vocabulary-lists-syntax-never-values--2026-10-14)
+- [README request-flow diagram renders again — 2026-10-14](#readme-request-flow-diagram-renders-again--2026-10-14)
+- [Docs: agent vocabulary diagram and trust boundary — 2026-10-14](#docs-agent-vocabulary-diagram-and-trust-boundary--2026-10-14)
+- [Agent declines — 2026-10-14](#agent-declines--2026-10-14)
+- [Data classes combine as a set — 2026-10-14](#data-classes-combine-as-a-set--2026-10-14)
+- [Live test run 5 (blind) fixes — 2026-10-14](#live-test-run-5-blind-fixes--2026-10-14)
+- [Docs: what Two-Key verifies (live run 5c) — 2026-10-14](#docs-what-two-key-verifies-live-run-5c--2026-10-14)
+- [Release v0.3.1 — 2026-10-14](#release-v031--2026-10-14)
+- [PR #90 DeepSource fixes — 2026-10-14](#pr-90-deepsource-fixes--2026-10-14)
+- [Release v0.4.0: new repository, package `two-key`, formats without "concept" — 2026-10-15](#release-v040-new-repository-package-two-key-formats-without-concept--2026-10-15)
+- [Mutable defaults in test helpers (#5) — 2026-10-15](#mutable-defaults-in-test-helpers-5--2026-10-15)
+- [Workflow actions pinned to commit SHAs (#4) — 2026-10-15](#workflow-actions-pinned-to-commit-shas-4--2026-10-15)
+- [Leftover review nits (#7) — 2026-10-15](#leftover-review-nits-7--2026-10-15)
+- [Semgrep workflow permission — 2026-10-15](#semgrep-workflow-permission--2026-10-15)
+- [MCP proxy, part 1: skeleton without caller facts (#2 P2) — 2026-10-15](#mcp-proxy-part-1-skeleton-without-caller-facts-2-p2--2026-10-15)
+- [`two-key mcp-draft-specs` (#2 P3) — 2026-10-15](#two-key-mcp-draft-specs-2-p3--2026-10-15)
+- [Docs: the MCP proxy (#2 P4) — 2026-10-15](#docs-the-mcp-proxy-2-p4--2026-10-15)
+- [Live harness for run 6, through the MCP proxy (#2 P5) — 2026-10-15](#live-harness-for-run-6-through-the-mcp-proxy-2-p5--2026-10-15)
+- [`main`'s workflow edits merged; CodeQL restored; Sonar scan v6 — 2026-10-15](#mains-workflow-edits-merged-codeql-restored-sonar-scan-v6--2026-10-15)
+- [README license badge — 2026-10-15](#readme-license-badge--2026-10-15)
+- [Caller-supplied facts and the guard core (#2 P1) — 2026-10-15](#caller-supplied-facts-and-the-guard-core-2-p1--2026-10-15)
+- [Docs: roadmap order, README intro and MCP section, tables of contents — 2026-10-15](#docs-roadmap-order-readme-intro-and-mcp-section-tables-of-contents--2026-10-15)
+<!-- /toc -->
+
 ## 0.1.0 — 2026-10-02
 
 Initial concept repository, private, Apache-2.0.
@@ -2208,3 +2268,10 @@ only; no behavior change.
   the move from `two-key-concept` to "History and license".
 - The MCP proxy diagram (README and HOWTO) shows the fact hooks. Docs that
   said "branch `mcp-proxy`" now say `working`.
+- **Tables of contents** in README, ROADMAP, CHANGES, AGENTS.md, HOWTO,
+  THREAT_MODEL, JUDGES_AND_QUORUM, and FIT, between `<!-- toc -->` markers.
+  `tests/test_doc_toc.py` checks that each matches its headings, with
+  GitHub's anchors (repeated headings get `-1`, `-2`), and
+  `python tests/test_doc_toc.py --write` regenerates them. CONTRIBUTING and
+  AGENTS.md say so. Short documents (SECURITY, SCOPE, COMPARISON,
+  CONTRIBUTING) have none.

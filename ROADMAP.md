@@ -3,6 +3,30 @@
 Where `two-key` goes from 0.4.0 to a 1.0 release. It states intent, not a
 promise: the order may change, and version numbers are targets, not dates.
 
+## Contents
+
+<!-- toc -->
+- [The path to 1.0](#the-path-to-10)
+- [Ground rules](#ground-rules)
+- [0.5.0: MCP adapter](#050-mcp-adapter)
+- [0.6.0: DLP and AV hooks](#060-dlp-and-av-hooks)
+- [0.7.0: Ledger export for SIEM](#070-ledger-export-for-siem)
+- [1.0.0: Review and release](#100-review-and-release)
+- [After 1.0 (not scheduled)](#after-10-not-scheduled)
+  - [PKI and certificate recovery](#pki-and-certificate-recovery)
+  - [Post-quantum signatures](#post-quantum-signatures)
+  - [FIPS approved mode](#fips-approved-mode)
+  - [Local GUI for configuration and ledger auditing](#local-gui-for-configuration-and-ledger-auditing)
+  - [Optional reputation halt](#optional-reputation-halt)
+  - [More spec field types](#more-spec-field-types)
+- [Not planned for this repository](#not-planned-for-this-repository)
+- [Shipped](#shipped)
+  - [0.4.0: This repository and the package `two-key`](#040-this-repository-and-the-package-two-key)
+  - [0.3.1: Live-test fixes (beta)](#031-live-test-fixes-beta)
+  - [0.3.0: Key backup and recovery](#030-key-backup-and-recovery)
+  - [0.2.x: Baseline](#02x-baseline)
+<!-- /toc -->
+
 ## The path to 1.0
 
 ```mermaid

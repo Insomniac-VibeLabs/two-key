@@ -13,6 +13,20 @@ How to report a vulnerability is [SECURITY.md](../SECURITY.md). The longer
 narrative is the README. This file is the register. If the two disagree,
 the code wins, then this file should be corrected.
 
+## Contents
+
+<!-- toc -->
+- [Assets](#assets)
+- [Actors](#actors)
+- [Trust boundaries](#trust-boundaries)
+- [What this design is meant to stop](#what-this-design-is-meant-to-stop)
+- [Assumptions](#assumptions)
+- [Residual risks](#residual-risks)
+- [Out of scope](#out-of-scope)
+- [Planned changes to this model](#planned-changes-to-this-model)
+- [What to re-check when the code changes](#what-to-re-check-when-the-code-changes)
+<!-- /toc -->
+
 ## Assets
 
 - The signed constitution and the two compilation hashes (bytecode and prose).

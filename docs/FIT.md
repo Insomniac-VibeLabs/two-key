@@ -14,6 +14,14 @@ anchor and does not protect against someone who can also delete or roll
 back that anchor. It can back up its own keys under passphrases (0.3.0).
 That backup is not a seed phrase.
 
+## Contents
+
+<!-- toc -->
+- [Use this if](#use-this-if)
+- [Do not use this if](#do-not-use-this-if)
+- [Smallest working shape](#smallest-working-shape)
+<!-- /toc -->
+
 ## Use this if
 
 - A tool should run only after Path A and Path B both allow. Path A is a

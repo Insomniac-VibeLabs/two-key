@@ -7,6 +7,50 @@ leaves out is [SCOPE.md](SCOPE.md).
 
 Commands are from the repository root.
 
+## Contents
+
+<!-- toc -->
+- [Install](#install)
+- [Create a principal key and sign a constitution](#create-a-principal-key-and-sign-a-constitution)
+- [Data classes](#data-classes)
+- [What Two-Key verifies, and what it does not](#what-two-key-verifies-and-what-it-does-not)
+- [Designing a constitution](#designing-a-constitution)
+- [Custom Path A fields](#custom-path-a-fields)
+  - [Declare, map, and rule](#declare-map-and-rule)
+  - [What happens to a call](#what-happens-to-a-call)
+  - [Descriptions](#descriptions)
+  - [Envelope format](#envelope-format)
+  - [Caller-supplied facts](#caller-supplied-facts)
+  - [Using Two-Key in other languages](#using-two-key-in-other-languages)
+  - [Changing a limit](#changing-a-limit)
+- [Judges](#judges)
+- [The monitored agent and the judge-is-not-the-agent rule](#the-monitored-agent-and-the-judge-is-not-the-agent-rule)
+- [Quorum policy](#quorum-policy)
+- [Local judges](#local-judges)
+- [Parsing and limits](#parsing-and-limits)
+  - [Recommended local judge: Qwen2.5-7B-Instruct](#recommended-local-judge-qwen25-7b-instruct)
+- [Authorize from the command line](#authorize-from-the-command-line)
+- [Authorize from Python](#authorize-from-python)
+- [Monitored agents](#monitored-agents)
+  - [Declines](#declines)
+- [Redeem](#redeem)
+  - [Deployment boundary: the gateway runs in the TwoKey process](#deployment-boundary-the-gateway-runs-in-the-twokey-process)
+- [Put Two-Key in front of an MCP server (`two-key mcp-proxy`)](#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy)
+  - [Install](#install-1)
+  - [Worked example: a billing server](#worked-example-a-billing-server)
+  - [`proxy.yaml`](#proxyyaml)
+  - [What the proxy does](#what-the-proxy-does)
+  - [What each refusal or warning means](#what-each-refusal-or-warning-means)
+  - [Key custody](#key-custody)
+  - [Limits](#limits)
+- [If the ledger will not open after a crash](#if-the-ledger-will-not-open-after-a-crash)
+- [Back up the keys](#back-up-the-keys)
+- [Pin the witness key](#pin-the-witness-key)
+  - [Rotate the witness key](#rotate-the-witness-key)
+- [Known trade-offs by configuration](#known-trade-offs-by-configuration)
+- [Revoke outstanding tokens](#revoke-outstanding-tokens)
+<!-- /toc -->
+
 ## Install
 
 ```bash

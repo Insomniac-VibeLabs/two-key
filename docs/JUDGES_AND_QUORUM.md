@@ -5,6 +5,20 @@ This document describes judge and quorum behavior in `two-key` 0.4.0 (tag `v0.4.
 
 See [THREAT_MODEL.md](THREAT_MODEL.md) for the threat register, [SCOPE.md](SCOPE.md) for the project's boundaries, and [FIT.md](FIT.md) for when this package is or is not suitable.
 
+## Contents
+
+<!-- toc -->
+- [What a judge is](#what-a-judge-is)
+- [One judge](#one-judge)
+- [The quorum threshold](#the-quorum-threshold)
+- [YES, NO, and ABSTAIN](#yes-no-and-abstain)
+- [Diversity and local judges](#diversity-and-local-judges)
+- [How Path A and Path B combine](#how-path-a-and-path-b-combine)
+- [What a quorum pass means](#what-a-quorum-pass-means)
+- [Operator checklist](#operator-checklist)
+- [Implementation references](#implementation-references)
+<!-- /toc -->
+
 ## What a judge is
 
 A Path B judge is a configured evaluator that returns a ballot on an authorization attempt. A judge is not the authorization system by itself, and an affirmative ballot is not proof that an action is safe.

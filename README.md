@@ -48,6 +48,23 @@ Maintainer-reviewed and tested with live LLM agents and judges. Read
 [Known limits](#known-limits) and [docs/FIT.md](docs/FIT.md) before you rely
 on it.
 
+## Contents
+
+<!-- toc -->
+- [Quick start](#quick-start)
+- [Put Two-Key in front of an MCP server](#put-two-key-in-front-of-an-mcp-server)
+- [Documentation](#documentation)
+- [Components](#components)
+- [Dual-path authorization](#dual-path-authorization)
+- [Architecture](#architecture)
+- [What this repo leaves out](#what-this-repo-leaves-out)
+- [Known limits](#known-limits)
+- [Roadmap](#roadmap)
+- [Install and versions](#install-and-versions)
+- [Layout](#layout)
+- [History and license](#history-and-license)
+<!-- /toc -->
+
 ## Quick start
 
 Install the 0.4.0 release from git (it is not on PyPI yet):

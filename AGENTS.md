@@ -6,6 +6,17 @@ Guidance for coding agents working in this clone of
 This file is a short contributor guide for agents. Product and API context for
 any LLM reader is in [llms.txt](llms.txt). Do not replace one with the other.
 
+## Contents
+
+<!-- toc -->
+- [Scope](#scope)
+- [Branch and commit rules](#branch-and-commit-rules)
+- [Install and version matrix](#install-and-version-matrix)
+- [Tests and docs](#tests-and-docs)
+- [Crypto and security changes](#crypto-and-security-changes)
+- [Fail-closed defaults to preserve](#fail-closed-defaults-to-preserve)
+<!-- /toc -->
+
 ## Scope
 
 Core only: signed constitution, Path A bytecode, Path B judge hooks,
@@ -76,6 +87,9 @@ Git install:
   in the same release.
 - Keep [docs/HOWTO.md](docs/HOWTO.md) "Known trade-offs by configuration"
   accurate when a config trade-off changes.
+- Tables of contents are generated: after changing a heading, run
+  `python tests/test_doc_toc.py --write` (`tests/test_doc_toc.py` fails
+  while one is stale).
 
 ## Crypto and security changes
 
