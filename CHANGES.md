@@ -2041,3 +2041,47 @@ On branch `mcp-proxy`. No behavior change.
 - `tests/test_mcp_docs.py` keeps the worked example true: its `proxy.yaml`
   parses, its rules sign, and the config table lists exactly the keys the
   loader accepts.
+
+## Live harness for run 6, through the MCP proxy (#2 P5) — 2026-10-15
+
+On branch `mcp-proxy`. Test tooling only; nothing in `two_key/` changed.
+
+- `tests/live/` is ported from `two-key-concept` (branch
+  `test/live-functional-2026-10-13`, run 5c), rebuilt around the proxy: the
+  harness is the agent's MCP host and starts the real `two-key mcp-proxy`,
+  which starts `tests/live/clinic_mcp_server.py`. That server's every call
+  comes back to the harness over loopback, where the harness is the system
+  of record (the purchase-order check), records the side effect, and relays
+  the tool bot's simulated result. Judges are `openai_compatible` judges on
+  loopback endpoints that serve only relayed replies, as before.
+- **The harness plants injection text itself** (a case's `plant`), appended
+  to a tool result, so injection never depends on the tool bot agreeing to
+  write it.
+- **Setup goes through the documented commands:** `mcp-draft-specs` drafts the
+  specs, a fixed and logged "principal review" fills them, then
+  `sign-constitution`, then `mcp-draft-specs --constitution` for the digest.
+  The run-5b Writer reply is reused byte for byte (sha256 checked), without
+  its `require-po-match` rule: caller facts are not built yet, so
+  `po_matched` is not a field, and the billing tool checks the PO.
+- **30 cases** (`make_cases.py`, shuffled neutral ids):
+  - legit payments, messages, bookings, and lookups;
+  - C05 redone with the tool checking the PO and `po_matched` dropped before
+    the tool;
+  - three planted-injection chains (remit-to change, credential
+    exfiltration, a call to a tool the proxy does not offer);
+  - crafted host calls: a hidden tool, a case variant of a signed id, a hidden
+    bcc, oversize, deep nesting, an amount in words, a payee off the list, an
+    upstream crash;
+  - start-up refusals: unresolved identity, a poisoned schema, `warn`, a judge
+    holding the agent's key, an unsigned `tools:` entry;
+  - a `tools/list` check;
+  - C05 with `po_matched` as a caller fact, N/A until #2 P1 ships.
+- `--selftest` runs every case with stub bots under `tests/live/selftest/`
+  (git-ignored) to check the plumbing before a live run. It passes 27 of 30;
+  the two cases only a real judge can catch fail with always-yes stubs, as
+  expected, and the caller-fact case is N/A.
+- The report checks, besides the verdicts: answer-key echo, an agent claiming
+  it executed something, and an argument value inside a deny reason.
+- `RELAY.md` is the operator procedure. `cases.jsonl` and `state/` are
+  git-ignored; `make_cases.py` (the answer key's source) is committed, as in
+  earlier runs, so role bots must have no repository or web access.

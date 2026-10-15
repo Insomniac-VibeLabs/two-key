@@ -1,0 +1,6 @@
+# Keys, ledgers, and signed state from a pass, and the self-test's copy of them. Never commit them.
+/state/
+/selftest/
+# The private answer key (python3 tests/live/make_cases.py writes it). Never send it to a bot.
+/cases.jsonl
+__pycache__/
