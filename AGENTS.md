@@ -230,7 +230,15 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   (maintainer's decision, 2026-10-15); nothing past a limit is read. Every
   declared file states `max_bytes`, with no default (base64 at most
   196608). Do not make these denies depend on the stance or give
-  `max_bytes` a default. The stance is the signed rule. Content never reaches
+  `max_bytes` a default. An encrypted file is flagged; only a tool whose
+  signed spec maps the scan field with `encrypted: pass` turns an
+  `encrypted` finding into the verdict `encrypted`, and only when it is the
+  sole finding (with another finding it is flagged; with a part not
+  scanned, unavailable). The gateway refuses that verdict for any other
+  tool (`scan_mismatch`); an adapter reads only ClamAV's
+  `Heuristics.Encrypted` name as encrypted (`tests/test_scan_encrypted.py`).
+  Do not make it a `proxy.yaml` setting or a default (maintainer's
+  decision, 2026-10-15). The stance is the signed rule. Content never reaches
   the ledger or a reason code, and file content never reaches a judge; a
   flagged call's arguments and proposal reach the judges only with
   `tool_args_on_scan_flag`. The gateway never scans: it checks the token's

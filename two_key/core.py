@@ -259,12 +259,13 @@ class TwoKey:
                   file=sys.stderr)
         return scanner
 
-    def _scan(self, tool: str, arguments: Any, proposal: Any) -> tuple[Outcome, tuple[str, dict] | None]:
+    def _scan(self, tool: str, arguments: Any, proposal: Any,
+              encrypted_pass: bool = False) -> tuple[Outcome, tuple[str, dict] | None]:
         """Scan one call (Two-Key starts it; the agent cannot). Also returns the ledger entry for the scanner
         going down or coming back, said once each on stderr, never once per call. Raises ``FileDeniedError``
         before the scanner is called when a declared file cannot be read or the call is over a file limit."""
         scanner = self.scanner
-        outcome = scanner.run(tool, scanner.prepare(tool, arguments, proposal))
+        outcome = scanner.run(tool, scanner.prepare(tool, arguments, proposal), encrypted_pass=encrypted_pass)
         change = scanner.transition(outcome.available)
         if change == "down":
             print(f"two-key: WARNING: the content scanner is unavailable ({outcome.error or 'no answer'}); calls "
@@ -452,7 +453,8 @@ class TwoKey:
                     if facts is not None and self.scanner.field in facts:
                         raise DeriveError("scan_fact_supplied")
                     derive(spec, arguments, self.compiled.fields, {**(facts or {}), self.scanner.field: "unavailable"})
-                    scanned, scanner_change = self._scan(normalized.tool, arguments, proposal)
+                    scanned, scanner_change = self._scan(normalized.tool, arguments, proposal,
+                                                         self.scanner.passes_encrypted(spec))
                     facts = {**(facts or {}), self.scanner.field: scanned.verdict}
                 derived = derive(spec, arguments, self.compiled.fields, facts)
             except FileDeniedError as exc:

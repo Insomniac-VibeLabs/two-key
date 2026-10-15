@@ -75,7 +75,8 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   constitution marks, files included (base64, or a path in a declared
   folder). Two-Key starts every scan; the verdict is a caller-supplied
   enum fact that a signed rule decides on, told to the judges and recorded
-  without content (docs/SCANNERS.md)
+  without content. An encrypted file passes only on a tool signed
+  `encrypted: pass` (docs/SCANNERS.md)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),

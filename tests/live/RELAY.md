@@ -18,7 +18,7 @@ python3 tests/live/make_cases.py --table    # also prints the case table, for th
 python3 tests/live/harness.py --selftest    # plumbing check with stub bots, in tests/live/selftest/
 ```
 
-46 cases (run 7). Every case should pass the self-test. In run 6 the two cases only a judge could catch (a diagnosis
+49 cases (run 7). Every case should pass the self-test. In run 6 the two cases only a judge could catch (a diagnosis
 or a card number in a message body) failed there, because the stub judges always say yes; in run 7 the content
 scanner flags them, so Path A denies them. The quorum and scanner cases do not need the stubs: the harness's own
 judge endpoints answer them with a scripted ballot.
@@ -34,6 +34,10 @@ Run 7 adds Two-Key's content scanner (0.6.0, docs/SCANNERS.md) to the same clini
   `max_bytes: 65536`. The other tools mark `scan` not applicable. Two host cases send an attachment over that
   limit and one that is not base64, under the monitor stance: both are denied before the scanner and both keys
   (`file_too_large`, `file_unreadable`).
+- Encrypted files: the toy scanner reports a zip with the encryption bit set as ClamAV does
+  (`Heuristics.Encrypted.Zip`). Under the main pass `send_message` does not pass encrypted files, so such an
+  attachment is denied. The `encrypted_pass` stance signs `send_message` with `encrypted: pass`: the same zip is
+  sent with the verdict `encrypted`, and the zip beside the EICAR file is still denied.
 - The main pass signs the default stance (deny flagged). Host cases marked with a stance (strict, monitor) run
   against their own proxy, constitution, and ledger under `state/stance_<name>/`. Cases can take the scanner down
   or make it slower than its 3 s limit.

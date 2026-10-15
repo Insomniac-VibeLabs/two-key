@@ -83,13 +83,27 @@ def _overlaps(a: str, b: str) -> bool:
     return a == b or a.startswith(b + ".") or b.startswith(a + ".")
 
 
+# The scan verdict for an encrypted file the principal lets a tool pass (scan.py). Only an enum caller field
+# with this value may carry ``encrypted: pass``; Two-Key checks at start that it is the scan field.
+ENCRYPTED = "encrypted"
+
+
 def _field_mapping(where: str, defn: Mapping, entry: Any) -> dict:
     """One field's mapping: ``{json_path}`` for an argument field; ``{source: caller}`` or
-    ``{source: caller, json_path}`` for a caller-supplied fact (the path is where the tool receives it)."""
+    ``{source: caller, json_path}`` for a caller-supplied fact (the path is where the tool receives it). The scan
+    field may add ``encrypted: pass``."""
     if is_caller(defn):
-        if not isinstance(entry, Mapping) or entry.get("source") != "caller" or set(entry) - {"source", "json_path"}:
+        if not isinstance(entry, Mapping) or entry.get("source") != "caller" or \
+                set(entry) - {"source", "json_path", "encrypted"}:
             raise ConstitutionError(f"{where}: a caller-supplied field maps as {{source: caller}} or "
                                     "{source: caller, json_path: ...}")
+        if "encrypted" in entry:
+            if entry["encrypted"] != "pass":
+                raise ConstitutionError(f"{where}.encrypted: expected pass (omit it and an encrypted file is "
+                                        "flagged)")
+            if defn.get("type") != "enum" or ENCRYPTED not in (defn.get("values") or ()):
+                raise ConstitutionError(f"{where}.encrypted: only the scan field takes encrypted: pass, an enum "
+                                        "whose values include encrypted")
         return dict(entry)
     if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
         if isinstance(entry, Mapping) and "source" in entry:
@@ -129,6 +143,21 @@ def domain_allow_notes(specs: Mapping) -> list[tuple[bool, str]]:
                 text += (f"; Path A does not read {', '.join(unread)}, so anyone there can receive what it carries, "
                          "and only the judges check it")
             out.append((bool(unread), text))
+    return out
+
+
+def encrypted_pass_notes(specs: Mapping) -> list[str]:
+    """Each tool signed to pass encrypted files, for the signer. Takes canonical tool specs.
+
+    The scanner cannot see inside them, so on that tool encryption is a way past it; the tool's allow lists and
+    the judges are what still check where they go."""
+    out = []
+    for tool in sorted(specs):
+        marked = [name for name, entry in sorted((specs[tool].get("fields") or {}).items())
+                  if isinstance(entry, Mapping) and entry.get("encrypted") == "pass"]
+        if marked:
+            out.append(f"tool {tool!r}: {', '.join(marked)} has encrypted: pass, so encrypted files reach it without "
+                       "a look inside; only the receiving side can scan them")
     return out
 
 
@@ -178,8 +207,9 @@ def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: li
             out[fname] = NOT_APPLICABLE
             continue
         entry = _field_mapping(where, registry[fname], entry)
+        passes = {"encrypted": entry["encrypted"]} if "encrypted" in entry else {}
         if "json_path" not in entry:
-            out[fname] = {"source": "caller"}
+            out[fname] = {"source": "caller", **passes}
             continue
         try:
             path = check_path(_json_path(entry["json_path"], where), where)
@@ -190,7 +220,7 @@ def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: li
             if _overlaps(path, other):
                 raise ConstitutionError(f"{where}: field path {path!r} overlaps the path {other!r}")
         control_paths.append(path)
-        out[fname] = {"json_path": path, **({"source": "caller"} if is_caller(registry[fname]) else {})}
+        out[fname] = {"json_path": path, **({"source": "caller"} if is_caller(registry[fname]) else {}), **passes}
     return out
 
 

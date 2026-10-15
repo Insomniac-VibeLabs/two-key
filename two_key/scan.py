@@ -16,8 +16,11 @@ Two-Key sends the scanner (an ``Inspector``):
 
 The answer is ``clean``, ``flagged``, or ``unavailable``. Two-Key, not the adapter, sets it when the scan
 fails: a timeout, an exception, or an invalid result is ``unavailable``, so the fact is never missing and
-never ``clean`` by accident. A result that names ``limits_exceeded`` (the scanner could not finish) or
-``unreadable`` is ``flagged``.
+never ``clean`` by accident. A result that names ``limits_exceeded`` (the scanner could not finish),
+``unreadable``, or ``encrypted`` (it could not look inside) is ``flagged``. The one exception is signed: on a
+tool whose spec maps the scan field with ``encrypted: pass``, a call whose only finding is ``encrypted`` gets
+the fourth verdict ``encrypted``, which the stance rules do not deny; any other finding with it is still
+``flagged``.
 
 Every declared file states ``max_bytes``, the largest file the tool needs. A call whose files Two-Key cannot
 read, or that is over a file limit, is not well-formed and within limits, so it is denied before the scanner
@@ -54,11 +57,15 @@ from .canonical import canonical_bytes, digest_hex
 from .derive import MAX_ARGS_BYTES, caller_fields
 from .fields import FIELD_NAME
 
-VERDICTS = ("clean", "flagged", "unavailable")
+VERDICTS = ("clean", "flagged", "unavailable")      # what an Inspector may answer
+# The fourth verdict, only on a tool whose signed spec says encrypted: pass, and only Two-Key sets it.
+ENCRYPTED = "encrypted"
+CALL_VERDICTS = VERDICTS + (ENCRYPTED,)               # what a call's verdict may be
 CATEGORIES = ("malware", "secret", "credential", "card_number", "personal_data", "health_data",
-              "limits_exceeded", "policy", "unreadable")
-# Categories that mean the content was not fully scanned: always flagged (could-not-finish is flagged).
-_INCOMPLETE = ("limits_exceeded", "unreadable")
+              "limits_exceeded", "policy", "unreadable", ENCRYPTED)
+# Categories that mean the content was not fully scanned: flagged (could-not-finish is flagged), except
+# ``encrypted`` alone on a tool that passes encrypted files.
+_INCOMPLETE = ("limits_exceeded", "unreadable", ENCRYPTED)
 FILE_KINDS = ("base64", "base64url", "path")
 STANCES = ("strict", "default", "monitor")
 
@@ -143,7 +150,8 @@ class ScanResult:
 
     ``verdict`` is clean, flagged, or unavailable; ``categories`` come from ``CATEGORIES``. Use
     ``limits_exceeded`` when the scanner could not finish (size or time limits): Two-Key treats it as
-    flagged. ``scanner`` and ``version`` label the product (printable ASCII, cut to 64 characters).
+    flagged. Use ``ScanResult.flagged("encrypted")`` when the product could not look inside because the content
+    is encrypted. ``scanner`` and ``version`` label the product (printable ASCII, cut to 64 characters).
     """
     verdict: str
     categories: tuple[str, ...] = ()
@@ -173,14 +181,20 @@ class Inspector(Protocol):
 
 
 def combine(results: Iterable[ScanResult]) -> ScanResult:
-    """One result for several parts: flagged if any part is, else unavailable if any is, else clean."""
+    """One result for several parts: flagged if any part is, else unavailable if any is, else clean.
+
+    When the only finding is ``encrypted`` and another part could not be scanned, the result is unavailable
+    with the category ``encrypted``, so a tool that passes encrypted files still sees the part that was not
+    scanned (and any other tool still sees the encrypted finding)."""
     results = list(results)
     if not results:
         return ScanResult.unavailable()
     first = results[0]
     flagged = [r for r in results if r.verdict == "flagged"]
     if flagged:
-        cats = sorted({c for r in flagged for c in r.categories}) or ["policy"]
+        cats = sorted({c for r in flagged for c in (r.categories or ("policy",))})
+        if cats == [ENCRYPTED] and any(r.verdict == "unavailable" for r in results):
+            return ScanResult("unavailable", (ENCRYPTED,), first.scanner, first.version)
         return ScanResult("flagged", tuple(cats), first.scanner, first.version)
     if any(r.verdict != "clean" for r in results):
         return ScanResult.unavailable(first.scanner, first.version)
@@ -288,6 +302,16 @@ def stance_of(rules: list, field_name: str) -> str:
     return "default" if "flagged" in denies else "monitor"
 
 
+def denies_encrypted(rules: list, field_name: str) -> bool:
+    """True when a signed rule on the scan field alone denies the verdict ``encrypted``."""
+    for rule in rules:
+        body = rule.get("deny_if_fields") if isinstance(rule, Mapping) else None
+        if isinstance(body, Mapping) and set(body) == {field_name} and \
+                all(_holds(op, ENCRYPTED, lit) for op, lit in body[field_name].items()):
+            return True
+    return False
+
+
 def _holds(op: str, value: str, literal: Any) -> bool:
     if isinstance(literal, str):
         literal = literal.strip().casefold()
@@ -382,6 +406,7 @@ class Scanner:
         self._lock = threading.Lock()
         self._down = False
         self._stance = "monitor"
+        self._encrypted_tools: tuple[str, ...] = ()
 
     # -- start-up ------------------------------------------------------------------------------------------
     def bind(self, compiled) -> list[str]:
@@ -392,10 +417,21 @@ class Scanner:
             raise ScanConfigError(f"scan_field_missing: the constitution declares no field {self.field!r}; declare "
                                   f"{self.field}: {{type: enum, values: [clean, flagged, unavailable], default: "
                                   "clean, source: caller}} and map it on each tool to scan")
-        if defn.get("type") != "enum" or defn.get("source") != "caller" or set(defn.get("values") or ()) != set(VERDICTS):
-            raise ScanConfigError(f"scan_field_invalid: {self.field!r} must be a caller-supplied enum (source: caller) "
-                                  "with exactly the values clean, flagged, unavailable")
         specs = compiled.tool_specs or {}
+        self._check_encrypted_marks(specs)
+        passing = sorted(t for t, s in specs.items() if self.passes_encrypted(s))
+        values = set(defn.get("values") or ())
+        if defn.get("type") != "enum" or defn.get("source") != "caller" or not set(VERDICTS) <= values <= set(CALL_VERDICTS):
+            raise ScanConfigError(f"scan_field_invalid: {self.field!r} must be a caller-supplied enum (source: caller) "
+                                  "with exactly the values clean, flagged, unavailable (and encrypted when a tool "
+                                  "passes encrypted files)")
+        if passing and ENCRYPTED not in values:
+            raise ScanConfigError(f"scan_field_invalid: {', '.join(passing)} pass encrypted files (encrypted: pass), so "
+                                  f"{self.field!r} needs the values clean, flagged, unavailable, encrypted")
+        if ENCRYPTED in values and not passing:
+            raise ScanConfigError(f"scan_field_invalid: the value encrypted is only for a tool that passes encrypted "
+                                  f"files; mark one {self.field}: {{source: caller, encrypted: pass}} or remove the "
+                                  "value")
         for tool, items in self.files.items():
             spec = specs.get(tool)
             if spec is None:
@@ -411,13 +447,27 @@ class Scanner:
                     raise ScanConfigError(f"files.{tool}: {item.path!r} is not under a payload path the signed spec "
                                           "passes to the tool")
         self._stance = stance_of(compiled.rules, self.field)
+        self._encrypted_tools = tuple(passing)
         scanned = sorted(t for t, s in specs.items() if self.scans(s))
         unscanned = sorted(set(specs) - set(scanned))
         notes = [f"scanner {self.label or 'configured'}: stance {self._stance}; scans {len(scanned)} of "
                  f"{len(specs)} tool(s)"]
         if unscanned:
             notes.append(f"not scanned (they do not map {self.field}): {', '.join(unscanned)}")
+        if passing:
+            notes.append(f"encrypted files pass without a look inside (encrypted: pass): {', '.join(passing)}")
+            if denies_encrypted(compiled.rules, self.field):
+                notes.append(f"a rule on {self.field} alone denies encrypted, so encrypted: pass lets nothing more "
+                             "through")
         return notes
+
+    def _check_encrypted_marks(self, specs: Mapping[str, Any]) -> None:
+        """``encrypted: pass`` belongs on the scan field only: on any other field it would mean nothing."""
+        for tool in sorted(specs):
+            for name, entry in sorted((specs[tool].get("fields") or {}).items()):
+                if isinstance(entry, Mapping) and "encrypted" in entry and name != self.field:
+                    raise ScanConfigError(f"tool_specs.{tool}.fields.{name}: encrypted: pass is only valid on the scan "
+                                          f"field {self.field!r}")
 
     @property
     def stance(self) -> str:
@@ -427,11 +477,20 @@ class Scanner:
         """Whether calls to a tool with this spec are scanned: it maps the scan field as a caller field."""
         return isinstance(spec, Mapping) and self.field in caller_fields(spec)
 
+    def passes_encrypted(self, spec: Mapping[str, Any] | None) -> bool:
+        """Whether the principal signed this tool to pass encrypted files: ``encrypted: pass`` on the scan field."""
+        entry = (spec.get("fields") or {}).get(self.field) if isinstance(spec, Mapping) else None
+        return (isinstance(entry, Mapping) and entry.get("source") == "caller"
+                and entry.get("encrypted") == "pass")
+
     def to_record(self) -> dict:
         """For ``constitution_loaded``: the configuration, never a secret (an adapter's address is not one)."""
-        return {"field": self.field, "label": self.label, "stance": self._stance,
-                "timeout_seconds": self.timeout_seconds,
-                "files": {tool: [f.to_record() for f in items] for tool, items in sorted(self.files.items())}}
+        rec = {"field": self.field, "label": self.label, "stance": self._stance,
+               "timeout_seconds": self.timeout_seconds,
+               "files": {tool: [f.to_record() for f in items] for tool, items in sorted(self.files.items())}}
+        if self._encrypted_tools:
+            rec["encrypted_pass"] = list(self._encrypted_tools)
+        return rec
 
     # -- one call ------------------------------------------------------------------------------------------
     def _occurrences(self, arguments: Any, item: FileArg) -> list[tuple[str, Any, list]]:
@@ -599,8 +658,11 @@ class Scanner:
             return None, box["error"]
         return _valid(box.get("result"))
 
-    def run(self, tool: str, prepared: Prepared) -> Outcome:
-        """Scan one call. Never raises: every scanner failure is an ``unavailable`` outcome."""
+    def run(self, tool: str, prepared: Prepared, *, encrypted_pass: bool = False) -> Outcome:
+        """Scan one call. Never raises: every scanner failure is an ``unavailable`` outcome.
+
+        ``encrypted_pass`` is the tool's signed ``encrypted: pass``: a call whose only finding is ``encrypted``
+        then gets the verdict ``encrypted`` (or ``unavailable`` when another part could not be scanned)."""
         started = time.monotonic()
         request = ScanRequest(tool, prepared.parts, started + self.timeout_seconds)
         try:
@@ -612,9 +674,14 @@ class Scanner:
         if result is None:
             result = ScanResult.unavailable()
         verdict, categories = result.verdict, set(result.categories)
-        if categories & set(_INCOMPLETE):
+        if encrypted_pass and categories == {ENCRYPTED}:
+            # Signed for this tool: encryption alone is not a finding. A part that could not be scanned still is
+            # unavailable, so the strict stance still denies it.
+            if verdict != "unavailable":
+                verdict = ENCRYPTED
+        elif categories & set(_INCOMPLETE):
             verdict = "flagged"           # the scanner could not finish: flagged, not clean or unavailable
-        if verdict != "flagged":
+        if verdict not in ("flagged", ENCRYPTED):
             categories = set()
         elif not categories:
             categories = {"policy"}
@@ -670,5 +737,5 @@ def warn(message: str) -> None:
     print(f"two-key: {message}", file=sys.stderr)
 
 
-__all__ = ["CATEGORIES", "FILE_KINDS", "FileArg", "FileDeniedError", "file_arg", "Inspector", "Outcome", "ScanConfigError", "ScanPart",
-           "ScanRequest", "ScanResult", "Scanner", "VERDICTS", "combine", "stance_of"]
+__all__ = ["CALL_VERDICTS", "CATEGORIES", "ENCRYPTED", "FILE_KINDS", "FileArg", "FileDeniedError", "file_arg", "Inspector", "Outcome", "ScanConfigError", "ScanPart",
+           "ScanRequest", "ScanResult", "Scanner", "VERDICTS", "combine", "denies_encrypted", "stance_of"]

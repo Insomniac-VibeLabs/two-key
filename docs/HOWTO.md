@@ -1550,6 +1550,13 @@ Two-Key prints the stance and the tools that are not scanned, and warns
 when the scan limit plus the judges' deadline is over 60 s, or when
 `high_assurance` runs without the strict stance.
 
+An encrypted file the scanner cannot open is flagged. A tool that needs to
+move encrypted files (an upload to a vault that decrypts and scans them)
+can pass them: map `scan: {source: caller, encrypted: pass}` on that tool
+and add `encrypted` to the field's values. It is signed, per tool, and off
+by default, because encrypting a file is also a way past the scanner. See
+[docs/SCANNERS.md](SCANNERS.md), "Encrypted files".
+
 ## Put Two-Key in front of an MCP server (`two-key mcp-proxy`)
 
 New in 0.5.0
@@ -2232,6 +2239,14 @@ names the setting or declaration that controls it.
   outside its folder, for example) is denied under every stance. The
   stance is the signed
   `scan` rule (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)).
+
+- `encrypted: pass` on a tool (default off): encrypted files the scanner
+  cannot open reach that tool unscanned, so a malicious agent can carry
+  anything it can encrypt through it. Only the receiving side, the tool's
+  signed allow lists, and the judges check them. Without it, a legitimate
+  encrypted file is denied under the default and strict stances. Raw
+  ciphertext (PGP, age) is not recognized by most scanners and passes on
+  every tool either way.
 
 - `tool_args_on_scan_flag` (default false): the judges do not see the
   arguments or the proposal of a flagged call, so the content the scanner

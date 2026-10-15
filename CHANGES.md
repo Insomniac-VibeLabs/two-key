@@ -89,6 +89,7 @@
 - [Content scanning, part 3: docs (0.6.0 Phase 6) — 2026-10-15](#content-scanning-part-3-docs-060-phase-6--2026-10-15)
 - [Live run 7 harness: content scanning (0.6.0 Phase 7) — 2026-10-15](#live-run-7-harness-content-scanning-060-phase-7--2026-10-15)
 - [File size limits; unreadable files denied under every stance (0.6.0) — 2026-10-15](#file-size-limits-unreadable-files-denied-under-every-stance-060--2026-10-15)
+- [Encrypted files: signed per-tool pass (0.6.0) — 2026-10-15](#encrypted-files-signed-per-tool-pass-060--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3077,3 +3078,47 @@ or unreadable file through any stance.
   host cases under the monitor stance (an attachment over the limit, and
   one that is not base64) expect `file_too_large` and `file_unreadable`
   (46 cases).
+
+## Encrypted files: signed per-tool pass (0.6.0) — 2026-10-15
+
+On branch `working`. The maintainer's decision of 2026-10-15: some
+deployments move encrypted files, which an antivirus or DLP product cannot
+open, so the principal can let a tool pass them and leave scanning to
+wherever they are decrypted. It is signed, per tool, and off by default,
+because encrypting a file is also a way past the scanner.
+
+- A new scanner category, `encrypted`. clamd's `Heuristics.Encrypted...`
+  (with `AlertEncrypted yes`) is now `encrypted` (it was `unreadable`). An
+  ICAP answer whose infection headers name only `Heuristics.Encrypted...`
+  is `encrypted`; any other name is still `malware`. A command reports it
+  with `two-key-categories: encrypted`, a Python inspector with
+  `ScanResult.flagged("encrypted")`.
+- `tool_specs.<tool>.fields.scan: {source: caller, encrypted: pass}` lets
+  that tool pass encrypted files. The scan field then needs a fourth value,
+  `encrypted`, which is refused when no tool passes. `encrypted: pass` is
+  refused on any other field. A constitution without it signs byte for
+  byte as before.
+- On such a tool, a call whose only finding is `encrypted` gets the
+  verdict `encrypted`, which the default and strict stances do not deny.
+  With any other finding it is `flagged`; when another part could not be
+  scanned it is `unavailable` (strict denies it). On every other tool an
+  encrypted file is `flagged`, as before. A scanner cannot answer the
+  verdict `encrypted` itself.
+- The judges see the verdict `encrypted` with one added line saying what
+  it means, and get the arguments. Every other judge prompt is unchanged.
+  The token binds the verdict; the gateway refuses it for a tool that does
+  not pass encrypted files (`scan_mismatch`). `constitution_loaded`
+  records `encrypted_pass` (the tools) when there are any.
+- `sign-constitution` warns for each tool that passes encrypted files. At
+  start, Two-Key lists them, and notes when a rule on `scan` alone denies
+  `encrypted` (the pass then does nothing). `two-key mcp-draft-specs`
+  points to the docs in its scan template.
+- Docs: docs/SCANNERS.md "Encrypted files" (and the ClamAV, ICAP, command,
+  and Python sections; `HeuristicScanPrecedence no`), HOWTO (scanning,
+  trade-offs), THREAT_MODEL, SECURITY, AGENTS.md, JUDGES_AND_QUORUM,
+  SCOPE, ROADMAP, llms.txt, and examples/scanning.yaml.
+- Live run 7: the toy scanner reports a zip with the encryption bit set as
+  `Heuristics.Encrypted.Zip`. Three host cases: the zip is denied under the
+  main pass, sent with the verdict `encrypted` under a new
+  `encrypted_pass` stance, and still denied beside the EICAR file (49
+  cases).

@@ -130,6 +130,9 @@ ECHO_INSTRUCTION = (
 MAX_RATIONALE = 2000
 SCAN_NOTE = ("Written by Two-Key from the operator's content scanner (antivirus or DLP), not by the agent. "
              "A file in the action record appears as its digest and size, never its content. ")
+# Added only for the verdict "encrypted", so every other scan prompt is unchanged byte for byte.
+SCAN_ENCRYPTED_NOTE = ("Verdict encrypted: the scanner found nothing but could not look inside encrypted content, "
+                       "and the principal's signed spec lets this tool pass encrypted files. ")
 
 
 class MalformedBallot(ValueError):
@@ -150,7 +153,8 @@ def build_user_prompt(constitution_text: str, action: Action, proposal: str,
     parts = ["<principal_constitution>\n" + constitution_text + "\n</principal_constitution>\n\n"]
     scan = getattr(action, "scan", None)
     if scan:      # only with a content scanner configured, so other prompts are unchanged byte for byte
-        parts.append("<scan_result>\n" + SCAN_NOTE + untrusted_json(dict(scan)) + "\n</scan_result>\n\n")
+        note = SCAN_NOTE + (SCAN_ENCRYPTED_NOTE if scan.get("verdict") == "encrypted" else "")
+        parts.append("<scan_result>\n" + note + untrusted_json(dict(scan)) + "\n</scan_result>\n\n")
     parts.append("<untrusted_action_record>\n" + untrusted_json(action.to_record()) +
                  "\n</untrusted_action_record>\n\n")
     if proposal:

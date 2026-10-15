@@ -26,7 +26,9 @@ your antivirus or DLP product (clamd, ICAP, a command, or Python; docs/SCANNERS.
 starts every scan of a tool the constitution marks; the agent cannot ask for, skip, or answer
 one. The signed rule on the scan field (clean, flagged, unavailable) is the stance. Each declared
 file states max_bytes; a file over it, more than 32 files or 100 MiB in a call, or a file Two-Key
-cannot read is denied before the scanner and both paths under every stance.
+cannot read is denied before the scanner and both paths under every stance. An encrypted file the
+scanner cannot open is flagged, unless the tool's signed spec says encrypted: pass and encryption is
+the only finding (verdict encrypted).
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests

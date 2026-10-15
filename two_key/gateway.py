@@ -48,7 +48,7 @@ from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_
 from .derive import (MAX_ARGS_BYTES, DeriveError, args_too_large, blocked_from_rules, caller_fields, canonical_too_large,
                      derive, dropped_keys, form_for, forms_match, project_arguments, size_record)
 from .ledger import LedgerError
-from .scan import VERDICTS
+from .scan import CALL_VERDICTS, ENCRYPTED
 
 
 _MAX_REASON_CHARS = 200
@@ -310,8 +310,9 @@ class ToolGateway:
         if self.scanner is not None and self.scanner.scans(spec):
             # No second scan: the verdict is the one the token binds. Supplied any other way, it is refused.
             scan = payload.get("scan")
-            if (not isinstance(scan, dict) or scan.get("verdict") not in VERDICTS
-                    or not isinstance(scan.get("files"), list)):
+            if (not isinstance(scan, dict) or scan.get("verdict") not in CALL_VERDICTS
+                    or not isinstance(scan.get("files"), list)
+                    or (scan["verdict"] == ENCRYPTED and not self.scanner.passes_encrypted(spec))):
                 return GatewayResult(False, "scan_mismatch")
             if facts is not None and (not isinstance(facts, dict) or self.scanner.field in facts):
                 return GatewayResult(False, "fact_mismatch")

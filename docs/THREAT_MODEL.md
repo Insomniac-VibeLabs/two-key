@@ -144,8 +144,12 @@ the code wins, then this file should be corrected.
   in its arguments is `caller_field_in_arguments`, and in `facts=` it is
   `scan_fact_supplied`. The scanner is trusted to answer, not to decide: a
   timeout, an exception, or an answer Two-Key cannot read is
-  `unavailable`; a result it could not finish is `flagged`. The signed rule
-  on the verdict decides. A declared file Two-Key cannot read (bad base64,
+  `unavailable`; a result it could not finish, or content it could not
+  look inside (`encrypted`), is `flagged`. The signed rule on the verdict
+  decides. Only a tool whose signed spec says `encrypted: pass` turns an
+  `encrypted` finding into the verdict `encrypted`, and only when it is the
+  sole finding; the gateway refuses that verdict for any other tool
+  (`scan_mismatch`). A declared file Two-Key cannot read (bad base64,
   a path outside its folder, a link, a missing file), or a call over a file
   limit (each file's required `max_bytes`, 32 files, 100 MiB together), is
   denied before the scanner and both paths under every stance, and nothing
@@ -527,6 +531,14 @@ claims to close.
   not scan again, so a signature update between authorization and
   redemption (at most 300 s) does not apply to that call. A scanner that
   is still running when its time limit passes is abandoned, not stopped.
+  A scanner cannot see inside encrypted content. On a tool signed
+  `encrypted: pass`, an encrypted container passes unscanned, so an agent
+  can carry anything it can encrypt through that tool; only the receiving
+  side, the tool's signed allow lists, and the judges check it. Raw
+  ciphertext (PGP, age, a custom format) looks like noise to most
+  products and was never flagged on any tool. With ClamAV's
+  `HeuristicScanPrecedence yes`, malware in a readable part of an
+  encrypted archive can be reported as `Heuristics.Encrypted` only.
 - There is no TEE. OAuth device-code judge auth is rejected. A username and
   password is accepted only as HTTP Basic over HTTPS (`type: basic`). Use
   `env`, `keyring`, `callback`, or `basic`.

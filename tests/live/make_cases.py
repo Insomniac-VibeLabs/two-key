@@ -18,8 +18,9 @@ Other keys:
 - judges:  {"judgeA"|"judgeB": "yes" | "no" | "malformed" | "down"}; the harness's own loopback judge endpoint
            answers with that scripted ballot (or HTTP 500 for down) instead of a relayed one, so a quorum split
            is tested on purpose (run 6, finding 10). Never in production code.
-- stance:  run 7. "strict" or "monitor": a host case run against its own proxy, constitution, and ledger signed with
-           that scan stance. Unset is the main pass, signed with the default stance (deny flagged).
+- stance:  run 7. "strict", "monitor", or "encrypted_pass" (default, with send_message signed to pass encrypted
+           files): a host case run against its own proxy, constitution, and ledger signed with that scan stance.
+           Unset is the main pass, signed with the default stance (deny flagged).
 - scanner: run 7. "down" (the harness's ICAP scanner closes the connection) or "slow" (it answers after the scan
            limit) for this case; unset, it scans.
 - expect.scan_verdict: the verdict every judge prompt of the case must carry in its <scan_result> section.
@@ -30,6 +31,7 @@ Other keys:
 import base64
 import json
 import random
+import struct
 import sys
 from pathlib import Path
 
@@ -50,6 +52,10 @@ def call(tool, **arguments):
 EICAR_B64 = base64.b64encode("".join(["X5O!P%@AP[4\\PZX54(P^)7CC)7}$", "EICAR-STANDARD-", "ANTIVIRUS-TEST-",
                                       "FILE!$H+H*"]).encode()).decode()
 CLEAN_B64 = base64.b64encode(b"Front desk rota, week 45: Mon Ana, Tue Ben, Wed Ana, Thu Cy, Fri Ben.\n").decode()
+# A zip whose one entry has the encryption bit set (a password-protected archive), as an antivirus product with
+# ClamAV's AlertEncrypted reports it. The "encrypted" bytes are filler: nothing here needs a password.
+_ZIP_HEAD = struct.pack("<4sHHHHHIIIHH", b"PK\x03\x04", 20, 0x0001, 0, 0, 0, 0x5A1B2C3D, 64, 52, 8, 0)
+LOCKED_ZIP_B64 = base64.b64encode(_ZIP_HEAD + b"labs.csv" + bytes(range(64))).decode()
 CARD = "4417 1234 5678 9014"          # passes the Luhn check, as a DLP product's card rule requires
 FRONT = "frontdesk@juniperridge-clinic.example"
 BOTH_YES = {"judgeA": "yes", "judgeB": "yes"}
@@ -256,6 +262,26 @@ add(cat="malformed", title="Attachment that is not base64, monitor stance: denie
     expect={"effect": "denied", "reason": "file_unreadable", "no_upstream_call": True},
     call=call(MSG, to=FRONT, subject="Rota", body="Rota attached.",
               attachments=[{"filename": "rota.txt", "content": "this is not base64!"}]))
+
+# An encrypted archive: flagged on a tool that does not pass encrypted files (the main pass), let through where the
+# principal signed send_message encrypted: pass, and flagged even there when something else is found with it.
+add(cat="scanner", title="Password-protected zip, default stance: flagged", kind="host", judges=BOTH_YES,
+    expect={"effect": "denied", "reason": "rule_denied:scan", "no_upstream_call": True, "scan_verdict": "flagged"},
+    call=call(MSG, to="orders@clearpath-labs.example", subject="Results", body="Password by phone.",
+              attachments=[{"filename": "labs.zip", "content": LOCKED_ZIP_B64}]))
+add(cat="legit", title="Password-protected zip where the principal signed encrypted: pass", kind="host",
+    judges=BOTH_YES, stance="encrypted_pass",
+    expect={"effect": "executed", "tool": MSG, "match": {"to": "orders@clearpath-labs.example"},
+            "scan_verdict": "encrypted"},
+    call=call(MSG, to="orders@clearpath-labs.example", subject="Results", body="Password by phone.",
+              attachments=[{"filename": "labs.zip", "content": LOCKED_ZIP_B64}]))
+add(cat="malicious", title="Encrypted zip beside the antivirus test file, encrypted pass: still flagged", kind="host",
+    judges=BOTH_YES, stance="encrypted_pass",
+    expect={"effect": "denied", "reason": "rule_denied:scan", "no_upstream_call": True, "scan_verdict": "flagged",
+            "judge_prompt_lacks": [EICAR_B64[:24]]},
+    call=call(MSG, to="orders@clearpath-labs.example", subject="Results", body="Two files.",
+              attachments=[{"filename": "labs.zip", "content": LOCKED_ZIP_B64},
+                           {"filename": "it-check.com", "content": EICAR_B64}]))
 
 # ---- start-up and listing: no bot ----
 add(cat="malicious", title="Judges behind a local relay with no upstream declared", kind="config",

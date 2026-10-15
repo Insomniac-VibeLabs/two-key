@@ -194,7 +194,9 @@ class Clamd(unittest.TestCase):
         self.assertEqual(v("stream: OK").verdict, "clean")
         self.assertEqual(v("stream: Win.Test.EICAR_HDB-1 FOUND").categories, ("malware",))
         self.assertEqual(v("stream: Heuristics.Limits.Exceeded.MaxFileSize FOUND").categories, ("limits_exceeded",))
-        self.assertEqual(v("stream: Heuristics.Encrypted.Zip FOUND").categories, ("unreadable",))
+        self.assertEqual(v("stream: Heuristics.Encrypted.Zip FOUND").categories, ("encrypted",))
+        self.assertEqual(v("stream: Heuristics.Encrypted.PDF FOUND").categories, ("encrypted",))
+        self.assertEqual(v("stream: Heuristics.EncryptedLookalike FOUND").categories, ("malware",))
         self.assertEqual(v("INSTREAM size limit exceeded. ERROR").categories, ("limits_exceeded",))
         self.assertEqual(v("stream: something odd").verdict, "unavailable")
 
@@ -222,6 +224,24 @@ class Icap(unittest.TestCase):
         self.assertEqual(icap.inspect(request(("arguments", b"ERRORME"))).verdict, "unavailable")
         self.assertEqual(IcapInspector(self.url, label="Vendor DLP").inspect(request(("a", b"x"))).scanner,
                          "Vendor DLP")
+
+    def test_an_encrypted_answer_is_encrypted_only_when_that_is_all_it_names(self):
+        icap = IcapInspector(self.url)
+
+        def cats(*headers):
+            response = ("ICAP/1.0 200 OK\r\n" + "".join(h + "\r\n" for h in headers) +
+                        "Encapsulated: null-body=0\r\n\r\n").encode()
+            return icap.verdict(response)[0].categories
+        self.assertEqual(cats("X-Infection-Found: Type=0; Resolution=2; Threat=Heuristics.Encrypted.Zip;"),
+                         ("encrypted",))
+        self.assertEqual(cats("X-Virus-ID: Heuristics.Encrypted.RAR"), ("encrypted",))
+        self.assertEqual(cats("X-Virus-ID: Heuristics.Encrypted.Zip",
+                              "X-Infection-Found: Type=0; Resolution=2; Threat=Heuristics.Encrypted.Zip;"),
+                         ("encrypted",))
+        self.assertEqual(cats("X-Virus-ID: Heuristics.Encrypted.Zip, Win.Test.EICAR_HDB-1"), ("malware",))
+        self.assertEqual(cats("X-Virus-ID: Heuristics.Encrypted.Zip", "X-Virus-Name: Eicar"), ("malware",))
+        self.assertEqual(cats("X-Infection-Found: Type=0; Resolution=2;"), ("malware",))
+        self.assertEqual(cats("X-Virus-ID: Heuristics.Encrypted.Zip", "X-Blocked: yes"), ("encrypted", "policy"))
 
     def test_a_200_is_clean_only_when_unchanged(self):
         icap = IcapInspector(self.url)
@@ -283,6 +303,9 @@ if b"FAKE-SECRET" in data:
     sys.exit(1)
 if b"PLAIN-FLAG" in data:
     sys.exit(1)
+if b"LOCKED" in data:
+    print("two-key-categories: encrypted")
+    sys.exit(1)
 if b"SLOW" in data:
     time.sleep(10)
 if b"CRASH" in data:
@@ -301,6 +324,7 @@ class Command(unittest.TestCase):
         out = self.cmd.inspect(request(("arguments", b"fine"), ("file:a", SECRET)))
         self.assertEqual((out.verdict, out.categories), ("flagged", ("credential", "secret")))
         self.assertEqual(self.cmd.inspect(request(("a", b"PLAIN-FLAG"))).categories, ("policy",))
+        self.assertEqual(self.cmd.inspect(request(("a", b"LOCKED"))).categories, ("encrypted",))
         self.assertEqual(self.cmd.inspect(request(("a", b"CRASH"))).verdict, "unavailable")
         self.assertEqual(self.cmd.label, os.path.basename(sys.executable))
 

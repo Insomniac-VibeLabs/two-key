@@ -251,6 +251,7 @@ SCAN_TEMPLATE = [
     "#   - {id: scan, deny_if_fields: {scan: {eq: flagged}}}                  # default stance",
     "#   - {id: scan, deny_if_fields: {scan: {in: [flagged, unavailable]}}}   # strict stance, instead",
     "# Monitor mode: no rule; the verdict is recorded and shown to the judges.",
+    "# An encrypted file is flagged; to let one tool pass it, see docs/SCANNERS.md, Encrypted files.",
 ]
 
 

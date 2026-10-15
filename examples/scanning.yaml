@@ -12,7 +12,7 @@
 fields:
   scan:
     type: enum
-    values: [clean, flagged, unavailable]   # exactly these three
+    values: [clean, flagged, unavailable]   # exactly these three; add encrypted only with encrypted: pass below
     default: clean
     source: caller                          # filled by Two-Key from the scanner, never by the agent
 
@@ -39,7 +39,9 @@ tool_specs:
       - {json_path: body, shape: string, max_length: 8000}
       - {json_path: attachments}            # files must lie under a payload path
     fields:
-      scan: {source: caller}                # scanned
+      scan: {source: caller}                # scanned; an encrypted attachment is flagged
+      # To let this tool pass encrypted files instead (docs/SCANNERS.md "Encrypted files"):
+      #   scan: {source: caller, encrypted: pass}
   lookup:
     irreversible: false
     data_class_floor: public

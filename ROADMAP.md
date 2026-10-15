@@ -126,7 +126,8 @@ design note, with the maintainer's additions: Two-Key alone starts a scan
 (the agent never proposes, skips, or answers one), a call can carry a file
 (base64, or a path in a folder the operator declares, each with a required
 `max_bytes`; an oversized or unreadable file is denied before both keys
-under every stance), and
+under every stance), an encrypted file is flagged unless the principal
+signs that tool `encrypted: pass`, and
 [docs/SCANNERS.md](docs/SCANNERS.md) shows with diagrams how ClamAV, ICAP
 products, a command, or Python code connect. The first bullets below are
 the original sketch; where they differ (a deny on every error,

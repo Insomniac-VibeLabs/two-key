@@ -36,7 +36,7 @@ from urllib.parse import quote, urlparse
 
 from ._platform import WINDOWS, resolve_program
 from .judges.config import HOOK
-from .scan import CATEGORIES, DEFAULT_FIELD, DEFAULT_TIMEOUT_SECONDS, ScanConfigError, ScanRequest, \
+from .scan import CATEGORIES, DEFAULT_FIELD, DEFAULT_TIMEOUT_SECONDS, ENCRYPTED, ScanConfigError, ScanRequest, \
     ScanResult, Scanner, combine
 
 MAX_REPLY_BYTES = 64 * 1024
@@ -48,6 +48,10 @@ DEFAULT_ICAPS_PORT = 11344
 _KEEP_ENV = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT", "WINDIR", "COMSPEC",
              "PATHEXT", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA")
 _INFECTION_HEADERS = ("x-infection-found", "x-virus-id", "x-virus-name")
+# ClamAV's name for content it could not look inside (AlertEncrypted), as clamd and ClamAV-based ICAP services
+# pass it on. Matched whole, so a list of names or any other text is malware, never encrypted.
+_ENCRYPTED_NAME = re.compile(r"Heuristics\.Encrypted(?:\.[A-Za-z0-9_-]+)*")
+_THREAT = re.compile(r"(?i)(?:^|;)\s*threat\s*=\s*([^;]*)")
 _VIOLATION_HEADERS = ("x-violations-found", "x-blocked", "x-block-reason", "x-dlp-violation")
 
 
@@ -172,8 +176,8 @@ class ClamdInspector:
             name = text[:-len(" FOUND")]
             if name.startswith("Heuristics.Limits.Exceeded"):       # AlertExceedsMax: it could not finish
                 return ScanResult.flagged("limits_exceeded")
-            if name.startswith("Heuristics.Encrypted"):             # AlertEncrypted: it could not look inside
-                return ScanResult.flagged("unreadable")
+            if _ENCRYPTED_NAME.fullmatch(name):                     # AlertEncrypted: it could not look inside
+                return ScanResult.flagged(ENCRYPTED)
             return ScanResult.flagged("malware")
         if "size limit exceeded" in text:
             return ScanResult.flagged("limits_exceeded")
@@ -289,8 +293,13 @@ class IcapInspector:
             return ScanResult.flagged("policy"), server, istag
         if code != 200:
             return ScanResult.unavailable(), server, istag
-        if any(h in headers for h in _INFECTION_HEADERS):
-            return ScanResult.flagged("malware"), server, istag
+        infected = [headers[h] for h in _INFECTION_HEADERS if h in headers]
+        if infected:
+            if not all(_encrypted_threat(h) for h in infected):
+                return ScanResult.flagged("malware"), server, istag
+            if any(h in headers for h in _VIOLATION_HEADERS):
+                return ScanResult.flagged(ENCRYPTED, "policy"), server, istag
+            return ScanResult.flagged(ENCRYPTED), server, istag
         if any(h in headers for h in _VIOLATION_HEADERS):
             return ScanResult.flagged("policy"), server, istag
         offsets = _offsets(headers.get("encapsulated", "null-body=0"))
@@ -425,6 +434,14 @@ class CommandInspector:
                 results.append(ScanResult.unavailable())
         out = combine(results)
         return ScanResult(out.verdict, out.categories, self.label, "")
+
+
+def _encrypted_threat(value: str) -> bool:
+    """Whether an infection header names only ClamAV's encrypted heuristic. ``X-Infection-Found`` carries
+    ``Type=0; Resolution=2; Threat=<name>;``; ``X-Virus-ID`` and ``X-Virus-Name`` carry the name. The name is
+    compared, never kept."""
+    names = _THREAT.findall(value) if "=" in value else [value]
+    return bool(names) and all(_ENCRYPTED_NAME.fullmatch(n.strip()) for n in names)
 
 
 # --- Python hook ----------------------------------------------------------------------------------------

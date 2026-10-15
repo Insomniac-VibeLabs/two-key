@@ -21,6 +21,7 @@ from.
 - [What the agent can and cannot do](#what-the-agent-can-and-cannot-do)
 - [A call with an attached file](#a-call-with-an-attached-file)
 - [Verdict and stance](#verdict-and-stance)
+- [Encrypted files](#encrypted-files)
 - [ClamAV](#clamav)
 - [ICAP products](#icap-products)
 - [Command-line scanners](#command-line-scanners)
@@ -41,6 +42,9 @@ your scanner. The scanner answers one of three things:
 - **flagged**: it found malware, a secret, a card number, personal or health
   data, or something your product's policy blocks; or it could not finish;
 - **unavailable**: it was down, errored, or ran out of time.
+
+An encrypted file the product could not look inside is flagged, unless you
+signed that tool to pass encrypted files ([Encrypted files](#encrypted-files)).
 
 Two-Key turns that answer into a fact (`scan`) that your signed rules decide
 on, tells the judges, and records it in the ledger. The scanner never
@@ -269,13 +273,84 @@ Two-Key, not the adapter, settles the edge cases:
 
 - A timeout, an exception, or an answer it cannot read is `unavailable`,
   never `clean`.
-- A result naming `limits_exceeded` or `unreadable` (the scanner could not
-  finish, or could not look inside) is `flagged`.
+- A result naming `limits_exceeded`, `unreadable`, or `encrypted` (the
+  scanner could not finish, or could not look inside) is `flagged`. The one
+  exception is `encrypted` alone on a tool you signed to pass it
+  ([Encrypted files](#encrypted-files)).
 - A declared file Two-Key itself cannot read, or one over a size limit, is
   denied before the scan under every stance; it never becomes a verdict.
 - Monitor never blocks on the verdict. Use it to tune your product's
   policy, then sign default or strict.
 - `high_assurance` without the strict stance prints a warning at start.
+
+## Encrypted files
+
+An antivirus or DLP product can't see inside an encrypted file. By default
+Two-Key treats an encrypted file the product reports as `flagged`, so the
+default and strict stances deny it. When a tool needs to move encrypted
+files, you can sign that tool to pass them, and leave scanning to wherever
+the file is decrypted.
+
+Encrypting a file is also the easiest way past a scanner: an agent that
+wants to send out patient data, or deliver malware, only has to put it in a
+password-protected zip. So the pass is per tool, signed, and off by
+default. Opt in where the file goes into your own systems (a vault that
+decrypts and scans it), or where the tool's recipients are on its signed
+allow list. Avoid it on a tool that sends files to anyone.
+
+```yaml
+fields:
+  scan: {type: enum, values: [clean, flagged, unavailable, encrypted], default: clean, source: caller}
+tool_specs:
+  upload_to_vault:
+    # ...
+    fields: {scan: {source: caller, encrypted: pass}}   # encrypted files pass on this tool
+  send_email:
+    # ...
+    fields: {scan: {source: caller}}                    # an encrypted file is flagged here
+```
+
+The fourth value, `encrypted`, is required once any tool says
+`encrypted: pass`, and refused when none does. `encrypted: pass` is valid
+only on the scan field. A constitution without it signs byte for byte as
+before. `sign-constitution` prints a warning naming each tool that passes
+encrypted files, and Two-Key lists them at start.
+
+| What the scanner reports | Tool with `encrypted: pass` | Any other tool |
+| --- | --- | --- |
+| `encrypted` and nothing else | `encrypted`: no stance denies it | `flagged` |
+| `encrypted` and anything else (malware, a secret, could not finish) | `flagged` | `flagged` |
+| `encrypted`, and another part could not be scanned | `unavailable` (strict denies it) | `flagged` |
+
+- The judges see the verdict `encrypted` in the trusted scan section, with
+  a line saying what it means, and get the arguments: nothing was found,
+  so nothing is withheld. They can still weigh who the file goes to.
+- The ledger's `scan` entry has `"verdict": "encrypted"` and the category.
+  The token binds the verdict, and the gateway refuses it for a tool that
+  does not pass encrypted files (`scan_mismatch`).
+- You can still rule on it: a rule such as
+  `{deny_if_fields: {scan: {eq: encrypted}, recipient_zone: {eq: external}}}`
+  denies encrypted files to outside recipients only (`recipient_zone` being
+  a field of your own). A rule on `scan` alone
+  that denies `encrypted` makes the pass do nothing, and Two-Key says so at
+  start.
+- The file limits still apply under every stance: `max_bytes`, unreadable
+  files, 32 files, 100 MiB.
+
+What each product reports as encrypted:
+
+| Product | Encrypted when |
+| --- | --- |
+| `clamd` | It answers `Heuristics.Encrypted...` (needs `AlertEncrypted yes`) |
+| ICAP | Every infection header names only `Heuristics.Encrypted...` (c-icap and squidclamav pass on ClamAV's names); any other name is `malware` |
+| Command | Exit 1 with the first line `two-key-categories: encrypted` |
+| Python | `ScanResult.flagged("encrypted")` |
+
+Raw ciphertext (PGP, age, S/MIME, a custom format) has no structure a
+scanner recognizes, so most products answer clean, and it passes on every
+tool whatever this setting says. Only a container the product recognizes
+as encrypted (a zip, rar, or 7z archive, a PDF or Office file with a
+password) is reported as `encrypted`.
 
 ## ClamAV
 
@@ -362,7 +437,8 @@ socket, check `LocalSocketGroup` and `LocalSocketMode` in `clamd.conf`.
 | `StreamMaxLength` | The largest stream `clamd` accepts. Set it at least to your largest `max_bytes`. Over it, `clamd` replies `INSTREAM size limit exceeded`, which is `flagged` (`limits_exceeded`). |
 | `MaxFileSize`, `MaxScanSize` | Past these, `clamd` stops looking inside a file. |
 | `AlertExceedsMax yes` | Reports a file it stopped scanning as `Heuristics.Limits.Exceeded`, which is `flagged` (`limits_exceeded`). Without it, a partly scanned file is `OK`. Recommended. |
-| `AlertEncrypted yes` | Reports an encrypted archive or document as `Heuristics.Encrypted`, which is `flagged` (`unreadable`). Recommended. |
+| `AlertEncrypted yes` | Reports an encrypted archive or document as `Heuristics.Encrypted`, which is `flagged` (`encrypted`), or passes on a tool signed `encrypted: pass`. Without it, an encrypted file is `OK` on every tool. Recommended. |
+| `HeuristicScanPrecedence no` | ClamAV's default. ClamAV keeps scanning after a heuristic finding, so malware in a readable part of an encrypted archive is reported instead of `Heuristics.Encrypted`. Keep it off when a tool passes encrypted files. |
 
 ### What each reply means
 
@@ -371,7 +447,7 @@ socket, check `LocalSocketGroup` and `LocalSocketMode` in `clamd.conf`.
 | `stream: OK` | clean | |
 | `stream: <name> FOUND` | flagged | `malware` (the name is not kept) |
 | `stream: Heuristics.Limits.Exceeded... FOUND` | flagged | `limits_exceeded` |
-| `stream: Heuristics.Encrypted... FOUND` | flagged | `unreadable` |
+| `stream: Heuristics.Encrypted... FOUND` | flagged (or `encrypted` on a tool that passes it) | `encrypted` |
 | `INSTREAM size limit exceeded. ERROR` | flagged | `limits_exceeded` |
 | Anything else, no reply, refused, or out of time | unavailable | |
 
@@ -467,6 +543,7 @@ encapsulated `HTTP/1.1 200 OK` response carrying the part as its body
 | `204 No Content` | clean | |
 | `200` returning the part unchanged | clean | |
 | `200` with `X-Infection-Found`, `X-Virus-ID`, or `X-Virus-Name` | flagged | `malware` |
+| `200` whose infection headers name only `Heuristics.Encrypted...` | flagged (or `encrypted` on a tool that passes it) | `encrypted` (and `policy` with a violation header too) |
 | `200` with `X-Violations-Found`, `X-Blocked`, `X-Block-Reason`, or `X-DLP-Violation` | flagged | `policy` |
 | `200` to REQMOD that encapsulates an HTTP response (a block page) | flagged | `policy` |
 | `200` to RESPMOD whose encapsulated HTTP status is 400 or more | flagged | `policy` |
@@ -487,6 +564,9 @@ detail, or the body.
 - [ ] Answers `204` for a clean part when the request carries `Allow: 204`,
       or `200` with the part unchanged.
 - [ ] Signals a finding with one of the answers in the table above.
+- [ ] Names an encrypted file it could not open `Heuristics.Encrypted...`
+      in an infection header, if the operator passes encrypted files on
+      some tools; any other name is read as malware.
 - [ ] Answers within the operator's `timeout_seconds` (15 s by default),
       counting every part of the call.
 - [ ] Accepts a body up to the operator's largest `max_bytes`, or answers a
@@ -516,7 +596,7 @@ The contract:
 | Input | The part's bytes on stdin |
 | Environment | `PATH`, `HOME`, the locale and temp variables (and on Windows the system ones), `TWO_KEY_TOOL`, `TWO_KEY_PART`, and `env`. Nothing else, so judge keys stay out. |
 | Exit 0 | clean |
-| Exit 1 | flagged. A first stdout line `two-key-categories: secret,credential` names the categories (known names only; `policy` otherwise). |
+| Exit 1 | flagged. A first stdout line `two-key-categories: secret,credential` names the categories (known names only; `policy` otherwise). `two-key-categories: encrypted` reports an encrypted file. |
 | Any other exit, or the time limit | unavailable |
 | Other output | Ignored and never recorded |
 
@@ -564,11 +644,15 @@ where `inspect` is a function of the request or an object with `inspect`.
 - **Threads:** `inspect` runs on a worker thread, possibly while an earlier
   call that ran out of time is still running. Make it thread-safe.
 - **Failures:** raise, or return `ScanResult.unavailable()`, when you cannot
-  answer. Use `limits_exceeded` when you could not finish and `unreadable`
-  when you could not look inside: both are flagged.
+  answer. Use `limits_exceeded` when you could not finish, `encrypted` when
+  the content is encrypted, and `unreadable` when you could not look inside
+  for another reason: all are flagged (`encrypted` alone passes on a tool
+  signed for it).
 - **Categories:** `malware`, `secret`, `credential`, `card_number`,
   `personal_data`, `health_data`, `limits_exceeded`, `policy`,
-  `unreadable`. Anything else makes the answer `unavailable`.
+  `unreadable`, `encrypted`. Anything else makes the answer `unavailable`.
+  The verdict is `clean`, `flagged`, or `unavailable`; only Two-Key sets
+  `encrypted`.
 - **Never content:** a `ScanResult` carries a verdict, categories, a label,
   and a version, never matched text.
 
@@ -623,7 +707,8 @@ when the scanner did not answer. Also:
   cannot answer, and `scanner_recovered` when it answers again. Never one
   per call.
 - `constitution_loaded` carries the scanner configuration: field, label,
-  stance, time limit, and declared files with their `max_bytes`.
+  stance, time limit, declared files with their `max_bytes`, and
+  `encrypted_pass` (the tools that pass encrypted files) when there are any.
 - A call denied for a file has a `decision` entry with `file_denied`: the
   file's argument path, and the sizes or why it could not be read
   (`bad_base64`, `not_a_string`, `outside_folder`, `link`, `cannot_open`,
@@ -644,7 +729,10 @@ same as before 0.6.0.
 | `WARNING: mcp-proxy: <tool>: <path> looks like a file ... not declared` | That input is scanned as text, not decoded | Declare it under `tools.<id>.files`, or ignore it if it is not a file |
 | `WARNING: the content scanner is unavailable (...)` | Once, when it goes down | Check the product; calls go on under the signed stance |
 | `the content scanner is answering again` | Once, when it recovers | Nothing |
-| `scan_field_missing` or `scan_field_invalid` at start | The constitution has no usable `scan` field | Declare the enum field with exactly `clean`, `flagged`, `unavailable` and `source: caller` |
+| `scan_field_missing` or `scan_field_invalid` at start | The constitution has no usable `scan` field | Declare the enum field with exactly `clean`, `flagged`, `unavailable` (and `encrypted` when a tool says `encrypted: pass`) and `source: caller` |
+| `note: encrypted files pass without a look inside (encrypted: pass): ...` | Start-up summary | Check that each tool listed should take encrypted files |
+| `note: a rule on scan alone denies encrypted, so encrypted: pass lets nothing more through` | A signed rule undoes the pass | Remove the pass, or narrow the rule |
+| `encrypted: pass is only valid on the scan field` | The mark is on another field | Move it to the scan field |
 | `files.<tool>: the tool does not map 'scan'` or `is not under a payload path` | A declared file would not be scanned or would not reach the tool | Map `scan` on the tool, or fix the path |
 | `files.<tool>[i].max_bytes: required` | A declared file has no size limit | Set the largest file the tool needs, in bytes |
 | `max_bytes: a base64 file arrives inside the call ... at most 196608 bytes` | A base64 file cannot be larger than the call | Lower it; a tool that needs larger files takes a path |
@@ -674,6 +762,9 @@ permissions), and that `timeout_seconds` covers every part of a call.
 - Path A does not read content. It rules on the verdict. A file's size is
   held by `max_bytes`; a rule on its type needs a fact hook.
 - It does not scan the tool's result, only the call.
+- It cannot see inside encrypted content. A container the product
+  recognizes is flagged, or passes on a tool you signed for it; raw
+  ciphertext looks like noise to most products and passes as clean.
 - A signature update between authorization and redemption (2 minutes by
   default) is not applied to that call: the gateway does not scan again.
 - Which arguments are files is operator configuration (`proxy.yaml` or

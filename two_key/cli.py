@@ -58,8 +58,8 @@ import sys
 from pathlib import Path
 
 from . import _platform
-from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, load_unsigned_with_fields, save_envelope,
-                           sign_constitution)
+from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, encrypted_pass_notes, load_unsigned_with_fields,
+                           save_envelope, sign_constitution)
 from .fields import case_warnings, not_applicable_notes
 from .keys import generate_private_key, load_private_key_file, load_public_key, save_private_key, save_public_key
 from .policy_vm import ConstitutionError
@@ -95,6 +95,8 @@ def _sign(args) -> int:
         print(f"two-key: WARNING: {line}", file=sys.stderr)
     for warn, line in domain_allow_notes(signed["tool_specs"]):
         print(f"two-key: {'WARNING' if warn else 'note'}: {line}", file=sys.stderr)
+    for line in encrypted_pass_notes(signed["tool_specs"]):
+        print(f"two-key: WARNING: {line}", file=sys.stderr)
     print(f"wrote {args.out}")
     return 0
 
