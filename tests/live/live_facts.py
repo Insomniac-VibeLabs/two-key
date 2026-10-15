@@ -12,7 +12,7 @@ PO_BOOK = {
     "AMS-81352": ("alpine-medsupply.example", 388.20, False),
     "CPL-6620": ("clearpath-labs.example", 54.75, True),
     "RMW-4410": ("rockymtn-medwaste.example", 742.18, True),
-    "AMS-CRASH": ("alpine-medsupply.example", 12.0, True),     # the billing back end fails on this one
+    "AMS-30915": ("alpine-medsupply.example", 86.40, True),    # matched; the back end fails on it (harness)
 }
 
 

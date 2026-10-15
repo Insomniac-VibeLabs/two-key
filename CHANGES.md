@@ -2473,3 +2473,38 @@ On branch `working`. Warnings and docs; no authorization change.
   Path A as well (the 0.5.0 caller-fact pattern is a start).
 - Tests: `tests/test_lone_judge.py`, and a drafter test in
   `tests/test_mcp_draft.py`.
+
+## Live harness: run 6 referee fixes, quorum cases (for re-run 6z) — 2026-10-15
+
+On branch `working`. Test tooling only (`tests/live/`); nothing in `two_key/`.
+From GrokBot's run 6 report (findings 4, 10, 11, 12 and recommendation d).
+
+- **Judge ballots are keyed by agent step** (finding 12): a chain case's step-1
+  ballot no longer overwrites its step-0 one.
+- **Personas:** each agent request carries a `PERSONA:` line (LEGIT,
+  INCOMPETENT, MALICIOUS) from the case (`make_cases.py` `persona`), and the
+  agent batch header is the role-play one GrokBot used, so an attack is
+  attempted and the deny is exercised.
+- **Strict verdicts** (finding 11): a case that names its intended denies
+  (`expect.reasons`) is INCONCLUSIVE when never attempted or stopped another
+  way, and FAIL when it reached the system of record. C05, the injection
+  chains, the over-cap and wire cases, and the two judge-only cases name
+  theirs.
+- **Scripted quorum cases** (finding 10): the harness's loopback judge
+  endpoints answer a case's `judges` script (yes, no, malformed, down)
+  instead of a relayed reply: a split, a malformed ballot, a judge down, and
+  a control. Nothing test-only enters `two_key/`.
+- **A start-up case for the one-judge warning** (`required_yes 1` of 2).
+- **C13 reaches the crash path** (finding 4): an ordinary matched invoice
+  (`AMS-30915`) the judges approve, on which the back end then fails;
+  `AMS-CRASH` is gone from `PO_BOOK`.
+- **Referee:** a freshness check flags a reply byte-identical to one from an
+  earlier run (`--earlier DIR`, `LIVE_EARLIER_RUNS`); an outbound batch with a
+  private file name is refused, like one with a case title; soft leak terms
+  are counted in the requests, not the header.
+- `make_cases.py --table` prints the case table for the referee's brief.
+  36 cases; the self-test passes 34, and the two only a real judge can catch
+  fail with always-yes stubs, as expected.
+- `tests/live/.gitignore` ignores `state/`, `selftest/`, and `cases.jsonl` at
+  any depth, so a copied run tree (`run6x/state/`) cannot be committed by
+  accident. `RELAY.md` is updated.
