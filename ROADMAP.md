@@ -116,6 +116,12 @@ test run 6 runs before the release.
   the content.
 - Design decision to settle first: run the hook before judges receive
   `tool_args`, so scanned content is not sent to cloud vendors.
+- Second decision: feed the scanner's result to Path A as well as the
+  ledger, so a content leak is not left to the judges alone (live run 6:
+  a diagnosis, a card number, and a recovery code in free text were stopped
+  only by Path B). In 0.5.0 a scanner can already do this as a
+  caller-supplied fact (HOWTO "Designing a constitution", point 10); the
+  hook interface may build on that.
 - Tests use the EICAR test file and fake secrets.
 - Also in 0.6.0: reuse judge connections (#6). Today each quorum round
   starts new threads, so the per-thread pool never reuses a connection, and

@@ -38,7 +38,7 @@ from .fields import defaults as field_defaults
 from .gateway import ToolGateway, mark_two_key_ledger
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
-from .quorum import QuorumPolicy, check_judge_set, convene, unmeetable_floor
+from .quorum import QuorumPolicy, check_judge_set, convene, lone_judge_warning, unmeetable_floor
 
 
 class TwoKeyConfigError(ValueError):
@@ -139,6 +139,9 @@ class TwoKey:
             raise TwoKeyConfigError("Path B needs a hard deadline: quorum timeout_seconds must be a positive "
                                     "number, not None")
         check_judge_set(self.judges, self.quorum)
+        lone = lone_judge_warning(self.judges, self.quorum)
+        if lone:      # allowed, and recorded in quorum_policy; said once, so the operator sees it (run 6x, X03)
+            print(f"two-key: WARNING: {lone}", file=sys.stderr)
         # Judge != monitored agent, from operator configuration only (identity.py): refused on the agent's
         # credential at any address, or keyless on the agent's keyless address; likely accidents are warned on
         # stderr and recorded below.

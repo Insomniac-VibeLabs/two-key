@@ -18,6 +18,10 @@ claim about the world the agent would write. The draft leaves it out of the spec
 the agent's value, and lists it as a candidate for a caller-supplied fact (``source: caller``, HOWTO "Caller-
 supplied facts"). The proxy then hides it from the agent and delivers the hook's value instead.
 
+Behind the proxy, the upstream schema is the agent's only format guide. A property the draft maps as a
+counterparty or an amount with no ``description`` gets a WARNING: the agent then guesses the format, and a
+display name ("Alpine MedSupply (alpine-medsupply.example)") is not on an exact allow list (live run 6, C25).
+
 Only top-level properties are read. A nested object is one payload path, copied unread; review it.
 """
 
@@ -46,6 +50,7 @@ class ToolDraft:
     spec: dict
     notes: list[str] = field(default_factory=list)
     facts: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -59,11 +64,42 @@ class Draft:
     def fact_candidates(self) -> dict[str, list[str]]:
         return {t.tool_id: t.facts for t in self.tools if t.facts}
 
+    @property
+    def warnings(self) -> dict[str, list[str]]:
+        return {t.tool_id: t.warnings for t in self.tools if t.warnings}
+
+
+def _described(schema: Mapping[str, Any]) -> bool:
+    text = schema.get("description")
+    return isinstance(text, str) and bool(text.strip())
+
+
+_UNDESCRIBED = {
+    "counterparty": ("the agent sees only the name, so it may write a display name instead of the exact id the "
+                     "allow list needs; describe the format upstream, e.g. 'Vendor id: the bare domain, such as "
+                     "vendor.example'"),
+    "amount": ("the agent sees only the name, so it may write words, another currency, or cents; describe the "
+               "unit upstream, e.g. 'Amount in US dollars, a number such as 271.85'"),
+}
+
 
 def _comment(text: str) -> str:
     """One comment line: printable ASCII only, so server text cannot end the comment or hide characters."""
     clean = "".join(c if 0x20 <= ord(c) < 0x7F else "?" for c in text)
     return clean[:MAX_DESCRIPTION_IN_COMMENT] + ("..." if len(clean) > MAX_DESCRIPTION_IN_COMMENT else "")
+
+
+def _wrapped(text: str, width: int = 100) -> list[str]:
+    """Our own note as comment lines: each made ASCII-safe like server text, wrapped instead of cut."""
+    words, lines, line = text.split(), [], ""
+    for word in words:
+        if line and len(line) + 1 + len(word) > width:
+            lines.append(line)
+            line = word
+        else:
+            line = f"{line} {word}" if line else word
+    lines.append(line)
+    return [f"  # - {_comment(lines[0])}"] + [f"  #   {_comment(rest)}" for rest in lines[1:]]
 
 
 def _payload(path: str, schema: Mapping[str, Any]) -> dict:
@@ -116,9 +152,14 @@ def draft_tool(view: Mapping[str, Any]) -> ToolDraft | str:
             unit = "cents" if "cents" in low else "REPLACE_WITH_usd_OR_cents"
             spec["amount"] = {"json_path": prop, "unit": unit}
             draft.notes.append(f"{prop}: amount-like, mapped as the amount; set unit (usd or cents)")
+            if not _described(sub):
+                draft.warnings.append(f"{prop}: no description in the upstream schema; {_UNDESCRIBED['amount']}")
         elif PARTY_LIKE.fullmatch(low) and sub.get("type") in ("string", "array", None):
             parties.append({"json_path": prop, "allow": []})
             draft.notes.append(f"{prop}: payee-like, mapped as a counterparty; fill its allow list")
+            if not _described(sub):
+                draft.warnings.append(f"{prop}: no description in the upstream schema; "
+                                      f"{_UNDESCRIBED['counterparty']}")
         else:
             payload.append(_payload(prop, sub))
     if parties:
@@ -177,6 +218,8 @@ def render_rules(draft: Draft, command: list[str]) -> str:
                          "in proxy.yaml")
         for note in t.notes:
             lines.append(f"  # - {_comment(note)}")
+        for warning in t.warnings:
+            lines.extend(_wrapped(f"WARNING: {warning}"))
         lines.append(f"  {_yaml_value(t.tool_id)}:")
         for key in ("irreversible", "data_class_floor", "amount", "counterparties", "payload"):
             if key in t.spec:

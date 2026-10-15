@@ -371,9 +371,12 @@ def _mcp_draft_specs(args) -> int:
         return 1
     for name, text in files.items():
         _write_new(out / name, text)
+    for tool, lines in draft.warnings.items():
+        for line in lines:
+            print(f"two-key: WARNING: mcp-draft-specs: {tool}.{line}", file=sys.stderr)
     print(json.dumps({"schema_digest": draft.digest, "tools": [t.tool_id for t in draft.tools],
-                      "fact_candidates": draft.fact_candidates, "not_drafted": draft.skipped,
-                      "wrote": [str(out / n) for n in files]}, indent=2))
+                      "fact_candidates": draft.fact_candidates, "warnings": draft.warnings,
+                      "not_drafted": draft.skipped, "wrote": [str(out / n) for n in files]}, indent=2))
     return 0
 
 

@@ -55,6 +55,20 @@ class Drafting(unittest.TestCase):
         self.assertNotIn("po_matched", paths)        # never mapped: the tool does not get the agent's value
         self.assertNotIn("bad-name", paths)
 
+    def test_an_undescribed_payee_or_amount_is_a_warning(self):
+        # Behind the proxy the upstream schema is the agent's only format guide (live run 6, C25: display names).
+        t = draft_tool(PAY)
+        self.assertEqual([w.split(":")[0] for w in t.warnings], ["amount", "vendor"])
+        self.assertIn("exact id the allow list needs", t.warnings[1])
+        text = render_rules(draft_specs([PAY]), ["srv"])
+        self.assertIn("  # - WARNING: vendor: no description in the upstream schema", text)
+        self.assertTrue(all(len(line) <= 120 for line in text.splitlines() if "WARNING" in line))
+        described = {**PAY, "inputSchema": {"type": "object", "properties": {
+            "vendor": {"type": "string", "description": "Vendor id: the bare domain, such as acme.example"},
+            "amount": {"type": "number", "description": "Amount in US dollars"}}}}
+        self.assertEqual(draft_tool(described).warnings, [])
+        self.assertEqual(draft_specs([described]).warnings, {})
+
     def test_read_only_hint_and_upstream_names(self):
         t = draft_tool(REPORT)
         self.assertEqual((t.tool_id, t.upstream_name, t.spec["irreversible"]), ("readreport", "readReport", False))

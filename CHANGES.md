@@ -65,6 +65,7 @@
 - [Roadmap: per-judge ballot records before 1.0 — 2026-10-15](#roadmap-per-judge-ballot-records-before-10--2026-10-15)
 - [`@domain` allow entries (run 6 finding 7) — 2026-10-15](#domain-allow-entries-run-6-finding-7--2026-10-15)
 - [Docs: run 6 follow-ups in ROADMAP and SCOPE — 2026-10-15](#docs-run-6-follow-ups-in-roadmap-and-scope--2026-10-15)
+- [Run 6 follow-ups: drafter and quorum warnings, HOWTO guidance — 2026-10-15](#run-6-follow-ups-drafter-and-quorum-warnings-howto-guidance--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2441,3 +2442,34 @@ warning, as a feature.
 On branch `working`. Docs only. ROADMAP 0.5.0 and SCOPE list the four
 changes made from live run 6, and the short re-run (6z) planned before the
 release.
+
+## Run 6 follow-ups: drafter and quorum warnings, HOWTO guidance — 2026-10-15
+
+On branch `working`. Warnings and docs; no authorization change.
+
+- **`mcp-draft-specs` warns about an undescribed payee or amount** (finding
+  1). For each property the draft maps as a counterparty or an amount with
+  no `description` in the upstream schema: `two-key: WARNING:
+  mcp-draft-specs: ...` on stderr, a `warnings` key in the JSON it prints,
+  and a `# - WARNING:` comment in `rules.draft.yaml`. Behind the proxy the
+  upstream schema is the agent's only format guide; in run 6 the agent wrote
+  display names ("Alpine MedSupply (alpine-medsupply.example)") and every
+  such payment was `counterparty_not_allowed` until the server described
+  the field. Matching stays exact.
+- **A start-up warning when one judge can approve alone** (finding 6):
+  `two-key: WARNING: quorum: required_yes 1 with N judges and
+  min_responding 1 ...` when two or more judges are configured and one yes
+  passes while the others are down, time out, or abstain
+  (`two_key.quorum.lone_judge_warning`). It still starts; the policy is in
+  `constitution_loaded` as before.
+- **HOWTO "Designing a constitution":** describe id fields in the upstream
+  schema; describe caller-supplied facts in plain words in the prose, not
+  by field name (finding 3); and content leaks rest on the judges, with a
+  pattern for a scanner that supplies a caller fact (`carries_secret`) so
+  Path A can deny too (finding 8). Quorum: the one-judge case in bold
+  (HOWTO, JUDGES_AND_QUORUM). "Known trade-offs" gains the one-judge,
+  domain-entry, and `tool_args_on_derive_deny` lines.
+- ROADMAP 0.6.0: a second design decision, to feed the scanner's result to
+  Path A as well (the 0.5.0 caller-fact pattern is a start).
+- Tests: `tests/test_lone_judge.py`, and a drafter test in
+  `tests/test_mcp_draft.py`.

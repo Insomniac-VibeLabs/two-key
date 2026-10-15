@@ -85,6 +85,8 @@ With the default policy:
 
 This is **not a majority rule**. Two affirmative ballots can meet the default threshold with five configured judges. Operators who need a majority or unanimity must configure an appropriate `required_yes` value.
 
+**With `required_yes: 1` and two or more judges, one judge approves a call alone whenever the others are down, time out, or abstain,** because `min_responding` then follows `required_yes` and is 1. In live run 6x a 1-of-2 deployment executed a call with judge B on a dead port. `TwoKey` prints a `two-key: WARNING: quorum: required_yes 1 with N judges and min_responding 1 ...` line at start. Set `min_responding` to the number of judges to require every judge to answer, or `required_yes: 2` for two approvals.
+
 The configured set must be capable of satisfying the policy. If the affirmative threshold, response floor, provider floor, or judge-set diversity requirements cannot be met, configuration may be rejected at startup. `convene` also denies when the configured policy cannot be met.
 
 ## YES, NO, and ABSTAIN
@@ -171,10 +173,10 @@ Before relying on a deployment:
 
 1. Configure the monitored agent and at least one judge explicitly.
 2. Confirm that judge identities and credentials match the actual deployment.
-3. Set `required_yes` and `min_responding` intentionally. Do not assume the default is a majority.
+3. Set `required_yes` and `min_responding` intentionally. Do not assume the default is a majority. With `required_yes: 1` and more than one judge, set `min_responding` too, or one judge decides alone while the others are down.
 4. For higher-impact actions, consider `QuorumPolicy.high_assurance()` and check the configured local judge and maker labels.
 5. Decide whether judges receive only the normalized record or also the proposal text.
-6. Review `tool_args_on_derive_deny`; argument bytes are withheld by default after a derive deny.
+6. Review `tool_args_on_derive_deny`; argument bytes are withheld by default after a derive deny, and a call that cannot be read is then not sent to the judges at all.
 7. Test timeout, malformed ballot, binding mismatch, insufficient response, and deny cases.
 8. Read [THREAT_MODEL.md](THREAT_MODEL.md) and [FIT.md](FIT.md) before deployment.
 

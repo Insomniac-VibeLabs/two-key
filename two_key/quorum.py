@@ -280,6 +280,19 @@ def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | Non
     return None
 
 
+def lone_judge_warning(judges: Sequence, policy: QuorumPolicy) -> str | None:
+    """Text for a start-up warning when one judge's yes approves a call while every other judge is down, times
+    out, or abstains: two or more judges, ``required_yes`` 1, and ``min_responding`` 1 (its default then).
+    Allowed, and sometimes meant; but the second judge is then no check at all while it is unreachable
+    (live run 6x, X03). Not a refusal."""
+    n = len(judges)
+    if n >= 2 and policy.required_yes == 1 and (policy.effective_min_responding or 0) <= 1:
+        return (f"quorum: required_yes 1 with {n} judges and min_responding {policy.effective_min_responding}: one "
+                "judge approves a call alone whenever the others are down, time out, or abstain. Set "
+                f"min_responding: {n} to require every judge to answer, or required_yes: 2")
+    return None
+
+
 def check_judge_set(judges: Sequence, policy: QuorumPolicy) -> None:
     """Refuse a judge set below the policy's floors (makers, local judges, a local yes). Raises QuorumConfigError."""
     short = heterogeneity_shortfall(judges, policy)
