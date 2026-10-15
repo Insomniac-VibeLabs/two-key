@@ -1,7 +1,7 @@
 # Threat model
 
 This is the design model for `two-key` 0.4.0. Tag `v0.4.0` on `main` is the tagged release. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
-Branch `mcp-proxy` (for 0.5.0) adds the MCP proxy (`two-key mcp-proxy`), the spec drafter
+Branch `working` (for 0.5.0) adds the MCP proxy (`two-key mcp-proxy`), the spec drafter
 (`two-key mcp-draft-specs`), caller-supplied facts (`source: caller`, constitution v3), and the
 guard core (`two_key/guard.py`), described below.
 It is not a penetration test and it is not an independent review. The package is
@@ -239,7 +239,7 @@ These are accepted or still open. They are not bugs the design already
 claims to close.
 
 - No independent review, and no production deployment.
-- MCP proxy (branch `mcp-proxy`):
+- MCP proxy (branch `working`):
   - An agent that can reach the upstream server directly, or holds its
     credential, bypasses the proxy entirely. The proxy cannot see or stop
     that.
@@ -267,7 +267,7 @@ claims to close.
   - The proxy does not verify the upstream server's identity beyond the
     command it runs. A changed package behind an unpinned `npx -y` shows
     up only if its schema changes.
-- Caller-supplied facts (branch `mcp-proxy`):
+- Caller-supplied facts (branch `working`):
   - A fact hook is trusted code that receives agent-written arguments. A
     hook that returns an argument (`arguments["po_matched"]`) turns the
     fact back into the agent's assertion. A hook that looks a record up by
@@ -472,75 +472,80 @@ claims to close.
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md). None of what follows is in 0.3.0, and nothing in
-this section describes current behavior. Each item is added to the sections
-above in the release that ships it. Key backup and custom Path A fields
-shipped in 0.3.0 and are described above, not here.
+These come from [ROADMAP.md](../ROADMAP.md), in its order: the MCP adapter
+(0.5.0), DLP and antivirus hooks (0.6.0), the SIEM export (0.7.0), then 1.0;
+the rest come after 1.0. None of what follows is in a release yet, and
+nothing here describes current behavior except where an item says it is
+built. Each item is added to the sections above in the release that ships
+it. Key backup and custom Path A fields shipped in 0.3.0 and are described
+above, not here.
 
-- Ledger export for SIEM (target 0.4). New boundary: ledger to exporter to
+- MCP adapter (0.5.0). The stdio proxy, the spec drafter, and
+  caller-supplied facts with the guard core (#2 P1, design reviewed by the
+  maintainer) are built and described above; live test run 6 runs before
+  the release. HTTP transports come later. A `tool_specs` draft made from
+  MCP schemas stays a proposal for the principal to review and sign, not
+  trusted input.
+- Inspection hooks for DLP and antivirus (0.6.0, next). New trust boundary:
+  the scanner. A scanner error, timeout, or missing result is meant to be a
+  deny. A scanner sees only what the tool spec lets through, so a payload
+  value it cannot read stays a residual risk. Where the hook runs relative to
+  the judges is an open choice, because cloud judges receive `tool_args`
+  today.
+- Ledger export for SIEM (0.7.0). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.
   It is meant to use a field allowlist that leaves out the proposal text and
   the derived amount, counterparty, and custom field values, which the
   ledger holds today.
   Whoever can read the SIEM becomes a new audience for ledger metadata.
-- Inspection hooks for DLP and antivirus (target 0.5). New trust boundary:
-  the scanner. A scanner error, timeout, or missing result is meant to be a
-  deny. A scanner sees only what the tool spec lets through, so a payload
-  value it cannot read stays a residual risk. Where the hook runs relative to
-  the judges is an open choice, because cloud judges receive `tool_args`
-  today.
-- MCP adapter (target 0.6). Part 1 (the stdio proxy and the spec drafter)
-  and caller-supplied facts with the guard core (#2 P1, design reviewed by
-  the maintainer) are on branch `mcp-proxy` and are described above. Still
-  planned: HTTP transports. A `tool_specs` draft made from MCP schemas stays a
-  proposal for the principal to review and sign, not trusted input.
-- PKI and certificate recovery (target 0.7). New assets: the certificate
-  authority key (a personal local CA or an enterprise CA), issued
-  certificates, the revocation list, and recovery material (a backup bundle,
-  a recovery key, or key shares). New boundary: certificate validation, meaning
-  chain building to a configured trust anchor, validity period, key usage, and
-  revocation. A stolen CA key lets an attacker mint identities the package
-  accepts, so it is treated as equal to the principal key or higher. Recovery
-  is itself an attack path: a stolen recovery key, enough colluding or
-  coerced custodians, or a social-engineered recovery request can replace an
-  identity. Recovery is meant to be a ledger event and to end with the old
-  certificate revoked. Validity checks depend on a correct clock. Existing
-  bare-key setups stay valid.
-- Post-quantum signatures (target 0.8). New assets: a second signing key per
-  signing role, and larger signatures in the constitution, ledger head, and
-  possibly tokens. A hybrid signature is meant to verify only when both
-  halves verify. New risk to design against: a downgrade, where the
-  post-quantum half is stripped. Every signed format carries an algorithm
-  identifier, and a verifier that expects the hybrid form refuses a
-  classical-only one. Existing 0.2.x ledgers stay readable.
-- FIPS approved mode (target 0.9). New boundary: the cryptographic provider.
-  The mode is meant to refuse to start unless the library runs on a FIPS
-  140-3 validated module in approved mode, and to refuse algorithms outside
-  the approved set. The module's certificate and version are meant to be
-  recorded in `constitution_loaded`. The claim is limited to "runs on a
-  validated module". This package stays unvalidated, and the mode does not
-  cover the rest of the host. How a hybrid signature is treated in approved
-  mode depends on what the validated module supports, and is decided when
-  the mode is built.
-- Local GUI (target 0.10). New boundary: browser to a local server. It is
-  meant to bind to loopback only and to require a per-session token, which
-  is meant to address other local pages, cross-site requests, and DNS
-  rebinding. It is the first place decrypted ledger content is displayed, so
-  anyone who can see the screen or reach the local port is a new audience. It
-  is meant to show digests, sizes, and reason codes, not argument values.
-  Filtering by judge needs per-judge ballot records, which the ledger does
-  not hold today. They are meant to carry the judge id, the vote, and a
-  capped error only, never the rationale text, which is model output and may
-  quote arguments.
-  Configuration edits change policy, so the GUI is meant never to hold the
-  principal key. It prepares a constitution and hands it to the existing
-  signing command. A GUI that is reachable from another machine is out of
-  scope.
-- More spec field types (planned, not scheduled). Custom `boolean`,
-  `integer`, `enum`, and `string` fields shipped in 0.3.0 and are described
-  above. Decimal, URL, path, email, and opaque-bytes kinds are not built,
-  and `amount` and `counterparty` remain special kinds.
+- After 1.0, not scheduled:
+  - PKI and certificate recovery. New assets: the certificate
+    authority key (a personal local CA or an enterprise CA), issued
+    certificates, the revocation list, and recovery material (a backup bundle,
+    a recovery key, or key shares). New boundary: certificate validation, meaning
+    chain building to a configured trust anchor, validity period, key usage, and
+    revocation. A stolen CA key lets an attacker mint identities the package
+    accepts, so it is treated as equal to the principal key or higher. Recovery
+    is itself an attack path: a stolen recovery key, enough colluding or
+    coerced custodians, or a social-engineered recovery request can replace an
+    identity. Recovery is meant to be a ledger event and to end with the old
+    certificate revoked. Validity checks depend on a correct clock. Existing
+    bare-key setups stay valid.
+  - Post-quantum signatures. New assets: a second signing key per
+    signing role, and larger signatures in the constitution, ledger head, and
+    possibly tokens. A hybrid signature is meant to verify only when both
+    halves verify. New risk to design against: a downgrade, where the
+    post-quantum half is stripped. Every signed format carries an algorithm
+    identifier, and a verifier that expects the hybrid form refuses a
+    classical-only one. Existing 0.2.x ledgers stay readable.
+  - FIPS approved mode. New boundary: the cryptographic provider.
+    The mode is meant to refuse to start unless the library runs on a FIPS
+    140-3 validated module in approved mode, and to refuse algorithms outside
+    the approved set. The module's certificate and version are meant to be
+    recorded in `constitution_loaded`. The claim is limited to "runs on a
+    validated module". This package stays unvalidated, and the mode does not
+    cover the rest of the host. How a hybrid signature is treated in approved
+    mode depends on what the validated module supports, and is decided when
+    the mode is built.
+  - Local GUI. New boundary: browser to a local server. It is
+    meant to bind to loopback only and to require a per-session token, which
+    is meant to address other local pages, cross-site requests, and DNS
+    rebinding. It is the first place decrypted ledger content is displayed, so
+    anyone who can see the screen or reach the local port is a new audience. It
+    is meant to show digests, sizes, and reason codes, not argument values.
+    Filtering by judge needs per-judge ballot records, which the ledger does
+    not hold today. They are meant to carry the judge id, the vote, and a
+    capped error only, never the rationale text, which is model output and may
+    quote arguments.
+    Configuration edits change policy, so the GUI is meant never to hold the
+    principal key. It prepares a constitution and hands it to the existing
+    signing command. A GUI that is reachable from another machine is out of
+    scope.
+  - More spec field types. Custom `boolean`,
+    `integer`, `enum`, and `string` fields shipped in 0.3.0 and are described
+    above. Decimal, URL, path, email, and opaque-bytes kinds are not built,
+    and `amount` and `counterparty` remain special kinds.
 
 ## What to re-check when the code changes
 

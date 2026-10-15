@@ -24,7 +24,7 @@ is how to report a vulnerability. It is not the model.
 - Agent proposal that causes tool execution inside `authorize_from_agent`
 - An agent decline that issues a token, runs either path, or is read as a call
 - A redeeming gateway that can mint a token it will accept
-- Behind the MCP proxy (branch `mcp-proxy`): a `tools/call` that reaches the
+- Behind the MCP proxy (branch `working`): a `tools/call` that reaches the
   upstream server without both keys, a tool the proxy shows that is not
   signed, an argument that reaches the server outside the signed spec, a
   changed tool schema accepted under `on_schema_change: refuse`, an

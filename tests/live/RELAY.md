@@ -1,6 +1,6 @@
 # Live run 6: relay procedure (operator)
 
-Run 6 tests Two-Key behind the MCP proxy (branch `mcp-proxy`). The harness is the agent's MCP host: it starts
+Run 6 tests Two-Key behind the MCP proxy (branch `working`, also `mcp-proxy`). The harness is the agent's MCP host: it starts
 `two-key mcp-proxy`, which starts `clinic_mcp_server.py`, whose calls come back to the harness (the system of
 record). Judges and the agent are role bots whose replies you relay by hand. Nothing here uses the network: the
 endpoints are loopback, and the bots are reached only through you.

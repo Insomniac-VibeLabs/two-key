@@ -303,7 +303,7 @@ with a message to re-sign it. Installs older than custom fields refuse
 v2, so they cannot load it and ignore the fields. A v2 constitution
 refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
 `fields`. A constitution with a caller-supplied field (`source: caller`)
-signs as `two-key-constitution-v3` (0.5.0, branch `mcp-proxy`); installs
+signs as `two-key-constitution-v3` (0.5.0, branch `working`); installs
 before 0.5.0 refuse v3 as an unsupported format. The format label is
 outside the signed bytes, so the meaning comes from the signed bytes only:
 a v1 or v2 label on a constitution with a caller-supplied field is refused,
@@ -327,7 +327,7 @@ value.
 
 ### Caller-supplied facts
 
-On branch `mcp-proxy`, for 0.5.0
+On branch `working`, for 0.5.0
 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2) P1).
 
 **In plain words.** Some things a rule needs are facts about the world,
@@ -1242,7 +1242,7 @@ make it an error in tests or CI:
 
 ## Put Two-Key in front of an MCP server (`two-key mcp-proxy`)
 
-On branch `mcp-proxy`, for 0.5.0
+On branch `working`, for 0.5.0
 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)). It supports
 caller-supplied facts through per-tool hooks (see "Caller-supplied facts").
 
@@ -1258,10 +1258,12 @@ flowchart LR
   host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
   subgraph proxy["two-key mcp-proxy, its own OS user"]
     tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk
   end
   tk -. "normalized record" .-> judges["Judges"]
   gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
   up --> sor["System of record"]
+  hooks -. "look facts up" .-> sor
 ```
 
 ```mermaid
@@ -2029,4 +2031,4 @@ This ends every token issued before the call: the gateway refuses them
 To stop an agent, stop calling `authorize` (or stop the process), and revoke
 to end tokens already issued. A halt that refuses new approvals is not part
 of `revoke`. An optional reputation halt, off unless configured, is planned
-as 0.11 in ROADMAP. It is not built.
+after 1.0 in ROADMAP. It is not built.

@@ -2186,3 +2186,25 @@ passed the maintainer's security review before it was written.
 - The MCP proxy writes two new ledger kinds, `mcp_proxy_started` and
   `tool_not_offered`. A probe for a hidden tool is no longer silent in the
   ledger; a ledger consumer that lists kinds should expect them.
+
+## Docs: roadmap order, README intro and MCP section, tables of contents — 2026-10-15
+
+On branch `working`, which now carries the 0.5.0 work (fast-forwarded to
+`mcp-proxy`; that branch stays at the same commit for live run 6). Docs
+only; no behavior change.
+
+- **Roadmap order (maintainer's decision, 2026-10-15):** the MCP adapter
+  (0.5.0), DLP and antivirus hooks (0.6.0), the SIEM export (0.7.0), then
+  1.0. PKI and certificate recovery, post-quantum signatures, FIPS approved
+  mode, the local GUI, the optional reputation halt, and more field types
+  move after 1.0, unscheduled. ROADMAP.md uses package versions instead of
+  phase labels, puts what is next first, and keeps the released phases'
+  design records under "Shipped". README, SCOPE, THREAT_MODEL, AGENTS.md,
+  llms.txt, and HOWTO follow.
+- **README:** a new opening (what Two-Key does and what you get; the status
+  in one line, with Known limits and FIT.md linked), a quick start, a
+  section on the MCP proxy with its diagram, and a table of the docs. The
+  install, version, and upgrade notes move to "Install and versions", and
+  the move from `two-key-concept` to "History and license".
+- The MCP proxy diagram (README and HOWTO) shows the fact hooks. Docs that
+  said "branch `mcp-proxy`" now say `working`.

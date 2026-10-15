@@ -15,10 +15,11 @@ audited. Apache-2.0.
 
 Do **not** add a scanning or antivirus engine, chain anchoring, or seed
 phrases here. The items in [ROADMAP.md](ROADMAP.md) are in scope: key backup
-(shipped in 0.3.0), ledger export for a SIEM, DLP and antivirus hooks that call external scanners,
-an MCP adapter, PKI with certificate recovery, hybrid ML-DSA signatures, a FIPS
-approved mode, and a local GUI. Build them in the order and with the limits stated there, unless the
-operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
+(shipped in 0.3.0), an MCP adapter (0.5.0), DLP and antivirus hooks that call
+external scanners (0.6.0), ledger export for a SIEM (0.7.0), and, after 1.0,
+PKI with certificate recovery, hybrid ML-DSA signatures, a FIPS approved
+mode, and a local GUI. Build them in the order and with the limits stated
+there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
@@ -58,7 +59,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | --- | --- | --- |
 | (none) | `cryptography>=41` | Ed25519, SHA-256, AES-256-GCM ledger |
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
-| `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (branch `mcp-proxy`) |
+| `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (branch `working`) |
 
 Git install:  
 `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.4.0"`

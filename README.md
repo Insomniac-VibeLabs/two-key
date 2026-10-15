@@ -3,23 +3,123 @@
 [![tests](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key)](https://github.com/Insomniac-VibeLabs/two-key/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Insomniac-VibeLabs/two-key/blob/main/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key/)
 
-Two independent keys must turn before an AI agent can act.
+**Two independent keys must turn before an AI agent can act.**
 
-This repository is the Two-Key authorization layer, kept small on purpose. It has a
-working ledger, Path A, Path B, and the judge and monitored-agent hooks. It does
-not scan payloads and it has no antivirus or DLP hooks today. Hooks for
-them, and the rest of the path to a 1.0 release, are on the
-[roadmap](#roadmap). Development moved here from the archived
-[two-key-concept](https://github.com/Insomniac-VibeLabs/two-key-concept)
-repository at 0.3.1; its history is preserved in this repository.
+Two-Key is an authorization layer for AI agents that use tools. Before a
+tool call runs (a payment, an email, a change to a record), two independent
+checks must both say yes:
 
-Apache License 2.0. See [LICENSE](LICENSE).
+- **The policy key (Path A).** The rules you sign compile to bytecode. A
+  small deterministic VM checks every call against fields read from the
+  call's own arguments: the tool, the amount, the counterparty, the data
+  class, and fields you define. It reads no prose, so no prompt can talk it
+  out of a rule.
+- **The judgment key (Path B).** One or more AI judges, each with its own
+  credential, review the call against your written constitution. Two-Key
+  refuses to start with a judge that holds the agent's own credential.
 
-Read [docs/FIT.md](docs/FIT.md) first, then
-[docs/COMPARISON.md](docs/COMPARISON.md),
-[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), and
-[docs/SCOPE.md](docs/SCOPE.md), before relying on it. For where the project
-is going, see [ROADMAP.md](ROADMAP.md).
+Only when both keys turn does Two-Key issue a single-use token, bound to the
+exact arguments, the signed constitution, and the ledger state. The gateway
+runs the tool only with that token, and every decision, allowed or denied,
+is written to an encrypted, hash-chained ledger with a signed head.
+
+What you get:
+
+- **Works with the agent you have.** Grok, ChatGPT, Claude, Gemini, or a
+  local Ollama model proposes the call as data; Two-Key decides.
+- **Judges you choose.** xAI, OpenAI, Anthropic, Gemini, or Ollama. One
+  judge is enough to start; the `high_assurance` profile asks for judges
+  from two makers and a yes from a local one.
+- **In front of any MCP server** (0.5.0). `two-key mcp-proxy` shows the
+  agent only the tools you signed and runs every call through both keys.
+- **Facts from your systems, not from the agent** (0.5.0). A field such as
+  "this invoice matches its purchase order" comes from your own lookup,
+  and is looked up again just before the tool runs.
+- **An audit trail you can check.** AES-256-GCM at rest, a hash chain, a
+  head signed by the principal and a witness key, and `two-key audit`.
+- **Keys you can recover.** Passphrase backup of every key, in three
+  bundles.
+- **Small on purpose.** Python 3.10 or later, one required dependency
+  (`cryptography`), Apache-2.0.
+
+**Status:** beta. 0.4.0 is the current release; 0.5.0, with the MCP proxy
+and caller-supplied facts, is in testing on the `working` branch.
+Maintainer-reviewed and tested with live LLM agents and judges. Read
+[Known limits](#known-limits) and [docs/FIT.md](docs/FIT.md) before you rely
+on it.
+
+## Quick start
+
+Install the 0.4.0 release from git (it is not on PyPI yet):
+
+```bash
+pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.4.0"
+```
+
+Or run the offline demo from a clone. It uses test-double judges, so it
+needs no API keys:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e ".[yaml]"
+python -m two_key demo
+python -m two_key authorize --help
+```
+
+Real judges are configured in `examples/judges.yaml`. The operator guide is
+[docs/HOWTO.md](docs/HOWTO.md).
+
+## Put Two-Key in front of an MCP server
+
+New in 0.5.0, in testing on the `working` branch
+([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
+
+```bash
+pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@working"
+```
+
+An MCP client (a desktop assistant, an IDE, an agent framework) normally
+starts an MCP server and calls its tools directly. With Two-Key, the client
+starts `two-key mcp-proxy` instead. The proxy starts the real server itself,
+shows the agent only the tools you signed, and runs every call through both
+keys before the server sees it. Facts such as a purchase-order match come
+from your own hook, never from the agent. A refused call comes back to the
+agent as a tool error with a reason code.
+
+```mermaid
+flowchart LR
+  host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
+  subgraph proxy["two-key mcp-proxy, its own OS user"]
+    tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk
+  end
+  tk -. "normalized record" .-> judges["Judges"]
+  gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
+  up --> sor["System of record"]
+  hooks -. "look facts up" .-> sor
+```
+
+`two-key mcp-draft-specs` drafts the tool specs from the server's own
+schemas for you to review and sign. The walkthrough, with a worked
+example, is HOWTO
+["Put Two-Key in front of an MCP server"](docs/HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).
+Run the proxy and the upstream server as separate OS users, so neither the
+agent nor the server can reach the proxy's keys (HOWTO "Key custody").
+
+## Documentation
+
+| Read | For |
+| --- | --- |
+| [docs/FIT.md](docs/FIT.md) | Whether Two-Key is the right control for you |
+| [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
+| [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
+| [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Trust boundaries and residual risk |
+| [docs/SCOPE.md](docs/SCOPE.md) | What is included, left out, and planned |
+| [docs/COMPARISON.md](docs/COMPARISON.md) | What Two-Key is not a substitute for |
+| [ROADMAP.md](ROADMAP.md) | The path to 1.0 |
+| [CHANGES.md](CHANGES.md) | Every change, with upgrade notes |
+| [SECURITY.md](SECURITY.md) | How to report a vulnerability |
 
 ## Components
 
@@ -29,8 +129,8 @@ is going, see [ROADMAP.md](ROADMAP.md).
 - **Monitored Agent**: The untrusted agent under constraint. It proposes actions; it has no direct access to any registered tool.
 - **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported (#45). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
 - **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
-- **MCP proxy** (branch `mcp-proxy`, for 0.5.0; `pip install "two-key[mcp]"`): `two-key mcp-proxy` sits between an MCP client and one upstream MCP server. It shows the agent only the signed tools, pins their schemas, and runs every `tools/call` through both keys and the in-process gateway. `two-key mcp-draft-specs` drafts the tool specs for the principal to review and sign. See HOWTO "Put Two-Key in front of an MCP server".
-- **Caller-supplied facts and the guard** (branch `mcp-proxy`): a field declared `source: caller` gets its value from your integration (`facts=`), never from the agent's arguments, and is looked up again before the tool runs. `two_key.guard.Guard` does both lookups and both keys in one call for any agent loop; the MCP proxy runs on it. See HOWTO "Caller-supplied facts".
+- **MCP proxy** (0.5.0, on `working`; the `mcp` extra): `two-key mcp-proxy` sits between an MCP client and one upstream MCP server. It shows the agent only the signed tools, pins their schemas, and runs every `tools/call` through both keys and the in-process gateway. `two-key mcp-draft-specs` drafts the tool specs for the principal to review and sign. See HOWTO "Put Two-Key in front of an MCP server".
+- **Caller-supplied facts and the guard** (0.5.0, on `working`): a field declared `source: caller` gets its value from your integration (`facts=`), never from the agent's arguments, and is looked up again before the tool runs. `two_key.guard.Guard` does both lookups and both keys in one call for any agent loop; the MCP proxy runs on it. See HOWTO "Caller-supplied facts".
 
 ## Dual-path authorization
 
@@ -331,9 +431,9 @@ Not in this repository:
 - hybrid ML-DSA-65
 
 Some of this is planned as optional additions. See the
-[roadmap](#roadmap): DLP and antivirus hooks (an interface that calls
-external scanners, not a scanning engine), PKI with certificate recovery,
-and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
+[roadmap](#roadmap): DLP and antivirus hooks next (0.6.0, an interface that
+calls external scanners, not a scanning engine), and, after 1.0, PKI with
+certificate recovery and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
 backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
 phrases are not planned.
 
@@ -364,7 +464,7 @@ audited. It is not a FIPS 140-3 validated module.
   It does not verify facts the agent asserts: a custom field read from the
   arguments (for example `po_matched: true`) is the agent's word. The tool
   or the integration must check such facts against the system of record
-  (HOWTO "What Two-Key verifies"). On branch `mcp-proxy`, a `source: caller`
+  (HOWTO "What Two-Key verifies"). From 0.5.0 (on `working`), a `source: caller`
   field takes the fact from the integration's own lookup instead; that
   fact is as good as the lookup, which Two-Key does not check.
 - No external anchor for the ledger. Someone holding the principal and
@@ -397,91 +497,74 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Roadmap
 
-The plan from 0.2.4 to a 1.0 release. It states intent, not a
-promise. The order may change, and version numbers are targets, not dates.
-0.3.0 (key backup), 0.3.1 (live-test fixes, beta), and 0.4.0 (the move to
-this repository and the package rename to `two-key`) are released. The MCP adapter (0.6) moves ahead of 0.4 and
-0.5; its first part (the stdio proxy, the spec drafter, caller-supplied facts, and the guard core) is on branch `mcp-proxy`. Nothing else after 0.3 in that plan exists yet.
-The detail is in [ROADMAP.md](ROADMAP.md).
+Next come the MCP adapter (0.5.0), DLP and antivirus hooks (0.6.0), and a
+ledger export for a SIEM (0.7.0), then a public review and the 1.0 release.
+It states intent, not a promise: the order may change, and version numbers
+are targets, not dates. The detail, and what comes after 1.0, is in
+[ROADMAP.md](ROADMAP.md).
 
 ```mermaid
 flowchart LR
-  p0["0.2.x<br/>Baseline"] --> p1["0.3<br/>Key backup"]
-  p1 --> p2["0.4<br/>Ledger export<br/>for SIEM"]
-  p2 --> p3["0.5<br/>DLP and AV hooks"]
-  p3 --> p4["0.6<br/>MCP adapter"]
-  p4 --> p5["0.7<br/>PKI and certificate<br/>recovery"]
-  p5 --> p6["0.8<br/>Post-quantum<br/>signatures"]
-  p6 --> p7["0.9<br/>FIPS approved<br/>mode"]
-  p7 --> p8["0.10<br/>Local GUI"]
-  p8 --> p9["1.0<br/>Review and release"]
-  p0 -.-> prep["0.11<br/>Optional reputation halt<br/>off unless configured"]
-  prep -.-> p9
+  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter"]
+  r05 --> r06["0.6.0<br/>DLP and AV hooks"]
+  r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM"]
+  r07 --> r10["1.0.0<br/>Review and release"]
+  r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
 ```
 
-| Target | What |
-| --- | --- |
-| 0.2.3 | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
-| 0.2.4 | Head anchor against a ledger-directory rollback or wipe (#62); `two-key recover` for an uncheckpointed tail (#49). Tagged `v0.2.4` on `main` |
-| 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys, in three bundles. A restore includes `head.anchor` from the same moment. Tagged `v0.3.0` on `main` |
-| 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
-| 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
-| 0.6 | MCP adapter: a proxy in front of the gateway, not an MCP server |
-| 0.7 | PKI: X.509 identities for personal and enterprise use, and certificate recovery |
-| 0.8 | Hybrid Ed25519 plus ML-DSA-65 signatures for the constitution and ledger head |
-| 0.9 | FIPS approved mode: refuses to start unless running on a validated module |
-| 0.10 | Local GUI for configuration and ledger auditing |
-| 1.0 | Public community review, then release. Described as community-reviewed, not audited |
-| 0.11, any time before 1.0 | Optional reputation halt. Off unless configured. Not a change to `revoke` |
-| After 1.0, not scheduled | More spec field types (decimal, URL, path, email, opaque bytes), and `amount` / `counterparty` as ordinary typed fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped in 0.3.0 |
+| Version | What | Status |
+| --- | --- | --- |
+| 0.4.0 | This repository and the package name `two-key` | Released, tag `v0.4.0` |
+| 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | In testing on `working` |
+| 0.6.0 | DLP and antivirus hooks that call external scanners (ClamAV, a secret scanner) | Next |
+| 0.7.0 | Ledger export for a SIEM: verified, decrypted locally, no argument values | Planned |
+| 1.0.0 | Public community review, then release on PyPI. Described as community-reviewed, not audited | Planned |
+| After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
-Install from git. It is not published to PyPI. Package version is 0.4.0,
-the first release from this repository: tag `v0.4.0` on `main`. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. In
-that repository tag `v0.3.0` stays on
-`e44be56`. Tag `v0.2.4` stays on
-`fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
-commit `2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
-some judges 0.2.2 accepted (one holding the agent's credential without
-sending it, or in the other form), and pins each ledger's witness key on
-its first open: read "Upgrading from 0.2.2" in
-[CHANGES.md](CHANGES.md) before upgrading (and "Upgrading from 0.2.1" and
-"Upgrading from 0.1.12" from older versions). 0.2.4 writes a head anchor on
-the first open of an existing ledger and refuses a rolled-back ledger
-directory: read "Upgrading from 0.2.3". 0.3.0 adds key backup, custom Path
-A fields, and `TwoKey.gateway()` (#45). Existing ledgers and constitutions
-open unchanged: read "Upgrading from 0.2.4". A constitution that declares
-custom fields signs as v2, which installs before 0.3.0 refuse: read
-"Custom Path A fields" > "Upgrading" in CHANGES.md. 0.3.1 changes how data
-classes combine and adds agent declines: read "Release v0.3.1" > "Upgrading".
+## Install and versions
 
-The middle column on the GitHub file list is the last commit that touched
-that file, not a description of the file. The layout table below is the
-description.
+Two-Key is not on PyPI yet. Install a tagged release from git:
 
 ```bash
 pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.4.0"
 ```
 
-That ref is the tagged 0.4.0 release: 0.3.1 under the new package name `two-key` (0.3.0's key backup, custom Path A
-fields, and #45 gateway boundary, plus the live-test fixes: agent declines,
-the syntax-only agent vocabulary, and data classes that combine as a set).
-`main` is that release. `working` is where the next changes land. For the
-previous release, use `@v0.3.0`.
+`v0.4.0` is the 0.3.1 code under the new package name `two-key`: key
+backup, custom Path A fields, the #45 gateway boundary, agent declines, the
+syntax-only agent vocabulary, and data classes that combine as a set. `main`
+holds that release and the fixes merged since; `working` is where the next
+changes land. For the previous release, use `@v0.3.0`. Tags `v0.3.1` and
+earlier are in the archived `two-key-concept` repository, where `v0.3.0`
+stays on `e44be56`, `v0.2.4` on `fc836bb`, `v0.2.3` on `4a4352e`, and
+`v0.2.0` on `2f756ac`.
 
-## Run the offline demo
+Upgrading from an older version: read the "Upgrading" notes in
+[CHANGES.md](CHANGES.md) for every version you skip.
 
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e ".[yaml]"
-python -m unittest discover -s tests
-python -m two_key demo
-python -m two_key authorize --help
-```
+- 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses some judges
+  0.2.2 accepted (one holding the agent's credential without sending it,
+  or in the other form), and pins each ledger's witness key on its first
+  open: "Upgrading from 0.2.2" (and "Upgrading from 0.2.1" and "Upgrading
+  from 0.1.12" from older versions).
+- 0.2.4 writes a head anchor on the first open of an existing ledger and
+  refuses a rolled-back ledger directory: "Upgrading from 0.2.3".
+- 0.3.0 adds key backup, custom Path A fields, and `TwoKey.gateway()` (#45).
+  Existing ledgers and constitutions open unchanged: "Upgrading from
+  0.2.4". A constitution that declares custom fields signs as v2, which
+  installs before 0.3.0 refuse: "Custom Path A fields" > "Upgrading".
+- 0.3.1 changes how data classes combine and adds agent declines: "Release
+  v0.3.1" > "Upgrading".
+- 0.4.0 renames the package and its file formats. Key files still load;
+  re-sign the constitution, start a new ledger, and export a new backup:
+  "Upgrading from 0.3.1".
+- 0.5.0 (in testing on `working`) adds constitution v3 for caller-supplied
+  facts. Nothing changes until a field is declared `source: caller`:
+  "Upgrading from 0.4.0".
 
-That install follows the ranges in `pyproject.toml`. CI does not: it installs
-the versions in `uv.lock` (cryptography, PyYAML, the MCP SDK for the `mcp`
-extra, and their dependencies), wheels only. To match CI, use the uv version pinned in
+A clone installed with `pip install -e` follows the ranges in
+`pyproject.toml`. CI does not: it installs the versions in `uv.lock`
+(cryptography, PyYAML, the MCP SDK for the `mcp` extra, and their
+dependencies), wheels only. To match CI, use the uv version pinned in
 `.github/workflows/tests.yml`:
 
 ```bash
@@ -490,10 +573,10 @@ uv sync --locked --no-build --extra yaml --extra mcp --no-dev
 .venv/bin/python -m unittest discover -s tests
 ```
 
-The demo uses fixed test-double judges. Real judges are configured in
-`examples/judges.yaml`. See [docs/HOWTO.md](docs/HOWTO.md).
-
 ## Layout
+
+The middle column on the GitHub file list is the last commit that touched
+that file, not a description of the file. This table is the description.
 
 | Path | What |
 | --- | --- |
@@ -517,10 +600,11 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, custom fields, judges, agents |
-| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.4.0 is tagged `v0.4.0` |
-| `docs/HOWTO.md` | Operator how-to |
-| `docs/JUDGES_AND_QUORUM.md` | How judges vote and how Path A and Path B combine |
-| `docs/FIT.md` | Whether this package is the right control |
-| `docs/COMPARISON.md` | What this package is not a substitute for |
-| `docs/THREAT_MODEL.md` | Boundaries and residual risk |
-| `docs/SCOPE.md` | What this package includes, leaves out, and plans |
+
+## History and license
+
+Development moved here from the archived
+[two-key-concept](https://github.com/Insomniac-VibeLabs/two-key-concept)
+repository at 0.3.1; its history is preserved in this repository.
+
+Apache License 2.0. See [LICENSE](LICENSE).

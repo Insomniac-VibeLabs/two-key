@@ -37,7 +37,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
 - a single-use token and a gateway intended to be the only component that
   invokes registered tools; this does not stop an agent from calling a
   tool directly through another path
-- on branch `mcp-proxy` (for 0.5.0), behind the optional `mcp` extra (the
+- on branch `working` (for 0.5.0), behind the optional `mcp` extra (the
   official MCP Python SDK): `two-key mcp-proxy`, a stdio proxy in front of
   one upstream MCP server. It starts the server as a child process, shows
   the agent only the signed tools, pins their schemas
@@ -49,7 +49,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   the principal to review and sign; a draft does not sign until the
   principal decides each floor, amount unit, and allow list. The proxy
   speaks MCP to the agent's host but offers no tools of its own
-- on branch `mcp-proxy` (for 0.5.0): caller-supplied facts. A field
+- on branch `working` (for 0.5.0): caller-supplied facts. A field
   declared `source: caller` (constitution v3) takes its value from the
   integration's `facts=`, never from the agent's arguments; the gateway
   takes the facts again at redemption (`fact_mismatch`). The guard core
@@ -69,44 +69,48 @@ anchoring, seed phrases, or hybrid ML-DSA.
 
 ## Planned additions
 
-[ROADMAP.md](../ROADMAP.md) lists optional additions to this repository. 0.3.0
-(key backup) is released and is described above. None of the later phases
-exists yet. When one ships, this file and [THREAT_MODEL.md](THREAT_MODEL.md)
-change in the same release.
+[ROADMAP.md](../ROADMAP.md) lists optional additions to this repository, in
+this order: the MCP adapter (0.5.0), DLP and antivirus hooks (0.6.0), and
+the SIEM export (0.7.0), then 1.0. Nothing below exists in a release yet.
+When an item ships, this file and [THREAT_MODEL.md](THREAT_MODEL.md) change
+in the same release.
 
-- Ledger export for SIEM (target 0.4): a command that verifies and decrypts
+- MCP adapter (0.5.0): the proxy, the drafter, caller-supplied facts,
+  and the framework-neutral guard core are built (above) and go through
+  live test run 6 before the release. HTTP transports come later. The proxy offers no tools of its own.
+- Inspection hooks for DLP and antivirus (0.6.0, next): an interface that
+  calls external scanners. This package still does not scan or classify
+  content itself.
+- Ledger export for SIEM (0.7.0): a command that verifies and decrypts
   the ledger locally and writes events without argument values. A field
   allowlist leaves out the proposal text and the derived amount and
   counterparty, which the ledger holds today.
-- Inspection hooks for DLP and antivirus (target 0.5): an interface that
-  calls external scanners. This package still does not scan or classify
-  content itself.
-- MCP adapter (target 0.6): part 1, caller-supplied facts, and the
-  framework-neutral guard core are on branch `mcp-proxy` (above). Still
-  planned: HTTP transports. The proxy offers no tools of its own.
-- PKI and certificate recovery (target 0.7): X.509 identities for the
+
+After 1.0, not scheduled:
+
+- PKI and certificate recovery: X.509 identities for the
   principal, witness, capability issuer, and optionally agents, for personal
   use (a small local CA) and enterprise use (an existing CA and trust
   anchors), with revocation recorded in the ledger. Recovery is a backup
   bundle unlocked by a recovery key for personal use, and a key split k-of-n
   among custodians for enterprise use. This package does not become a
   general-purpose certificate authority.
-- Post-quantum signatures (target 0.8): hybrid Ed25519 plus ML-DSA-65 for the
+- Post-quantum signatures: hybrid Ed25519 plus ML-DSA-65 for the
   long-lived signatures (the constitution and the ledger head), sized to this
   repository's scope.
-- FIPS approved mode (target 0.9): an opt-in mode that refuses to start unless
+- FIPS approved mode: an opt-in mode that refuses to start unless
   the cryptography library runs on a FIPS 140-3 validated module in approved
   mode, and that refuses algorithms outside the approved set. This package is
   not FIPS validated today, and that mode would not make it validated.
   Running on a validated module is not the same as this package being
   validated or compliant, and the docs will not describe it that way.
-- Local GUI (target 0.10): a loopback-only interface for configuration and
+- Local GUI: a loopback-only interface for configuration and
   ledger auditing, built on the CLI and the existing file formats. It does not
   hold the principal key, and it is not a hosted or multi-user service.
   Filtering by judge needs per-judge ballot records (judge id, vote, and
   capped error only, never the rationale text), which the ledger does not
   hold today.
-- More spec field types (planned, not scheduled): decimal, URL, path,
+- More spec field types: decimal, URL, path,
   email, and opaque bytes. `amount` and `counterparty` become ordinary typed
   fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped
   in 0.3.0 and are described above.

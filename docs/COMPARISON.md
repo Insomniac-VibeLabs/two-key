@@ -7,7 +7,7 @@ current behavior of those projects in their own docs before you rely on them.
 
 A call runs only if Path A and Path B both allow, and only if the gateway
 later redeems a single-use token bound to that tool and those argument
-bytes. Path A does not read English. There is no MCP proxy in this release (branch `mcp-proxy` has one; it forwards an upstream server's signed tools and offers none of its own).
+bytes. Path A does not read English. There is no MCP proxy in this release (branch `working` has one; it forwards an upstream server's signed tools and offers none of its own).
 There are no scanner hooks in this package. Key backup (0.3.0) is three
 passphrase bundles of this package's own keys, not a seed phrase and not a
 substitute for a password manager.
@@ -17,7 +17,7 @@ substitute for a password manager.
 | Content and injection filters, such as Llama Guard, Prompt Guard, NeMo input rails, and Guardrails AI | Whether text looks unsafe, off-topic, or injected | Does not. Path A never reads the proposal. A filter can run before this package. It is not the authorization decision. |
 | Dialogue and execution rails, such as NeMo execution rails | Whether a step in a conversation script may call a tool | Does not model a dialogue. The gateway runs a registered function only after both paths allow and the token matches the argument bytes. |
 | Deterministic policy engines, such as Cedar, OPA, and Cerbos | Whether a request is permitted by policy, independent of a model | Path A is this kind of check, and only for the normalized action record and the compiled hard rules. It is not a general policy engine for the rest of the application. The second key is the judge quorum. The token and the ledger are part of the decision. |
-| Identity and MCP transport authorization | Whether a client may open a session or act as a user | Not user login or MCP session authorization. The MCP proxy (branch `mcp-proxy`) authorizes each `tools/call`, not who may connect. This package has no X.509 or PKI check. |
+| Identity and MCP transport authorization | Whether a client may open a session or act as a user | Not user login or MCP session authorization. The MCP proxy (branch `working`) authorizes each `tools/call`, not who may connect. This package has no X.509 or PKI check. |
 | Audit products and DLP | Whether a payload is sensitive, and whether an outside system stores the decision | The ledger is an encrypted hash chain with a signed head. Nothing is exported to a SIEM. There is no DLP or antivirus hook, and no built-in scan of argument text. |
 
 ## Do not use this instead of

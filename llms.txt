@@ -62,7 +62,7 @@ It is not an external anchor. two-key recover drops an uncheckpointed tail and d
 Creating a ledger at a new path warns on stderr. A non-empty agent_session satisfies the cloud-judge
 presence check, including a placeholder; that does not fail closed. The check fails closed only when
 the session is missing or equals a judge credential. revoke ends earlier tokens only; an optional
-reputation halt is roadmap 0.11 and is not built.
+reputation halt is on the roadmap after 1.0 and is not built.
 The token TTL default is 120 seconds, at most 300. It is signed by the capability key, not
 the principal key. The gateway verifies only. It runs in the TwoKey process on the
 TwoKey ledger object (TwoKey.gateway()); a gateway in another process or host is not
