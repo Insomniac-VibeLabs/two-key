@@ -58,6 +58,7 @@
 - [README license badge — 2026-10-15](#readme-license-badge--2026-10-15)
 - [Caller-supplied facts and the guard core (#2 P1) — 2026-10-15](#caller-supplied-facts-and-the-guard-core-2-p1--2026-10-15)
 - [Docs: roadmap order, README intro and MCP section, tables of contents — 2026-10-15](#docs-roadmap-order-readme-intro-and-mcp-section-tables-of-contents--2026-10-15)
+- [Roadmap: judge connection reuse (#6) and judge history summary (#1) placed — 2026-10-15](#roadmap-judge-connection-reuse-6-and-judge-history-summary-1-placed--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2275,3 +2276,13 @@ only; no behavior change.
   `python tests/test_doc_toc.py --write` regenerates them. CONTRIBUTING and
   AGENTS.md say so. Short documents (SECURITY, SCOPE, COMPARISON,
   CONTRIBUTING) have none.
+
+## Roadmap: judge connection reuse (#6) and judge history summary (#1) placed — 2026-10-15
+
+On branch `working`. Docs only.
+
+- The maintainer's decision: #6 (judge connections are never reused, since
+  each quorum round starts new threads) joins 0.6.0, and #1 (a judge
+  history summary built from the ledger, on by default) comes before the
+  1.0 review, after its own maintainer security review. ROADMAP, README,
+  SCOPE, and THREAT_MODEL list both.

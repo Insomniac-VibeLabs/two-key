@@ -42,14 +42,16 @@ flowchart LR
 | --- | --- | --- |
 | 0.4.0 | This repository and the package name `two-key` (0.3.1 under the new name) | Released, tag `v0.4.0` |
 | 0.5.0 | MCP adapter: `two-key mcp-proxy`, `two-key mcp-draft-specs`, caller-supplied facts, and the guard core | Built on `working`; live test run 6 next |
-| 0.6.0 | DLP and antivirus hooks that call external scanners | Next |
+| 0.6.0 | DLP and antivirus hooks that call external scanners; judge connection reuse (#6) | Next |
 | 0.7.0 | Ledger export for a SIEM | Planned |
-| 1.0.0 | Public community review, then release on PyPI | Planned |
+| 1.0.0 | Judge history summary (#1), then a public community review and release on PyPI | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
 antivirus hooks, then the SIEM export, then 1.0. PKI, post-quantum
-signatures, FIPS approved mode, and the local GUI move after 1.0. Earlier
+signatures, FIPS approved mode, and the local GUI move after 1.0. Judge
+connection reuse (#6) joins 0.6.0, and the judge history summary (#1) comes
+before the 1.0 review. Earlier
 versions of this plan numbered the phases 0.4 to 0.11 in another order;
 CHANGES.md keeps that record. Released versions are under "Shipped" below.
 
@@ -111,6 +113,12 @@ test run 6 runs before the release.
 - Design decision to settle first: run the hook before judges receive
   `tool_args`, so scanned content is not sent to cloud vendors.
 - Tests use the EICAR test file and fake secrets.
+- Also in 0.6.0: reuse judge connections (#6). Today each quorum round
+  starts new threads, so the per-thread pool never reuses a connection, and
+  every round opens a new TCP (and TLS) connection per judge. Move to a
+  lock-guarded pool keyed by origin, or document fresh connections plainly.
+  No security impact; it matters once the MCP proxy puts Two-Key on every
+  tool call.
 
 ## 0.7.0: Ledger export for SIEM
 
@@ -127,6 +135,15 @@ test run 6 runs before the release.
 
 ## 1.0.0: Review and release
 
+- First, the judge history summary (#1): Path B judges get a summary of
+  recent allows, denies, and abstains, built by `TwoKey` from its own
+  ledger and on by default (opt-out in the quorum policy), so a repeated
+  bill, a split payment, or a burst of denied attempts is visible to the
+  next decision. Structured fields and library reason codes only: no
+  proposal text, no rationale, and a counterparty or tool name only when it
+  is signed. It changes what judges receive and reads the ledger during
+  authorization, so it gets its own maintainer security review before any
+  code. The design is in the issue.
 - A time-boxed, public community review with a stated scope.
 - Release only with no unresolved Medium or higher findings from that review.
 - Publish to PyPI with trusted publishing, signed tags, and an SBOM.

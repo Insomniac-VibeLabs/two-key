@@ -81,10 +81,15 @@ in the same release.
 - Inspection hooks for DLP and antivirus (0.6.0, next): an interface that
   calls external scanners. This package still does not scan or classify
   content itself.
+- Judge connection reuse (#6, 0.6.0): judge connections are not reused
+  today; each quorum round opens new ones.
 - Ledger export for SIEM (0.7.0): a command that verifies and decrypts
   the ledger locally and writes events without argument values. A field
   allowlist leaves out the proposal text and the derived amount and
   counterparty, which the ledger holds today.
+- Judge history summary (#1, before 1.0): judges get a summary of recent
+  decisions built from the ledger, on by default, after its own security
+  review.
 
 After 1.0, not scheduled:
 

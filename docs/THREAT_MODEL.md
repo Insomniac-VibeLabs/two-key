@@ -513,6 +513,14 @@ above, not here.
   the derived amount, counterparty, and custom field values, which the
   ledger holds today.
   Whoever can read the SIEM becomes a new audience for ledger metadata.
+- Judge history summary (#1, before 1.0). Judges are meant to receive a
+  summary of recent decisions that `TwoKey` builds from its own ledger, on
+  by default. New flows: the ledger is read during authorization, and cloud
+  judges receive the counterparty's history on every call. The summary is
+  meant to carry structured fields and library reason codes only, never
+  proposal text, decline reasons, or rationales, and a counterparty or tool
+  name only when it is signed; its digest is meant to be ledgered with the
+  decision. It needs its own maintainer security review before code.
 - After 1.0, not scheduled:
   - PKI and certificate recovery. New assets: the certificate
     authority key (a personal local CA or an enterprise CA), issued
