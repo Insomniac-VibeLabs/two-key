@@ -1906,3 +1906,26 @@ On branch `working`. Package version stays 0.4.0. CI only.
   upload reads the workflow run and failed with "Resource not accessible by
   integration" without it. The upload still needs code scanning (Advanced
   Security) enabled in the repository settings (#3), as the CodeQL job does.
+
+## `main`'s workflow edits merged; CodeQL restored; Sonar scan v6 — 2026-10-15
+
+On branch `working`. Package version stays 0.4.0. CI only.
+
+- Merged `main` (three web-editor commits: `codeql.yml` deleted and
+  re-created, and `coverage.yml`'s project key set to
+  `Insomniac-VibeLabs_two-key`, which `working` already had).
+- **`codeql.yml` is the CodeQL workflow again.** The re-created file on `main`
+  was a copy of `coverage.yml` (named `coverage`, project key
+  `Insomniac-VibeLabs_two-key-concept`): it ran a second SonarCloud scan that
+  failed on pull requests ("Could not find the pullrequest") and, on a push,
+  uploaded this repository's analysis to the old project. CodeQL did not run
+  at all. A plain merge would have kept that copy, so the file is restored
+  explicitly.
+- **`sonarqube-scan-action` moves to v6, pinned:**
+  `fd88b7d7ccbaefd23d8f36f73b59db7a3d246602` (`v6` = `v6.0.0`). This is what
+  Dependabot's PR #8 proposed, but pinned to a commit SHA instead of the
+  mutable `v6` tag (#4). v6 changes how `args` are quoted; this workflow's
+  arguments have no quotes or spaces, so they parse the same.
+- Still a SonarCloud setting, not code: the CI scan fails while the project's
+  Automatic Analysis is on ("You are running CI analysis while Automatic
+  Analysis is enabled"). Turn Automatic Analysis off (#3).
