@@ -4,7 +4,6 @@ loads the principal key through the safe loader, uses the configured TTL, and le
 import io
 import json
 import os
-import stat
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -19,6 +18,7 @@ from two_key.keys import generate_private_key, load_private_key_file, save_priva
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
+from perm import chmod, private
 
 PROSE = "Drafts to ada are allowed."
 RULES = [{"id": "tools", "allow_only_tools": ["email_draft"]}]
@@ -72,7 +72,7 @@ class CliTokens(unittest.TestCase):
         path = self.dir / "token.txt"
         code, out, _ = self.run_cli("--emit-token", str(path))
         self.assertEqual(code, 0)
-        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        self.assertTrue(private(path))
         token = path.read_text().strip()
         self.assertTrue(token.startswith("tk1."))
         self.assertNotIn(token, out)
@@ -127,12 +127,12 @@ class CliTokens(unittest.TestCase):
 
     def test_safe_loader_refuses_group_or_world_readable_key(self):
         path = self.dir / "principal.pem"
-        os.chmod(path, 0o644)
+        chmod(path, 0o644)
         with self.assertRaisesRegex(ValueError, "key_file_insecure"):
             load_private_key_file(path)
         with self.assertRaisesRegex(ValueError, "key_file_insecure"):
             self.run_cli()
-        os.chmod(path, 0o600)
+        chmod(path, 0o600)
         link = self.dir / "link.pem"
         link.symlink_to(path)
         with self.assertRaisesRegex(ValueError, "key_file_unreadable"):

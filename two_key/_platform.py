@@ -36,6 +36,8 @@ O_BINARY = getattr(os, "O_BINARY", 0)
 O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 SYSTEM_SID = "S-1-5-18"
+# OWNER RIGHTS: an entry for whoever owns the file, which is checked to be one of the trusted accounts.
+OWNER_RIGHTS_SID = "S-1-3-4"
 ADMINISTRATORS_SID = "S-1-5-32-544"
 
 if WINDOWS:  # pragma: no cover - exercised on the Windows CI runner
@@ -254,6 +256,8 @@ if WINDOWS:  # pragma: no cover - exercised on the Windows CI runner
             owner_sid = _sid_string(owner)
             if owner_sid not in trusted and forbidden is None:
                 return f"it is owned by {owner_sid}, not by you"
+            if owner_sid in trusted:
+                trusted.add(OWNER_RIGHTS_SID)
             if not dacl.value:
                 return "it has no access list, so everyone has full access"
             info = _ACL_SIZE_INFORMATION_T()
@@ -435,19 +439,19 @@ def is_link(path) -> bool:
         return False
 
 
-def dir_writable_by_others(path) -> bool:
-    """Whether accounts other than the owner can add or remove entries in a directory.
+def dir_write_problem(path) -> str | None:
+    """Why accounts other than the owner can add or remove entries in a directory, or None.
 
     POSIX: the group or other write bit. Windows: an "allow" entry with a write right for an account other
     than the current user, SYSTEM, or Administrators.
     """
     if not WINDOWS:
-        return bool(os.lstat(path).st_mode & 0o022)
+        return "writable by group or others" if os.lstat(path).st_mode & 0o022 else None
     # GENERIC_ALL, GENERIC_WRITE, WRITE_OWNER, WRITE_DAC, DELETE, delete child, add subdirectory, add file
     write = 0x10000000 | 0x40000000 | 0x80000 | 0x40000 | 0x10000 | 0x40 | 0x4 | 0x2  # pragma: no cover
     fd = _create_file_dir(path)  # pragma: no cover
     try:  # pragma: no cover
-        return _access_problem_handle(msvcrt.get_osfhandle(fd), write) is not None
+        return _access_problem_handle(msvcrt.get_osfhandle(fd), write)
     finally:  # pragma: no cover
         os.close(fd)
 

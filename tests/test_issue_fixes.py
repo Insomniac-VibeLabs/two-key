@@ -5,7 +5,6 @@
 
 import http.server
 import os
-import stat
 import sys
 import tempfile
 import threading
@@ -25,6 +24,7 @@ from two_key.ledger import Ledger, LedgerError
 from two_key.quorum import QuorumPolicy, convene
 from two_key.strict import StrictParseError, load_yaml, loads_json
 from two_key.testing import TEST_AGENT, FixedJudge
+from perm import chmod, private
 
 from test_two_key import PROSE, RULES, SPECS, _engine
 
@@ -202,10 +202,10 @@ class KeyFiles(unittest.TestCase):
         self.path = Path(self.tmp.name, "ledger")
 
     def test_new_witness_directory_is_private(self):
-        self.assertEqual(stat.S_IMODE(self.tk.ledger.witness_path.parent.stat().st_mode), 0o700)
-        os.chmod(self.tk.ledger.witness_path.parent, 0o755)  # skipcq: BAN-B103 -- the test loosens the mode to check it is tightened to 0o700
+        self.assertTrue(private(self.tk.ledger.witness_path.parent))
+        chmod(self.tk.ledger.witness_path.parent, 0o755)   # loosened, to check it is tightened again
         Ledger(self.path, self.key)                         # the default directory is set back to 0700
-        self.assertEqual(stat.S_IMODE(self.tk.ledger.witness_path.parent.stat().st_mode), 0o700)
+        self.assertTrue(private(self.tk.ledger.witness_path.parent))
 
     def test_a_witness_directory_it_cannot_chmod_still_opens(self):
         real = os.chmod
@@ -219,10 +219,10 @@ class KeyFiles(unittest.TestCase):
 
     def test_lax_or_linked_witness_key_is_refused(self):
         witness = self.tk.ledger.witness_path
-        os.chmod(witness, 0o644)
+        chmod(witness, 0o644)
         with self.assertRaisesRegex(LedgerError, "witness key: key_file_insecure"):
             Ledger(self.path, self.key)
-        os.chmod(witness, 0o600)
+        chmod(witness, 0o600)
         real = witness.with_name("real.pem")
         witness.rename(real)
         witness.symlink_to(real)
@@ -231,7 +231,7 @@ class KeyFiles(unittest.TestCase):
 
     def test_lax_capability_key_is_refused(self):
         cap = self.tk.ledger.capability_key_path()
-        os.chmod(cap, 0o644)
+        chmod(cap, 0o644)
         env = sign_constitution(PROSE, RULES, self.key, SPECS)
         with self.assertRaisesRegex(TwoKeyConfigError, "capability key: key_file_insecure"):
             TwoKey(Ledger(self.path, self.key), self.key.public_key(), verify_signed(env, self.key.public_key()),

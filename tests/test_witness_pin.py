@@ -17,6 +17,7 @@ from two_key.audit import witness_pins
 from two_key.canonical import canonical_bytes
 from two_key.keys import generate_private_key, public_raw, save_private_key, sign
 from two_key.ledger import Ledger, LedgerError, _seal, witness_key_fingerprint
+from perm import chmod, private
 
 from test_two_key import _engine
 
@@ -101,7 +102,7 @@ class SwappedWitness(unittest.TestCase):
         swap_witness(self.led)
         self.led.witness_path.unlink()
         self.led.witness_path.write_bytes(original)
-        os.chmod(self.led.witness_path, 0o600)
+        chmod(self.led.witness_path, 0o600)
         Ledger(self.path, self.key).verify()
 
     def test_head_signed_by_another_witness_key_is_refused(self):
@@ -256,7 +257,7 @@ class Rotation(unittest.TestCase):
         self.assertLessEqual({"principal_signature", "old_witness_signature", "new_witness_signature"},
                              set(entry.body))
         self.assertFalse(Path(str(self.led.witness_path) + ".new").exists())
-        self.assertEqual(self.led.witness_path.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(private(self.led.witness_path))
         self.assertIn(b"PUBLIC KEY", self.led.witness_path.with_suffix(".pub.pem").read_bytes())
         self.led.append("note", {"n": 2})
         self.led.checkpoint()
@@ -272,7 +273,7 @@ class Rotation(unittest.TestCase):
         self.led.rotate_witness()
         self.led.witness_path.unlink()
         self.led.witness_path.write_bytes(old_pem)
-        os.chmod(self.led.witness_path, 0o600)
+        chmod(self.led.witness_path, 0o600)
         with self.assertRaisesRegex(LedgerError, "witness_key_changed"):
             Ledger(self.path, self.key)
 

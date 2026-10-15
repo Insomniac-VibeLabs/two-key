@@ -1,13 +1,12 @@
 """The ledger key and the wrapped data key are created with O_EXCL at 0600 and checked on read."""
 
-import os
-import stat
 import tempfile
 import unittest
 from pathlib import Path
 
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger, LedgerError
+from perm import chmod, private
 
 
 class LedgerKeyFile(unittest.TestCase):
@@ -24,9 +23,9 @@ class LedgerKeyFile(unittest.TestCase):
     def test_created_0600_in_a_0700_directory_and_reused(self):
         led = self.open()
         path = led.ledger_key_path
-        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
-        self.assertEqual(stat.S_IMODE(os.stat(path.parent).st_mode), 0o700)
-        self.assertEqual(stat.S_IMODE(os.stat(led.wrap_path).st_mode), 0o600)
+        self.assertTrue(private(path))
+        self.assertTrue(private(path.parent))
+        self.assertTrue(private(led.wrap_path))
         first = path.read_bytes()
         led.append("note", {"n": 1})
         led.checkpoint()
@@ -39,7 +38,7 @@ class LedgerKeyFile(unittest.TestCase):
 
     def test_group_readable_ledger_key_is_refused(self):
         led = self.open()
-        os.chmod(led.ledger_key_path, 0o640)
+        chmod(led.ledger_key_path, 0o640)
         with self.assertRaisesRegex(LedgerError, "ledger_key_insecure"):
             self.open()
 
@@ -48,7 +47,7 @@ class LedgerKeyFile(unittest.TestCase):
         key_dir.mkdir(mode=0o700)
         target = self.root / "elsewhere"
         target.write_bytes(b"x" * 32)
-        os.chmod(target, 0o600)
+        chmod(target, 0o600)
         (key_dir / "ledger.key").symlink_to(target)
         with self.assertRaisesRegex(LedgerError, "ledger_key_unreadable"):
             self.open()
@@ -64,7 +63,7 @@ class LedgerKeyFile(unittest.TestCase):
 
     def test_wrong_length_ledger_key_is_refused(self):
         led = self.open()
-        os.chmod(led.ledger_key_path, 0o600)
+        chmod(led.ledger_key_path, 0o600)
         with open(led.ledger_key_path, "ab") as fh:
             fh.write(b"x")
         with self.assertRaisesRegex(LedgerError, "ledger_key_unreadable"):

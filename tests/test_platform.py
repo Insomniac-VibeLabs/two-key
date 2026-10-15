@@ -4,7 +4,7 @@ The POSIX branches run on Linux and macOS, the Windows branches on the Windows r
 """
 
 import os
-import subprocess  # nosec B404 - starts this interpreter, and icacls on Windows, in a test
+import subprocess  # nosec B404 - starts this interpreter in a test
 import sys
 import tempfile
 import time
@@ -14,21 +14,17 @@ from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from child_env import child_env
+from perm import EVERYONE, chmod
 from two_key import _platform
 from two_key.keys import load_private_key_file, save_private_key
 from two_key.ledger import Ledger, LedgerError
 
 ROOT = Path(__file__).resolve().parent.parent
-EVERYONE = "S-1-1-0"
 
 
 def loosen(path: Path) -> None:
-    """Let other accounts read ``path``: a group/other mode bit, or an Everyone entry on Windows."""
-    if _platform.WINDOWS:
-        subprocess.run(["icacls", str(path), "/grant", f"*{EVERYONE}:(R)"],  # nosec B603 B607
-                       check=True, capture_output=True)
-    else:
-        os.chmod(path, 0o644 if path.is_file() else 0o775)  # skipcq: BAN-B103 -- the test loosens it on purpose
+    """Let other accounts read ``path`` (and write, if it is a directory)."""
+    chmod(path, 0o644 if path.is_file() else 0o775)
 
 
 def symlink_or_skip(test: unittest.TestCase, target: Path, link: Path) -> None:
@@ -40,8 +36,9 @@ def symlink_or_skip(test: unittest.TestCase, target: Path, link: Path) -> None:
 
 class Files(unittest.TestCase):
     def setUp(self):
-        self.dir = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: __import__("shutil").rmtree(self.dir, ignore_errors=True))
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
 
     def write_new(self, name="f", data=b"\x00\r\n\x1a\nend", **kw) -> Path:
         path = self.dir / name
@@ -100,7 +97,7 @@ class Files(unittest.TestCase):
             os.close(fd)
         self.assertTrue(problem)
         if _platform.WINDOWS:
-            self.assertIn(EVERYONE, problem)
+            self.assertIn(EVERYONE.lstrip("*"), problem)
         else:
             self.assertEqual(problem, "readable by group or others")
 
@@ -120,10 +117,10 @@ class Files(unittest.TestCase):
         sub = self.dir / "keys"
         sub.mkdir()
         loosen(sub)
-        self.assertTrue(_platform.dir_writable_by_others(sub) or not _platform.is_owner_only_dir(sub))
+        self.assertTrue(_platform.dir_write_problem(sub) or not _platform.is_owner_only_dir(sub))
         _platform.owner_only_dir(sub)
         self.assertTrue(_platform.is_owner_only_dir(sub))
-        self.assertFalse(_platform.dir_writable_by_others(sub))
+        self.assertIsNone(_platform.dir_write_problem(sub))
 
     def test_inside(self):
         sub = self.dir / "Ledger"

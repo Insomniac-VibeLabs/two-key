@@ -2841,3 +2841,7 @@ approved 2026-10-15). Linux and macOS behave as before.
 - The MCP upstream command (proxy and drafter) is resolved with
   `shutil.which` on Windows, so `npx` finds `npx.cmd`. No shell.
 - `tests/test_platform.py` tests each function on the platform it runs on.
+- The key-file tests assert "owner-only" through `tests/perm.py` (mode bits on
+  POSIX, the access list on Windows), and loosen a file with an Everyone
+  entry on Windows. The read-only-directory test is POSIX only. An "OWNER
+  RIGHTS" entry is accepted when the owner is.

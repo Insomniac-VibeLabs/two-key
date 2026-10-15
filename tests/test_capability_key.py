@@ -1,7 +1,6 @@
 """Fix 9: the capability key file, its directory, its fingerprint pin, and the principal-key split."""
 
 import os
-import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +13,7 @@ from two_key.keys import generate_private_key, load_private_key, save_private_ke
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
+from perm import chmod, private
 
 RULES = [{"id": "t", "allow_only_tools": ["search"]}]
 SPECS = {"search": {"irreversible": False, "data_class_floor": "public"}}
@@ -27,23 +27,19 @@ def engine(path, key):
                   allow_test_doubles=True, monitored_agent=TEST_AGENT)
 
 
-def mode(p):
-    return stat.S_IMODE(os.stat(p).st_mode)
-
-
 class KeyFile(unittest.TestCase):
     def test_created_exclusive_0600_in_0700_dir(self):
         with tempfile.TemporaryDirectory() as tmp:
             tk = engine(Path(tmp, "l"), generate_private_key())
             cap = tk.ledger.capability_key_path()
-            self.assertEqual(mode(cap), 0o600)
-            self.assertEqual(mode(cap.parent), 0o700)
+            self.assertTrue(private(cap))
+            self.assertTrue(private(cap.parent))
 
     def test_save_private_key_never_overwrites_or_follows_a_symlink(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp, "k", "key.pem")
             save_private_key(p, generate_private_key())
-            self.assertEqual(mode(p.parent), 0o700)
+            self.assertTrue(private(p.parent))
             with self.assertRaises(FileExistsError):
                 save_private_key(p, generate_private_key())
             target = Path(tmp, "elsewhere")
@@ -57,9 +53,10 @@ class KeyFile(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tk = engine(Path(tmp, "l"), generate_private_key())
             cap_dir = tk.ledger.capability_key_path().parent
-            os.chmod(cap_dir, 0o755)  # skipcq: BAN-B103 -- the test loosens the mode to check it is tightened to 0o700
+            chmod(cap_dir, 0o755)   # loosened, to check it is tightened again
+            self.assertFalse(private(cap_dir))
             engine(Path(tmp, "l"), tk.ledger.private_key)
-            self.assertEqual(mode(cap_dir), 0o700)
+            self.assertTrue(private(cap_dir))
 
 
 class NoSilentRegeneration(unittest.TestCase):

@@ -3,7 +3,6 @@
 import hashlib
 import hmac
 import os
-import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +13,8 @@ from two_key.keys import generate_private_key
 from two_key.judges.credentials import StaticToken
 from two_key.judges.openai_compat import OpenAICompatibleJudge
 from two_key.ledger import Ledger, LedgerError
+from perm import chmod, private
+from two_key import _platform
 from test_judge_agent_separation import Env, claude
 
 
@@ -26,13 +27,13 @@ class KeyFile(unittest.TestCase):
     def test_created_once_0600_in_a_0700_directory(self):
         key = load_fingerprint_key(self.path)
         self.assertEqual(len(key), 32)
-        self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o600)
-        self.assertEqual(stat.S_IMODE(os.stat(os.path.dirname(self.path)).st_mode), 0o700)
+        self.assertTrue(private(self.path))
+        self.assertTrue(private(os.path.dirname(self.path)))
         self.assertEqual(load_fingerprint_key(self.path), key, "an existing key is read, never regenerated")
 
     def test_group_readable_key_is_refused(self):
         load_fingerprint_key(self.path)
-        os.chmod(self.path, 0o640)
+        chmod(self.path, 0o640)
         with self.assertRaisesRegex(IdentityError, "fingerprint_key_insecure"):
             load_fingerprint_key(self.path)
 
@@ -40,20 +41,20 @@ class KeyFile(unittest.TestCase):
         os.makedirs(os.path.dirname(self.path))
         target = Path(self.tmp.name) / "elsewhere"
         target.write_bytes(b"x" * 32)
-        os.chmod(target, 0o600)
+        chmod(target, 0o600)
         os.symlink(target, self.path)
         with self.assertRaisesRegex(IdentityError, "fingerprint_key_unreadable"):
             load_fingerprint_key(self.path)
 
     def test_wrong_length_is_refused(self):
         os.makedirs(os.path.dirname(self.path))
-        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        os.write(fd, b"short")
-        os.close(fd)
+        with os.fdopen(_platform.create_new(self.path), "wb") as fh:
+            fh.write(b"short")
         with self.assertRaisesRegex(IdentityError, "fingerprint_key_unreadable: .* 32-byte key"):
             load_fingerprint_key(self.path)
 
     @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root can write anywhere")
+    @unittest.skipIf(_platform.WINDOWS, "a read-only directory is a mode bit; Windows ignores it")
     def test_uncreatable_key_fails_closed(self):
         ro = Path(self.tmp.name) / "ro"
         ro.mkdir(mode=0o500)
@@ -68,7 +69,7 @@ class KeyFile(unittest.TestCase):
         self.assertFalse(path.resolve().is_relative_to(led.path.resolve()))
         key = led.fingerprint_key()
         self.assertEqual(led.fingerprint_key(), key)
-        os.chmod(path, 0o644)
+        chmod(path, 0o644)
         with self.assertRaisesRegex(LedgerError, "fingerprint_key_insecure"):
             led.fingerprint_key()
 

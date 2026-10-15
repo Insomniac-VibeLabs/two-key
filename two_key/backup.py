@@ -722,8 +722,11 @@ def _prepare_output_dir(out: Path) -> Path:
         st = os.lstat(out)
         if not stat.S_ISDIR(st.st_mode):
             raise BackupError("backup_refused: the output directory is not a directory")
-        if _platform.dir_writable_by_others(out):
+        problem = _platform.dir_write_problem(out)
+        if problem and not _platform.WINDOWS:
             raise BackupError("backup_refused: the output directory is writable by group or others")
+        if problem:
+            raise BackupError(f"backup_refused: other accounts can write the output directory: {problem}")
         return out
     try:
         out.mkdir(mode=0o700, parents=True, exist_ok=False)
