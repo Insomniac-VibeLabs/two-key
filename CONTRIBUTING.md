@@ -26,8 +26,8 @@ Run `python -m unittest discover -s tests` before opening a pull request.
 
 CI runs every pipeline that runs code on Linux, macOS, and Windows: the tests
 and the demo (`tests.yml`, Python 3.10 to 3.12), the build with a wheel
-install and the demo (`build.yml`), and bandit (`security.yml`). Windows jobs
-do not block until Windows support lands in 0.6.0. CodeQL (`codeql.yml`)
+install and the demo (`build.yml`), and bandit (`security.yml`). Every job
+blocks, Windows included. CodeQL (`codeql.yml`)
 runs on all three as well. Semgrep (`semgrep.yml`) stays on Linux: it
 analyses the source, not the running system, and its container image runs
 only on Linux runners. Coverage (`coverage.yml`) is one report, from Linux.

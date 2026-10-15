@@ -82,6 +82,7 @@
 - [CI on Linux, macOS, and Windows (0.6.0 Phase 1) — 2026-10-15](#ci-on-linux-macos-and-windows-060-phase-1--2026-10-15)
 - [Windows support, part 1: owner-only files, locks, no-follow opens (0.6.0 Phase 2) — 2026-10-15](#windows-support-part-1-owner-only-files-locks-no-follow-opens-060-phase-2--2026-10-15)
 - [Windows support, part 2: docs; one message (0.6.0 Phase 2) — 2026-10-15](#windows-support-part-2-docs-one-message-060-phase-2--2026-10-15)
+- [Windows CI blocks (0.6.0 Phase 2 done) — 2026-10-15](#windows-ci-blocks-060-phase-2-done--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2862,4 +2863,14 @@ On branch `working`. Docs, and one Windows-only message.
 - AGENTS.md: the platform invariant; README and AGENTS: Windows from 0.6.0.
 - On Windows, a backup output directory that other accounts can write is
   refused as "writable by other accounts", naming the account.
+
+## Windows CI blocks (0.6.0 Phase 2 done) — 2026-10-15
+
+On branch `working`. CI and docs only.
+
+- Every test and the demo pass on Windows, macOS, and Linux (Python 3.10 to
+  3.12), and the wheel installs and runs the demo on all three (CI on
+  `9c6f850`). The golden-hash tests pass unchanged on all three.
+- `tests.yml` and `build.yml` drop `continue-on-error` for Windows: a
+  Windows failure now fails the check. CONTRIBUTING says so.
 
