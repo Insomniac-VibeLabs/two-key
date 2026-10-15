@@ -334,8 +334,8 @@ def _write_new(path: Path, text: str) -> None:
         fh.write(text)
 
 
-def _mcp_draft_specs(args) -> int:
-    from .mcp_proxy.config import ProxyConfigError
+def _draft_command(args) -> list[str]:
+    """The upstream server's command (after ``--``), and exactly one of ``--out`` or ``--constitution``."""
     command = list(args.command)
     if command[:1] == ["--"]:
         command = command[1:]
@@ -343,36 +343,23 @@ def _mcp_draft_specs(args) -> int:
         raise SystemExit("give the upstream server's command after --, for example: -- npx -y @example/server@1.2.3")
     if (args.out is None) == (args.constitution is None):
         raise SystemExit("give --out DIR (draft specs) or --constitution FILE (the digest of its signed tools)")
-    env = _draft_env(args.env)
-    try:
-        from .mcp_proxy import sdk
-        from .mcp_proxy.draft import draft_specs, render_proxy_tools, render_rules, signed_check
-    except ImportError as e:
-        print(f"two-key: {e}", file=sys.stderr)
-        return 1
-    try:
-        tools = sdk.draft_tools(command, env)
-    except ProxyConfigError as e:
-        print(f"two-key: mcp-draft-specs: {e}", file=sys.stderr)
-        return 1
-    if args.constitution is not None:
-        from .constitution import load_envelope
-        digest, missing, undescribed = signed_check(tools, load_envelope(args.constitution))
-        for line in undescribed:
-            print(f"two-key: WARNING: mcp-draft-specs: {line}", file=sys.stderr)
-        print(json.dumps({"schema_digest": digest, "signed_tools_not_listed": list(missing),
-                          "undescribed_inputs": undescribed}, indent=2))
-        return 0 if not missing else 2
-    try:
-        draft = draft_specs(tools, args.tool)
-    except ValueError as e:
-        print(f"two-key: mcp-draft-specs: {e}", file=sys.stderr)
-        return 1
-    out = Path(args.out)
+    return command
+
+
+def _draft_signed_check(tools, path: str, signed_check) -> int:
+    """``--constitution``: the digest of the signed tools, those the server does not list, and undescribed inputs."""
+    from .constitution import load_envelope
+    digest, missing, undescribed = signed_check(tools, load_envelope(path))
+    for line in undescribed:
+        print(f"two-key: WARNING: mcp-draft-specs: {line}", file=sys.stderr)
+    print(json.dumps({"schema_digest": digest, "signed_tools_not_listed": list(missing),
+                      "undescribed_inputs": undescribed}, indent=2))
+    return 0 if not missing else 2
+
+
+def _draft_write(draft, out: Path, files: dict[str, str]) -> int:
+    """``--out``: write the draft files (never over an existing file or link) and report them."""
     out.mkdir(parents=True, exist_ok=True)
-    files = {"rules.draft.yaml": render_rules(draft, command),
-             "proxy-tools.draft.yaml": render_proxy_tools(draft),
-             "schemas.json": json.dumps(draft.views, indent=2, sort_keys=True, ensure_ascii=True) + "\n"}
     taken = [name for name in files if (out / name).exists() or (out / name).is_symlink()]
     if taken:
         print(f"refusing to overwrite {[str(out / n) for n in taken]}", file=sys.stderr)
@@ -386,6 +373,34 @@ def _mcp_draft_specs(args) -> int:
                       "fact_candidates": draft.fact_candidates, "warnings": draft.warnings,
                       "not_drafted": draft.skipped, "wrote": [str(out / n) for n in files]}, indent=2))
     return 0
+
+
+def _mcp_draft_specs(args) -> int:
+    from .mcp_proxy.config import ProxyConfigError
+    command = _draft_command(args)
+    env = _draft_env(args.env)
+    try:
+        from .mcp_proxy import sdk
+        from .mcp_proxy.draft import draft_specs, render_proxy_tools, render_rules, signed_check
+    except ImportError as e:
+        print(f"two-key: {e}", file=sys.stderr)
+        return 1
+    try:
+        tools = sdk.draft_tools(command, env)
+    except ProxyConfigError as e:
+        print(f"two-key: mcp-draft-specs: {e}", file=sys.stderr)
+        return 1
+    if args.constitution is not None:
+        return _draft_signed_check(tools, args.constitution, signed_check)
+    try:
+        draft = draft_specs(tools, args.tool)
+    except ValueError as e:
+        print(f"two-key: mcp-draft-specs: {e}", file=sys.stderr)
+        return 1
+    files = {"rules.draft.yaml": render_rules(draft, command),
+             "proxy-tools.draft.yaml": render_proxy_tools(draft),
+             "schemas.json": json.dumps(draft.views, indent=2, sort_keys=True, ensure_ascii=True) + "\n"}
+    return _draft_write(draft, Path(args.out), files)
 
 
 def _recover(args) -> int:

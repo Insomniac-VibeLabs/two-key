@@ -97,16 +97,18 @@ class Format(unittest.TestCase):
     def test_load_refuses_a_v2_label_on_a_mark(self):
         signed = sign_with({"reset_password": RESET, "lookup_kb": MARKED})["signed"]
         key, env = self._resigned(signed, FORMAT_V2)
+        pub = key.public_key()
         with self.assertRaisesRegex(ConstitutionError, "need a v3"):
-            verify_signed(env, key.public_key())
+            verify_signed(env, pub)
 
     def test_load_refuses_a_constitution_signed_before_the_rule(self):
         # What 0.3.0 to 0.4.0 signed: lookup_kb neither maps nor marks the field the rule reads.
         signed = {"prose": "p", "hard_rules": RULES, "fields": FIELDS,
                   "tool_specs": {"reset_password": RESET, "lookup_kb": LOOKUP}}
         key, env = self._resigned(signed, FORMAT_V2)
+        pub = key.public_key()
         with self.assertRaisesRegex(ConstitutionError, "tool_specs.lookup_kb.fields.ticket_verified"):
-            verify_signed(env, key.public_key())
+            verify_signed(env, pub)
 
 
 class Behaviour(unittest.TestCase):

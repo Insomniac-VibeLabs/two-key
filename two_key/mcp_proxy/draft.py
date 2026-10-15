@@ -109,49 +109,64 @@ def _payload(path: str, schema: Mapping[str, Any]) -> dict:
     return entry
 
 
+def _usable_id(name: Any) -> str | None:
+    """The signed tool id for an upstream name (case-folded), or None when it cannot be one."""
+    tool_id = name.casefold() if isinstance(name, str) else ""
+    if tool_id and len(tool_id) <= MAX_TOOL_NAME_CHARS and TOOL_NAME.fullmatch(tool_id):
+        return tool_id
+    return None
+
+
+def _note_fact(draft: ToolDraft, prop: str) -> None:
+    draft.facts.append(prop)
+    draft.notes.append(f"{prop}: fact-like, left out (the agent would assert it); make it a caller-supplied "
+                       f"fact (fields: {prop}: {{type: ..., default: ..., source: caller}}; map it as "
+                       f"{{source: caller, json_path: {prop}}}; add a hook under tools.<id>.facts in "
+                       "proxy.yaml), or have the tool check it")
+
+
+def _draft_property(draft: ToolDraft, prop: Any, sub: Any, parties: list, payload: list) -> None:
+    """One top-level input: left out, a fact candidate, the amount, a counterparty, or payload."""
+    sub = sub if isinstance(sub, Mapping) else {}
+    if not isinstance(prop, str) or not PATH_SEGMENT.fullmatch(prop):
+        draft.notes.append(f"property {_comment(str(prop))!r} is not a dotted-identifier path; it is left "
+                           "out, so the tool never receives it")
+        return
+    low, kind = prop.casefold(), sub.get("type")
+    if FACT_LIKE.search(low):
+        _note_fact(draft, prop)
+    elif AMOUNT_LIKE.fullmatch(low) and "amount" not in draft.spec and kind in ("number", "integer", None):
+        unit = "cents" if "cents" in low else "REPLACE_WITH_usd_OR_cents"
+        draft.spec["amount"] = {"json_path": prop, "unit": unit}
+        draft.notes.append(f"{prop}: amount-like, mapped as the amount; set unit (usd or cents)")
+        if not _described(sub):
+            draft.warnings.append(f"{prop} (the amount) {undescribed_advice('the amount')}")
+    elif PARTY_LIKE.fullmatch(low) and kind in ("string", "array", None):
+        parties.append({"json_path": prop, "allow": []})
+        draft.notes.append(f"{prop}: payee-like, mapped as a counterparty; fill its allow list")
+        if not _described(sub):
+            draft.warnings.append(f"{prop} (a counterparty) {undescribed_advice('a counterparty')}")
+    else:
+        payload.append(_payload(prop, sub))
+
+
 def draft_tool(view: Mapping[str, Any]) -> ToolDraft | str:
     """A draft spec for one tool, or the reason it was skipped."""
     name = view.get("name")
-    tool_id = name.casefold() if isinstance(name, str) else ""
-    if not tool_id or len(tool_id) > MAX_TOOL_NAME_CHARS or not TOOL_NAME.fullmatch(tool_id):
+    tool_id = _usable_id(name)
+    if tool_id is None:
         return f"{str(name)[:80]!r}: not usable as a signed tool id (a-z, 0-9, _ . : / -)"
-    annotations = view.get("annotations") or {}
-    read_only = annotations.get("readOnlyHint") is True
+    read_only = (view.get("annotations") or {}).get("readOnlyHint") is True
     spec: dict[str, Any] = {"irreversible": not read_only, "data_class_floor": "REPLACE_WITH_DATA_CLASS"}
     draft = ToolDraft(tool_id, name, spec)
-    if read_only:
-        draft.notes.append("irreversible: false because the server says readOnlyHint: true (a claim; review it)")
-    else:
-        draft.notes.append("irreversible: true (the server does not say readOnlyHint: true)")
+    draft.notes.append("irreversible: false because the server says readOnlyHint: true (a claim; review it)"
+                       if read_only else "irreversible: true (the server does not say readOnlyHint: true)")
     schema = view.get("inputSchema") or {}
     props = schema.get("properties") if isinstance(schema, Mapping) else None
-    parties, payload = [], []
+    parties: list = []
+    payload: list = []
     for prop, sub in sorted((props or {}).items()):
-        sub = sub if isinstance(sub, Mapping) else {}
-        if not isinstance(prop, str) or not PATH_SEGMENT.fullmatch(prop):
-            draft.notes.append(f"property {_comment(str(prop))!r} is not a dotted-identifier path; it is left "
-                               "out, so the tool never receives it")
-            continue
-        low = prop.casefold()
-        if FACT_LIKE.search(low):
-            draft.facts.append(prop)
-            draft.notes.append(f"{prop}: fact-like, left out (the agent would assert it); make it a caller-supplied "
-                               f"fact (fields: {prop}: {{type: ..., default: ..., source: caller}}; map it as "
-                               f"{{source: caller, json_path: {prop}}}; add a hook under tools.<id>.facts in "
-                               "proxy.yaml), or have the tool check it")
-        elif AMOUNT_LIKE.fullmatch(low) and "amount" not in spec and sub.get("type") in ("number", "integer", None):
-            unit = "cents" if "cents" in low else "REPLACE_WITH_usd_OR_cents"
-            spec["amount"] = {"json_path": prop, "unit": unit}
-            draft.notes.append(f"{prop}: amount-like, mapped as the amount; set unit (usd or cents)")
-            if not _described(sub):
-                draft.warnings.append(f"{prop} (the amount) {undescribed_advice('the amount')}")
-        elif PARTY_LIKE.fullmatch(low) and sub.get("type") in ("string", "array", None):
-            parties.append({"json_path": prop, "allow": []})
-            draft.notes.append(f"{prop}: payee-like, mapped as a counterparty; fill its allow list")
-            if not _described(sub):
-                draft.warnings.append(f"{prop} (a counterparty) {undescribed_advice('a counterparty')}")
-        else:
-            payload.append(_payload(prop, sub))
+        _draft_property(draft, prop, sub, parties, payload)
     if parties:
         spec["counterparties"] = parties
     if payload:

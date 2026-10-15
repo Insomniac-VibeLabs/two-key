@@ -71,6 +71,7 @@
 - [Undescribed inputs: checked for every field Path A reads, at sign-off and start — 2026-10-15](#undescribed-inputs-checked-for-every-field-path-a-reads-at-sign-off-and-start--2026-10-15)
 - [Run 6z follow-ups: clearer refusals, harness fixes, judge memory — 2026-10-15](#run-6z-follow-ups-clearer-refusals-harness-fixes-judge-memory--2026-10-15)
 - [Release v0.5.0: MCP proxy, caller-supplied facts, run 6 follow-ups — 2026-10-15](#release-v050-mcp-proxy-caller-supplied-facts-run-6-follow-ups--2026-10-15)
+- [PR #11 review: SonarCloud maintainability findings — 2026-10-15](#pr-11-review-sonarcloud-maintainability-findings--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2652,4 +2653,17 @@ The full notes are under "Caller-supplied facts and the guard core (#2 P1)"
   string `not_applicable`.
 - The MCP proxy needs the `mcp` extra: `pip install "two-key[mcp] @
   git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"`.
+
+## PR #11 review: SonarCloud maintainability findings — 2026-10-15
+
+On branch `working`. No behaviour change; the same tests pass.
+
+- Cognitive complexity (python:S3776) under 15, by splitting into helpers:
+  `two_key.mcp_proxy.draft.draft_tool` (33: `_usable_id`, `_note_fact`,
+  `_draft_property`), `two_key.fields._definition` (18: `_field_type`,
+  `_letter_case`, `_source`), and `two_key.cli._mcp_draft_specs` (17:
+  `_draft_command`, `_draft_signed_check`, `_draft_write`).
+- Tests: one call that may raise inside each `assertRaises` block
+  (python:S5778; the public key is taken first), and `assertIs(x, False)` /
+  `assertIs(x, True)` for boolean results (exact, unlike `assertFalse`).
 

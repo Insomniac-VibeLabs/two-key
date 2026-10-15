@@ -258,7 +258,7 @@ class Calls(unittest.TestCase):
         added = core.two_key.ledger.entries[before:]
         self.assertEqual([e.kind for e in added], ["tool_not_offered"] * 5)
         self.assertEqual([e.body["tool"] for e in added], ["delete_all", "env_names", "Pay_Vendor", None, None])
-        self.assertEqual(added[3].body["tool_omitted"], True)
+        self.assertIs(added[3].body["tool_omitted"], True)
         self.assertEqual(self.calls, [])
         self.assertIn("does not offer: 'delete_all'", err.getvalue())
 

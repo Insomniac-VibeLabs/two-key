@@ -80,8 +80,9 @@ class Signing(unittest.TestCase):
         key = generate_private_key()
         relabelled = {"format": FORMAT_V1, "signed": env["signed"], "fingerprint": "x",
                       "signature": sign(key, canonical_bytes(env["signed"]))}
+        pub = key.public_key()
         with self.assertRaisesRegex(ConstitutionError, "need a v3"):
-            verify_signed(relabelled, key.public_key())
+            verify_signed(relabelled, pub)
 
     def test_bad_entries(self):
         for item, msg in (("*@larkspurvalley.example", "wildcards"), ("@*.larkspurvalley.example", "wildcards"),
@@ -104,7 +105,7 @@ class Signing(unittest.TestCase):
         self.assertIn("tool 'send_notice': to allows any address at @larkspurvalley.example", text)
         self.assertIn("Path A does not read body", text)
         quiet = dict(SPECS, send_notice=dict(SPECS["send_notice"], payload=[]))
-        self.assertEqual(domain_allow_notes(signed(quiet)["signed"]["tool_specs"])[0][0], False)
+        self.assertIs(domain_allow_notes(signed(quiet)["signed"]["tool_specs"])[0][0], False)
 
     def test_cli_warns_and_signs(self):
         with tempfile.TemporaryDirectory() as tmp:

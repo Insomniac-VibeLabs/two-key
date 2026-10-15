@@ -104,12 +104,14 @@ class Signing(unittest.TestCase):
         key, env = signed()
         body = dict(env["signed"], fields=dict(env["signed"]["fields"],
                                                po_matched={"type": "boolean", "default": True}))
+        pub = key.public_key()
         with self.assertRaises(Exception):
-            verify_signed(dict(env, signed=body), key.public_key())
+            verify_signed(dict(env, signed=body), pub)
         # Re-signed without the source, the tool mapping no longer fits: the constitution does not load.
         forged = dict(env, signed=body, signature=sign(key, canonical_bytes(body)))
+        pub = key.public_key()
         with self.assertRaises(ConstitutionError):
-            verify_signed(forged, key.public_key())
+            verify_signed(forged, pub)
 
 
 class Derive(unittest.TestCase):
@@ -126,7 +128,7 @@ class Derive(unittest.TestCase):
         self.assertEqual(dict(d.fields), {"po_matched": False, "risk_tier": "low"})
         self.assertEqual(d.fact_fields, ("po_matched",))
         projected = project_arguments(self.spec, ARGS, dict(d.fields))
-        self.assertEqual(projected["po_matched"], False)            # delivered to the tool at its json_path
+        self.assertIs(projected["po_matched"], False)            # delivered to the tool at its json_path
 
     def test_refusals(self):
         cases = [

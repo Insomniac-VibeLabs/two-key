@@ -64,8 +64,9 @@ class Definition(unittest.TestCase):
         key = generate_private_key()
         relabelled = {"format": FORMAT_V2, "signed": env["signed"], "fingerprint": "x",
                       "signature": sign(key, canonical_bytes(env["signed"]))}
+        pub = key.public_key()
         with self.assertRaisesRegex(ConstitutionError, "need a v3"):
-            verify_signed(relabelled, key.public_key())
+            verify_signed(relabelled, pub)
         insensitive = {"folder": {k: v for k, v in EXACT["folder"].items() if k != "case"}}
         rules = [RULES[0], {"id": "k", "deny_if_fields": {"folder": {"not_in": ["fld-a"]}}}]
         self.assertEqual(signed(insensitive, rules)["format"], FORMAT_V2)

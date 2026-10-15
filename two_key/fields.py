@@ -348,8 +348,9 @@ def _string_limit(out: dict, defn: Mapping[str, Any], where: str) -> None:
     out["max_length"] = limit
 
 
-def _definition(name: str, defn: Any) -> dict:
-    where = f"fields.{name}"
+def _field_type(defn: Any, where: str) -> str:
+    """The declared type, after checking the definition's shape: a mapping, a known type, only that type's
+    keys, and a default."""
     if not isinstance(defn, Mapping):
         raise FieldError(f"{where}: expected a mapping")
     kind = defn.get("type")
@@ -360,17 +361,34 @@ def _definition(name: str, defn: Any) -> dict:
         raise FieldError(f"{where}: unknown key(s) {sorted(map(str, extra))} for type {kind}")
     if "default" not in defn:
         raise FieldError(f"{where}.default: required (the value for tools that do not map this field)")
+    return kind
+
+
+def _letter_case(out: dict, defn: Mapping[str, Any], where: str) -> None:
+    """``case: exact`` (string only, per _TYPE_KEYS), set before the default is read."""
+    if defn["case"] not in CASES:
+        raise FieldError(f"{where}.case: expected exact (omit it for a case-insensitive field)")
+    if out["charset"] != "ascii":
+        raise FieldError(f"{where}.case: exact is only valid with charset: ascii")
+    out["case"] = defn["case"]
+
+
+def _source(out: dict, defn: Mapping[str, Any], where: str) -> None:
+    if defn["source"] not in SOURCES:
+        raise FieldError(f"{where}.source: expected caller (omit it for a field read from the arguments)")
+    out["source"] = defn["source"]
+
+
+def _definition(name: str, defn: Any) -> dict:
+    where = f"fields.{name}"
+    kind = _field_type(defn, where)
     out: dict[str, Any] = {"type": kind}
     if kind == "integer":
         _integer_bounds(out, defn, where)
     if kind in ("enum", "string"):
         _text_charset(out, defn, where)
-    if "case" in defn:          # string only (_TYPE_KEYS), set before the default is read
-        if defn["case"] not in CASES:
-            raise FieldError(f"{where}.case: expected exact (omit it for a case-insensitive field)")
-        if out["charset"] != "ascii":
-            raise FieldError(f"{where}.case: exact is only valid with charset: ascii")
-        out["case"] = defn["case"]
+    if "case" in defn:
+        _letter_case(out, defn, where)
     if kind == "enum":
         _enum_values(out, defn, where)
     if kind == "string":
@@ -382,9 +400,7 @@ def _definition(name: str, defn: Any) -> dict:
     if "description" in defn:
         out["description"] = _description(defn["description"], where)
     if "source" in defn:
-        if defn["source"] not in SOURCES:
-            raise FieldError(f"{where}.source: expected caller (omit it for a field read from the arguments)")
-        out["source"] = defn["source"]
+        _source(out, defn, where)
     return out
 
 
