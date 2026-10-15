@@ -24,6 +24,7 @@ from typing import Any, Callable, Iterable, Mapping
 from ..action import MAX_TOOL_NAME_CHARS
 from ..canonical import canonical_hash
 from ..derive import size_record
+from ..fields import field_mappings
 from ..guard import Guard, GuardConfigError, GuardedTool
 from .config import ProxyConfig, ProxyConfigError, ToolPolicy
 
@@ -110,6 +111,55 @@ def schema_check(selection: ToolSelection, pinned: str, on_change: str) -> list[
     if on_change == "refuse":
         raise ProxyConfigError(f"upstream_schema_changed: {detail}. {hint}, or pin the upstream server version")
     return [f"two-key: WARNING: upstream_schema_changed: {detail}; starting anyway (on_schema_change: warn). {hint}"]
+
+
+def _schema_at(schema: Any, path: str) -> Mapping[str, Any] | None:
+    """The JSON Schema of one dotted argument path, through nested ``properties``; None when it is not declared."""
+    node = schema
+    for segment in path.split("."):
+        props = node.get("properties") if isinstance(node, Mapping) else None
+        if not isinstance(props, Mapping) or not isinstance(props.get(segment), Mapping):
+            return None
+        node = props[segment]
+    return node
+
+
+def _read_paths(spec: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Every argument path Path A reads for a tool, with what it is: the amount and currency, each counterparty,
+    and each argument-mapped custom field. Payload paths are copied unread, and a caller-supplied fact is hidden
+    from the agent, so neither is listed."""
+    out = []
+    amount = spec.get("amount") or {}
+    for key, what in (("json_path", "the amount"), ("currency_path", "the currency")):
+        if isinstance(amount.get(key), str):
+            out.append((amount[key], what))
+    out += [(p["json_path"], "a counterparty") for p in spec.get("counterparties") or [] if isinstance(p, Mapping)]
+    out += [(entry["json_path"], f"the field {name}") for name, entry in sorted(field_mappings(spec).items())
+            if entry.get("source") != "caller" and isinstance(entry.get("json_path"), str)]
+    return out
+
+
+def undescribed_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """One line per argument Path A reads that the upstream schema shows the agent with no ``description`` and no
+    ``enum``. Behind the proxy that schema is the agent's only format guide, whatever the data: a payee, a folder
+    id, an environment, a ticket. With nothing to go on the agent guesses, and an exact match then fails (live run
+    6: payees written as display names; run 6x: a folder id's letter case). Advice, never a refusal."""
+    out = []
+    for tool in sorted(selection.views):
+        schema = selection.views[tool].get("inputSchema")
+        for path, what in _read_paths(specs.get(tool) or {}):
+            node = _schema_at(schema, path)
+            if node is None:
+                out.append(f"{tool}: {path} ({what}) is not declared in the upstream input schema, so the agent is "
+                           "not told it exists or how to write it")
+                continue
+            text = node.get("description")
+            if (isinstance(text, str) and text.strip()) or (isinstance(node.get("enum"), list) and node["enum"]):
+                continue
+            out.append(f"{tool}: {path} ({what}) has no description in the upstream schema; the agent sees only "
+                       "its name and type and guesses the format. Describe it in the server (the exact form "
+                       "Two-Key compares, such as 'Vendor id: the bare domain, e.g. vendor.example')")
+    return out
 
 
 def identity_refusal(separation: Any, allow_unresolved: bool) -> str | None:

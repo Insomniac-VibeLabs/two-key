@@ -341,7 +341,7 @@ def _mcp_draft_specs(args) -> int:
     env = _draft_env(args.env)
     try:
         from .mcp_proxy import sdk
-        from .mcp_proxy.draft import draft_specs, render_proxy_tools, render_rules, signed_digest
+        from .mcp_proxy.draft import draft_specs, render_proxy_tools, render_rules, signed_check
     except ImportError as e:
         print(f"two-key: {e}", file=sys.stderr)
         return 1
@@ -352,8 +352,11 @@ def _mcp_draft_specs(args) -> int:
         return 1
     if args.constitution is not None:
         from .constitution import load_envelope
-        digest, missing = signed_digest(tools, load_envelope(args.constitution))
-        print(json.dumps({"schema_digest": digest, "signed_tools_not_listed": list(missing)}, indent=2))
+        digest, missing, undescribed = signed_check(tools, load_envelope(args.constitution))
+        for line in undescribed:
+            print(f"two-key: WARNING: mcp-draft-specs: {line}", file=sys.stderr)
+        print(json.dumps({"schema_digest": digest, "signed_tools_not_listed": list(missing),
+                          "undescribed_inputs": undescribed}, indent=2))
         return 0 if not missing else 2
     try:
         draft = draft_specs(tools, args.tool)

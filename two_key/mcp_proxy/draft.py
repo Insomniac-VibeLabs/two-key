@@ -249,12 +249,20 @@ def signed_digest(upstream_tools: list[Mapping[str, Any]], envelope: Mapping[str
     """The ``schema_digest`` the proxy will compute for a signed constitution's tools, and the signed tools the
     upstream does not list. The constitution is read, not verified: this only prints a digest, and the proxy
     verifies the signature when it starts."""
+    digest, missing, _ = signed_check(upstream_tools, envelope, upstream_names)
+    return digest, missing
+
+
+def signed_check(upstream_tools: list[Mapping[str, Any]], envelope: Mapping[str, Any],
+                 upstream_names: Mapping[str, str] | None = None) -> tuple[str, tuple[str, ...], list[str]]:
+    """``signed_digest`` plus the arguments the signed specs read that the upstream schema leaves undescribed
+    (``core.undescribed_inputs``): any custom field, counterparty, or amount, not only what a draft maps."""
     from .config import ToolPolicy
-    from .core import select_tools
+    from .core import select_tools, undescribed_inputs
     signed = envelope.get("signed") if isinstance(envelope, Mapping) else None
     specs = signed.get("tool_specs") if isinstance(signed, Mapping) else None
     if not isinstance(specs, Mapping):
         raise ValueError("not a signed constitution (no signed.tool_specs)")
     policies = {tool: ToolPolicy(upstream_name=name) for tool, name in (upstream_names or {}).items()}
     selection = select_tools(upstream_tools, specs, policies)
-    return selection.digest, selection.missing
+    return selection.digest, selection.missing, undescribed_inputs(selection, specs)

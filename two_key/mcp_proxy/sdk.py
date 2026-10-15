@@ -38,7 +38,7 @@ except ImportError as e:  # pragma: no cover - exercised only without the extra
 from .. import __version__
 from .config import ProxyConfig, ProxyConfigError
 from .core import CallOutcome, ProxyCore, ToolSelection, agent_session, build_two_key, check_tools_signed, \
-    identity_refusal, schema_check, select_tools
+    identity_refusal, schema_check, select_tools, undescribed_inputs
 
 SERVER_NAME = "two-key-mcp-proxy"
 MAX_TOOL_PAGES = 100           # tools/list pages read from the upstream at start
@@ -141,6 +141,8 @@ async def start_core(stack: AsyncExitStack, config: ProxyConfig, *, two_key: Any
     selection: ToolSelection = select_tools(upstream, tk.compiled.tool_specs, config.tools)
     for line in schema_check(selection, config.upstream.schema_digest, config.upstream.on_schema_change):
         print(line, file=sys.stderr)
+    for line in undescribed_inputs(selection, tk.compiled.tool_specs):      # advice; it still starts
+        print(f"two-key: WARNING: mcp-proxy: {line}", file=sys.stderr)
     core = ProxyCore(tk, config, selection, upstream_caller(client, config.upstream.call_timeout_seconds),
                      agent_session=session)
     try:

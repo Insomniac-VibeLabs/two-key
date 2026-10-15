@@ -144,7 +144,8 @@ resources, prompts, sampling, elicitation, or roots. two-key mcp-draft-specs --o
 drafts tool_specs (signing refuses until each floor, amount unit, and allow list is decided;
 *_matched/*_verified/*_approved/... left out as caller-fact candidates) and prints the digest;
 it warns when a payee or amount it maps has no description in the upstream schema (the agent's only
-format guide behind the proxy). --constitution FILE prints the digest of a signed constitution's tools.
+format guide behind the proxy); --constitution and proxy start warn the same way for every input the
+signed specs read (amount, currency, counterparties, argument-mapped custom fields), whatever the data. --constitution FILE prints the digest of a signed constitution's tools.
 An agent that can reach the upstream directly bypasses the proxy; run the upstream as its own OS user.
 decision.reason names one cause (parse/limit/derive deny, then Path A, then Path B); read
 path_a.reason and path_b.reason too. judges.yaml and agents.yaml are trusted operator config:

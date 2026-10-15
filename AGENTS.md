@@ -201,8 +201,10 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   the library keeps warning. The claim comes from `proxy.yaml` only, never
   from the agent. A deny returns a reason code, never a value. Nothing but
   MCP on stdout. Drafts must not sign until the principal decides; server
-  text stays in ASCII comments, and a payee or amount with no upstream
-  description is a draft WARNING, never a looser match. SDK tests skip without the extra; CI installs
+  text stays in ASCII comments. An input Path A reads that the upstream
+  schema leaves undescribed (no `description`, no `enum`) is a WARNING in
+  the draft, at `--constitution`, and at proxy start, for any field, never
+  a looser match (`core.undescribed_inputs`). SDK tests skip without the extra; CI installs
   it (`--extra mcp`).
 - The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
   (`TwoKey.gateway()`). A gateway in another process or host is not

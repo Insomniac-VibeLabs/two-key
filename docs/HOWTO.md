@@ -1497,8 +1497,16 @@ overwrites a file. Pin the server version in the command (`@1.2.3`); `npx
 It also warns (`two-key: WARNING: mcp-draft-specs: ...` on stderr, a
 `warnings` key in its JSON, and a `# - WARNING:` line in the draft) for
 each property it maps as a counterparty or an amount that has no
-`description` in the upstream schema. **Behind the proxy, the upstream
-schema is the agent's only format guide.** The agent never sees your
+`description` in the upstream schema. The same check runs again, for
+**every** argument the signed specs read (the amount and currency, each
+counterparty, and each custom field you mapped by hand, such as a folder
+id, an environment, or a ticket), when `mcp-draft-specs --constitution`
+prints the digest (`undescribed_inputs` in its JSON) and when
+`two-key mcp-proxy` starts (`two-key: WARNING: mcp-proxy: ...`). An input
+with an `enum` in the schema counts as described; payload paths, which
+Path A does not read, and caller-supplied facts, which the agent never
+sees, are not checked. It is advice: the proxy still starts. **Behind the
+proxy, the upstream schema is the agent's only format guide.** The agent never sees your
 allow list, so with no description it guesses: in live run 6 it wrote
 `"Alpine MedSupply (alpine-medsupply.example)"` for a payee whose allow
 list held `alpine-medsupply.example`, and every such payment was
@@ -1709,6 +1717,9 @@ judge-and-agent warnings (`same_model_shared_route` and the others) print
 as usual and are recorded in `constitution_loaded`. The quorum warning for
 one judge that can approve alone prints too (see "Quorum policy"); it is
 not a separate entry, but the policy behind it is in `constitution_loaded`.
+So does a `two-key: WARNING: mcp-proxy: <tool>: <path> ... has no
+description in the upstream schema` line for each input Path A reads that
+the server leaves undescribed (step 1 above).
 
 At call time, a refused call is an MCP tool error whose text is `two-key
 denied this call: <reason>`: printable ASCII, at most 200 characters, never

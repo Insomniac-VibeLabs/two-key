@@ -68,6 +68,7 @@
 - [Run 6 follow-ups: drafter and quorum warnings, HOWTO guidance — 2026-10-15](#run-6-follow-ups-drafter-and-quorum-warnings-howto-guidance--2026-10-15)
 - [Live harness: run 6 referee fixes, quorum cases (for re-run 6z) — 2026-10-15](#live-harness-run-6-referee-fixes-quorum-cases-for-re-run-6z--2026-10-15)
 - [Docs: the run 6 follow-ups everywhere they apply — 2026-10-15](#docs-the-run-6-follow-ups-everywhere-they-apply--2026-10-15)
+- [Undescribed inputs: checked for every field Path A reads, at sign-off and start — 2026-10-15](#undescribed-inputs-checked-for-every-field-path-a-reads-at-sign-off-and-start--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2524,3 +2525,26 @@ On branch `working`. Docs only.
   signs, a changed `case: exact` value), AGENTS.md (the one-judge warning,
   `case: exact`, the drafter warning), llms.txt, and ROADMAP 0.5.0 list the
   run 6 follow-ups.
+
+## Undescribed inputs: checked for every field Path A reads, at sign-off and start — 2026-10-15
+
+On branch `working`. A warning; no authorization change. Maintainer's question:
+the drafter warning should not be about payees and amounts only.
+
+- `two_key.mcp_proxy.core.undescribed_inputs`: one line per argument the
+  signed specs read (the amount and currency, each counterparty, and each
+  argument-mapped custom field, at any depth such as `target.folder_id`)
+  that the upstream input schema shows with no `description` and no `enum`,
+  or does not declare at all. Payload paths (never read by Path A) and
+  caller-supplied facts (hidden from the agent) are skipped.
+- It runs where the signed spec and the upstream schema meet: `two-key
+  mcp-draft-specs --constitution FILE` (stderr, and `undescribed_inputs` in
+  its JSON) and `two-key mcp-proxy` at start (`two-key: WARNING: mcp-proxy:
+  ...`). The draft-time warning still covers what the draft maps. The proxy
+  still starts.
+- `tests/live/clinic_mcp_server.py` describes every input Path A reads (as
+  GrokBot's run 6y did), so re-run 6z does not repeat the display-name false
+  denies; the proxy prints no such warning for it.
+- Tests: `tests/test_mcp_draft.py` (a nested folder id, an enum, a caller
+  fact, a payload path, an undeclared path). Docs: HOWTO (MCP step 1, the
+  start-up warnings), THREAT_MODEL, AGENTS.md, llms.txt.

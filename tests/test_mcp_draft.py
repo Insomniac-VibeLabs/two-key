@@ -69,6 +69,29 @@ class Drafting(unittest.TestCase):
         self.assertEqual(draft_tool(described).warnings, [])
         self.assertEqual(draft_specs([described]).warnings, {})
 
+    def test_every_input_path_a_reads_is_checked_not_only_payees(self):
+        # Data-agnostic: an id, an environment, or a ticket the principal maps as a custom field is checked too,
+        # at --constitution and at proxy start, where the signed spec and the upstream schema meet.
+        from two_key.mcp_proxy.core import select_tools, undescribed_inputs
+        upstream = [{"name": "share_folder", "inputSchema": {"type": "object", "properties": {
+            "target": {"type": "object", "properties": {
+                "folder_id": {"type": "string"},
+                "env": {"type": "string", "enum": ["dev", "prod"]}}},
+            "grantee": {"type": "string", "description": "Staff email, exactly as in the directory"},
+            "note": {"type": "string"}, "ticket_ok": {"type": "boolean"}}}}]
+        specs = {"share_folder": {"counterparties": [{"json_path": "grantee", "allow": ["@x.example"]}],
+                                  "payload": [{"json_path": "note"}],
+                                  "fields": {"folder": {"json_path": "target.folder_id"},
+                                             "env": {"json_path": "target.env"},
+                                             "ticket_ok": {"source": "caller", "json_path": "ticket_ok"},
+                                             "region": {"json_path": "region"},
+                                             "tier": "not_applicable"}}}
+        got = undescribed_inputs(select_tools(upstream, specs, {}), specs)
+        self.assertEqual([line.split(" (")[0] for line in got],
+                         ["share_folder: target.folder_id", "share_folder: region"])
+        self.assertIn("(the field folder) has no description", got[0])
+        self.assertIn("is not declared in the upstream input schema", got[1])
+
     def test_read_only_hint_and_upstream_names(self):
         t = draft_tool(REPORT)
         self.assertEqual((t.tool_id, t.upstream_name, t.spec["irreversible"]), ("readreport", "readReport", False))
@@ -144,8 +167,12 @@ class CommandLine(unittest.TestCase):
             Path(tmp, "c.json").write_text(json.dumps(env))
             check = self.run_cli("--constitution", str(Path(tmp, "c.json")), "--", sys.executable, str(FAKE))
             self.assertEqual(check.returncode, 0, check.stderr)
-            self.assertEqual(json.loads(check.stdout),
-                             {"schema_digest": summary["schema_digest"], "signed_tools_not_listed": []})
+            got = json.loads(check.stdout)
+            self.assertEqual((got["schema_digest"], got["signed_tools_not_listed"]), (summary["schema_digest"], []))
+            # The fake server describes neither the amount nor the vendor: every input Path A reads is checked.
+            self.assertEqual([line.split(" (")[0] for line in got["undescribed_inputs"]],
+                             ["pay_vendor: amount", "pay_vendor: vendor"])
+            self.assertIn("two-key: WARNING: mcp-draft-specs: pay_vendor: vendor (a counterparty)", check.stderr)
 
     def test_refusals(self):
         self.assertIn("after --", self.run_cli("--out", "x").stderr)
