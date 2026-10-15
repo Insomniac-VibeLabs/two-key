@@ -32,7 +32,7 @@ jobs:
         with:
           args: >
             -Dsonar.organization=insomniac-vibelabs
-            -Dsonar.projectKey=Insomniac-VibeLabs_two-key-concept
+            -Dsonar.projectKey=Insomniac-VibeLabs_two-key
             -Dsonar.python.coverage.reportPaths=coverage.xml
             -Dsonar.sources=two_key
             -Dsonar.tests=tests
