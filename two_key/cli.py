@@ -19,6 +19,7 @@
                     [--replace-ledger]
   two-key audit --key KEY --ledger DIR [--witness-public-key PEM]
   two-key mcp-proxy --config FILE
+  two-key mcp-draft-specs (--out DIR | --constitution FILE) [--tool NAME]... [--env NAME[=VALUE]]... -- COMMAND...
   two-key demo
 
 ``authorize`` never prints the bearer token. It prints the decision with the token's
@@ -290,6 +291,76 @@ def _mcp_proxy(args) -> int:
     return sdk.run(config)
 
 
+def _draft_env(items: list[str] | None) -> dict[str, str]:
+    """``--env NAME`` passes the variable from this environment; ``--env NAME=VALUE`` passes a literal."""
+    from .mcp_proxy.config import ENV_NAME
+    out: dict[str, str] = {}
+    for item in items or []:
+        name, sep, value = item.partition("=")
+        if not ENV_NAME.fullmatch(name):
+            raise SystemExit(f"--env {name[:80]!r}: expected NAME or NAME=VALUE")
+        if not sep:
+            value = os.environ.get(name, "")
+            if not value:
+                raise SystemExit(f"--env {name}: the environment variable is unset or empty")
+        out[name] = value
+    return out
+
+
+def _write_new(path: Path, text: str) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    with os.fdopen(os.open(path, flags, 0o644), "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
+def _mcp_draft_specs(args) -> int:
+    from .mcp_proxy.config import ProxyConfigError
+    command = list(args.command)
+    if command[:1] == ["--"]:
+        command = command[1:]
+    if not command:
+        raise SystemExit("give the upstream server's command after --, for example: -- npx -y @example/server@1.2.3")
+    if (args.out is None) == (args.constitution is None):
+        raise SystemExit("give --out DIR (draft specs) or --constitution FILE (the digest of its signed tools)")
+    env = _draft_env(args.env)
+    try:
+        from .mcp_proxy import sdk
+        from .mcp_proxy.draft import draft_specs, render_proxy_tools, render_rules, signed_digest
+    except ImportError as e:
+        print(f"two-key: {e}", file=sys.stderr)
+        return 1
+    try:
+        tools = sdk.draft_tools(command, env)
+    except ProxyConfigError as e:
+        print(f"two-key: mcp-draft-specs: {e}", file=sys.stderr)
+        return 1
+    if args.constitution is not None:
+        from .constitution import load_envelope
+        digest, missing = signed_digest(tools, load_envelope(args.constitution))
+        print(json.dumps({"schema_digest": digest, "signed_tools_not_listed": list(missing)}, indent=2))
+        return 0 if not missing else 2
+    try:
+        draft = draft_specs(tools, args.tool)
+    except ValueError as e:
+        print(f"two-key: mcp-draft-specs: {e}", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    files = {"rules.draft.yaml": render_rules(draft, command),
+             "proxy-tools.draft.yaml": render_proxy_tools(draft),
+             "schemas.json": json.dumps(draft.views, indent=2, sort_keys=True, ensure_ascii=True) + "\n"}
+    taken = [name for name in files if (out / name).exists() or (out / name).is_symlink()]
+    if taken:
+        print(f"refusing to overwrite {[str(out / n) for n in taken]}", file=sys.stderr)
+        return 1
+    for name, text in files.items():
+        _write_new(out / name, text)
+    print(json.dumps({"schema_digest": draft.digest, "tools": [t.tool_id for t in draft.tools],
+                      "fact_candidates": draft.fact_candidates, "not_drafted": draft.skipped,
+                      "wrote": [str(out / n) for n in files]}, indent=2))
+    return 0
+
+
 def _recover(args) -> int:
     from .ledger import Ledger, LedgerError
     key = load_private_key_file(args.key)
@@ -460,6 +531,18 @@ def main(argv: list[str] | None = None) -> int:
                                              "both keys (needs the mcp extra)")
     proxy.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
     proxy.set_defaults(func=_mcp_proxy)
+    drafter = sub.add_parser("mcp-draft-specs", help="draft tool_specs and the schema digest from an upstream MCP "
+                                                     "server, for the principal to review and sign (needs the mcp extra)")
+    drafter.add_argument("--out", default=None, metavar="DIR",
+                         help="write rules.draft.yaml, proxy-tools.draft.yaml, and schemas.json here (never overwritten)")
+    drafter.add_argument("--constitution", default=None, metavar="FILE",
+                         help="instead, print the schema_digest of this signed constitution's tools")
+    drafter.add_argument("--tool", action="append", default=None, metavar="NAME",
+                         help="draft only this upstream tool (repeatable); default: all")
+    drafter.add_argument("--env", action="append", default=None, metavar="NAME[=VALUE]",
+                         help="pass this variable to the server (repeatable); NAME reads it from this environment")
+    drafter.add_argument("command", nargs=argparse.REMAINDER, help="-- then the server's program and arguments")
+    drafter.set_defaults(func=_mcp_draft_specs)
     demo = sub.add_parser("demo")
     demo.set_defaults(func=_demo)
     args = parser.parse_args(argv)

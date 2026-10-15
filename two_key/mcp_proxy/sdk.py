@@ -189,3 +189,22 @@ def run(config: ProxyConfig) -> int:
         print(f"two-key: mcp-proxy refused to start: {e}", file=sys.stderr)
         return 1
     return 0
+
+
+async def fetch_upstream_tools(command: list[str], env: dict[str, str]) -> list[dict]:
+    """``two-key mcp-draft-specs``: start the server once, list its tools, and stop it."""
+    params = StdioServerParameters(command=command[0], args=list(command[1:]), env=env)
+    async with Client(params, cache=None, mode="auto") as client:
+        return await list_upstream_tools(client)
+
+
+def draft_tools(command: list[str], env: dict[str, str]) -> list[dict]:
+    try:
+        return anyio.run(fetch_upstream_tools, command, env)
+    except ProxyConfigError:
+        raise
+    except Exception as e:
+        found = _refusal(e)
+        if found is not None:
+            raise found from None
+        raise ProxyConfigError(f"upstream_unavailable: {type(e).__name__}: {str(e)[:200]}") from None

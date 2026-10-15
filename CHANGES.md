@@ -1972,3 +1972,42 @@ gateway, or the ledger changed.
   paging, the child's environment, a poisoned description, duplicates, an
   upstream that does not start, an upstream error, and the command line's
   refusals.
+
+## `two-key mcp-draft-specs` (#2 P3) — 2026-10-15
+
+On branch `mcp-proxy`. For 0.5.0; package version stays 0.4.0. Needs the
+`mcp` extra. Nothing in authorization changed.
+
+- `two-key mcp-draft-specs --out DIR [--tool NAME]... [--env NAME[=VALUE]]...
+  -- COMMAND...` starts the upstream server once, lists its tools, and
+  writes `rules.draft.yaml` (a rules file with review comments),
+  `proxy-tools.draft.yaml` (a `tools:` block for proxy.yaml, `claim: none`),
+  and `schemas.json` (exactly what the schema digest covers, for review and
+  diffs). It prints the `schema_digest` for those tools. It never
+  overwrites a file.
+- `--constitution FILE` instead prints the `schema_digest` the proxy will
+  compute for that signed constitution's tools, and exits 2 if the upstream
+  does not list one of them. The file is read, not verified; the proxy
+  verifies it when it starts.
+- **Drafts fail closed.** `sign-constitution` refuses a draft until the
+  principal decides: every tool has `data_class_floor:
+  REPLACE_WITH_DATA_CLASS`, an amount-like property (`amount`, `price`,
+  `total`, ...) is the amount with `unit: REPLACE_WITH_usd_OR_cents`, and a
+  payee-like property (`vendor`, `recipient`, `to`, ...) is a counterparty
+  with an empty `allow` list. `irreversible` is `false` only for a tool the
+  server marks `readOnlyHint: true`.
+- **Fact-like properties are left out and flagged.** `*_matched`,
+  `*_verified`, `*_approved`, `*_confirmed`, and `*_validated` are claims the
+  agent would write (run 5c, C05). The draft does not map them, so the tool
+  never receives the agent's value, and lists them as `fact_candidates`
+  for caller-supplied facts (#2 P1, pending review).
+- Other top-level properties become payload paths (`shape` from the JSON
+  type: string, number, or a list of strings, with `maxLength`/`maxItems`).
+  A nested object is one unread payload path. A property name that is not a
+  dotted identifier is left out and noted.
+- Server text (descriptions, the command) appears only in comments, as
+  printable ASCII, so it cannot add keys to the draft. Tool ids are quoted
+  keys. An upstream name that is not lower case gets a lower-case id and an
+  `upstream_name` line in the proxy block.
+- Tests: `tests/test_mcp_draft.py` (the drafting rules without the SDK; the
+  command line against the fake server, skipped without the extra).
