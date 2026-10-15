@@ -78,6 +78,7 @@
 - [CI: an informational macOS and Windows run — 2026-10-15](#ci-an-informational-macos-and-windows-run--2026-10-15)
 - [macOS: the one failing test; first portability results — 2026-10-15](#macos-the-one-failing-test-first-portability-results--2026-10-15)
 - [Semgrep findings suppressed with reasons; judge hooks checked like proxy hooks — 2026-10-15](#semgrep-findings-suppressed-with-reasons-judge-hooks-checked-like-proxy-hooks--2026-10-15)
+- [CodeQL action v4; the maintainer's 0.6.0 decisions in ROADMAP — 2026-10-15](#codeql-action-v4-the-maintainers-060-decisions-in-roadmap--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2765,3 +2766,18 @@ On branch `working`. No behaviour change for a valid configuration.
   `.m:f`, or one with spaces is refused with `hook must be
   'module:function'`, cut to 80 characters in the message
   (`tests/test_judge_hook_spec.py`).
+
+## CodeQL action v4; the maintainer's 0.6.0 decisions in ROADMAP — 2026-10-15
+
+On branch `working`. CI and docs only.
+
+- `codeql.yml` (`init`, `analyze`) and `semgrep.yml` (`upload-sarif`) move
+  from CodeQL action v3, deprecated in December 2026, to v4.39.0, pinned by
+  commit SHA (`6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee`).
+- ROADMAP "Plan to 0.6.0" gains "Decisions for 0.6.0": the scanner hook is
+  optional and fails open by default after a time limit, could-not-finish is
+  flagged, the stance (default, strict, monitor) is a signed rule on a
+  caller-supplied verdict, fail-open is ledgered and warned about, the
+  judges get the verdict and never content; Two-Key runs on Linux, macOS,
+  and Windows, every CI pipeline that runs code (and CodeQL) runs on all
+  three. Additions only.

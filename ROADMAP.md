@@ -210,6 +210,50 @@ AGENTS.md requires.
 8. **Release 0.6.0**: version, `uv.lock` (uv 0.13.0), a PR into `main`
    once every check passes, then the `v0.6.0` tag and release notes.
 
+#### Decisions for 0.6.0 (maintainer, 2026-10-15)
+
+These settle the open points above. Where they differ from an earlier line
+in this plan, these win; nothing above is removed.
+
+**Scanner (antivirus or DLP) hook**
+
+- **Optional.** Two-Key runs fully without a scanner. A one-time note at
+  start-up encourages one.
+- **Fail-open by default.** A configured scanner gets a time limit (15 s by
+  default, configurable). If it is unreachable, errors, or does not answer
+  in time, the call goes on to the two keys exactly as today. Start-up warns
+  when the scan limit plus the judge deadline exceeds 60 s, since MCP
+  clients often give up on a tool call after 60 s.
+- **Could not finish is flagged.** A result the scanner could not finish
+  (size or time limits, such as ClamAV's `Heuristics.Limits.Exceeded`)
+  counts as flagged, not unavailable.
+- **The stance is signed** in the constitution. The scanner supplies a
+  caller-supplied enum fact with the verdict (`clean`, `flagged`,
+  `unavailable`), and a signed rule decides:
+  - default: deny `flagged`;
+  - strict (enterprise or high assurance, fail-closed): deny `flagged` and
+    `unavailable`;
+  - monitor: no rule; the verdict is only recorded.
+
+  `high_assurance` warns at start-up unless the stance is strict.
+- **Fail-open is visible.** Every unavailable scan is ledgered. One warning
+  when the scanner goes down and one when it recovers, not one per call. The
+  judges are told.
+- **Monitor mode** exists, for tuning before enforcing.
+- **What the judges get:** the scanner's decision for the call (verdict,
+  finding categories, scanner label), never content. Recent scan verdicts
+  also go into the judge history summary (#1, before 1.0), designed then.
+
+**Platforms, CI, and docs**
+
+- Two-Key runs on Linux, macOS, and Windows in 0.6.0. Windows support
+  changes key and ledger handling, so its design note gets the security
+  review before code.
+- Every CI pipeline that runs code (tests, demo, build and install) runs on
+  all three. CodeQL runs on all three as well; Semgrep stays on Linux, where
+  its container image runs.
+- HOWTO explains, with diagrams, how to hook a scanner in.
+
 ## 0.7.0: Ledger export for SIEM
 
 - A command that verifies the ledger, decrypts it locally, and writes events
