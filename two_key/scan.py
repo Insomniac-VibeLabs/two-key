@@ -370,7 +370,7 @@ class Scanner:
         notes = [f"scanner {self.label or 'configured'}: stance {self._stance}; scans {len(scanned)} of "
                  f"{len(specs)} tool(s)"]
         if unscanned:
-            notes.append(f"not scanned (no {self.field} mapping): {', '.join(unscanned)}")
+            notes.append(f"not scanned (they do not map {self.field}): {', '.join(unscanned)}")
         return notes
 
     @property

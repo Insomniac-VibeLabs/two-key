@@ -412,7 +412,7 @@ class ExampleFile(unittest.TestCase):
                         [FixedJudge("a", "yes")], private_key=key, quorum=QuorumPolicy(required_yes=1),
                         allow_test_doubles=True, monitored_agent=TEST_AGENT, scanner=scanner)
             self.assertEqual(scanner.stance, "default")
-            self.assertIn("not scanned (no scan mapping): lookup", err.getvalue())
+            self.assertIn("not scanned (they do not map scan): lookup", err.getvalue())
             claim = {"tool": "send_email", "data_class": "personal"}
 
             def send(data):

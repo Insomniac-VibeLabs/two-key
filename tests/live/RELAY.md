@@ -1,4 +1,4 @@
-# Live run 6: relay procedure (operator)
+# Live run 6 and 7: relay procedure (operator)
 
 Run 6 tests Two-Key behind the MCP proxy (branch `working`, also `mcp-proxy`). The harness is the agent's MCP host: it starts
 `two-key mcp-proxy`, which starts `clinic_mcp_server.py`, whose calls come back to the harness (the system of
@@ -18,9 +18,27 @@ python3 tests/live/make_cases.py --table    # also prints the case table, for th
 python3 tests/live/harness.py --selftest    # plumbing check with stub bots, in tests/live/selftest/
 ```
 
-36 cases. The self-test's stub judges always say yes, so the two cases only a judge can catch (a diagnosis or a
-card number in a message body: Path A does not read free text) fail there. Every other case should pass. The
-quorum cases do not need the stubs: the harness's own judge endpoints answer them with a scripted ballot.
+44 cases (run 7). Every case should pass the self-test. In run 6 the two cases only a judge could catch (a diagnosis
+or a card number in a message body) failed there, because the stub judges always say yes; in run 7 the content
+scanner flags them, so Path A denies them. The quorum and scanner cases do not need the stubs: the harness's own
+judge endpoints answer them with a scripted ballot.
+
+## Run 7: content scanning
+
+Run 7 adds Two-Key's content scanner (0.6.0, docs/SCANNERS.md) to the same clinic:
+
+- The proxy's `scan:` block points at a toy ICAP scanner the harness serves on loopback (port 18465). It stands in
+  for an antivirus or DLP product: it flags the EICAR test file, a Luhn-valid card number, and a word from a short
+  diagnosis list. It is not a classifier, and it never logs content.
+- `send_message` is scanned, and its new `attachments[].content` argument is a declared base64 file. The other
+  tools mark `scan` not applicable.
+- The main pass signs the default stance (deny flagged). Host cases marked with a stance (strict, monitor) run
+  against their own proxy, constitution, and ledger under `state/stance_<name>/`. Cases can take the scanner down
+  or make it slower than its 3 s limit.
+- The report reads the `<scan_result>` section of every judge prompt of a scan case and checks that the flagged
+  content (the card number, the diagnosis, the EICAR file) is not in any judge prompt.
+- The agent never sees or sets the scan. Its batch shows the attachment argument because the clinic's tool takes
+  one, nothing more.
 
 ## Each round
 
@@ -70,7 +88,7 @@ that is not a leak.
 ## After COMPLETE
 
 Move `relay/`, `logs/`, `constitution/` (the prose and rules the pass signed), `RESULTS.md`, and `results.json`
-into `run6/` (or `run6z/`, and so on) and commit them on a test branch, not on `working`. Until they are moved
+into `run6/` (or `run6z/`, `run7/`, and so on) and commit them on a test branch, not on `working`. Until they are moved
 they are git-ignored, so a pass in progress is not committed by mistake. Never commit `state/` (keys, ledgers),
 `selftest/`, or `cases.jsonl`. They are git-ignored at any depth under `tests/live/` (a copied `run6x/state/`
 too); still check `git status --ignored` before every commit, since a tree copied elsewhere is not covered.

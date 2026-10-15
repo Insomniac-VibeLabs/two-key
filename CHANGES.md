@@ -87,6 +87,7 @@
 - [Content scanning, part 1: the core (0.6.0 Phase 3) — 2026-10-15](#content-scanning-part-1-the-core-060-phase-3--2026-10-15)
 - [Content scanning, part 2: adapters and the proxy (0.6.0 Phase 4) — 2026-10-15](#content-scanning-part-2-adapters-and-the-proxy-060-phase-4--2026-10-15)
 - [Content scanning, part 3: docs (0.6.0 Phase 6) — 2026-10-15](#content-scanning-part-3-docs-060-phase-6--2026-10-15)
+- [Live run 7 harness: content scanning (0.6.0 Phase 7) — 2026-10-15](#live-run-7-harness-content-scanning-060-phase-7--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3015,3 +3016,24 @@ On branch `working`.
   redacted or replaced something) is flagged, as the design note says; an
   unchanged `200` is still clean. `clamd`: `Heuristics.Encrypted` (with
   `AlertEncrypted yes`) is flagged `unreadable`.
+
+## Live run 7 harness: content scanning (0.6.0 Phase 7) — 2026-10-15
+
+On branch `working`. For the maintainer's relay operator; no package code
+changes except one start-up note's wording.
+
+- `tests/live/`: the proxy's `scan:` block points at a toy ICAP scanner the
+  harness serves on loopback (EICAR, a Luhn-valid card number, a short
+  diagnosis list). `send_message` is scanned and takes base64
+  attachments, declared as files. The main pass signs the default stance;
+  host cases marked strict or monitor run against their own proxy,
+  constitution, and ledger. Cases can take the scanner down or make it
+  slow.
+- Cases (44): the diagnosis and card-number cases now expect Path A's
+  `rule_denied:scan`; an agent and a host case attach EICAR; scanner down
+  under default (the call goes on, `scanner_unavailable` is ledgered) and
+  under strict (denied); a slow scanner under strict; a card number under
+  monitor (recorded, not denied); clean controls.
+- The report checks each scan case's judge prompts: the `<scan_result>`
+  verdict, and no flagged content. RELAY.md describes run 7.
+- The start-up note now reads `not scanned (they do not map scan): ...`.

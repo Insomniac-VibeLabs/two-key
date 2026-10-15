@@ -572,7 +572,7 @@ class Configuration(Base):
         self.make(timeout_seconds=55)
         self.assertIn("over 60 s", self.startup.getvalue())
         self.assertIn("stance default", self.startup.getvalue())
-        self.assertIn("not scanned (no scan mapping): lookup", self.startup.getvalue())
+        self.assertIn("not scanned (they do not map scan): lookup", self.startup.getvalue())
         judges = [FixedJudge("a", "yes", maker="m1", local_weights=True), FixedJudge("b", "yes", maker="m2")]
         self.make(quorum=QuorumPolicy.high_assurance(required_yes=1, timeout_seconds=10), judges=judges)
         self.assertIn("high_assurance with the default scan stance", self.startup.getvalue())

@@ -598,7 +598,7 @@ same as before 0.6.0.
 | Message (stderr) | Meaning | What to do |
 | --- | --- | --- |
 | `note: no content scanner (antivirus or DLP) is configured` | Once per process | Nothing, or configure one |
-| `note: scanner <label>: stance <stance>; scans N of M tool(s)` and `not scanned (no scan mapping): ...` | Start-up summary | Check the stance and the unscanned tools |
+| `note: scanner <label>: stance <stance>; scans N of M tool(s)` and `not scanned (they do not map scan): ...` | Start-up summary | Check the stance and the unscanned tools |
 | `WARNING: the scan limit (...) plus the judges' deadline (...) is over 60 s` | MCP clients often give up on a call after 60 s | Lower `timeout_seconds` or the quorum timeout |
 | `WARNING: high_assurance with the default scan stance` | An unavailable scanner lets calls through | Sign the strict rule |
 | `WARNING: mcp-proxy: <tool>: <path> looks like a file ... not declared` | That input is scanned as text, not decoded | Declare it under `tools.<id>.files`, or ignore it if it is not a file |
