@@ -1897,3 +1897,69 @@ authorization decision, refusal, or warning.
   first. The record keeps its shape; `SeparationReport` and HOWTO say so.
 - Tests: `test_open_weight_gpt_oss_is_not_served_by_the_openai_api`, and the
   record test checks that `refusals` is empty.
+
+## MCP proxy, part 1: skeleton without caller facts (#2 P2) — 2026-10-15
+
+On branch `mcp-proxy` (cut from `working` at 9cc1a65, so `working` stays the
+0.4.0 release). For 0.5.0; package version stays 0.4.0 until then. Caller
+facts (#2 P1) are not in this part: they wait for the maintainer's security
+review of their design. Nothing in authorization, derive, the token, the
+gateway, or the ledger changed.
+
+- **`two-key mcp-proxy --config proxy.yaml`**, behind a new optional extra:
+  `pip install "two-key[mcp]"` (the official MCP Python SDK, `mcp>=2.2,<3`,
+  and PyYAML). `uv.lock` (uv 0.13.0) pins `mcp` and `mcp-types` 2.2.0, the
+  newest release more than two weeks old; the rest of the new dependencies
+  resolve to their newest versions as before. The core install is
+  unchanged (`cryptography` only).
+- **One SDK module.** `two_key/mcp_proxy/sdk.py` is the only file that
+  imports the SDK. `config.py` (the config file) and `core.py` (every
+  decision) need no extra and are tested without it.
+- **Upstream child process.** The proxy starts the upstream MCP server
+  from `upstream.command` (a list, no shell), with only the variables in
+  `upstream.env` (a literal, or `{env: NAME}` read from the proxy's
+  environment; unset refuses to start) plus the SDK's minimal set. The
+  proxy's other variables, such as judge keys, do not reach it. The SDK's
+  client response cache is off.
+- **Only signed tools.** `tools/list` shows each upstream tool whose exact
+  name is a signed tool id (or its `tools.<id>.upstream_name`), under the
+  signed id, with only `name`, `title`, `description`, `inputSchema`,
+  `outputSchema`, and `annotations`. A call to any other name is refused as
+  `tool_not_offered` before anything is authorized or ledgered (no token can
+  exist for it). Resources, prompts, completions, and server instructions
+  are not forwarded, and the upstream gets no sampling, elicitation, or
+  roots callbacks.
+- **Schema pin.** `upstream.schema_digest` (required) is `sha256:` over the
+  canonical JSON of those shown fields for the signed tools. On a mismatch
+  the proxy refuses to start (`upstream_schema_changed`, with both digests
+  and any signed tool the upstream no longer lists), unless
+  `upstream.on_schema_change: warn`. Tools are read once, at start;
+  `tools/list_changed` is ignored. Two upstream tools with one name refuse
+  to start.
+- **Per-tool claim policy.** `tools.<id>.claim` is `floor` (the signed
+  `data_class_floor`), a data class, or `none` (the default: omitted, so
+  `classified`). Amount, counterparty, and irreversible are never claimed:
+  they come from the argument bytes and the spec. The proposal text is fixed
+  per tool (`tools.<id>.proposal`, default `MCP tools/call <id>`).
+- **Identity refusal.** The proxy refuses to start on an
+  `unresolved_identity` warning unless `allow_unresolved_identity: true`;
+  the library still only warns. The refusal comes after `TwoKey` starts, so
+  the ledger's `constitution_loaded` records the warning that caused it.
+- **Calls.** Each `tools/call` runs `TwoKey.authorize` (origin `mcp-proxy`),
+  then `gateway.invoke` in the same process (#45); the gateway's tool is the
+  upstream `tools/call`, with the projected arguments only. One call at a
+  time. A deny, a gateway refusal, or an upstream failure
+  (`tool_error:<type>`, ledgered `redemption_aborted`) is an MCP tool error
+  whose text is `two-key denied this call: <reason>`, printable ASCII, at most
+  200 characters. An allowed call returns the upstream result without its
+  `_meta`.
+- **Nothing but MCP on stdout.** Refusals print `two-key: mcp-proxy refused
+  to start: <reason>` on stderr and exit 1.
+- CI installs the `mcp` extra (`tests.yml`, `coverage.yml`), so the SDK tests
+  run there. Tested locally on Python 3.11, 3.12, and 3.13; 3.10 only in CI.
+- Tests: `tests/test_mcp_proxy.py` (no SDK) and `tests/test_mcp_proxy_sdk.py`
+  (skipped without the extra), against `tests/fixtures/fake_mcp_server.py`
+  over stdio, network-free: both protocol eras (2026-07-28 and 2025-11-25),
+  paging, the child's environment, a poisoned description, duplicates, an
+  upstream that does not start, an upstream error, and the command line's
+  refusals.

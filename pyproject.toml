@@ -14,6 +14,8 @@ dependencies = ["cryptography>=41"]
 
 [project.optional-dependencies]
 yaml = ["pyyaml>=6"]
+# two-key mcp-proxy: the official MCP Python SDK, and PyYAML for the proxy config.
+mcp = ["mcp>=2.2,<3", "pyyaml>=6"]
 
 [project.urls]
 Homepage = "https://github.com/Insomniac-VibeLabs/two-key"

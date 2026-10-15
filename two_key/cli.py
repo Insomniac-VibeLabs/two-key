@@ -18,6 +18,7 @@
                     --witness-passphrase-env NAME [--witness-public-key PEM] [--head-anchor PATH] \
                     [--replace-ledger]
   two-key audit --key KEY --ledger DIR [--witness-public-key PEM]
+  two-key mcp-proxy --config FILE
   two-key demo
 
 ``authorize`` never prints the bearer token. It prints the decision with the token's
@@ -274,6 +275,21 @@ def _authorize(args) -> int:
     return 0 if decision.allowed else 2
 
 
+def _mcp_proxy(args) -> int:
+    from .mcp_proxy.config import ProxyConfigError, load_proxy_config
+    try:
+        config = load_proxy_config(args.config)
+    except ProxyConfigError as e:
+        print(f"two-key: mcp-proxy refused to start: {e}", file=sys.stderr)
+        return 1
+    try:
+        from .mcp_proxy import sdk
+    except ImportError as e:
+        print(f"two-key: {e}", file=sys.stderr)
+        return 1
+    return sdk.run(config)
+
+
 def _recover(args) -> int:
     from .ledger import Ledger, LedgerError
     key = load_private_key_file(args.key)
@@ -440,6 +456,10 @@ def main(argv: list[str] | None = None) -> int:
                               "does not delete the anchor")
     _add_passphrases(restore)
     restore.set_defaults(func=_backup_restore)
+    proxy = sub.add_parser("mcp-proxy", help="serve an upstream MCP server's signed tools over stdio, through "
+                                             "both keys (needs the mcp extra)")
+    proxy.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
+    proxy.set_defaults(func=_mcp_proxy)
     demo = sub.add_parser("demo")
     demo.set_defaults(func=_demo)
     args = parser.parse_args(argv)
