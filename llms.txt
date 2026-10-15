@@ -31,7 +31,8 @@ scanner cannot open is flagged, unless the tool's signed spec says encrypted: pa
 the only finding (verdict encrypted).
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
-before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
+before README.md and docs/HOWTO.md. docs/CONNECTING.md: how to connect the agent and every hook so
+it cannot go around Two-Key. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
 (no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.

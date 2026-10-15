@@ -611,6 +611,11 @@ pay_vendor({"payee": "alpine", "amount": 50, "invoice": "AMS-1"})   # raises Gua
   `field_missing` deny); its type goes to stderr.
 - Calls run one at a time.
 
+The guard is only a gate if the model has no other door: offer your
+framework the guarded functions only, never the raw function or a shell,
+code, HTTP, or file tool that reaches the same system, and never execute
+model output. See [docs/CONNECTING.md](CONNECTING.md), Route 2.
+
 **Hooks are trusted code that receives agent-written arguments.** A hook
 must look the fact up by an id (the invoice number) in the system of record
 and never echo an argument (`return args["po_matched"]` brings the agent's
@@ -1910,7 +1915,9 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 - **The agent host's user** must not be able to read any of that, change
   `proxy.yaml` or the constitution, or reach the upstream server or its
   credential by another path. An agent that can call the upstream directly
-  bypasses the proxy (THREAT_MODEL).
+  bypasses the proxy (THREAT_MODEL). [docs/CONNECTING.md](CONNECTING.md)
+  covers every connection and hook, the client's other tools, services on
+  the same machine, and a checklist.
 - **The upstream server's user** (`mcp-billing`) gets only its own
   credential. The server is third-party code, often fetched fresh. Run as
   the `two-key` user, it could read every key above, including the proxy's

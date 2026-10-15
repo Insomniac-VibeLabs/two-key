@@ -1,0 +1,253 @@
+# Connecting the monitored agent so it cannot go around Two-Key
+
+Two-Key can only stop the calls that go through it. This guide covers
+every connection and hook: how to wire each one, and what you have to
+close so that a malicious or careless agent has no other way to the
+tools, their credentials, or the files and settings Two-Key trusts.
+
+Two-Key checks some of this itself (see
+[What Two-Key checks for you](#what-two-key-checks-for-you)).
+Most of it is your operating system, your network, and your agent
+framework, which Two-Key cannot see. The
+[checklist](#checklist-before-you-let-an-agent-run) at the end is the
+short version.
+
+## Contents
+
+<!-- toc -->
+- [In plain words](#in-plain-words)
+- [Pick your route](#pick-your-route)
+- [Route 1: an MCP client, through `two-key mcp-proxy`](#route-1-an-mcp-client-through-two-key-mcp-proxy)
+- [Route 2: your own agent loop, through the Guard or the library](#route-2-your-own-agent-loop-through-the-guard-or-the-library)
+- [Every connection and hook](#every-connection-and-hook)
+- [Services on the same machine](#services-on-the-same-machine)
+- [What Two-Key checks for you](#what-two-key-checks-for-you)
+- [Checklist before you let an agent run](#checklist-before-you-let-an-agent-run)
+<!-- /toc -->
+
+## In plain words
+
+Two-Key is a lock on one door. It only helps if that is the only door.
+
+The agent should be able to do exactly one thing: ask Two-Key to run a
+signed tool. It should not be able to:
+
+- reach the tool, or the system behind it, another way (its own API key,
+  the network, a second tool that does the same job, a shell);
+- change what Two-Key trusts (the signed constitution and its key, the
+  config files, the hook code, the judges, the scanner);
+- read Two-Key's keys, ledger, or the credentials it holds for the tools
+  and judges.
+
+Each of those is a way around both keys. The fix for all of them is the
+same: run the agent as its own OS user (or in its own container or
+machine), give everything Two-Key trusts to a separate `two-key` user, and
+give each tool's real credential only to the side that calls the tool.
+The examples use Linux and macOS users and `sudo`; on Windows, use a
+separate account for the agent and a service account for Two-Key, with
+the same rules.
+
+```mermaid
+flowchart LR
+  subgraph agentzone["Agent zone: agent user, container, or machine"]
+    agent["Monitored agent<br/>and its host"]
+  end
+  subgraph tkzone["Two-Key zone: two-key user"]
+    tk["Two-Key<br/>Path A, Path B, ledger, gateway"]
+    trusted["Keys, ledger, constitution,<br/>proxy.yaml, judges.yaml,<br/>hook code, scanner config"]
+  end
+  subgraph toolzone["Tool zone: its own user"]
+    tool["Tool or upstream server<br/>holds the tool credential"]
+  end
+  agent -- "the only door:<br/>a tool call" --> tk
+  tk -- "after both keys" --> tool
+  tool --> sor["System of record"]
+  agent -. "closed: no credential,<br/>no network route" .-> sor
+  agent -. "closed: cannot read<br/>or write" .-> trusted
+  tk -. "verdict" .-> scanner["Scanner"]
+  tk -. "record" .-> judges["Judges"]
+```
+
+## Pick your route
+
+| Your agent is | Use | Why |
+| --- | --- | --- |
+| An MCP client (a desktop assistant, an IDE, an agent framework that speaks MCP), or code you do not control, in any language | Route 1, `two-key mcp-proxy` | Two-Key runs as a separate process and OS user, so the agent cannot reach its memory, keys, or tools |
+| A model your own Python code calls, where your code decides which functions run | Route 2, `Guard` (or `authorize` and the gateway) | Two-Key runs in your process; only the model's text is untrusted |
+| Untrusted code that would run inside your Python process | Route 1 | Python gives no isolation inside one process: that code could read every key and call the tool directly ([HOWTO](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)) |
+
+## Route 1: an MCP client, through `two-key mcp-proxy`
+
+The agent host starts the proxy instead of the real server. The proxy
+starts the real server itself, as a third user, and hands it only calls
+that both keys allowed. The full worked example is in
+[HOWTO](HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).
+
+1. **Three OS users.** `agent` runs the agent host. `two-key` runs the
+   proxy and owns its keys, ledger, config, hook code, and secrets.
+   `mcp-billing` (one per upstream) runs the real server and holds only
+   its credential.
+2. **The agent host can start the proxy and nothing else as `two-key`.**
+   In the client's MCP server list, the server's command is
+   `sudo -n -u two-key /opt/two-key/run-proxy`. Most clients take JSON
+   like this:
+
+   ```json
+   {"mcpServers": {"billing": {"command": "sudo",
+                               "args": ["-n", "-u", "two-key", "/opt/two-key/run-proxy"]}}}
+   ```
+
+   The sudoers rule allows exactly that command, with no arguments (the
+   `""`), so the agent cannot point the proxy at another config:
+
+   ```text
+   agent ALL=(two-key) NOPASSWD: /opt/two-key/run-proxy ""
+   ```
+
+   `run-proxy` is owned by root or `two-key`, not writable by `agent`,
+   loads the secrets from a file only `two-key` can read, and runs the
+   proxy from the `two-key` virtualenv with a fixed config path. Leave
+   sudo's `env_reset` on (the default), so nothing from the agent's
+   environment (`PYTHONPATH`, `LD_PRELOAD`) reaches the proxy.
+3. **Remove the real server from the client.** The client's MCP list must
+   not also start `@example/billing-mcp` (or any other server for the
+   same system). The agent must not hold `BILLING_TOKEN` in its
+   environment, its files, or its prompt.
+4. **Close the network route.** The agent's user, container, or machine
+   must not be able to reach the billing API or the system of record. A
+   firewall rule (egress by user, container network, or host) is the
+   usual way. Without the token a direct call should fail anyway; the
+   firewall covers a token that leaks.
+5. **Check the client's other tools.** Any tool that reaches the same
+   system is a second door: a shell or code runner, an HTTP fetch or
+   browser tool (especially one signed in to the same service), a file
+   tool that can write into a folder a tool reads (`kind: path`) or read
+   `/etc/two-key`. Remove them from that agent, or confine them so they
+   cannot reach any of it.
+6. **Start and read the output.** The proxy prints the tools it serves,
+   the scanner stance, and any warning on stderr, and writes
+   `mcp_proxy_started` to the ledger. A refusal at start (schema changed,
+   judge holds the agent's credential, unresolved identity) means do not
+   override it until you know why.
+
+## Route 2: your own agent loop, through the Guard or the library
+
+Your Python code calls the model, reads the tool call it proposes, and
+runs it through `Guard` (or `authorize` and then `gateway.invoke`). The
+model's output is data; your code is trusted. See
+[HOWTO "The guard"](HOWTO.md#the-guard) and
+[HOWTO "Authorize from Python"](HOWTO.md#authorize-from-python).
+
+- **Register only guarded functions with your framework.** The model must
+  be offered `pay_vendor` the guarded wrapper, never the raw function,
+  and never a general tool (shell, Python execution, HTTP request, file
+  write, a second client for the same API) that does the same job.
+- **Never execute model output.** No `eval`, no shell built from its text,
+  no dynamic import of a name it chose. A tool call is a name and
+  arguments; the guard looks the name up among signed tools.
+- **Keep the tool's credential out of the model's reach.** Load it inside
+  the guarded function's module from a secret the agent cannot read; do
+  not put it in the prompt, the instruction, or an argument.
+- **The guard fixes the claim and the proposal per tool.** The model's own
+  claim and reason are not used, so they cannot talk Path A down.
+- **Facts come from your hooks, never from the model.** A hook looks the
+  fact up by an id in the system of record and never returns an argument
+  ([HOWTO "Caller-supplied facts"](HOWTO.md#caller-supplied-facts)).
+- **`authorize_from_agent`** is the same route with Two-Key calling the
+  model itself: the model only returns a JSON proposal and never touches a
+  tool. Your code redeems the token through the gateway.
+- **The process holds every key.** Keep the registered tools small and
+  trusted, and do not load untrusted plug-ins into this process. If the
+  agent is untrusted code rather than a model, use Route 1.
+
+## Every connection and hook
+
+Each row is one connection or piece of trusted input: how to connect it,
+what an agent would try, and what stops it.
+
+| Connection or hook | Connect it so | An agent might try | Stopped by |
+| --- | --- | --- | --- |
+| Agent host to Two-Key | Route 1: the client starts the proxy wrapper through the exact sudoers rule. Route 2: the framework is offered guarded functions only | Starting the real server, or the proxy with its own config | Removing the real server from the client; sudoers allowing only the wrapper with no arguments; `env_reset` |
+| Two-Key to the tool (upstream server, or the registered function) | The gateway is the only caller. The upstream runs as its own user with only its credential (`upstream.command` with `sudo -u mcp-billing` or a container) | Calling the tool's API directly; reading the proxy's keys through the upstream | The agent has no tool credential and no network route; the upstream's user cannot read the `two-key` user's files or `/proc` |
+| Tool credentials (`BILLING_TOKEN`, API keys) | In a file only `two-key` reads (`proxy.env`, mode 0600), passed to the upstream through `upstream.env` | Reading it from the environment, a file, a log, or the prompt | Separate users; never in the prompt, the instruction, or an argument |
+| Signed constitution and principal key | Owned by `two-key`; the key mode 0600 in an owner-only directory | Replacing the constitution, or signing a looser one | The constitution's signature is checked on every load; Two-Key refuses a key readable by others; the agent's user cannot write either file |
+| `proxy.yaml`, `judges.yaml`, `agents.yaml`, `scan:` block, declared files | Owned by `two-key`, not writable by the agent | Turning a tool's scan off (declared files are not signed), adding a looser judge, pointing the scanner at its own server | File permissions. Which tools are scanned and the stance are signed; which arguments are files is not |
+| Fact hooks (`module:function`) | The module, and every directory on the proxy's `PYTHONPATH`, owned by root or `two-key` and not writable by the agent. Run the installed `two-key` command, not `python -m` from a directory the agent can write (Python imports from the current directory) | Planting a module that returns the fact it wants, or a `json.py` the proxy imports first | Directory permissions and a fixed working directory. A hook looks facts up by id and never echoes an argument; the tool still checks |
+| Judges | Their own credentials, not the agent's (`judges.yaml` auth by `env`, `keyring`, or `callback`). Cloud judges over HTTPS. A local judge's model, server, and config owned by `two-key` or root | Holding a judge's key, pointing a judge at its own account, rewriting a local judge's system prompt or model, answering on a local judge's port | Two-Key refuses a judge with the agent's credential at any address and warns on other overlaps; HTTPS is verified; the rest is permissions and [Services on the same machine](#services-on-the-same-machine) |
+| Monitored agent endpoint (`authorize_from_agent`, `agent_session_env`) | Its own API key, different from every judge's | Sharing a key with a judge so its own model votes | The judge-is-not-the-agent check at start ([HOWTO](HOWTO.md#the-monitored-agent-and-the-judge-is-not-the-agent-rule)) |
+| Content scanner, `clamd` | A Unix socket in clamd's own directory (`unix:/run/clamav/clamd.ctl`), with `LocalSocketMode 660` and a `LocalSocketGroup` that has `two-key` in it and not the agent; or TCP on a host the agent cannot reach | Answering "OK" in clamd's place, or flooding it so it is unavailable | The agent cannot write clamd's directory, so it cannot put its own socket there, and cannot open the socket; the strict stance denies while it is down; the agent never starts or sees a scan ([SCANNERS](SCANNERS.md)) |
+| Content scanner, ICAP | `icaps://` with a certificate the host trusts, unless it is on the same host behind a port the agent cannot take | Answering clean in the product's place | TLS verification; network placement |
+| Content scanner, command or Python hook | An absolute path or module owned by root or `two-key`, not writable by the agent | Replacing the scanner with one that always exits 0 | File and directory permissions; the command gets only a minimal environment and the part's bytes on stdin |
+| Files sent by path (`kind: path`) | A folder only the guarded tools (and whatever legitimately produces the files) can write; not writable by the agent's user or its file tools | Swapping the file after the scan, or linking it to a secret | Two-Key refuses links, files outside the folder, and changed files (`file_changed`); a folder the agent cannot write closes the swap between the last check and the tool |
+| Ledger and its key, witness, and capability directories | Owned by `two-key`; Two-Key creates them owner-only | Deleting or rewriting the history, or minting a token | AES-GCM, the hash chain, the signed and pinned head; the minting key never leaves this process; the agent cannot read the directories |
+| Tool results back to the agent | Nothing to wire | Text in a result that tells the agent to do something else | Not a way around Two-Key: each later call is judged on its own. Results are not scanned |
+
+## Services on the same machine
+
+On one machine, any user can listen on a free TCP port above 1024 on
+127.0.0.1. If the agent runs on the same machine as a loopback judge, a
+loopback scanner, or a system of record a hook reads over HTTP, it can wait
+for that service to stop (a crash, a restart, an update) and take its port.
+Two-Key would then ask the agent's own program for a ballot, a verdict, or
+a fact.
+
+Close it one of these ways:
+
+- Run the agent in its own network namespace (a container or a VM). Its
+  127.0.0.1 is then a different one.
+- Use a Unix socket in a directory the agent cannot write, where the
+  service supports one (`clamd`).
+- Use TLS with a verified certificate (`icaps://`, `https://`).
+- Run the services on a host the agent cannot reach.
+
+A judge Two-Key reaches over HTTPS on another host, and a scanner on a
+Unix socket in a directory the agent cannot write, need none of this.
+
+## What Two-Key checks for you
+
+At start and on every call, without any setup from you:
+
+- The constitution's signature, on every load; a v1 or v2 envelope that
+  carries a newer feature is refused.
+- Keys readable by anyone but the owner are refused (on Windows, an access
+  list naming anyone but the user, SYSTEM, Administrators, or OWNER
+  RIGHTS).
+- A judge holding the agent's credential, at any address, is refused;
+  other overlaps warn and are recorded.
+- The MCP proxy: the upstream's tool schemas against the pinned digest,
+  only signed tools shown, any other name `tool_not_offered`, the claim
+  from `proxy.yaml` only, and `mcp_proxy_started` ledgered before serving.
+- The agent cannot write a caller-supplied fact or the scan verdict
+  (`caller_field_in_arguments`, `scan_fact_supplied`), and the gateway
+  checks the facts and files again before the tool runs.
+
+What it cannot see: OS users and file permissions other than its own keys,
+the network, the client's other tools, your framework's tool list, and
+whether a port it connects to is the service you meant. Those are the
+items above and the checklist below.
+
+## Checklist before you let an agent run
+
+```text
+[ ] The agent runs as its own OS user, container, or machine.
+[ ] Two-Key runs as the two-key user, which owns the keys, ledger, constitution,
+    proxy.yaml, judges.yaml, agents.yaml, hook code, scanner config, and secrets.
+[ ] The agent's user cannot read or write any of those, or the virtualenv and
+    every directory on the proxy's PYTHONPATH.
+[ ] Route 1: the client starts only the proxy wrapper, through a sudoers rule
+    with no arguments; the real server is not in the client's list.
+[ ] Route 2: the framework offers only guarded functions; no shell, code runner,
+    HTTP, or file tool that reaches the same systems; model output is never executed.
+[ ] No tool credential is in the agent's environment, files, prompt, or arguments.
+[ ] The agent has no network route to the tool's API or the system of record.
+[ ] Each upstream server runs as its own user with only its own credential.
+[ ] Judges use their own credentials; a local judge's model and server are not
+    writable by the agent.
+[ ] The scanner is on a Unix socket in a directory the agent cannot write (mode 660,
+    a group without the agent), behind TLS, or on a host the agent cannot reach;
+    consider the strict stance.
+[ ] Folders for files sent by path are not writable by the agent or its tools.
+[ ] Loopback judges, scanners, and hook back ends are not on a machine where the
+    agent shares 127.0.0.1 (or the agent has its own network namespace).
+[ ] Start-up output read: tools served, scan stance, and no unexplained warning.
+```

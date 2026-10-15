@@ -433,7 +433,8 @@ socket, check `LocalSocketGroup` and `LocalSocketMode` in `clamd.conf`.
 
 | Line | Why |
 | --- | --- |
-| `TCPSocket 3310` and `TCPAddr 127.0.0.1` | `clamd` has no authentication. Listen on loopback, or on a private network only Two-Key can reach. |
+| `TCPSocket 3310` and `TCPAddr 127.0.0.1` | `clamd` has no authentication. Listen on loopback, or on a private network only Two-Key can reach. If the agent runs on the same machine without its own network namespace, prefer the Unix socket: it could take a free loopback port and answer `OK` ([CONNECTING](CONNECTING.md#services-on-the-same-machine)). |
+| `LocalSocket`, `LocalSocketGroup`, `LocalSocketMode 660` | The Unix socket (`address: unix:/run/clamav/clamd.ctl`). Put `two-key` in the group and not the agent's user, so the agent cannot open it. clamd's own directory, which the agent cannot write, keeps it from putting a socket of its own there. |
 | `StreamMaxLength` | The largest stream `clamd` accepts. Set it at least to your largest `max_bytes`. Over it, `clamd` replies `INSTREAM size limit exceeded`, which is `flagged` (`limits_exceeded`). |
 | `MaxFileSize`, `MaxScanSize` | Past these, `clamd` stops looking inside a file. |
 | `AlertExceedsMax yes` | Reports a file it stopped scanning as `Heuristics.Limits.Exceeded`, which is `flagged` (`limits_exceeded`). Without it, a partly scanned file is `OK`. Recommended. |

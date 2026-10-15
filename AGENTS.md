@@ -82,6 +82,7 @@ Git install:
 - Tests: `python -m unittest discover -s tests` (no network). Keep the suite
   network-free; use `two_key.testing` doubles only where the docs allow.
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
+  `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
   `docs/SCOPE.md`, `CHANGES.md`, `SECURITY.md`, `CONTRIBUTING.md`,
   `AGENTS.md`, and `llms.txt` as needed.

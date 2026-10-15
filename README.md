@@ -85,7 +85,8 @@ python -m two_key authorize --help
 ```
 
 Real judges are configured in `examples/judges.yaml`. The operator guide is
-[docs/HOWTO.md](docs/HOWTO.md).
+[docs/HOWTO.md](docs/HOWTO.md). Before a real agent runs, close every way
+around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 
 ## Put Two-Key in front of an MCP server
 
@@ -129,6 +130,8 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
 | --- | --- |
 | [docs/FIT.md](docs/FIT.md) | Whether Two-Key is the right control for you |
 | [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
+| [docs/CONNECTING.md](docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
+| [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0, on `working`) |
 | [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Trust boundaries and residual risk |
 | [docs/SCOPE.md](docs/SCOPE.md) | What is included, left out, and planned |

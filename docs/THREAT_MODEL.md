@@ -296,6 +296,15 @@ These are accepted or still open. They are not bugs the design already
 claims to close.
 
 - No independent review, and no production deployment.
+- Any route around Two-Key is outside what it can see: a tool
+  credential the agent holds, a network route to the system of record, a
+  second tool on the agent host that reaches the same system (a shell, an
+  HTTP or browser tool, a file tool that writes into a `kind: path`
+  folder), or write access to what Two-Key trusts (config files, hook
+  modules or anything on its `PYTHONPATH`, a local judge's model). On one
+  machine, an agent can also take a loopback port a judge, scanner, or
+  hook back end left free (after a crash or restart) and answer in its
+  place. docs/CONNECTING.md lists each connection and how to close it.
 - MCP proxy (0.5.0):
   - An agent that can reach the upstream server directly, or holds its
     credential, bypasses the proxy entirely. The proxy cannot see or stop

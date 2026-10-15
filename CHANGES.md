@@ -90,6 +90,7 @@
 - [Live run 7 harness: content scanning (0.6.0 Phase 7) — 2026-10-15](#live-run-7-harness-content-scanning-060-phase-7--2026-10-15)
 - [File size limits; unreadable files denied under every stance (0.6.0) — 2026-10-15](#file-size-limits-unreadable-files-denied-under-every-stance-060--2026-10-15)
 - [Encrypted files: signed per-tool pass (0.6.0) — 2026-10-15](#encrypted-files-signed-per-tool-pass-060--2026-10-15)
+- [Docs: connecting the agent so it cannot go around Two-Key — 2026-10-15](#docs-connecting-the-agent-so-it-cannot-go-around-two-key--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3122,3 +3123,23 @@ because encrypting a file is also a way past the scanner.
   main pass, sent with the verdict `encrypted` under a new
   `encrypted_pass` stance, and still denied beside the EICAR file (49
   cases).
+
+## Docs: connecting the agent so it cannot go around Two-Key — 2026-10-15
+
+On branch `working`. Docs only; no behavior changes.
+
+- New docs/CONNECTING.md: the two routes (an MCP client through
+  `two-key mcp-proxy`, and your own loop through the Guard or the
+  library), with the exact sudoers rule and client entry for the proxy;
+  a table of every connection and hook (agent host, upstream, tool
+  credentials, constitution and key, config files, fact hooks and the
+  Python import path, judges, the monitored agent endpoint, each scanner
+  type, files sent by path, the ledger, tool results) with what an agent
+  would try and what stops it; services that share 127.0.0.1 with the
+  agent (a free loopback port can be taken after a crash or restart); what
+  Two-Key checks for you and what it cannot see; and a checklist.
+- THREAT_MODEL residual risks: routes around Two-Key it cannot see, and
+  loopback port takeover on a shared machine. SCANNERS: prefer clamd's
+  Unix socket (mode 660, a group without the agent) when the agent shares
+  the machine. HOWTO (key custody, the guard), README, llms.txt, and
+  AGENTS.md point to the new guide; `tests/test_doc_toc.py` covers it.
