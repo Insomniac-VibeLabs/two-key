@@ -23,3 +23,13 @@ After adding, renaming, or moving a heading in a document that has a table of
 contents, run `python tests/test_doc_toc.py --write`; the test suite fails
 while a table is out of date.
 Run `python -m unittest discover -s tests` before opening a pull request.
+
+CI runs every pipeline that runs code on Linux, macOS, and Windows: the tests
+and the demo (`tests.yml`, Python 3.10 to 3.12), the build with a wheel
+install and the demo (`build.yml`), and bandit (`security.yml`). Windows jobs
+do not block until Windows support lands in 0.6.0. CodeQL (`codeql.yml`)
+runs on all three as well. Semgrep (`semgrep.yml`) stays on Linux: it
+analyses the source, not the running system, and its container image runs
+only on Linux runners. Coverage (`coverage.yml`) is one report, from Linux.
+Tests that start a child process build its environment with
+`tests/child_env.py`, which keeps the variables Windows needs.

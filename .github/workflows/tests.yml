@@ -4,11 +4,18 @@ permissions:
   contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    # Windows does not block until Windows support lands (ROADMAP "Plan to 0.6.0", Phase 2).
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12"]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -18,4 +25,8 @@ jobs:
         run: |
           pip install --only-binary :all: "uv==0.13.0"
           uv sync --locked --no-build --extra yaml --extra mcp --no-dev --python python --no-managed-python --no-python-downloads
-      - run: .venv/bin/python -m unittest discover -s tests
+      - name: Tests
+        run: uv run --no-sync python -m unittest discover -s tests
+      - name: Demo
+        if: ${{ !cancelled() }}
+        run: uv run --no-sync python -m two_key demo

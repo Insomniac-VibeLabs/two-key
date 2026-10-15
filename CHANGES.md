@@ -79,6 +79,7 @@
 - [macOS: the one failing test; first portability results — 2026-10-15](#macos-the-one-failing-test-first-portability-results--2026-10-15)
 - [Semgrep findings suppressed with reasons; judge hooks checked like proxy hooks — 2026-10-15](#semgrep-findings-suppressed-with-reasons-judge-hooks-checked-like-proxy-hooks--2026-10-15)
 - [CodeQL action v4; the maintainer's 0.6.0 decisions in ROADMAP — 2026-10-15](#codeql-action-v4-the-maintainers-060-decisions-in-roadmap--2026-10-15)
+- [CI on Linux, macOS, and Windows (0.6.0 Phase 1) — 2026-10-15](#ci-on-linux-macos-and-windows-060-phase-1--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2781,3 +2782,28 @@ On branch `working`. CI and docs only.
   judges get the verdict and never content; Two-Key runs on Linux, macOS,
   and Windows, every CI pipeline that runs code (and CodeQL) runs on all
   three. Additions only.
+
+## CI on Linux, macOS, and Windows (0.6.0 Phase 1) — 2026-10-15
+
+On branch `working`. CI and tests only.
+
+- `tests.yml` runs on `ubuntu-latest`, `macos-latest`, and `windows-latest`
+  with Python 3.10, 3.11, and 3.12 (bash, installed from `uv.lock` as
+  before): the tests, then `python -m two_key demo`. Jobs stop after 30
+  minutes. Windows jobs are `continue-on-error` until Windows support lands
+  (Phase 2). `portability.yml` is folded in and removed.
+- `build.yml` builds the sdist and wheel on all three, installs the wheel
+  into a fresh venv, imports `two_key` from it (from outside the checkout),
+  and runs the demo.
+- `security.yml` (bandit) runs on all three.
+- `codeql.yml` runs on all three (maintainer, 2026-10-15). Linux keeps the
+  default category so its earlier alerts carry on; macOS and Windows upload
+  as `/language:python/os:<os>`. Semgrep and coverage stay on Linux
+  (CONTRIBUTING says why).
+- `tests/child_env.py`: a child process a test starts gets `PATH` and what
+  the test names, plus, on Windows, `SYSTEMROOT`, `COMSPEC`, `PATHEXT`,
+  `TEMP`, `TMP`, and `USERPROFILE` (without `SYSTEMROOT`, asyncio fails with
+  WinError 10106). `test_mcp_draft.py` and `test_mcp_proxy_sdk.py` use it.
+  The upstream-environment test also allows the MCP SDK's own minimal list
+  (`DEFAULT_INHERITED_ENV_VARS`), which differs on Windows; the proxy still
+  passes only the declared and minimal variables.

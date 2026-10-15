@@ -3,13 +3,13 @@
 import contextlib
 import io
 import json
-import os
 import subprocess  # nosec B404 - runs this repository's own CLI in a test
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
+from child_env import child_env
 from two_key.constitution import ConstitutionError, sign_constitution, validate_tool_specs
 from two_key.keys import generate_private_key
 from two_key.mcp_proxy.core import select_tools
@@ -146,7 +146,7 @@ class Drafting(unittest.TestCase):
 @unittest.skipUnless(HAVE_MCP, "needs the mcp extra")
 class CommandLine(unittest.TestCase):
     def run_cli(self, *argv):
-        env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(ROOT)}
+        env = child_env(PYTHONPATH=str(ROOT))
         return subprocess.run([sys.executable, "-m", "two_key", "mcp-draft-specs", *argv],  # nosec B603
                               capture_output=True, text=True, env=env, timeout=120)
 
