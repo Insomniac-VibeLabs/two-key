@@ -11,6 +11,7 @@ Commands are from the repository root.
 
 <!-- toc -->
 - [Install](#install)
+  - [Platforms](#platforms)
 - [Create a principal key and sign a constitution](#create-a-principal-key-and-sign-a-constitution)
 - [Data classes](#data-classes)
 - [What Two-Key verifies, and what it does not](#what-two-key-verifies-and-what-it-does-not)
@@ -60,12 +61,41 @@ pip install -e ".[yaml]"
 python -m unittest discover -s tests
 ```
 
+On Windows, activate with `.venv\Scripts\activate` instead. Two-Key runs on
+Linux, macOS, and Windows (0.6.0); see "Platforms" below for how keys are
+protected on each.
+
 That follows the ranges in `pyproject.toml`. The same checkout's `uv.lock`
 is what CI installs (wheels only). To match it, install the uv version
 pinned in `.github/workflows/tests.yml`, then `uv sync --locked --no-build
 --extra yaml --extra mcp --no-dev`, and run tests with `.venv/bin/python`. When a
 dependency range changes, regenerate `uv.lock` with that same uv and commit
 it. The lock is not a consumer pin: a git install still uses the ranges.
+
+### Platforms
+
+Two-Key runs on Linux, macOS, and Windows, with Python 3.10 to 3.12; CI
+runs the tests, the demo, and a wheel install on all three.
+
+Key files (the principal key, the ledger key, the witness and capability
+keys, the fingerprint key, the head anchor, token files) must be readable
+by their owner only. Two-Key creates them that way and refuses one that is
+not (`*_insecure`), with the command that fixes it:
+
+- **Linux and macOS:** mode 0600 in a 0700 directory. Fix: `chmod 600 FILE`.
+- **Windows:** an access list with only you in it. SYSTEM and
+  Administrators may also have access: they can read any file on the
+  machine anyway. Anyone else (Everyone, Users, another account) is
+  refused. Fix: `icacls "FILE" /inheritance:r /grant:r "%USERNAME%":F`.
+  To back keys up, use `two-key backup-export` ("Back up the keys"): the
+  bundles are encrypted, so they can go to ordinary backup storage.
+
+A symlink (or, on Windows, a junction) in place of a key file is refused
+on every platform. Two-Key processes that share a ledger take a
+cross-process lock (`flock`, or `LockFileEx` on Windows) on the separate
+`<ledger>.lock` and `<ledger>.redeem-locks` files. In `proxy.yaml`,
+`upstream.command` can name `npx` on Windows: the proxy finds `npx.cmd`
+through `PATHEXT`, without a shell.
 
 ## Create a principal key and sign a constitution
 

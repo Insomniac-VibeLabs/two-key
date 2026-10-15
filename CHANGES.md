@@ -81,6 +81,7 @@
 - [CodeQL action v4; the maintainer's 0.6.0 decisions in ROADMAP — 2026-10-15](#codeql-action-v4-the-maintainers-060-decisions-in-roadmap--2026-10-15)
 - [CI on Linux, macOS, and Windows (0.6.0 Phase 1) — 2026-10-15](#ci-on-linux-macos-and-windows-060-phase-1--2026-10-15)
 - [Windows support, part 1: owner-only files, locks, no-follow opens (0.6.0 Phase 2) — 2026-10-15](#windows-support-part-1-owner-only-files-locks-no-follow-opens-060-phase-2--2026-10-15)
+- [Windows support, part 2: docs; one message (0.6.0 Phase 2) — 2026-10-15](#windows-support-part-2-docs-one-message-060-phase-2--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2845,3 +2846,20 @@ approved 2026-10-15). Linux and macOS behave as before.
   POSIX, the access list on Windows), and loosen a file with an Everyone
   entry on Windows. The read-only-directory test is POSIX only. An "OWNER
   RIGHTS" entry is accepted when the owner is.
+
+## Windows support, part 2: docs; one message (0.6.0 Phase 2) — 2026-10-15
+
+On branch `working`. Docs, and one Windows-only message.
+
+- HOWTO "Platforms": Linux, macOS, and Windows; how keys are protected on
+  each, the fix command for each (`chmod 600` or `icacls`), backups through
+  `two-key backup-export`, and `npx` through `PATHEXT`.
+- THREAT_MODEL: what owner-only means on Windows (the user, SYSTEM, and
+  Administrators; anyone else refused), the Windows lock (`LockFileEx`,
+  mandatory, on the separate lock files only), and `_platform.py` in the
+  re-check list. It replaces the line that said there was no cross-process
+  lock without `fcntl`.
+- AGENTS.md: the platform invariant; README and AGENTS: Windows from 0.6.0.
+- On Windows, a backup output directory that other accounts can write is
+  refused as "writable by other accounts", naming the account.
+

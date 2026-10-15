@@ -551,6 +551,10 @@ flowchart LR
 
 ## Install and versions
 
+Two-Key is not on PyPI yet. Released versions (0.5.0 and earlier) run on
+Linux and macOS. Windows support is on the `working` branch for 0.6.0, with
+CI on all three platforms (HOWTO "Platforms").
+
 Two-Key is not on PyPI yet. Install a tagged release from git:
 
 ```bash

@@ -726,7 +726,7 @@ def _prepare_output_dir(out: Path) -> Path:
         if problem and not _platform.WINDOWS:
             raise BackupError("backup_refused: the output directory is writable by group or others")
         if problem:
-            raise BackupError(f"backup_refused: other accounts can write the output directory: {problem}")
+            raise BackupError(f"backup_refused: the output directory is writable by other accounts: {problem}")
         return out
     try:
         out.mkdir(mode=0o700, parents=True, exist_ok=False)

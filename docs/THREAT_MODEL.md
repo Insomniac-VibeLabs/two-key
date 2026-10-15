@@ -465,8 +465,25 @@ claims to close.
   amount, counterparties, and custom field values.
 - A crash after `redemption_started` and before the tool runs refuses a
   retry, even if the tool did not run. Exactly-once execution is not claimed.
-- Where `fcntl` is absent, another process can still append. This package
-  does not claim cross-process exclusion on those platforms.
+- Cross-process exclusion (the append lock and the redemption locks) is
+  `flock` on Linux and macOS and `LockFileEx` on Windows (0.6.0;
+  `two_key/_platform.py`). The Windows lock is mandatory, not advisory, but
+  it sits on byte 0 of a separate lock file, so it blocks only another
+  Two-Key process taking the same lock, never a reader of the ledger. Both
+  are released when the process ends. On a platform with neither, taking
+  the lock raises, so nothing is appended.
+- **Owner-only on Windows** (0.6.0) means: the key file's owner, and every
+  entry in its access list that grants more than metadata access, is the
+  current user, SYSTEM, or the local Administrators group (or OWNER RIGHTS
+  when the owner is one of those). SYSTEM and Administrators can read the
+  key, as they can read any file on the machine, and as root can on Linux
+  and macOS; backup software reads through the backup privilege either way
+  (maintainer's decision, 2026-10-15). Two-Key creates a key with an access
+  list for the current user only, set when the file is created. Another
+  ordinary user cannot read it. Files open with
+  `FILE_FLAG_OPEN_REPARSE_POINT`, so a symlink or junction as the last part
+  of the path is refused, as `O_NOFOLLOW` does on POSIX; a link earlier in
+  the path is followed on every platform.
 - There is no TEE. OAuth device-code judge auth is rejected. A username and
   password is accepted only as HTTP Basic over HTTPS (`type: basic`). Use
   `env`, `keyring`, `callback`, or `basic`.
@@ -615,4 +632,5 @@ above, not here.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
 - `two_key/mcp_proxy/`: only `sdk.py` imports the MCP SDK. Each `tools/call` runs `authorize`, then `gateway.invoke` in the same process; the upstream call is the gateway's registered tool, with projected arguments. Only signed tools are shown, under their signed ids; any other name is `tool_not_offered`, ledgered. Caller-supplied paths are removed from the `inputSchema` shown. `mcp_proxy_started` is ledgered before serving; if that fails, the proxy does not start. Fact hooks load at start; one that does not import refuses to start. The schema digest covers exactly the fields shown, as the upstream lists them (before caller paths are removed); a mismatch refuses unless `on_schema_change: warn`. `unresolved_identity` refuses unless `allow_unresolved_identity: true`. The claim is the per-tool policy only (`floor`, a class, or none = classified). The child gets `upstream.env` plus the SDK's minimal set. Nothing but MCP goes to stdout. `draft.py`: placeholders that signing refuses, fact-like properties left out, server text in ASCII comments only. `undescribed_inputs` warns, never refuses, for each input Path A reads that the upstream schema does not describe.
+- `two_key/_platform.py`: POSIX does exactly what it did before 0.6.0 (mode 0600 and 0700, `O_NOFOLLOW`, `flock`, the same messages). On Windows a key is created with a protected access list for the current user only, in `CreateFileW` itself; a key is accepted only when its owner and every allow entry with more than metadata access are the current user, SYSTEM, Administrators, or OWNER RIGHTS; a reparse point as the last part is refused; locks are `LockFileEx`; descriptors are binary. Every key read and write in the package goes through it, and every text file Two-Key writes uses `newline="\n"` and a named encoding (`tests/test_text_io.py`).
 - `two_key/backup.py`: three bundles; the ledger key and the witness key are never in one file; a wrong passphrase or a tampered bundle is a refusal; restore writes `head.anchor` from the same moment as the ledger and does not delete it. `--replace-ledger` is the only path that overwrites a different ledger, and it also overwrites a key file that differs. A missing anchor on a newer ledger is left missing; the next open adopts that head.

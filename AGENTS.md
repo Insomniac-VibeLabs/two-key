@@ -49,6 +49,8 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 Requires Python ≥ 3.10. Package name `two-key`, import name `two_key`,
 version `0.5.0`, tag `v0.5.0` on `main`. Not on PyPI.
+Linux and macOS; Windows from 0.6.0 (on `working`). CI runs tests, the demo,
+the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
 ```bash
 python3 -m venv .venv
@@ -206,6 +208,15 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   the draft, at `--constitution`, and at proxy start, for any field, never
   a looser match (`core.undescribed_inputs`). SDK tests skip without the extra; CI installs
   it (`--extra mcp`).
+- Platforms (0.6.0): every key read or write, owner-only directory, lock,
+  and no-follow open goes through `two_key/_platform.py`. On POSIX it does
+  what the code did before (mode 0600/0700, `O_NOFOLLOW`, `flock`, the same
+  messages). On Windows a key is created with an access list for the
+  current user only, and one whose owner or allow entries name anyone but
+  the user, SYSTEM, Administrators, or OWNER RIGHTS is refused; a reparse
+  point is refused; the lock is `LockFileEx`. Do not accept a wider access
+  list or fall back to "no lock". Text files Two-Key writes use
+  `newline="\n"` and a named encoding (`tests/test_text_io.py`).
 - The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
   (`TwoKey.gateway()`). A gateway in another process or host is not
   supported (#45); do not add a gateway-only ledger role, remote gateway,
