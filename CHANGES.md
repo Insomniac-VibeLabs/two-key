@@ -75,6 +75,7 @@
 - [PR #11 review: no raw bidirectional characters — 2026-10-15](#pr-11-review-no-raw-bidirectional-characters--2026-10-15)
 - [Semgrep findings printed to the job log — 2026-10-15](#semgrep-findings-printed-to-the-job-log--2026-10-15)
 - [Roadmap: where we are, and the plan to 0.6.0 — 2026-10-15](#roadmap-where-we-are-and-the-plan-to-060--2026-10-15)
+- [CI: an informational macOS and Windows run — 2026-10-15](#ci-an-informational-macos-and-windows-run--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2711,4 +2712,14 @@ On branch `working`. Docs only; nothing removed.
   weaker), 2 `non-literal-import` of operator-configured hooks (trusted
   configuration), and 1 `httpsconnection-detected` on a connection that
   verifies certificates and host names. None is a vulnerability.
+
+## CI: an informational macOS and Windows run — 2026-10-15
+
+On branch `working`. CI only.
+
+- `.github/workflows/portability.yml` runs the test suite and `python -m
+  two_key demo` on `macos-latest` and `windows-latest` (Python 3.12, from
+  `uv.lock`), on pushes to `working` and by hand. It does not block
+  (`continue-on-error`): Linux (`tests.yml`) stays the gate until those
+  platforms are supported.
 
