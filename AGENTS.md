@@ -47,8 +47,8 @@ python -m two_key demo
 ```
 
 CI does not use that floating install. `.github/workflows/tests.yml` pins
-`uv==0.13.0` and runs `uv sync --locked --no-build --extra yaml`, which
-installs `uv.lock` (cryptography, PyYAML, and their dependencies) as wheels.
+`uv==0.13.0` and runs `uv sync --locked --no-build --extra yaml --extra mcp`, which
+installs `uv.lock` (cryptography, PyYAML, the MCP SDK, and their dependencies) as wheels.
 Regenerate `uv.lock` with that uv when a dependency range changes, and
 commit the lock. Do not treat the lock as a release pin for consumers.
 Build, coverage, and bandit are pinned in their workflows, not in
@@ -58,6 +58,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | --- | --- | --- |
 | (none) | `cryptography>=41` | Ed25519, SHA-256, AES-256-GCM ledger |
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
+| `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (branch `mcp-proxy`) |
 
 Git install:  
 `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.4.0"`
@@ -145,6 +146,18 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   does not match the pin in the ledger, or the configured
   `witness_public_key`, is refused. It changes only by `rotate_witness`.
 - The gateway verifies only; it never mints.
+- The MCP proxy (`two_key/mcp_proxy/`): only `sdk.py` imports the MCP SDK;
+  `config.py`, `core.py`, and `draft.py` must not. Every `tools/call` goes
+  through `authorize`, then `gateway.invoke` in the same process; the
+  upstream call is the gateway's registered tool, never called directly.
+  Only signed tools are shown; any other name is `tool_not_offered`. A
+  schema mismatch refuses to start unless `on_schema_change: warn`.
+  `unresolved_identity` refuses unless `allow_unresolved_identity: true`;
+  the library keeps warning. The claim comes from `proxy.yaml` only, never
+  from the agent. A deny returns a reason code, never a value. Nothing but
+  MCP on stdout. Drafts must not sign until the principal decides; server
+  text stays in ASCII comments. SDK tests skip without the extra; CI installs
+  it (`--extra mcp`).
 - The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
   (`TwoKey.gateway()`). A gateway in another process or host is not
   supported (#45); do not add a gateway-only ledger role, remote gateway,

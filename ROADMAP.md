@@ -224,11 +224,25 @@ The list this section was written from:
 
 ## 0.6: MCP adapter
 
+Issue #2. Part 1 is on branch `mcp-proxy` (for package 0.5.0): the stdio
+proxy and the spec drafter. Caller-supplied facts wait for the
+maintainer's security review of their design.
+
 - A proxy for `tools/call` that runs `authorize` and forwards through the
-  gateway, in the same process (`TwoKey.gateway()`), only with a valid token. The package does not become an MCP
-  server.
-- A helper that drafts `tool_specs` from an MCP server's tool schemas. The
-  output is a draft for the principal to review and sign.
+  gateway, in the same process (`TwoKey.gateway()`), only with a valid
+  token. It speaks MCP to the agent's host but offers no tools of its own.
+  Built on the official MCP Python SDK as the optional `mcp` extra; only
+  one module imports it. (Part 1: done.)
+- Schema pinning: refuse to start when the signed tools' schemas change,
+  unless `on_schema_change: warn`. The proxy refuses an unresolved judge or
+  agent identity unless `allow_unresolved_identity: true`. (Part 1: done.)
+- A helper that drafts `tool_specs` from an MCP server's tool schemas
+  (`two-key mcp-draft-specs`). The output is a draft for the principal to
+  review and sign, and does not sign until they decide. (Part 1: done.)
+- Caller-supplied facts (`source: caller` fields), so a fact such as
+  `po_matched` comes from the integration, not the agent, and a
+  framework-neutral guard core for agent loops that do not use MCP.
+  (Next, after review.)
 - Start with stdio transport and one real server. HTTP and OAuth come later.
 - The proxy adds a trust boundary: an agent that can reach the MCP server
   directly bypasses it. THREAT_MODEL.md says so.
@@ -377,7 +391,8 @@ Planned, with no target version.
 ## Not planned for this repository
 
 - Its own antivirus or content-classification engine.
-- Running as an MCP server.
+- Running as an MCP server that offers tools of its own. The MCP proxy
+  speaks MCP only to forward an upstream server's signed tools.
 - A gateway in its own process or on its own host, or a gateway-only
   ledger role (#45). The gateway runs in the `TwoKey` process.
 - A hosted, remote, or multi-user GUI, and a GUI that holds the signing key.

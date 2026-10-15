@@ -37,9 +37,22 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
 - a single-use token and a gateway intended to be the only component that
   invokes registered tools; this does not stop an agent from calling a
   tool directly through another path
+- on branch `mcp-proxy` (for 0.5.0), behind the optional `mcp` extra (the
+  official MCP Python SDK): `two-key mcp-proxy`, a stdio proxy in front of
+  one upstream MCP server. It starts the server as a child process, shows
+  the agent only the signed tools, pins their schemas
+  (`upstream.schema_digest`; a mismatch refuses to start unless
+  `on_schema_change: warn`), refuses an unresolved judge or agent identity
+  unless `allow_unresolved_identity: true`, and runs each `tools/call`
+  through `authorize` and the in-process gateway with a per-tool claim
+  policy. `two-key mcp-draft-specs` drafts `tool_specs` and the digest for
+  the principal to review and sign; a draft does not sign until the
+  principal decides each floor, amount unit, and allow list. The proxy
+  speaks MCP to the agent's host but offers no tools of its own, and has no
+  caller-supplied facts yet
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
-Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent),
+Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
 `two_key/strict.py` (duplicate-key JSON/YAML), `two_key/audit.py` (decision
 digest checks), `two_key/backup.py` (key backup), and the per-install fingerprint key beside the ledger
 (`*.ledger-key/fingerprint.key`).
@@ -61,8 +74,9 @@ change in the same release.
 - Inspection hooks for DLP and antivirus (target 0.5): an interface that
   calls external scanners. This package still does not scan or classify
   content itself.
-- MCP adapter (target 0.6): an optional proxy in front of the gateway. This
-  package is still not an MCP server.
+- MCP adapter (target 0.6): part 1 is on branch `mcp-proxy` (above). Still
+  planned: caller-supplied facts, a framework-neutral guard core, and HTTP
+  transports. The proxy offers no tools of its own.
 - PKI and certificate recovery (target 0.7): X.509 identities for the
   principal, witness, capability issuer, and optionally agents, for personal
   use (a small local CA) and enterprise use (an existing CA and trust

@@ -2011,3 +2011,33 @@ On branch `mcp-proxy`. For 0.5.0; package version stays 0.4.0. Needs the
   `upstream_name` line in the proxy block.
 - Tests: `tests/test_mcp_draft.py` (the drafting rules without the SDK; the
   command line against the fake server, skipped without the extra).
+
+## Docs: the MCP proxy (#2 P4) — 2026-10-15
+
+On branch `mcp-proxy`. No behavior change.
+
+- **HOWTO "Put Two-Key in front of an MCP server"**: what the proxy does,
+  in plain words and in two Mermaid diagrams (flow and sequence); a worked
+  example (draft, review, sign, digest, `judges.yaml`, `proxy.yaml`, and the
+  agent host's command); the `proxy.yaml` reference; what each start-up
+  refusal, warning, and call-time reason means and what to do; key custody
+  with three OS users (the agent host, the proxy, and the upstream server,
+  which could otherwise read the proxy's keys and, through `/proc`, its
+  environment); and the limits (no caller facts yet, stdio and one upstream,
+  one call at a time, the pin covers schemas not behavior, results unread,
+  a timed-out call may still have run).
+- **THREAT_MODEL**: new assets (the upstream credential, `proxy.yaml`), a new
+  actor (the upstream server), two new trust boundaries (agent host to proxy,
+  proxy to upstream), a new assumption, the proxy's residual risks (bypass by
+  reaching the upstream directly, the upstream as the proxy's OS user,
+  schema vs behavior, `warn`, unread results, timeouts, rule ids in deny
+  reasons, `tool_not_offered` not ledgered), and what to re-check in
+  `two_key/mcp_proxy/`.
+- **SCOPE, ROADMAP, README, FIT, COMPARISON, SECURITY, llms.txt, AGENTS.md,
+  CONTRIBUTING**: the proxy and drafter on branch `mcp-proxy`, the `mcp`
+  extra, CI's `--extra mcp`, and the new in-scope and out-of-scope items.
+  "Not an MCP server" now reads "offers no tools of its own": the proxy
+  speaks MCP only to forward an upstream server's signed tools.
+- `tests/test_mcp_docs.py` keeps the worked example true: its `proxy.yaml`
+  parses, its rules sign, and the config table lists exactly the keys the
+  loader accepts.

@@ -16,6 +16,6 @@ Update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`, `docs/FIT.md`,
 `docs/JUDGES_AND_QUORUM.md` when a claim changes.
 When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
 in the same release.
-When `dependencies` or the `yaml` extra changes, regenerate `uv.lock` with
+When `dependencies`, the `yaml` extra, or the `mcp` extra changes, regenerate `uv.lock` with
 the uv version pinned in `.github/workflows/tests.yml` and commit it.
 Run `python -m unittest discover -s tests` before opening a pull request.

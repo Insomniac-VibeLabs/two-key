@@ -1,6 +1,8 @@
 # Threat model
 
 This is the design model for `two-key` 0.4.0. Tag `v0.4.0` on `main` is the tagged release. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+Branch `mcp-proxy` (for 0.5.0) adds the MCP proxy (`two-key mcp-proxy`) and the spec drafter
+(`two-key mcp-draft-specs`), described below; caller-supplied facts are not in it yet.
 It is not a penetration test and it is not an independent review. The package is
 beta (pre-1.0): maintainer-reviewed with live LLM testing and automated
 scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
@@ -44,7 +46,14 @@ the code wins, then this file should be corrected.
 - The wrapped data key stored inside the ledger directory.
 - Judge credentials and monitored-agent credentials. They are not the same secret.
 - The capability token and the argument bytes it is bound to.
-- Tool credentials, which only the gateway should hold.
+- Tool credentials, which only the gateway should hold. Behind the MCP
+  proxy, the upstream server's credential (`upstream.env`), which only the
+  proxy and its upstream child should hold.
+- The MCP proxy's `proxy.yaml`, above all `upstream.schema_digest`,
+  `upstream.command`, and `allow_unresolved_identity`. Whoever can change
+  it can accept a changed tool schema, run another server, or start beside
+  an unresolved judge identity. It is policy, like the constitution, but it
+  is not signed.
 - The ledger head and the hash chain.
 
 ## Actors
@@ -53,6 +62,9 @@ the code wins, then this file should be corrected.
 - An untrusted agent, local or cloud. Hosting is not trust.
 - Path B judges, each with its own credential. A judge can be wrong.
 - The caller that invokes authorize, then the gateway.
+- The upstream MCP server behind the proxy: third-party code, often
+  fetched fresh. Its tool descriptions, hints, and results are untrusted
+  text.
 - Anyone who can read or write the ledger directory, the ledger key, or the
   witness key.
 
@@ -88,6 +100,20 @@ the code wins, then this file should be corrected.
   function is called with declared paths only. Unnamed keys are not passed
   in. A counterparty path is the canonical party, not the raw spelling.
   Nothing in this package scans those bytes.
+- Agent host to the MCP proxy (stdio). The host sees the signed tools only,
+  under their signed ids, with the pinned fields (`name`, `title`,
+  `description`, `inputSchema`, `outputSchema`, `annotations`). Each
+  `tools/call` is authorized with a fixed claim and proposal from
+  `proxy.yaml`; the agent writes only the arguments. A name the proxy does
+  not show is refused (`tool_not_offered`) and not ledgered. A refusal
+  returns a reason code, never a value.
+- MCP proxy to the upstream server (stdio, a child process). The server
+  receives only the projected arguments of a redeemed token, and only the
+  variables in `upstream.env` plus the SDK's minimal set. It gets no
+  sampling, elicitation, or roots callbacks, and its resources, prompts,
+  and instructions are not forwarded. Its tool list is read once, at start,
+  and checked against `upstream.schema_digest`: a mismatch refuses to start
+  unless `on_schema_change: warn`.
 - Process to the ledger. Appends and checkpoints take a POSIX `flock` on
   `<ledger>.lock` next to the ledger directory. If the file changed since
   this process loaded it, the write is refused. Redemption also takes a
@@ -149,6 +175,10 @@ the code wins, then this file should be corrected.
 
 ## Assumptions
 
+- Behind the MCP proxy: the agent host cannot reach the upstream server or
+  its credential by another path, cannot read the proxy's keys,
+  environment, or `proxy.yaml`, and the upstream server runs as an OS user
+  that cannot read them either (HOWTO "Key custody").
 - The gateway is the only holder of tool credentials. This package cannot
   stop an agent that can call the tool by another path.
 - The principal key and the ledger key are not both in the attacker's
@@ -190,6 +220,35 @@ These are accepted or still open. They are not bugs the design already
 claims to close.
 
 - No independent review, and no production deployment.
+- MCP proxy (branch `mcp-proxy`):
+  - An agent that can reach the upstream server directly, or holds its
+    credential, bypasses the proxy entirely. The proxy cannot see or stop
+    that.
+  - An upstream server run as the proxy's OS user can read every key the
+    proxy holds (principal, ledger, witness, capability), the judge keys,
+    and the proxy's environment through `/proc`. The proxy does not change
+    users itself; `upstream.command` must (HOWTO "Key custody").
+  - The schema pin covers what the agent is shown, not what the server
+    does. A server can change its behavior, or read an argument
+    differently, without changing a schema.
+  - `on_schema_change: warn` starts with a changed, possibly poisoned,
+    description; the warning goes to stderr only.
+  - An upstream result reaches the agent unread. Injected text in a result
+    is not scanned; each later call is still authorized on its own.
+  - A call that times out (`call_timeout_seconds`) is recorded as
+    `redemption_aborted`, but the server may still have done the work.
+  - No caller-supplied facts yet. A fact-like argument is the agent's
+    assertion; the drafter leaves such properties out of the spec, but a
+    principal who maps one back accepts the agent's word (run 5c, C05).
+  - Deny reasons show the agent the rule id that denied
+    (`rule_denied:<id>`). A rule id that encodes a threshold tells the agent
+    that threshold.
+  - `tool_not_offered` is printed on stderr and not ledgered, so an agent
+    probing for hidden tools leaves no ledger record.
+  - One call runs at a time; a slow judge round delays the next call.
+  - The proxy does not verify the upstream server's identity beyond the
+    command it runs. A changed package behind an unpinned `npx -y` shows
+    up only if its schema changes.
 - Custom Path A fields (0.3.0). A tool that does not map a field gets the
   field's signed default, as a tool with no amount spec has `amount_usd` 0.
   A mapping the operator forgot is therefore silent. Rules written as
@@ -399,11 +458,11 @@ shipped in 0.3.0 and are described above, not here.
   value it cannot read stays a residual risk. Where the hook runs relative to
   the judges is an open choice, because cloud judges receive `tool_args`
   today.
-- MCP adapter (target 0.6). New boundary: MCP client to proxy to MCP server.
-  The assumption that the gateway is the only holder of tool credentials
-  becomes the central one, because an agent that can reach an MCP server
-  directly bypasses the proxy. A `tool_specs` draft made from MCP schemas is
-  a proposal for the principal to review and sign, not trusted input.
+- MCP adapter (target 0.6). Part 1 (the stdio proxy and the spec drafter)
+  is on branch `mcp-proxy` and is described above. Still planned:
+  caller-supplied facts (#2 P1, after the maintainer's security review),
+  then HTTP transports. A `tool_specs` draft made from MCP schemas stays a
+  proposal for the principal to review and sign, not trusted input.
 - PKI and certificate recovery (target 0.7). New assets: the certificate
   authority key (a personal local CA or an enterprise CA), issued
   certificates, the revocation list, and recovery material (a backup bundle,
@@ -462,4 +521,5 @@ shipped in 0.3.0 and are described above, not here.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
+- `two_key/mcp_proxy/`: only `sdk.py` imports the MCP SDK. Each `tools/call` runs `authorize`, then `gateway.invoke` in the same process; the upstream call is the gateway's registered tool, with projected arguments. Only signed tools are shown, under their signed ids; any other name is `tool_not_offered`. The schema digest covers exactly the fields shown; a mismatch refuses unless `on_schema_change: warn`. `unresolved_identity` refuses unless `allow_unresolved_identity: true`. The claim is the per-tool policy only (`floor`, a class, or none = classified). The child gets `upstream.env` plus the SDK's minimal set. Nothing but MCP goes to stdout. `draft.py`: placeholders that signing refuses, fact-like properties left out, server text in ASCII comments only.
 - `two_key/backup.py`: three bundles; the ledger key and the witness key are never in one file; a wrong passphrase or a tampered bundle is a refusal; restore writes `head.anchor` from the same moment as the ledger and does not delete it. `--replace-ledger` is the only path that overwrites a different ledger, and it also overwrites a key file that differs. A missing anchor on a newer ledger is left missing; the next open adopts that head.

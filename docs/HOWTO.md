@@ -19,7 +19,7 @@ python -m unittest discover -s tests
 That follows the ranges in `pyproject.toml`. The same checkout's `uv.lock`
 is what CI installs (wheels only). To match it, install the uv version
 pinned in `.github/workflows/tests.yml`, then `uv sync --locked --no-build
---extra yaml --no-dev`, and run tests with `.venv/bin/python`. When a
+--extra yaml --extra mcp --no-dev`, and run tests with `.venv/bin/python`. When a
 dependency range changes, regenerate `uv.lock` with that same uv and commit
 it. The lock is not a consumer pin: a git install still uses the ranges.
 
@@ -1110,6 +1110,307 @@ gateway is that it refuses tokens, as above. To silence it:
 make it an error in tests or CI:
 `python -W error::two_key.gateway.TwoKeyDeploymentWarning ...` or
 `warnings.simplefilter("error", TwoKeyDeploymentWarning)`.
+
+## Put Two-Key in front of an MCP server (`two-key mcp-proxy`)
+
+On branch `mcp-proxy`, for 0.5.0
+([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)). Caller-supplied
+facts are not in it yet (see "Limits" below).
+
+**In plain words.** An MCP client (a desktop assistant, an IDE, an agent
+framework) normally starts an MCP server and calls its tools directly. With
+the proxy, the client starts `two-key mcp-proxy` instead. The proxy starts
+the real server itself, shows the agent only the tools you signed, and runs
+every call through both keys before the server sees it. A refused call
+comes back to the agent as a tool error with a reason code.
+
+```mermaid
+flowchart LR
+  host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
+  subgraph proxy["two-key mcp-proxy, its own OS user"]
+    tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
+  end
+  tk -. "normalized record" .-> judges["Judges"]
+  gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
+  up --> sor["System of record"]
+```
+
+```mermaid
+sequenceDiagram
+  participant Host as Agent host
+  participant Proxy as two-key mcp-proxy
+  participant Judges
+  participant Up as Upstream server
+  Note over Proxy,Up: At start the proxy launches the server, lists its tools, and checks schema_digest
+  Host->>Proxy: tools/list
+  Proxy-->>Host: the signed tools only
+  Host->>Proxy: tools/call pay_vendor with vendor, amount, memo, po_matched
+  Proxy->>Proxy: Path A on the form derived from the arguments and the fixed claim
+  Proxy->>Judges: normalized record
+  Judges-->>Proxy: ballots
+  alt both keys turn
+    Proxy->>Proxy: mint a token, the gateway checks it
+    Proxy->>Up: tools/call pay_vendor with vendor, amount, memo only
+    Up-->>Proxy: result
+    Proxy-->>Host: result
+  else a key does not turn
+    Proxy-->>Host: tool error, two-key denied this call, then the reason code
+  end
+```
+
+The proxy is a separate process, so it works with any MCP client and any
+agent language. It uses the official MCP Python SDK, installed with the
+`mcp` extra; only `two_key/mcp_proxy/sdk.py` imports it. The SDK moves
+messages and decides nothing.
+
+### Install
+
+```bash
+pip install -e ".[mcp]"          # from a checkout of the mcp-proxy branch
+```
+
+### Worked example: a billing server
+
+The upstream server is `@example/billing-mcp@1.2.3`, started with `npx`. It
+needs `BILLING_TOKEN`. Use three OS users (see "Key custody"): the agent
+host's user, `two-key` for the proxy, and `mcp-billing` for the upstream
+server.
+
+**1. Draft the tool specs** (as the principal):
+
+```bash
+two-key mcp-draft-specs --out drafts --env BILLING_TOKEN -- npx -y @example/billing-mcp@1.2.3
+```
+
+It starts the server once, lists its tools, and writes:
+
+- `drafts/rules.draft.yaml`: a rules file with review comments;
+- `drafts/proxy-tools.draft.yaml`: a `tools:` block for `proxy.yaml`;
+- `drafts/schemas.json`: exactly what the schema digest covers.
+
+It prints the digest and the fact-like properties it left out. It never
+overwrites a file. Pin the server version in the command (`@1.2.3`); `npx
+-y` without one fetches whatever is newest.
+
+**2. Review the draft.** The draft fails closed: `sign-constitution`
+refuses it until you decide every `data_class_floor`
+(`REPLACE_WITH_DATA_CLASS`), the unit of each amount
+(`REPLACE_WITH_usd_OR_cents`), and each counterparty's `allow` list (empty
+in the draft). `irreversible` is `false` only where the server says
+`readOnlyHint: true`; a server's hints and descriptions are its claims.
+Remove every tool the agent should not have. A fact-like property
+(`*_matched`, `*_verified`, `*_approved`, `*_confirmed`, `*_validated`) is
+left out of the spec, so the tool never receives the agent's value: until
+caller-supplied facts ship, the tool must check that fact itself (see "What
+Two-Key verifies"). A reviewed `rules.yaml` might be:
+
+```yaml
+hard_rules:
+  - {id: tools, allow_only_tools: ["pay_vendor", "read_report"]}
+  - {id: cap, deny_if: {amount_usd_gt: 500}}
+tool_specs:
+  pay_vendor:
+    irreversible: true
+    data_class_floor: "financial"
+    amount: {"json_path": "amount", "unit": "usd"}
+    counterparties: [{"json_path": "vendor", "allow": ["acme-supplies", "globex"]}]
+    payload: [{"json_path": "memo", "shape": "string", "max_length": 200}]
+  read_report:
+    irreversible: false
+    data_class_floor: "financial"
+```
+
+**3. Sign it, then get the digest of the signed tools:**
+
+```bash
+two-key sign-constitution --key keys/principal.pem --prose constitution.md \
+  --rules rules.yaml --out constitution.signed.json
+two-key mcp-draft-specs --constitution constitution.signed.json --env BILLING_TOKEN \
+  -- npx -y @example/billing-mcp@1.2.3
+```
+
+The second command prints `{"schema_digest": "sha256:...",
+"signed_tools_not_listed": []}`, the digest the proxy computes at start. It
+reads the constitution without verifying it; the proxy verifies it when it
+starts.
+
+**4. Declare the judges and the monitored agent** in `judges.yaml`, as in
+[examples/judges.yaml](../examples/judges.yaml). The `monitored_agent:`
+block is required. Behind a local proxy or an unrecognized host, declare
+`upstream:` for that side, or the MCP proxy refuses to start (below).
+
+**5. Write `proxy.yaml`:**
+
+```yaml
+constitution: constitution.signed.json
+keys: {principal: keys/principal.pem}
+ledger: ledger
+judges: judges.yaml
+witness_public_key: /etc/two-key/witness.pub.pem   # optional; kept where the ledger's writer cannot change it
+agent_session_env: AGENT_API_KEY                   # the agent's session; required with cloud judges
+agent_id: billing-agent                            # ledger metadata, not trust
+allow_unresolved_identity: false
+upstream:
+  command: ["sudo", "-n", "-u", "mcp-billing", "--preserve-env=BILLING_TOKEN", "--",
+            "npx", "-y", "@example/billing-mcp@1.2.3"]
+  env: {BILLING_TOKEN: {env: BILLING_TOKEN}}
+  schema_digest: "sha256:..."                       # from step 3
+  on_schema_change: refuse
+  call_timeout_seconds: 60
+tools:
+  pay_vendor: {claim: floor, proposal: "Pay a vendor invoice"}
+  read_report: {claim: floor}
+```
+
+**6. Point the agent host at the proxy.** In the client's MCP server list,
+the command is a wrapper owned by `two-key` that loads the proxy's secrets
+(judge keys, `BILLING_TOKEN`, `AGENT_API_KEY`) from a file only `two-key`
+can read, then runs `two-key mcp-proxy --config /etc/two-key/proxy.yaml`.
+For example, the client runs `sudo -n -u two-key /opt/two-key/run-proxy`,
+and `run-proxy` is:
+
+```bash
+#!/bin/sh
+set -a; . /etc/two-key/proxy.env; set +a       # mode 0600, owner two-key
+exec /opt/two-key/.venv/bin/two-key mcp-proxy --config /etc/two-key/proxy.yaml
+```
+
+The proxy prints `two-key: mcp-proxy: serving 2 signed tool(s)
+['pay_vendor', 'read_report']` on stderr. Nothing but MCP goes to stdout.
+
+### `proxy.yaml`
+
+Read strictly: a repeated key, a YAML merge key, and an unknown key are
+refused. Relative paths are relative to the file.
+
+| Key | Required | Meaning |
+| --- | --- | --- |
+| `constitution` | yes | The signed constitution |
+| `keys.principal` | yes | The principal private key (signs the ledger head; the capability key sits beside the ledger as usual) |
+| `ledger` | yes | The ledger directory |
+| `judges` | yes | `judges.yaml`, with its `monitored_agent:` block |
+| `witness_public_key`, `head_anchor` | no | As `--witness-public-key` and `--head-anchor` |
+| `ttl_seconds` | no | Token lifetime, 1 to 300 (default 120) |
+| `agent_session_env` | no | The variable holding the agent's session, read once at start; unset or empty refuses to start |
+| `agent_id`, `hosting` | no | Ledger metadata, at most 256 characters; not trust |
+| `allow_unresolved_identity` | no | `true` starts despite an `unresolved_identity` warning (default `false`) |
+| `upstream.command` | yes | Program and arguments, as a list; no shell |
+| `upstream.env` | no | Variables for the child: a literal, or `{env: NAME}` read from the proxy's environment (unset refuses to start) |
+| `upstream.cwd` | no | The child's working directory |
+| `upstream.schema_digest` | yes | `sha256:...` from `mcp-draft-specs` |
+| `upstream.on_schema_change` | no | `refuse` (default) or `warn` |
+| `upstream.call_timeout_seconds` | no | Per upstream call, at most 3600 (default 60) |
+| `tools.<id>.claim` | no | `floor` (the signed `data_class_floor`), a data class, or `none` (default: omitted, so `classified`) |
+| `tools.<id>.proposal` | no | Fixed proposal text (default `MCP tools/call <id>`); judges see it only with `judge_inputs: record_and_proposal` |
+| `tools.<id>.upstream_name` | no | The upstream's name for a signed tool whose name is not a lower-case id |
+
+The claim is the only thing the proxy says about a call, and the agent
+writes none of it. Amount, counterparty, and irreversible are never
+claimed: they come from the argument bytes and the signed spec, as in
+`two-key authorize` with those options left out.
+
+### What the proxy does
+
+- **At start:** it loads Two-Key exactly as `two-key authorize` does; any
+  library refusal stops it. Then it refuses an `unresolved_identity`
+  warning, unless `allow_unresolved_identity: true`. Next it starts the
+  upstream child, lists its tools (every page), and checks the schema
+  digest.
+- **The upstream child** gets `upstream.command`, no shell, and only the
+  variables in `upstream.env` plus the SDK's minimal set (`HOME`,
+  `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`). The proxy's other variables,
+  such as judge keys, are not passed to it.
+- **`tools/list`** shows each upstream tool whose exact name is a signed tool
+  id (or its `upstream_name`), under the signed id. Only `name`, `title`,
+  `description`, `inputSchema`, `outputSchema`, and `annotations` are shown;
+  the digest covers exactly those fields. Tools are listed once, at start:
+  a later `tools/list_changed` is ignored, so restart the proxy to pick up a
+  change, which checks the pin again. Resources, prompts, completions, and
+  server instructions are not forwarded. The upstream gets no sampling,
+  elicitation, or roots callbacks, so it cannot reach the agent's host.
+- **`tools/call`:** the proxy runs `TwoKey.authorize` (origin `mcp-proxy`),
+  then `gateway.invoke` in the same process (#45). The gateway's registered
+  tool is the upstream `tools/call`, with the projected arguments only: an
+  unnamed key, such as `po_matched` in the example, never reaches the
+  server. One call runs at a time. An allowed call returns the upstream's
+  result without its `_meta`, unread; the proxy does not scan it.
+
+### What each refusal or warning means
+
+At start, a refusal prints `two-key: mcp-proxy refused to start: <reason>`
+on stderr and exits 1.
+
+| Reason | Meaning | What to do |
+| --- | --- | --- |
+| a config key named | The config file is invalid | Fix that key |
+| `upstream_env_missing: upstream.env.X ...` | The variable `{env: NAME}` reads is unset or empty | Set it in the proxy's environment |
+| `agent_session_env: ...` | The agent session variable is unset or empty | Set it, or remove the key |
+| `TwoKeyConfigError: ...`, `JudgeConfigError: ...`, `LedgerError: ...` | Two-Key itself refused, as `two-key authorize` would | See the sections on judges, the monitored agent, and the ledger |
+| `unresolved_identity: ...` | Two-Key cannot tell who serves a judge or the agent (a local proxy serving an alias, an unrecognized host), so it cannot rule out a judge that is the agent | Declare `upstream:` for that side in `judges.yaml`, or set `allow_unresolved_identity: true` to accept the risk |
+| `tools: [...] are not tools in the signed constitution` | A `tools:` entry names an unsigned tool | Remove it, or sign the tool |
+| `upstream_unavailable: <type>: ...` | The child did not start, or did not speak MCP | Check the command and its user |
+| `upstream_duplicate_tool`, `upstream_tool_unreadable`, `upstream_too_many_tools`, `upstream_too_many_pages` | The upstream's tool list cannot be pinned | Fix or replace the server |
+| `upstream_name_collision` | Two signed tools map to one upstream name | Fix `upstream_name` |
+| `upstream_schema_changed: ... (pinned X, now Y)` | What the agent would see differs from the pin: a description, a schema, an annotation, or a signed tool the upstream no longer lists | Re-run `mcp-draft-specs`, diff `schemas.json`, re-sign if a tool's meaning changed, then update `schema_digest`. Pin the server version to make this rare |
+
+With `on_schema_change: warn`, the last one starts with `two-key: WARNING:
+upstream_schema_changed ...` on stderr instead. A warning in a background
+process is easy to miss, so `refuse` is the default. The library's
+judge-and-agent warnings (`same_model_shared_route` and the others) print
+as usual and are recorded in `constitution_loaded`.
+
+At call time, a refused call is an MCP tool error whose text is `two-key
+denied this call: <reason>`: printable ASCII, at most 200 characters, never
+an argument value.
+
+| Reason | Meaning |
+| --- | --- |
+| `tool_not_offered` | A name the proxy does not show. Nothing is authorized or ledgered, since no token can exist for it; a line goes to stderr |
+| any `two-key authorize` reason | `rule_denied:<rule id>`, `counterparty_not_allowed`, `derive_failed:...`, `insufficient_yes:...`, `cloud_judge_session_required`, `args_too_large`, and the others in "Parsing and limits" and "Quorum policy" |
+| `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`. After a timeout the server may still have done the work. The proxy does not retry |
+| `upstream_result_unreadable` | The upstream returned something that is not a tool result |
+
+An upstream result with `isError: true` is the server's own answer: the
+tool ran (the ledger has `redemption`), and the agent gets it unchanged.
+
+A deny reason shows the agent the id of the rule that denied
+(`rule_denied:cap`). Do not put a threshold or anything secret in a rule
+id.
+
+### Key custody
+
+Run the proxy as its own OS user, and the upstream server as a third one.
+
+- **The `two-key` user** holds the principal key, the ledger and its key,
+  witness, and capability directories, `judges.yaml`, the judge keys, the
+  agent session, and the upstream credential. As with the library, one
+  process holds all of them (#45).
+- **The agent host's user** must not be able to read any of that, change
+  `proxy.yaml` or the constitution, or reach the upstream server or its
+  credential by another path. An agent that can call the upstream directly
+  bypasses the proxy (THREAT_MODEL).
+- **The upstream server's user** (`mcp-billing`) gets only its own
+  credential. The server is third-party code, often fetched fresh. Run as
+  the `two-key` user, it could read every key above, including the proxy's
+  environment through `/proc`. The example uses `sudo -n -u mcp-billing
+  --preserve-env=BILLING_TOKEN` in `upstream.command`; that needs a
+  sudoers rule that lets `two-key` run exactly that command, with that
+  variable, as `mcp-billing`. A container with only that credential works
+  too.
+
+### Limits
+
+- **No caller-supplied facts yet** (#2 P1, waiting on the maintainer's
+  security review). A fact-like field must stay out of the spec, as the
+  draft leaves it, and the tool must check it against the system of record.
+- **One upstream, over stdio.** HTTP transports come later. One call runs at
+  a time, so a slow judge round delays the next call.
+- **The pin covers what the agent is shown,** not what the server does: a
+  server can change its behavior without changing a schema. Pin the
+  version.
+- **Results are not read.** An upstream result can carry injected text back
+  to the agent. Two-Key judges each later call on its own terms; it does not
+  scan the result.
 
 ## If the ledger will not open after a crash
 

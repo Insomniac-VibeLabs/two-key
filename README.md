@@ -29,6 +29,7 @@ is going, see [ROADMAP.md](ROADMAP.md).
 - **Monitored Agent**: The untrusted agent under constraint. It proposes actions; it has no direct access to any registered tool.
 - **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported (#45). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
 - **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
+- **MCP proxy** (branch `mcp-proxy`, for 0.5.0; `pip install "two-key[mcp]"`): `two-key mcp-proxy` sits between an MCP client and one upstream MCP server. It shows the agent only the signed tools, pins their schemas, and runs every `tools/call` through both keys and the in-process gateway. `two-key mcp-draft-specs` drafts the tool specs for the principal to review and sign. See HOWTO "Put Two-Key in front of an MCP server".
 
 ## Dual-path authorization
 
@@ -379,6 +380,9 @@ audited. It is not a FIPS 140-3 validated module.
 - Identities are bare keys. There is no certificate chain, expiry, or
   revocation. PKI with certificate recovery is on the roadmap.
 - It does not scan payloads, and it is not an antivirus or DLP product.
+- Behind the MCP proxy, an agent that can reach the upstream server directly
+  bypasses it, and an upstream server running as the proxy's OS user can
+  read the proxy's keys. Run each as its own user (HOWTO "Key custody").
 - A key backup is only as strong as its passphrase. The bundle is the keys.
   PBKDF2 slows guessing and is not memory-hard. It is not a seed phrase and
   not an external anchor. A restore onto a newer ledger fills missing key
@@ -394,7 +398,7 @@ The plan from 0.2.4 to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
 0.3.0 (key backup), 0.3.1 (live-test fixes, beta), and 0.4.0 (the move to
 this repository and the package rename to `two-key`) are released. The MCP adapter (0.6) moves ahead of 0.4 and
-0.5. Nothing after 0.3 in that plan exists yet.
+0.5; its first part (the stdio proxy and the spec drafter) is on branch `mcp-proxy`. Nothing else after 0.3 in that plan exists yet.
 The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
@@ -473,13 +477,13 @@ python -m two_key authorize --help
 ```
 
 That install follows the ranges in `pyproject.toml`. CI does not: it installs
-the versions in `uv.lock` (cryptography, PyYAML, and their dependencies),
-wheels only. To match CI, use the uv version pinned in
+the versions in `uv.lock` (cryptography, PyYAML, the MCP SDK for the `mcp`
+extra, and their dependencies), wheels only. To match CI, use the uv version pinned in
 `.github/workflows/tests.yml`:
 
 ```bash
 pip install --only-binary :all: "uv==0.13.0"
-uv sync --locked --no-build --extra yaml --no-dev
+uv sync --locked --no-build --extra yaml --extra mcp --no-dev
 .venv/bin/python -m unittest discover -s tests
 ```
 
@@ -501,6 +505,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
+| `two_key/mcp_proxy/` | MCP proxy and spec drafter (`mcp` extra). `config.py` and `core.py` decide; `sdk.py` is the only module that imports the MCP SDK; `draft.py` drafts specs |
 | `two_key/keys.py`, `cli.py`, `backup.py` | Key files; `two-key` command line; passphrase backup of the package's own keys |
 | `two_key/action.py` | Normalized action record and its validation |
 | `two_key/agent_meta.py` | Bounds on operator- or library-supplied agent identity metadata written to the ledger |
