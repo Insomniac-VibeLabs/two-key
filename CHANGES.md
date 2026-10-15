@@ -73,6 +73,7 @@
 - [Release v0.5.0: MCP proxy, caller-supplied facts, run 6 follow-ups — 2026-10-15](#release-v050-mcp-proxy-caller-supplied-facts-run-6-follow-ups--2026-10-15)
 - [PR #11 review: SonarCloud maintainability findings — 2026-10-15](#pr-11-review-sonarcloud-maintainability-findings--2026-10-15)
 - [PR #11 review: no raw bidirectional characters — 2026-10-15](#pr-11-review-no-raw-bidirectional-characters--2026-10-15)
+- [Semgrep findings printed to the job log — 2026-10-15](#semgrep-findings-printed-to-the-job-log--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2679,4 +2680,14 @@ On branch `working`. Tests only.
   `\u202e`; the tests are unchanged in effect.
 - `tests/test_no_bidi_chars.py` fails on any raw bidirectional control
   character in the repository's text files (Trojan Source, CVE-2021-42574).
+
+## Semgrep findings printed to the job log — 2026-10-15
+
+On branch `working`. CI only.
+
+- `.github/workflows/semgrep.yml` runs `semgrep scan --config=auto
+  --sarif-output=semgrep.sarif`: the SARIF still goes to the Security tab,
+  and the findings now also print to the job log as text, so they can be
+  read without code-scanning access (`--sarif --output` printed only a
+  count).
 

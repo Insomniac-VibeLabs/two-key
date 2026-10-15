@@ -21,7 +21,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Run Semgrep
-        run: semgrep scan --config=auto --sarif --output=semgrep.sarif
+        # Findings print to this log as text as well as going to the Security tab as SARIF, so they can be
+        # read without code-scanning access.
+        run: semgrep scan --config=auto --sarif-output=semgrep.sarif
 
       - name: Upload SARIF to GitHub
         if: always()
