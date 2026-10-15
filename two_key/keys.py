@@ -38,7 +38,8 @@ def save_private_key(path: Path | str, private_key: Ed25519PrivateKey, *, privat
     path = Path(path)
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if private_dir:
-        os.chmod(path.parent, 0o700)
+        # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
+        os.chmod(path.parent, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
     data = private_key.private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8,

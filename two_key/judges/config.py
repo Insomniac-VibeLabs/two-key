@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -62,6 +63,9 @@ from .credentials import (BasicAuthCredential, CallbackTokenProvider, Credential
 from .gemini import GeminiJudge
 from .ollama import OllamaJudge
 from .openai_compat import OpenAICompatibleJudge
+
+# A hook is "module:function": dotted identifiers, then one identifier. Shared with mcp_proxy/config.py.
+HOOK = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*")
 
 ADAPTERS = {
     "openai_compatible": OpenAICompatibleJudge,
@@ -94,11 +98,12 @@ class JudgeConfigError(ValueError):
 
 
 def _hook(spec: Any) -> Callable:
-    if not isinstance(spec, str) or ":" not in spec:
-        raise JudgeConfigError(f"hook must be 'module:function', got {spec!r}")
+    if not isinstance(spec, str) or not HOOK.fullmatch(spec):
+        raise JudgeConfigError(f"hook must be 'module:function', got {str(spec)[:80]!r}")
     mod, fn = spec.split(":", 1)
     try:
-        return getattr(importlib.import_module(mod), fn)
+        # The module named in the principal's judges.yaml, checked by HOOK: trusted configuration.
+        return getattr(importlib.import_module(mod), fn)  # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
     except (ImportError, AttributeError) as e:
         raise JudgeConfigError(f"cannot import hook {spec!r}: {e}") from e
 

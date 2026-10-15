@@ -56,7 +56,8 @@ def _connection(parts, timeout: float):
     conn = _pool().get(key)
     if conn is None:
         if parts.scheme == "https":
-            conn = http.client.HTTPSConnection(parts.hostname, port, timeout=timeout,
+            # TLS is verified: ssl.create_default_context() checks the certificate and the host name.
+            conn = http.client.HTTPSConnection(parts.hostname, port, timeout=timeout,  # nosemgrep: python.lang.security.audit.httpsconnection-detected.httpsconnection-detected
                                                context=ssl.create_default_context())
         else:
             conn = http.client.HTTPConnection(parts.hostname, port, timeout=timeout)

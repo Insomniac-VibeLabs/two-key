@@ -357,7 +357,8 @@ class Ledger:
         if directory.resolve().is_relative_to(self.path.resolve()):
             raise LedgerError("redemption lock must live outside the ledger directory")
         directory.mkdir(parents=True, exist_ok=True)
-        os.chmod(directory, 0o700)
+        # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
+        os.chmod(directory, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         return directory / hashlib.sha256(jti.encode("utf-8")).hexdigest()
 
     def _entries_file_size(self) -> int:
@@ -434,7 +435,8 @@ class Ledger:
             if self.wrap_path.exists():
                 raise LedgerError("ledger key missing; refusing to open ciphertext with the principal key")
             path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            os.chmod(path.parent, 0o700)
+            # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
+            os.chmod(path.parent, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
             try:
                 _write_new_secret(path, os.urandom(LEDGER_KEY_BYTES))
             except FileExistsError:
@@ -497,7 +499,8 @@ class Ledger:
             return key
         if self._default_witness_dir():
             try:
-                os.chmod(self.witness_path.parent, 0o700)   # <ledger>.witness is Two-Key's own directory
+                # <ledger>.witness is Two-Key's own directory. Owner only (0o700): the rule's 0o644 would let others read.
+                os.chmod(self.witness_path.parent, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
             except OSError:
                 pass                                        # not ours to change; the key file is still checked
         return self._load_witness()
@@ -842,7 +845,8 @@ class Ledger:
         parent = self._anchor_path.parent
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if parent == self.ledger_key_path.parent:
-            os.chmod(parent, 0o700)
+            # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
+            os.chmod(parent, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         data = (json.dumps(stored, indent=2) + "\n").encode("utf-8")
         tmp = parent / f".head.anchor.{os.getpid()}.{os.urandom(4).hex()}.tmp"
         try:
@@ -1003,7 +1007,8 @@ class Ledger:
         if dest_dir.resolve().is_relative_to(self.path.resolve()):
             raise LedgerError("recovery notes must live outside the ledger directory")
         dest_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.chmod(dest_dir, 0o700)
+        # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
+        os.chmod(dest_dir, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         dest = dest_dir / f"dropped-{digest[:16]}.bin"
         if not os.path.lexists(dest):
             _write_new_secret(dest, tail)

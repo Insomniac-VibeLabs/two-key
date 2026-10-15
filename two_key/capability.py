@@ -101,7 +101,8 @@ def open_capability_key(ledger, principal_public=None):
     path = ledger.capability_key_path()
     issued = any(e.kind == "capability_issued" for e in getattr(ledger, "entries", []))
     if path.exists():
-        os.chmod(path.parent, 0o700)
+        # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
+        os.chmod(path.parent, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         try:   # the safe loader: no symlink, a regular file, no group or other access (#57)
             key = load_private_key_file(path)
         except ValueError as e:

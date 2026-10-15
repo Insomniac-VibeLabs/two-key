@@ -22,10 +22,10 @@ from ..action import MAX_TOOL_NAME_CHARS, TOOL_NAME
 from ..fields import FIELD_NAME
 from ..guard import GuardConfigError
 from ..guard import valid_claim as _guard_claim
+from ..judges.config import HOOK
 from ..strict import StrictParseError, load_file_strict
 
 ON_SCHEMA_CHANGE = ("refuse", "warn")
-HOOK = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*")
 DEFAULT_CALL_TIMEOUT_SECONDS = 60.0
 MAX_CALL_TIMEOUT_SECONDS = 3600.0
 MAX_PROPOSAL_CHARS = 1000

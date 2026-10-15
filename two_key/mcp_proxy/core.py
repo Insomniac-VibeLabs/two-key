@@ -227,7 +227,8 @@ def load_hooks(config: ProxyConfig) -> dict[str, dict[str, Callable]]:
         for name, spec in policy.facts.items():
             module, fn = spec.split(":", 1)
             try:
-                hook = getattr(importlib.import_module(module), fn)
+                # The module named in the operator's proxy.yaml, checked by config.HOOK: trusted configuration.
+                hook = getattr(importlib.import_module(module), fn)  # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
             except (ImportError, AttributeError) as e:
                 raise ProxyConfigError(f"tools.{tool_id}.facts.{name}.hook: cannot import {spec!r} "
                                        f"({type(e).__name__})") from None

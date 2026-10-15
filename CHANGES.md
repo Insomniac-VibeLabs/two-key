@@ -77,6 +77,7 @@
 - [Roadmap: where we are, and the plan to 0.6.0 — 2026-10-15](#roadmap-where-we-are-and-the-plan-to-060--2026-10-15)
 - [CI: an informational macOS and Windows run — 2026-10-15](#ci-an-informational-macos-and-windows-run--2026-10-15)
 - [macOS: the one failing test; first portability results — 2026-10-15](#macos-the-one-failing-test-first-portability-results--2026-10-15)
+- [Semgrep findings suppressed with reasons; judge hooks checked like proxy hooks — 2026-10-15](#semgrep-findings-suppressed-with-reasons-judge-hooks-checked-like-proxy-hooks--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2743,3 +2744,24 @@ On branch `working`. Tests and CI only.
   takes this up.
 - `portability.yml` jobs stop after 30 minutes.
 
+
+## Semgrep findings suppressed with reasons; judge hooks checked like proxy hooks — 2026-10-15
+
+On branch `working`. No behaviour change for a valid configuration.
+
+- The 11 Semgrep findings triaged on 2026-10-15 carry `# nosemgrep:
+  <rule-id>` with a one-line reason above each: 8
+  `insecure-file-permissions` on owner-only `0o700` key directories
+  (`capability.py`, `identity.py`, `keys.py`, `ledger.py` x5; the rule's
+  `0o644` would let others read), 2 `non-literal-import` of hooks the
+  operator names in `judges.yaml` and `proxy.yaml`, and 1
+  `httpsconnection-detected` on a connection built with
+  `ssl.create_default_context()`, which verifies the certificate and host
+  name.
+- `judges.yaml` `auth: {type: callback}` hooks are now checked against the
+  same `module:function` pattern as `proxy.yaml` fact hooks before anything
+  is imported (`two_key.judges.config.HOOK`, which `mcp_proxy/config.py`
+  now imports instead of keeping its own copy). A spec such as `m:f:g`,
+  `.m:f`, or one with spaces is refused with `hook must be
+  'module:function'`, cut to 80 characters in the message
+  (`tests/test_judge_hook_spec.py`).

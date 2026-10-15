@@ -170,7 +170,8 @@ def load_fingerprint_key(path: str | os.PathLike) -> bytes:
     if not os.path.lexists(path):
         try:
             os.makedirs(os.path.dirname(path) or ".", mode=0o700, exist_ok=True)
-            os.chmod(os.path.dirname(path) or ".", 0o700)
+            # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
+            os.chmod(os.path.dirname(path) or ".", 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
         except FileExistsError:
             fd = None                      # another process created it first: read theirs
