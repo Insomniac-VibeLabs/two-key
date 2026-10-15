@@ -64,6 +64,7 @@
 - [Judges are not asked about a call that cannot be read (run 6 finding 4) — 2026-10-15](#judges-are-not-asked-about-a-call-that-cannot-be-read-run-6-finding-4--2026-10-15)
 - [Roadmap: per-judge ballot records before 1.0 — 2026-10-15](#roadmap-per-judge-ballot-records-before-10--2026-10-15)
 - [`@domain` allow entries (run 6 finding 7) — 2026-10-15](#domain-allow-entries-run-6-finding-7--2026-10-15)
+- [Docs: run 6 follow-ups in ROADMAP and SCOPE — 2026-10-15](#docs-run-6-follow-ups-in-roadmap-and-scope--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2434,3 +2435,9 @@ warning, as a feature.
   does not sign, and a v1 or v2 constitution that has one no longer loads
   (it would need v3). Drop the `@`, or re-sign knowing it now means a
   domain.
+
+## Docs: run 6 follow-ups in ROADMAP and SCOPE — 2026-10-15
+
+On branch `working`. Docs only. ROADMAP 0.5.0 and SCOPE list the four
+changes made from live run 6, and the short re-run (6z) planned before the
+release.

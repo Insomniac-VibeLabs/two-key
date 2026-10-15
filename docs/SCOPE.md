@@ -57,6 +57,12 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   with fact hooks before authorize and again before the tool; the MCP
   proxy runs on it (`tools.<id>.facts`). Two-Key checks where a fact came
   from, not whether the hook is right
+- on branch `working` (for 0.5.0), from live run 6: every tool maps each
+  field a rule reads or marks it `not_applicable` (a forgotten mapping does
+  not sign or load); `case: exact` string fields for case-sensitive ids;
+  `@domain` allow entries for every plain address at one domain, with a
+  signing warning; and no judge is asked about a call that cannot be read
+  (`skipped:derive_failed`)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
