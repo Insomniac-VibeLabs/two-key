@@ -170,7 +170,7 @@ class Policy(unittest.TestCase):
 
     def test_safe_reason(self):
         self.assertEqual(safe_reason("rule_denied:cap"), "rule_denied:cap")
-        self.assertEqual(safe_reason("a\nb‮c"), "abc")
+        self.assertEqual(safe_reason("a\nb\u202ec"), "abc")
         self.assertEqual(len(safe_reason("x" * 1000)), 200)
         self.assertEqual(safe_reason(None), "internal_error")
 

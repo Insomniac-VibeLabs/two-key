@@ -72,6 +72,7 @@
 - [Run 6z follow-ups: clearer refusals, harness fixes, judge memory — 2026-10-15](#run-6z-follow-ups-clearer-refusals-harness-fixes-judge-memory--2026-10-15)
 - [Release v0.5.0: MCP proxy, caller-supplied facts, run 6 follow-ups — 2026-10-15](#release-v050-mcp-proxy-caller-supplied-facts-run-6-follow-ups--2026-10-15)
 - [PR #11 review: SonarCloud maintainability findings — 2026-10-15](#pr-11-review-sonarcloud-maintainability-findings--2026-10-15)
+- [PR #11 review: no raw bidirectional characters — 2026-10-15](#pr-11-review-no-raw-bidirectional-characters--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2666,4 +2667,16 @@ On branch `working`. No behaviour change; the same tests pass.
 - Tests: one call that may raise inside each `assertRaises` block
   (python:S5778; the public key is taken first), and `assertIs(x, False)` /
   `assertIs(x, True)` for boolean results (exact, unlike `assertFalse`).
+
+## PR #11 review: no raw bidirectional characters — 2026-10-15
+
+On branch `working`. Tests only.
+
+- SonarCloud's security finding (the quality gate's "C Security Rating on
+  New Code"): `tests/test_mcp_draft.py` and `tests/test_mcp_proxy.py` held a
+  raw U+202E (right-to-left override) in a string, on purpose, to test that
+  server text and deny reasons cannot carry one. Each is now the escape
+  `\u202e`; the tests are unchanged in effect.
+- `tests/test_no_bidi_chars.py` fails on any raw bidirectional control
+  character in the repository's text files (Trojan Source, CVE-2021-42574).
 
