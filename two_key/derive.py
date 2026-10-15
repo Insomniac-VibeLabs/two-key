@@ -29,7 +29,7 @@ from typing import Any, Mapping
 from .action import DATA_CLASS_SEP, DATA_CLASSES, MAX_AMOUNT_USD, SPECIFIC_DATA_CLASSES
 from .agent_meta import type_tag
 from .canonical import canonical_bytes
-from .fields import FieldValueError, coerce_value, defaults
+from .fields import FIELD_NAME, FieldValueError, coerce_value, defaults
 
 
 # Size cap on tool arguments and on the proposal text, in UTF-8 bytes of their compact JSON.
@@ -94,6 +94,8 @@ class Derived:
     data_class_floor: str
     # Custom field values, sorted by name: read from the bytes for mapped fields, the signed default otherwise.
     fields: tuple[tuple[str, Any], ...] = ()
+    # The caller-supplied facts among them (``source: caller`` fields this tool maps), sorted.
+    fact_fields: tuple[str, ...] = ()
 
 
 def _cents(value: Any) -> int:
@@ -205,8 +207,9 @@ def _project_fields(out: dict, spec: Mapping[str, Any], derived_fields: Mapping[
     if derived_fields is None:
         return
     for name, entry in (spec.get("fields") or {}).items():
-        if name in derived_fields and isinstance(entry, Mapping):
-            _assign(out, entry["json_path"], derived_fields[name])
+        path = entry.get("json_path") if isinstance(entry, Mapping) else None
+        if name in derived_fields and isinstance(path, str):   # a caller fact with a path is delivered there
+            _assign(out, path, derived_fields[name])
 
 
 def project_arguments(spec: Mapping[str, Any], arguments: Mapping[str, Any],
@@ -335,8 +338,15 @@ def dropped_keys(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> list[
 
 
 def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any],
-           registry: Mapping[str, Mapping[str, Any]] | None = None) -> Derived:
-    """Read the derived fields from ``arguments`` using ``spec`` paths.
+           registry: Mapping[str, Mapping[str, Any]] | None = None,
+           facts: Mapping[str, Any] | None = None) -> Derived:
+    """Read the derived fields from ``arguments`` using ``spec`` paths, and caller-supplied facts from ``facts``.
+
+    A caller-supplied field (``source: caller``) takes its value from ``facts`` only. The agent writing it
+    (at its delivery path, or as a top-level key with its name when it has none) is
+    ``caller_field_in_arguments:<name>``; a missing fact is ``field_missing:<name>``. ``facts`` that is not a
+    mapping is ``facts_not_object``, and a key this tool does not map as a caller field is
+    ``fact_not_mapped`` (``:<name>`` when the key is a valid field name).
 
     Any value this cannot read is a ``DeriveError``, never another exception.
     An amount that cannot be read (for example 10**400) is
@@ -347,7 +357,7 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any],
     ``derive_failed:`` deny (``cap_ledger_text`` on the reason).
     """
     try:
-        return _derive(spec, arguments, registry or {})
+        return _derive(spec, arguments, registry or {}, facts)
     except DeriveError:
         raise
     except (OverflowError, TypeError, ValueError, RecursionError) as exc:
@@ -355,16 +365,46 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any],
         raise DeriveError(f"value_unreadable:{type_tag(exc)}") from None
 
 
+def caller_fields(spec: Mapping[str, Any]) -> tuple[str, ...]:
+    """The caller-supplied fields this tool maps, sorted."""
+    return tuple(sorted(name for name, entry in (spec.get("fields") or {}).items()
+                        if isinstance(entry, Mapping) and entry.get("source") == "caller"))
+
+
+def _check_facts(facts: Any, mapped: tuple[str, ...]) -> Mapping[str, Any]:
+    if facts is None:
+        return {}
+    if not isinstance(facts, Mapping):
+        raise DeriveError("facts_not_object")
+    for name in facts:
+        if name not in mapped:
+            ok = isinstance(name, str) and FIELD_NAME.fullmatch(name)
+            raise DeriveError(f"fact_not_mapped:{name}" if ok else "fact_not_mapped")
+    return facts
+
+
 def _custom_fields(spec: Mapping[str, Any], arguments: Mapping[str, Any],
-                   registry: Mapping[str, Mapping[str, Any]]) -> tuple[tuple[str, Any], ...]:
-    """Every registry field: a mapped field from the bytes (required), any other its signed default."""
+                   registry: Mapping[str, Mapping[str, Any]],
+                   facts: Mapping[str, Any] | None = None) -> tuple[tuple[str, Any], ...]:
+    """Every registry field: a mapped field from the bytes (required) or, for a caller-supplied one, from
+    ``facts`` (required); any other its signed default."""
+    facts = _check_facts(facts, caller_fields(spec))
     values = defaults(registry)
     for name, entry in (spec.get("fields") or {}).items():
         if name not in registry:
             raise DeriveError(f"field_unreadable:{name}")
-        found, raw = lookup(arguments, entry["json_path"])
-        if not found:
-            raise DeriveError(f"field_missing:{name}")
+        if entry.get("source") == "caller":
+            path = entry.get("json_path")
+            written = lookup(arguments, path)[0] if path else name in arguments
+            if written:                        # the agent wrote the fact; it is never read, and never dropped
+                raise DeriveError(f"caller_field_in_arguments:{name}")
+            if name not in facts:
+                raise DeriveError(f"field_missing:{name}")
+            raw = facts[name]
+        else:
+            found, raw = lookup(arguments, entry["json_path"])
+            if not found:
+                raise DeriveError(f"field_missing:{name}")
         try:
             values[name] = coerce_value(registry[name], raw)
         except FieldValueError as e:
@@ -373,7 +413,7 @@ def _custom_fields(spec: Mapping[str, Any], arguments: Mapping[str, Any],
 
 
 def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any],
-            registry: Mapping[str, Mapping[str, Any]]) -> Derived:
+            registry: Mapping[str, Mapping[str, Any]], facts: Mapping[str, Any] | None = None) -> Derived:
     if not isinstance(arguments, Mapping):
         raise DeriveError("arguments_not_object")
     amount_spec = spec.get("amount")
@@ -412,7 +452,9 @@ def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any],
         found, raw = lookup(arguments, entry["json_path"])
         if found:
             _payload_shape(entry, raw)
-    custom = _custom_fields(spec, arguments, registry) if registry else ()
+    custom = _custom_fields(spec, arguments, registry, facts) if registry else ()
+    if not registry and facts:
+        _check_facts(facts, ())                # a fact for a constitution with no fields at all
     if spec.get("deny_unmapped") is True and _unmapped(arguments, _declared_paths(spec)):
         raise DeriveError("unmapped_field")
     return Derived(
@@ -421,6 +463,7 @@ def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any],
         irreversible=bool(spec["irreversible"]),
         data_class_floor=str(spec["data_class_floor"]),
         fields=custom,
+        fact_fields=caller_fields(spec),
     )
 
 

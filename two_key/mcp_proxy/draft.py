@@ -15,7 +15,8 @@ A server's hints are claims too: review them.
 
 A fact-like property (``*_matched``, ``*_verified``, ``*_approved``, ``*_confirmed``, ``*_validated``) is a
 claim about the world the agent would write. The draft leaves it out of the spec, so the tool never receives
-the agent's value, and lists it as a candidate for a caller-supplied fact (HOWTO "What Two-Key verifies").
+the agent's value, and lists it as a candidate for a caller-supplied fact (``source: caller``, HOWTO "Caller-
+supplied facts"). The proxy then hides it from the agent and delivers the hook's value instead.
 
 Only top-level properties are read. A nested object is one payload path, copied unread; review it.
 """
@@ -108,7 +109,9 @@ def draft_tool(view: Mapping[str, Any]) -> ToolDraft | str:
         if FACT_LIKE.search(low):
             draft.facts.append(prop)
             draft.notes.append(f"{prop}: fact-like, left out (the agent would assert it); make it a caller-supplied "
-                               "fact, or have the tool check it")
+                               f"fact (fields: {prop}: {{type: ..., default: ..., source: caller}}; map it as "
+                               f"{{source: caller, json_path: {prop}}}; add a hook under tools.<id>.facts in "
+                               "proxy.yaml), or have the tool check it")
         elif AMOUNT_LIKE.fullmatch(low) and "amount" not in spec and sub.get("type") in ("number", "integer", None):
             unit = "cents" if "cents" in low else "REPLACE_WITH_usd_OR_cents"
             spec["amount"] = {"json_path": prop, "unit": unit}

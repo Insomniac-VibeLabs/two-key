@@ -125,13 +125,20 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   `data_class`, `counterparty`, `irreversible`) and the operator's custom
   fields (`two_key/fields.py`). Custom field values come from argument
   paths in the signed spec only, never from the agent's claim or
-  `Action.raw`. The agent writes the arguments, so a field is what the call
-  says, not a verified fact; do not describe fields as verification
+  `Action.raw`, or, for a field declared `source: caller`, from the
+  integration's `facts=` only: written in the arguments it denies
+  (`caller_field_in_arguments`), and the gateway takes the facts again
+  (`fact_mismatch`) (`tests/test_caller_facts.py`). The agent writes the
+  arguments, so an argument field is what the call says, not a verified
+  fact, and a caller fact is as true as its hook; do not describe fields as
+  verification
   (HOWTO "What Two-Key verifies"); `LOAD` refuses any name but a built-in field, and custom
   fields load with `LOAD_FIELD`. A mapped field is required; an unmapped
   tool gets the signed default. A description is never compiled, sent to a
   judge, or used in a reason. A constitution with no custom fields must
-  stay byte-for-byte v1 (`tests/test_fields_compat.py`).
+  stay byte-for-byte v1 (`tests/test_fields_compat.py`); one without caller
+  fields must not sign as v3. A caller field signs only as v3, and a v1 or
+  v2 envelope that declares one is refused.
 - Format identifiers are `two-key-...` (0.4.0). Files with the old
   `two-key-concept-...` formats are refused with a clear message, never
   read (`tests/test_legacy_formats.py`). Do not change a format name
@@ -146,11 +153,18 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   does not match the pin in the ledger, or the configured
   `witness_public_key`, is refused. It changes only by `rotate_witness`.
 - The gateway verifies only; it never mints.
+- The guard (`two_key/guard.py`) uses a fixed claim and proposal per tool,
+  never the agent's; looks facts up before `authorize` and again before
+  `invoke`, under one lock; and treats a hook that raises or returns None as
+  a missing fact (deny). It does not import the MCP SDK
+  (`tests/test_guard.py`).
 - The MCP proxy (`two_key/mcp_proxy/`): only `sdk.py` imports the MCP SDK;
   `config.py`, `core.py`, and `draft.py` must not. Every `tools/call` goes
-  through `authorize`, then `gateway.invoke` in the same process; the
-  upstream call is the gateway's registered tool, never called directly.
-  Only signed tools are shown; any other name is `tool_not_offered`. A
+  through the guard (`authorize`, then `gateway.invoke` in the same
+  process); the upstream call is the gateway's registered tool, never
+  called directly. Only signed tools are shown, with caller-supplied paths
+  removed from `inputSchema`; any other name is `tool_not_offered`,
+  ledgered. `mcp_proxy_started` is ledgered before serving. A
   schema mismatch refuses to start unless `on_schema_change: warn`.
   `unresolved_identity` refuses unless `allow_unresolved_identity: true`;
   the library keeps warning. The claim comes from `proxy.yaml` only, never

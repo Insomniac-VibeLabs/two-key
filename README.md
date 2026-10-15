@@ -30,6 +30,7 @@ is going, see [ROADMAP.md](ROADMAP.md).
 - **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported (#45). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
 - **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
 - **MCP proxy** (branch `mcp-proxy`, for 0.5.0; `pip install "two-key[mcp]"`): `two-key mcp-proxy` sits between an MCP client and one upstream MCP server. It shows the agent only the signed tools, pins their schemas, and runs every `tools/call` through both keys and the in-process gateway. `two-key mcp-draft-specs` drafts the tool specs for the principal to review and sign. See HOWTO "Put Two-Key in front of an MCP server".
+- **Caller-supplied facts and the guard** (branch `mcp-proxy`): a field declared `source: caller` gets its value from your integration (`facts=`), never from the agent's arguments, and is looked up again before the tool runs. `two_key.guard.Guard` does both lookups and both keys in one call for any agent loop; the MCP proxy runs on it. See HOWTO "Caller-supplied facts".
 
 ## Dual-path authorization
 
@@ -363,7 +364,9 @@ audited. It is not a FIPS 140-3 validated module.
   It does not verify facts the agent asserts: a custom field read from the
   arguments (for example `po_matched: true`) is the agent's word. The tool
   or the integration must check such facts against the system of record
-  (HOWTO "What Two-Key verifies").
+  (HOWTO "What Two-Key verifies"). On branch `mcp-proxy`, a `source: caller`
+  field takes the fact from the integration's own lookup instead; that
+  fact is as good as the lookup, which Two-Key does not check.
 - No external anchor for the ledger. Someone holding the principal and
   ledger keys can rewrite a ledger that never leaves the machine, unless
   the witness public key is configured outside the ledger
@@ -398,7 +401,7 @@ The plan from 0.2.4 to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
 0.3.0 (key backup), 0.3.1 (live-test fixes, beta), and 0.4.0 (the move to
 this repository and the package rename to `two-key`) are released. The MCP adapter (0.6) moves ahead of 0.4 and
-0.5; its first part (the stdio proxy and the spec drafter) is on branch `mcp-proxy`. Nothing else after 0.3 in that plan exists yet.
+0.5; its first part (the stdio proxy, the spec drafter, caller-supplied facts, and the guard core) is on branch `mcp-proxy`. Nothing else after 0.3 in that plan exists yet.
 The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
@@ -505,6 +508,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
+| `two_key/guard.py` | One guarded call through both keys, with caller-supplied fact hooks (any agent loop; the MCP proxy uses it) |
 | `two_key/mcp_proxy/` | MCP proxy and spec drafter (`mcp` extra). `config.py` and `core.py` decide; `sdk.py` is the only module that imports the MCP SDK; `draft.py` drafts specs |
 | `two_key/keys.py`, `cli.py`, `backup.py` | Key files; `two-key` command line; passphrase backup of the package's own keys |
 | `two_key/action.py` | Normalized action record and its validation |

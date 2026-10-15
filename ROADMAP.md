@@ -225,8 +225,8 @@ The list this section was written from:
 ## 0.6: MCP adapter
 
 Issue #2. Part 1 is on branch `mcp-proxy` (for package 0.5.0): the stdio
-proxy and the spec drafter. Caller-supplied facts wait for the
-maintainer's security review of their design.
+proxy, the spec drafter, caller-supplied facts, and the guard core. The
+facts design passed the maintainer's security review before it was built.
 
 - A proxy for `tools/call` that runs `authorize` and forwards through the
   gateway, in the same process (`TwoKey.gateway()`), only with a valid
@@ -239,10 +239,11 @@ maintainer's security review of their design.
 - A helper that drafts `tool_specs` from an MCP server's tool schemas
   (`two-key mcp-draft-specs`). The output is a draft for the principal to
   review and sign, and does not sign until they decide. (Part 1: done.)
-- Caller-supplied facts (`source: caller` fields), so a fact such as
-  `po_matched` comes from the integration, not the agent, and a
-  framework-neutral guard core for agent loops that do not use MCP.
-  (Next, after review.)
+- Caller-supplied facts (`source: caller` fields, constitution v3), so a
+  fact such as `po_matched` comes from the integration, not the agent, and
+  is looked up again at redemption (`fact_mismatch`). A framework-neutral
+  guard core (`two_key/guard.py`) for agent loops that do not use MCP; the
+  proxy runs on it, with fact hooks in `proxy.yaml`. (Done.)
 - Start with stdio transport and one real server. HTTP and OAuth come later.
 - The proxy adds a trust boundary: an agent that can reach the MCP server
   directly bypasses it. THREAT_MODEL.md says so.

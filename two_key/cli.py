@@ -1,9 +1,9 @@
 """Command line for Two-Key.
 
   two-key init-key DIR
-  two-key sign-constitution --key KEY --prose FILE --rules FILE --out FILE [--envelope-format auto|v2]
+  two-key sign-constitution --key KEY --prose FILE --rules FILE --out FILE [--envelope-format auto|v2|v3]
   two-key authorize --key KEY --ledger DIR --constitution FILE --judges FILE --tool NAME
-                    [--agent-session-env NAME] [--ttl-seconds N] [--emit-token PATH]
+                    [--facts FILE] [--agent-session-env NAME] [--ttl-seconds N] [--emit-token PATH]
                     [--witness-public-key PEM]
   two-key rotate-witness --key KEY --ledger DIR [--witness-public-key PEM] [--reason TEXT]
   two-key recover --key KEY --ledger DIR [--witness-public-key PEM] [--head-anchor PATH]
@@ -235,6 +235,15 @@ def _authorize(args) -> int:
         raise SystemExit(f"--args: {e}") from None
     if not isinstance(arguments, dict):
         raise SystemExit("args must be a JSON object")
+    facts = None
+    if args.facts is not None:
+        # Caller-supplied facts: the operator's values for source: caller fields, never the agent's.
+        try:
+            facts = loads_json(Path(args.facts).read_text(encoding="utf-8"))
+        except (OSError, StrictParseError) as e:
+            raise SystemExit(f"--facts: {e}") from None
+        if not isinstance(facts, dict):
+            raise SystemExit("--facts must hold a JSON object")
     token_path = Path(args.emit_token) if args.emit_token else None
     if token_path is not None and (token_path.exists() or token_path.is_symlink()):
         print(f"refusing to overwrite {token_path}", file=sys.stderr)
@@ -262,7 +271,8 @@ def _authorize(args) -> int:
         action["irreversible"] = args.irreversible
     if args.counterparty:
         action["counterparty"] = args.counterparty
-    decision = tk.authorize(action, arguments, args.proposal, agent_session=agent_session, origin="cli")
+    extra = {} if facts is None else {"facts": facts}
+    decision = tk.authorize(action, arguments, args.proposal, agent_session=agent_session, origin="cli", **extra)
     record = decision.to_record()
     if decision.allowed and token_path is not None:
         try:
@@ -448,8 +458,9 @@ def main(argv: list[str] | None = None) -> int:
     sign.add_argument("--prose", required=True)
     sign.add_argument("--rules", required=True)
     sign.add_argument("--envelope-format", choices=ENVELOPE_FORMATS, default="auto",
-                      help="auto (default): v1 unless the rules declare custom fields, then v2; "
-                           "v2: always v2. Installs older than custom fields refuse v2")
+                      help="auto (default): v1 unless the rules declare custom fields, then v2, or v3 when a "
+                           "field is source: caller; v2 forces v2 (refused with a caller field); v3 forces v3. "
+                           "Installs older than custom fields refuse v2; installs before 0.5.0 refuse v3")
     sign.add_argument("--out", required=True)
     sign.set_defaults(func=_sign)
     auth = sub.add_parser("authorize", help="run Path A and Path B; do not execute the tool")
@@ -459,6 +470,8 @@ def main(argv: list[str] | None = None) -> int:
     auth.add_argument("--judges", required=True)
     auth.add_argument("--tool", required=True)
     auth.add_argument("--args", default="{}")
+    auth.add_argument("--facts", default=None, metavar="FILE",
+                      help="a JSON object of caller-supplied facts (source: caller fields) for this call")
     auth.add_argument("--proposal", required=True)
     auth.add_argument("--amount-usd", type=float, default=None,
                       help="claim this USD amount; omit it and the amount is read from the argument bytes")

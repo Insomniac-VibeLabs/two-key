@@ -19,14 +19,17 @@ YAML_BLOCKS = re.findall(r"```yaml\n(.*?)```", SECTION, re.S)
 class WorkedExample(unittest.TestCase):
     def test_rules_example_signs(self):
         doc = load_yaml(next(b for b in YAML_BLOCKS if "tool_specs:" in b))
-        env = sign_constitution("Pay approved vendors.", doc["hard_rules"], generate_private_key(), doc["tool_specs"])
+        env = sign_constitution("Pay approved vendors.", doc["hard_rules"], generate_private_key(), doc["tool_specs"],
+                                fields=doc.get("fields"))
         self.assertEqual(sorted(env["signed"]["tool_specs"]), ["pay_vendor", "read_report"])
+        self.assertEqual(env["format"], "two-key-constitution-v3")        # po_matched is a caller-supplied fact
 
     def test_proxy_example_parses(self):
         text = next(b for b in YAML_BLOCKS if "upstream:" in b).replace('"sha256:..."', '"sha256:' + "a" * 64 + '"')
         cfg = parse_proxy_config(load_yaml(text), Path("/etc/two-key/proxy.yaml"))
         self.assertEqual(cfg.upstream.command[:4], ("sudo", "-n", "-u", "mcp-billing"))
         self.assertEqual(cfg.tool_policy("pay_vendor").claim, "floor")
+        self.assertEqual(cfg.tool_policy("pay_vendor").facts, {"po_matched": "billing_facts:po_matches"})
         self.assertFalse(cfg.allow_unresolved_identity)
 
     def test_the_config_table_lists_every_key(self):

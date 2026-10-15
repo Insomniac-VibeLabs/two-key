@@ -1,8 +1,9 @@
 # Threat model
 
 This is the design model for `two-key` 0.4.0. Tag `v0.4.0` on `main` is the tagged release. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
-Branch `mcp-proxy` (for 0.5.0) adds the MCP proxy (`two-key mcp-proxy`) and the spec drafter
-(`two-key mcp-draft-specs`), described below; caller-supplied facts are not in it yet.
+Branch `mcp-proxy` (for 0.5.0) adds the MCP proxy (`two-key mcp-proxy`), the spec drafter
+(`two-key mcp-draft-specs`), caller-supplied facts (`source: caller`, constitution v3), and the
+guard core (`two_key/guard.py`), described below.
 It is not a penetration test and it is not an independent review. The package is
 beta (pre-1.0): maintainer-reviewed with live LLM testing and automated
 scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
@@ -50,10 +51,13 @@ the code wins, then this file should be corrected.
   proxy, the upstream server's credential (`upstream.env`), which only the
   proxy and its upstream child should hold.
 - The MCP proxy's `proxy.yaml`, above all `upstream.schema_digest`,
-  `upstream.command`, and `allow_unresolved_identity`. Whoever can change
-  it can accept a changed tool schema, run another server, or start beside
-  an unresolved judge identity. It is policy, like the constitution, but it
-  is not signed.
+  `upstream.command`, `tools.<id>.facts`, and `allow_unresolved_identity`.
+  Whoever can change it can accept a changed tool schema, run another
+  server, point a fact hook at other code, or start beside an unresolved
+  judge identity. It is policy, like the constitution, but it is not signed.
+- Fact hooks and the system of record they read. A `source: caller` field
+  is whatever the hook returns; whoever can change the hook or the record
+  decides that fact.
 - The ledger head and the hash chain.
 
 ## Actors
@@ -61,7 +65,9 @@ the code wins, then this file should be corrected.
 - The principal, who holds the signing key and writes the constitution.
 - An untrusted agent, local or cloud. Hosting is not trust.
 - Path B judges, each with its own credential. A judge can be wrong.
-- The caller that invokes authorize, then the gateway.
+- The caller that invokes authorize, then the gateway, and supplies
+  caller facts (`facts=`) from its own system of record. Trusted, like the
+  operator: a fact hook is operator code.
 - The upstream MCP server behind the proxy: third-party code, often
   fetched fresh. Its tool descriptions, hints, and results are untrusted
   text.
@@ -82,6 +88,13 @@ the code wins, then this file should be corrected.
   already could with a bad proposal; it cannot turn a decline into an allow. A cloud judge must not reuse an agent credential.
   A missing session is a deny (`cloud_judge_session_required`).
 - Caller to Path A. The VM sees the normalized action record, not the proposal.
+- Caller facts to Path A. A `source: caller` field (constitution v3) takes
+  its value from `facts=` only, never from the arguments, the claim, or
+  `Action.raw`. Arguments that write it deny (`caller_field_in_arguments`),
+  a missing fact denies (`field_missing`), and a fact the tool does not map
+  denies (`fact_not_mapped`). The record names these fields in
+  `fact_fields`. The gateway takes the facts again at redemption; a value
+  that differs from the token's form is `fact_mismatch`.
 - Caller to Path B. Judges see the constitution prose and the normalized
   record. Non-empty tool arguments are attached on that record as
   `tool_args`, except after a derive deny (`derive_failed:*`,
@@ -104,9 +117,11 @@ the code wins, then this file should be corrected.
   under their signed ids, with the pinned fields (`name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`). Each
   `tools/call` is authorized with a fixed claim and proposal from
-  `proxy.yaml`; the agent writes only the arguments. A name the proxy does
-  not show is refused (`tool_not_offered`) and not ledgered. A refusal
-  returns a reason code, never a value.
+  `proxy.yaml`; the agent writes only the arguments. Caller-supplied
+  paths are removed from the `inputSchema` the host sees; their values
+  come from the `tools.<id>.facts` hooks, which run in the proxy. A name
+  the proxy does not show is refused and ledgered (`tool_not_offered`). A
+  refusal returns a reason code, never a value.
 - MCP proxy to the upstream server (stdio, a child process). The server
   receives only the projected arguments of a redeemed token, and only the
   variables in `upstream.env` plus the SDK's minimal set. It gets no
@@ -194,14 +209,18 @@ the code wins, then this file should be corrected.
   `deny_unmapped` defaults off. An unnamed key does not reach the tool.
   Setting the flag denies the call instead (`unmapped_field`). Custom
   fields (`fields:`, `deny_if_fields`) are read the same way: from the
-  argument path the signed spec names, never from the agent's claim. A tool
-  that does not map a field gets that field's signed default.
+  argument path the signed spec names, never from the agent's claim, or,
+  for a `source: caller` field, from `facts=` only. A tool that does not
+  map a field gets that field's signed default.
 - Two-Key does not verify facts about the world. The agent writes the
   arguments, so a custom field such as `po_matched` is the agent's
   assertion; a rule on it checks consistency, not truth (live run 5c, C05:
   `po_matched: true` on a mismatched invoice was paid). The tool, or the
   integration calling Two-Key, must check such facts against the system of
-  record. There is no input for caller-supplied facts yet.
+  record. A `source: caller` field moves that check into the integration's
+  fact hook: Two-Key then checks that the agent did not write the fact and
+  that it did not change between authorize and redemption, not that the
+  hook is right.
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are off by default; `high_assurance`
   turns them on. A judge that is not the same agent may still share a
@@ -237,18 +256,31 @@ claims to close.
     is not scanned; each later call is still authorized on its own.
   - A call that times out (`call_timeout_seconds`) is recorded as
     `redemption_aborted`, but the server may still have done the work.
-  - No caller-supplied facts yet. A fact-like argument is the agent's
+  - A fact-like argument still mapped by `json_path` alone is the agent's
     assertion; the drafter leaves such properties out of the spec, but a
     principal who maps one back accepts the agent's word (run 5c, C05).
+    Declare it `source: caller` instead.
   - Deny reasons show the agent the rule id that denied
     (`rule_denied:<id>`). A rule id that encodes a threshold tells the agent
     that threshold.
-  - `tool_not_offered` is printed on stderr and not ledgered, so an agent
-    probing for hidden tools leaves no ledger record.
   - One call runs at a time; a slow judge round delays the next call.
   - The proxy does not verify the upstream server's identity beyond the
     command it runs. A changed package behind an unpinned `npx -y` shows
     up only if its schema changes.
+- Caller-supplied facts (branch `mcp-proxy`):
+  - A fact hook is trusted code that receives agent-written arguments. A
+    hook that returns an argument (`arguments["po_matched"]`) turns the
+    fact back into the agent's assertion. A hook that looks a record up by
+    an id the agent wrote must also compare the record to the call (payee,
+    amount); otherwise the agent can cite a matched invoice for another
+    payment.
+  - Facts are looked up before authorize and again just before the tool
+    runs. A value that changes after the second lookup is not seen: the
+    window is narrowed, not closed.
+  - A hand-written integration that passes facts to `authorize` and not to
+    `invoke` gets `fact_mismatch` (closed). One that passes facts it took
+    from the agent defeats the field; the library cannot tell.
+  - Judges see the fact values in the record, as they see other fields.
 - Custom Path A fields (0.3.0). A tool that does not map a field gets the
   field's signed default, as a tool with no amount spec has `amount_usd` 0.
   A mapping the operator forgot is therefore silent. Rules written as
@@ -459,9 +491,9 @@ shipped in 0.3.0 and are described above, not here.
   the judges is an open choice, because cloud judges receive `tool_args`
   today.
 - MCP adapter (target 0.6). Part 1 (the stdio proxy and the spec drafter)
-  is on branch `mcp-proxy` and is described above. Still planned:
-  caller-supplied facts (#2 P1, after the maintainer's security review),
-  then HTTP transports. A `tool_specs` draft made from MCP schemas stays a
+  and caller-supplied facts with the guard core (#2 P1, design reviewed by
+  the maintainer) are on branch `mcp-proxy` and are described above. Still
+  planned: HTTP transports. A `tool_specs` draft made from MCP schemas stays a
   proposal for the principal to review and sign, not trusted input.
 - PKI and certificate recovery (target 0.7). New assets: the certificate
   authority key (a personal local CA or an enterprise CA), issued
@@ -514,12 +546,14 @@ shipped in 0.3.0 and are described above, not here.
 
 - `two_key/core.py`: both paths run once the call is well-formed and within limits, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
 - `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies. A description is never compiled, sent to a judge, or used in a reason.
-- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children.
+- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
+- `two_key/constitution.py`: a caller field signs only as v3; a v1 or v2 envelope that declares one is refused. A constitution without caller fields keeps its v1 or v2 bytes.
 - `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
-- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
+- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
+- `two_key/guard.py`: a fixed claim and proposal per tool, never the agent's. Facts are looked up before `authorize` and again before `invoke`, under one lock. A hook that raises or returns None leaves its fact out (deny). Every caller field of a guarded tool has a hook, and no other field does.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
-- `two_key/mcp_proxy/`: only `sdk.py` imports the MCP SDK. Each `tools/call` runs `authorize`, then `gateway.invoke` in the same process; the upstream call is the gateway's registered tool, with projected arguments. Only signed tools are shown, under their signed ids; any other name is `tool_not_offered`. The schema digest covers exactly the fields shown; a mismatch refuses unless `on_schema_change: warn`. `unresolved_identity` refuses unless `allow_unresolved_identity: true`. The claim is the per-tool policy only (`floor`, a class, or none = classified). The child gets `upstream.env` plus the SDK's minimal set. Nothing but MCP goes to stdout. `draft.py`: placeholders that signing refuses, fact-like properties left out, server text in ASCII comments only.
+- `two_key/mcp_proxy/`: only `sdk.py` imports the MCP SDK. Each `tools/call` runs `authorize`, then `gateway.invoke` in the same process; the upstream call is the gateway's registered tool, with projected arguments. Only signed tools are shown, under their signed ids; any other name is `tool_not_offered`, ledgered. Caller-supplied paths are removed from the `inputSchema` shown. `mcp_proxy_started` is ledgered before serving; if that fails, the proxy does not start. Fact hooks load at start; one that does not import refuses to start. The schema digest covers exactly the fields shown, as the upstream lists them (before caller paths are removed); a mismatch refuses unless `on_schema_change: warn`. `unresolved_identity` refuses unless `allow_unresolved_identity: true`. The claim is the per-tool policy only (`floor`, a class, or none = classified). The child gets `upstream.env` plus the SDK's minimal set. Nothing but MCP goes to stdout. `draft.py`: placeholders that signing refuses, fact-like properties left out, server text in ASCII comments only.
 - `two_key/backup.py`: three bundles; the ledger key and the witness key are never in one file; a wrong passphrase or a tampered bundle is a refusal; restore writes `head.anchor` from the same moment as the ledger and does not delete it. `--replace-ledger` is the only path that overwrites a different ledger, and it also overwrites a key file that differs. A missing anchor on a newer ledger is left missing; the next open adopts that head.

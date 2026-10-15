@@ -2117,3 +2117,72 @@ On branch `working`. Docs only.
   of the repository, which showed "repo not found". The coverage badge
   follows `main` and turns green when `working` is merged; the release badge
   shows "no releases" until Release v0.4.0 is published (#3).
+
+## Caller-supplied facts and the guard core (#2 P1) — 2026-10-15
+
+On branch `mcp-proxy`. For 0.5.0; package version stays 0.4.0. The design
+passed the maintainer's security review before it was written.
+
+- **`source: caller` fields.** A custom field declared `source: caller`
+  takes its value from the integration (`authorize(..., facts={...})`),
+  never from the agent's arguments or claim. A tool maps it as
+  `{source: caller}` or `{source: caller, json_path: P}`; with a path, the
+  tool receives the fact there. Denies (`derive_failed:`, both paths still
+  run): `caller_field_in_arguments:<name>` when the arguments write it,
+  `field_missing:<name>` when no fact is given, `fact_not_mapped:<name>`
+  for a fact the tool does not map, `facts_not_object`, `facts_too_large`,
+  `facts_unreadable`.
+- **The gateway takes the facts again.** `gateway.invoke(token, tool,
+  arguments, facts=...)` re-derives the form with the facts at redemption;
+  a value that differs from the token's form is `fact_mismatch`, and the
+  tool does not run.
+- **Constitution v3** (`two-key-constitution-v3`). A rules file with a
+  caller field signs as v3 (same signed keys as v2); `--envelope-format v3`
+  forces it. A caller field in a v1 or v2 envelope is refused, and
+  `--envelope-format v2` with one is a signing error. Constitutions without
+  caller fields keep their v1 or v2 bytes.
+- **`fact_fields`** in the action record and in `action_normalized` names
+  the caller-supplied fields, so judges and the ledger see which values came
+  from the integration. Absent when there are none.
+- **`two_key/guard.py`**: `Guard` and `GuardedTool` run one call through
+  both keys for any agent loop (a decorator too): a fixed claim and proposal
+  per tool, fact hooks before `authorize` and again before `invoke`, under
+  one lock; a hook that raises or returns None leaves its fact out (deny).
+  `authorize_from_agent(..., facts=resolver)` takes a resolver;
+  `two-key authorize --facts FILE` takes a JSON object.
+- **MCP proxy on the guard.** `proxy.yaml` `tools.<id>.facts:
+  {field: {hook: "module:function"}}` names a fact hook, imported at start
+  (a missing hook, an import failure, or a hook for a tool not offered
+  refuses to start). Caller-supplied paths are removed from the
+  `inputSchema` the host sees. The proxy now ledgers `mcp_proxy_started`
+  (the upstream program, a command digest, both schema digests, the
+  settings, each tool's claim and hooks) before serving, and
+  `tool_not_offered` with the name asked for. The agent vocabulary leaves
+  caller fields out.
+- Live run 6: `po_matched` is a caller fact (`tests/live/live_facts.py`);
+  the Writer's `require-po-match` rule is back, the prose sentence that let
+  the agent set `po_matched` is replaced, and the C05 caller-fact case runs.
+  31 cases; the self-test passes 29, and the two only a real judge can catch
+  fail with always-yes stubs, as expected.
+- Docs: HOWTO "Caller-supplied facts", the MCP section, THREAT_MODEL,
+  SCOPE, README, SECURITY, ROADMAP, AGENTS.md, llms.txt.
+
+### Upgrading from 0.4.0
+
+- Nothing changes unless a field is declared `source: caller`: the same
+  rules sign to the same bytes, and `authorize` and `invoke` without
+  `facts=` behave as before.
+- A v3 constitution needs this release (0.5.0) or later; 0.4.0 refuses it.
+- To turn an argument field into a caller fact: add `source: caller` to its
+  `fields:` entry; map it in each tool as `{source: caller}` (or keep its
+  `json_path` beside `source: caller` if the tool still needs the value);
+  re-sign; supply a hook (`GuardedTool.facts`, `proxy.yaml`
+  `tools.<id>.facts`, or `facts=` yourself). Behind the proxy, the field
+  disappears from the schema the agent sees; an agent that still writes it
+  is denied (`caller_field_in_arguments`).
+- A hand-written integration must pass the facts to both `authorize` and
+  `gateway.invoke`. Facts passed only to `authorize` redeem as
+  `fact_mismatch`.
+- The MCP proxy writes two new ledger kinds, `mcp_proxy_started` and
+  `tool_not_offered`. A probe for a hidden tool is no longer silent in the
+  ledger; a ledger consumer that lists kinds should expect them.

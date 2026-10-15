@@ -9,6 +9,11 @@ default, the way a tool with no amount spec has ``amount_usd`` 0. Rules name fie
 Values come only from the argument bytes, never from the agent's claim. The policy VM reads them with
 ``LOAD_FIELD`` from the derived mapping; nothing here ever reads ``Action.raw``.
 
+A field declared ``source: caller`` is a caller-supplied fact: its value comes only from the integration
+(``TwoKey.authorize(..., facts=)``), never from the arguments or the claim. A tool maps it as
+``{source: caller}``, or ``{source: caller, json_path: p}`` to deliver the fact to the tool at ``p``. A
+constitution with such a field signs as v3 (constitution.py).
+
 Types: ``boolean``, ``integer`` (``min`` and ``max`` required, within +/-(2**53 - 1) so a float compare is
 exact), ``enum`` (a declared list of values), and ``string`` (``max_length`` required). Enum and string
 values use a character set:
@@ -59,7 +64,8 @@ RESERVED_PREFIXES = ("two_key",)
 
 FIELD_TYPES = ("boolean", "integer", "enum", "string")
 CHARSETS = ("ascii", "unicode")
-_COMMON_KEYS = {"type", "default", "description"}
+_COMMON_KEYS = {"type", "default", "description", "source"}
+SOURCES = ("caller",)       # an omitted source is the arguments; it is never written, so v1/v2 bytes do not change
 _TYPE_KEYS = {
     "boolean": _COMMON_KEYS,
     "integer": _COMMON_KEYS | {"min", "max"},
@@ -359,7 +365,20 @@ def _definition(name: str, defn: Any) -> dict:
         raise FieldError(f"{where}.default: not a valid value of this field") from None
     if "description" in defn:
         out["description"] = _description(defn["description"], where)
+    if "source" in defn:
+        if defn["source"] not in SOURCES:
+            raise FieldError(f"{where}.source: expected caller (omit it for a field read from the arguments)")
+        out["source"] = defn["source"]
     return out
+
+
+def is_caller(defn: Mapping[str, Any]) -> bool:
+    """True for a caller-supplied fact (``source: caller``)."""
+    return defn.get("source") == "caller"
+
+
+def has_caller_fields(registry: Mapping[str, Mapping[str, Any]]) -> bool:
+    return any(is_caller(defn) for defn in registry.values())
 
 
 def validate_fields(registry: Any) -> dict:

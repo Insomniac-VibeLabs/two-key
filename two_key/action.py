@@ -112,6 +112,9 @@ class Action:
     # Custom field values derived from the argument bytes (fields.py). Never from the claim: a claim
     # that names ``fields`` is an unknown action field.
     fields: Mapping[str, Any] = field(default_factory=dict)
+    # The names among ``fields`` that are caller-supplied facts (``source: caller``), so a judge can tell an
+    # integration's fact from an agent-written field. Never from the claim.
+    fact_fields: tuple[str, ...] = ()
 
     def field_value(self, name: str) -> Any:
         """A built-in field. Any other name is a ``KeyError``: ``raw`` is the agent's, never a field."""
@@ -130,6 +133,11 @@ class Action:
             d["fields"] = dict(self.fields)
         else:
             del d["fields"]
+        # Present only when the tool maps a caller-supplied field, so other records hash as before.
+        if self.fact_fields:
+            d["fact_fields"] = list(self.fact_fields)
+        else:
+            del d["fact_fields"]
         return d
 
 

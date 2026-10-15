@@ -12,8 +12,8 @@ from two_key.core import TwoKey
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger
 from two_key.mcp_proxy.config import EnvValue, ProxyConfigError, ToolPolicy, parse_proxy_config, valid_claim
-from two_key.mcp_proxy.core import (DENY_PREFIX, ProxyCore, agent_session, agent_tools, check_tools_signed, claim_for,
-                                    identity_refusal, pinned_view, proposal_for, safe_reason, schema_check,
+from two_key.mcp_proxy.core import (DENY_PREFIX, ProxyCore, agent_session, agent_tools, check_tools_signed,
+                                    identity_refusal, load_hooks, pinned_view, proposal_for, safe_reason, schema_check,
                                     schema_digest, select_tools)
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
@@ -156,12 +156,15 @@ class Selection(unittest.TestCase):
 
 class Policy(unittest.TestCase):
     def test_claim_and_proposal(self):
-        spec = SPECS["pay_vendor"]
-        self.assertEqual(claim_for("pay_vendor", ToolPolicy(), spec), {"tool": "pay_vendor"})
-        self.assertEqual(claim_for("pay_vendor", ToolPolicy(claim="floor"), spec),
-                         {"tool": "pay_vendor", "data_class": "financial"})
-        self.assertEqual(claim_for("pay_vendor", ToolPolicy(claim="personal"), spec),
-                         {"tool": "pay_vendor", "data_class": "personal"})
+        with tempfile.TemporaryDirectory() as tmp:
+            for claim, want in (("none", {"tool": "pay_vendor"}),
+                                ("floor", {"tool": "pay_vendor", "data_class": "financial"}),
+                                ("personal", {"tool": "pay_vendor", "data_class": "personal"})):
+                tk = two_key(Path(tmp, claim))
+                cfg = config(tools={"pay_vendor": {"claim": claim}})
+                core = ProxyCore(tk, cfg, select_tools(UPSTREAM, SPECS, cfg.tools), lambda n, a: None)
+                self.assertEqual(core.guard.claim("pay_vendor"), want)
+                self.assertEqual(core.guard.proposal("pay_vendor"), "MCP tools/call pay_vendor")
         self.assertEqual(proposal_for("pay_vendor", ToolPolicy()), "MCP tools/call pay_vendor")
         self.assertEqual(proposal_for("pay_vendor", ToolPolicy(proposal="Pay an invoice")), "Pay an invoice")
 
@@ -250,7 +253,12 @@ class Calls(unittest.TestCase):
             for name in ("delete_all", "env_names", "Pay_Vendor", None, 7):
                 out = core.call_tool(name, {})
                 self.assertEqual((out.allowed, out.reason, out.stage), (False, "tool_not_offered", "proxy"))
-        self.assertEqual(core.two_key.ledger.size(), before)
+        # Nothing is authorized (no decision, no judge), but each attempt is ledgered: a name only when it is
+        # a short identifier, otherwise its size and digest.
+        added = core.two_key.ledger.entries[before:]
+        self.assertEqual([e.kind for e in added], ["tool_not_offered"] * 5)
+        self.assertEqual([e.body["tool"] for e in added], ["delete_all", "env_names", "Pay_Vendor", None, None])
+        self.assertEqual(added[3].body["tool_omitted"], True)
         self.assertEqual(self.calls, [])
         self.assertIn("does not offer: 'delete_all'", err.getvalue())
 
@@ -264,10 +272,98 @@ class Calls(unittest.TestCase):
         self.assertEqual((out.allowed, out.reason, out.stage), (False, "tool_error:ConnectionError", "gateway"))
         self.assertIn("redemption_aborted", [e.kind for e in core.two_key.ledger.entries])
 
+    def test_start_is_ledgered(self):
+        core = self.core(tools={"pay_vendor": {"claim": "floor"}})
+        core.record_start()
+        body = [e for e in core.two_key.ledger.entries if e.kind == "mcp_proxy_started"][-1].body
+        self.assertEqual(body["upstream_program"], "billing-mcp")
+        self.assertTrue(body["upstream_command_digest"].startswith("sha256:"))
+        self.assertEqual(body["schema_digest_pinned"], DIGEST)
+        self.assertEqual(body["schema_digest_seen"], core.selection.digest)
+        self.assertEqual(body["tools"]["pay_vendor"], {"claim": "floor", "facts": []})
+        self.assertEqual(body["signed_tools_not_listed"], ["env_names"])
+
     def test_unsigned_tools_entry_is_refused(self):
         tk = two_key(self.tmp)
         with self.assertRaisesRegex(ProxyConfigError, r"tools: \['wire_money'\] are not tools in the signed"):
             check_tools_signed(config(tools={"wire_money": {}}), tk)
+
+
+
+FACT_FIELDS = {"po_matched": {"type": "boolean", "default": True, "source": "caller"}}
+FACT_RULES = RULES + [{"id": "require-po-match", "deny_if_fields": {"po_matched": {"eq": False}}}]
+FACT_SPECS = dict(SPECS, pay_vendor=dict(SPECS["pay_vendor"],
+                                         fields={"po_matched": {"source": "caller", "json_path": "po_matched"}}))
+FACT_UPSTREAM = [dict(UPSTREAM[0], inputSchema={
+    "type": "object", "required": ["vendor", "amount", "po_matched"],
+    "properties": {"vendor": {"type": "string"}, "amount": {"type": "number"}, "po_matched": {"type": "boolean"}}}),
+    UPSTREAM[1]]
+PO_BOOK = {"inv-1": True, "inv-2": False}
+
+
+def po_hook(tool, arguments):
+    return PO_BOOK.get(arguments.get("memo"))
+
+
+class Facts(unittest.TestCase):
+    """Caller-supplied facts through the proxy: hooks, hidden schema properties, delivery to the tool."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        key = generate_private_key()
+        env = sign_constitution("Pay matched invoices only.", FACT_RULES, key, FACT_SPECS, fields=FACT_FIELDS)
+        self.tk = TwoKey(Ledger(Path(tmp.name, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
+                         [FixedJudge("a", "yes")], private_key=key, quorum=QuorumPolicy(required_yes=1),
+                         allow_test_doubles=True, monitored_agent=TEST_AGENT)
+        self.calls = []
+        self.cfg = config(tools={"pay_vendor": {"claim": "floor", "facts": {"po_matched": {"hook": "x.y:z"}}}})
+
+    def core(self, hooks=None):
+        return ProxyCore(self.tk, self.cfg, select_tools(FACT_UPSTREAM, FACT_SPECS, self.cfg.tools),
+                         lambda name, args: self.calls.append((name, args)) or {"ran": name},
+                         hooks={"pay_vendor": {"po_matched": po_hook}} if hooks is None else hooks)
+
+    def test_the_agent_never_sees_the_fact_and_the_tool_gets_the_callers_value(self):
+        core = self.core()
+        pay = next(t for t in core.list_tools() if t["name"] == "pay_vendor")
+        self.assertNotIn("po_matched", pay["inputSchema"]["properties"])
+        self.assertEqual(pay["inputSchema"]["required"], ["vendor", "amount"])
+        # The digest still pins what the upstream says, hidden property included.
+        self.assertEqual(core.selection.digest, select_tools(FACT_UPSTREAM, FACT_SPECS, {}).digest)
+        out = core.call_tool("pay_vendor", {"vendor": "ada", "amount": 40, "memo": "inv-1"})
+        self.assertTrue(out.allowed, out.reason)
+        self.assertEqual(self.calls, [("pay_vendor", {"vendor": "ada", "amount": 40, "memo": "inv-1",
+                                                      "po_matched": True})])
+
+    def test_fact_denies(self):
+        core = self.core()
+        for args, reason in (({"vendor": "ada", "amount": 40, "memo": "inv-2"}, "rule_denied:require-po-match"),
+                             ({"vendor": "ada", "amount": 40, "memo": "unknown"}, "derive_failed:field_missing:po_matched"),
+                             ({"vendor": "ada", "amount": 40, "memo": "inv-2", "po_matched": True},
+                              "derive_failed:caller_field_in_arguments:po_matched")):
+            with self.subTest(reason=reason):
+                out = core.call_tool("pay_vendor", args)
+                self.assertEqual((out.allowed, out.reason), (False, reason))
+        self.assertEqual(self.calls, [])
+
+    def test_a_fact_that_changes_before_the_tool_runs(self):
+        answers = iter([True, False])
+        core = self.core({"pay_vendor": {"po_matched": lambda tool, args: next(answers)}})
+        out = core.call_tool("pay_vendor", {"vendor": "ada", "amount": 40, "memo": "inv-1"})
+        self.assertEqual((out.allowed, out.reason, out.stage), (False, "fact_mismatch", "gateway"))
+        self.assertEqual(self.calls, [])
+
+    def test_hook_refusals(self):
+        with self.assertRaisesRegex(ProxyConfigError, r"no fact hook for caller-supplied field\(s\) \['po_matched'\]"):
+            self.core({})
+        with self.assertRaisesRegex(ProxyConfigError, "cannot import 'no_such_module_tk:fn'"):
+            load_hooks(config(tools={"pay_vendor": {"facts": {"po_matched": {"hook": "no_such_module_tk:fn"}}}}))
+        self.assertTrue(callable(load_hooks(config(tools={"pay_vendor": {
+            "facts": {"po_matched": {"hook": "os.path:isabs"}}}}))["pay_vendor"]["po_matched"]))
+        for bad in ({"po_matched": "mod:fn"}, {"po_matched": {"hook": "not a hook"}}, {"Bad": {"hook": "a:b"}}):
+            with self.subTest(bad=bad), self.assertRaises(ProxyConfigError):
+                config(tools={"pay_vendor": {"facts": bad}})
 
 
 if __name__ == "__main__":

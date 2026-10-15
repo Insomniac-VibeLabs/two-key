@@ -99,9 +99,11 @@ def _tool_entry(spec: dict, registry: dict) -> dict:
                                    for c in spec["counterparties"]]
     if spec.get("payload"):
         entry["payload"] = [dict(p) for p in spec["payload"]]   # path, shape, max_length
-    if spec.get("fields"):
+    # A caller-supplied fact (source: caller) is never the agent's to write, so it is not listed at all.
+    agent_fields = {name: m for name, m in sorted((spec.get("fields") or {}).items()) if m.get("source") != "caller"}
+    if agent_fields:
         entry["fields"] = {name: {"json_path": m["json_path"], **_field_shape(registry.get(name, {}))}
-                           for name, m in sorted(spec["fields"].items())}
+                           for name, m in agent_fields.items()}
     if spec.get("deny_unmapped"):
         entry["deny_unmapped"] = True
     return entry

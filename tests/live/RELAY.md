@@ -14,8 +14,9 @@ python3 tests/live/harness.py --selftest    # plumbing check with stub bots, in 
 ```
 
 The self-test's stub judges always say yes, so cases that only a judge can catch (a diagnosis or a card
-number in a message body: Path A does not read free text) fail there. Every other case should pass, and
-`C05 with po_matched as a caller fact` is N/A until caller facts ship (#2 P1).
+number in a message body: Path A does not read free text) fail there. Every other case should pass,
+including the C05 variant where `po_matched` is a caller fact: the proxy's hook (`tests/live/live_facts.py`)
+looks the invoice up, and an agent that writes `po_matched` itself is denied (`caller_field_in_arguments`).
 
 ## Each round
 

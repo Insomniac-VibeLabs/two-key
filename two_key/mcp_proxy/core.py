@@ -12,14 +12,22 @@ without the SDK installed:
 
 from __future__ import annotations
 
+import copy
+import importlib
 import os
+import re
 import sys
-import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
+from ..action import MAX_TOOL_NAME_CHARS
 from ..canonical import canonical_hash
+from ..derive import size_record
+from ..guard import Guard, GuardConfigError, GuardedTool
 from .config import ProxyConfig, ProxyConfigError, ToolPolicy
+
+_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
 # The parts of an upstream tool the agent sees, by their MCP wire names. Everything else (``_meta``,
 # ``icons``, ``execution``, unknown keys) is dropped, so the digest covers all the agent is shown.
@@ -120,16 +128,6 @@ def identity_refusal(separation: Any, allow_unresolved: bool) -> str | None:
               "proxy config to accept the risk")
 
 
-def claim_for(tool_id: str, policy: ToolPolicy, spec: Mapping[str, Any]) -> dict:
-    """The fixed claim for one call. The agent writes none of it; amount, counterparty, and irreversible
-    are left out, so they come from the argument bytes and the signed spec."""
-    if policy.claim == "none":
-        return {"tool": tool_id}                        # an omitted data class is classified
-    if policy.claim == "floor":
-        return {"tool": tool_id, "data_class": spec["data_class_floor"]}
-    return {"tool": tool_id, "data_class": policy.claim}
-
-
 def proposal_for(tool_id: str, policy: ToolPolicy) -> str:
     """Fixed per tool, never agent text. Judges see it only with ``judge_inputs: record_and_proposal``."""
     return policy.proposal or f"MCP tools/call {tool_id}"
@@ -158,25 +156,91 @@ class CallOutcome:
 UpstreamCall = Callable[[str, dict], Any]
 
 
+def load_hooks(config: ProxyConfig) -> dict[str, dict[str, Callable]]:
+    """Import each ``tools.<id>.facts.<field>.hook`` (``module:function``): trusted operator code, like a
+    ``judges.yaml`` callback. A hook that cannot be imported refuses to start."""
+    out: dict[str, dict[str, Callable]] = {}
+    for tool_id, policy in config.tools.items():
+        for name, spec in policy.facts.items():
+            module, fn = spec.split(":", 1)
+            try:
+                hook = getattr(importlib.import_module(module), fn)
+            except (ImportError, AttributeError) as e:
+                raise ProxyConfigError(f"tools.{tool_id}.facts.{name}.hook: cannot import {spec!r} "
+                                       f"({type(e).__name__})") from None
+            if not callable(hook):
+                raise ProxyConfigError(f"tools.{tool_id}.facts.{name}.hook: {spec!r} is not callable")
+            out.setdefault(tool_id, {})[name] = hook
+    return out
+
+
+def _hide(schema: Any, paths: Iterable[str]) -> Any:
+    """``schema`` without the properties at ``paths`` (dotted), also dropped from ``required``."""
+    schema = copy.deepcopy(schema)
+    for path in paths:
+        node, parts = schema, path.split(".")
+        for part in parts[:-1]:
+            props = node.get("properties") if isinstance(node, dict) else None
+            node = props.get(part) if isinstance(props, dict) else None
+            if not isinstance(node, dict):
+                break
+        else:
+            props = node.get("properties") if isinstance(node, dict) else None
+            if isinstance(props, dict):
+                props.pop(parts[-1], None)
+            if isinstance(node, dict) and isinstance(node.get("required"), list):
+                node["required"] = [r for r in node["required"] if r != parts[-1]]
+    return schema
+
+
+def caller_paths(spec: Mapping[str, Any]) -> list[str]:
+    """Where an agent might write a caller-supplied fact: its delivery path, or its name at the top level."""
+    out = []
+    for name, entry in (spec.get("fields") or {}).items():
+        if isinstance(entry, Mapping) and entry.get("source") == "caller":
+            out.append(entry.get("json_path") or name)
+    return sorted(out)
+
+
+def _ledger_name(name: Any) -> dict:
+    """A refused tool name for the ledger: the name only if it is a short identifier, else its size and digest."""
+    if isinstance(name, str) and len(name) <= MAX_TOOL_NAME_CHARS and _NAME.fullmatch(name):
+        return {"tool": name}
+    return {"tool": None, **size_record(name if isinstance(name, str) else type(name).__name__, "tool")}
+
+
+UpstreamCall = Callable[[str, dict], Any]
+
+
 class ProxyCore:
-    """Authorize and redeem each call, in this process, one at a time.
+    """Authorize and redeem each call through a ``Guard``, in this process, one at a time.
 
     ``upstream_call(upstream_name, arguments)`` runs the upstream tool and returns its result; it is the
-    gateway's registered tool, so it runs only for a redeemed token, with the projected arguments.
+    gateway's registered tool, so it runs only for a redeemed token, with the projected arguments (and any
+    caller-supplied fact delivered at its path).
     """
 
     def __init__(self, two_key: Any, config: ProxyConfig, selection: ToolSelection, upstream_call: UpstreamCall,
-                 *, agent_session: str | None = None):
+                 *, agent_session: str | None = None, hooks: Mapping[str, Mapping[str, Callable]] | None = None):
         self.two_key = two_key
         self.config = config
         self.selection = selection
         self._agent_session = agent_session
+        hooks = load_hooks(config) if hooks is None else hooks
+        unused = sorted(set(hooks) - set(selection.views))
+        if unused:
+            raise ProxyConfigError(f"tools: fact hooks for {unused}, which the proxy does not offer")
         specs = two_key.compiled.tool_specs
         self._specs = {tool_id: specs[tool_id] for tool_id in selection.views}
-        tools = {tool_id: self._tool(upstream_call, name) for tool_id, name in selection.upstream_names.items()}
-        self.gateway = two_key.gateway(tools=tools)
-        # TwoKey and the ledger are used by one call at a time; a judge round is bounded by the quorum deadline.
-        self._lock = threading.Lock()
+        self.guard = Guard(two_key, origin=ORIGIN, agent_id=config.agent_id, hosting=config.hosting)
+        self.gateway = self.guard.gateway
+        for tool_id, name in selection.upstream_names.items():
+            policy = config.tool_policy(tool_id)
+            try:
+                self.guard.add(GuardedTool(tool_id, self._tool(upstream_call, name), policy.claim,
+                                           hooks.get(tool_id, {}), proposal_for(tool_id, policy)))
+            except GuardConfigError as e:
+                raise ProxyConfigError(f"tools.{tool_id}: {e}") from None
 
     @staticmethod
     def _tool(upstream_call: UpstreamCall, name: str) -> Callable[[dict], Any]:
@@ -185,28 +249,44 @@ class ProxyCore:
         return run
 
     def list_tools(self) -> list[dict]:
-        return agent_tools(self.selection)
+        """The signed tools, with every caller-supplied field hidden from the input schema the agent sees."""
+        out = []
+        for tool in agent_tools(self.selection):
+            hidden = caller_paths(self._specs[tool["name"]])
+            if hidden and isinstance(tool.get("inputSchema"), dict):
+                tool = dict(tool, inputSchema=_hide(tool["inputSchema"], hidden))
+            out.append(tool)
+        return out
+
+    def record_start(self) -> None:
+        """Ledger ``mcp_proxy_started``: what this proxy serves, so an audit can tie decisions to a setup."""
+        command = list(self.config.upstream.command)
+        body = {"upstream_program": Path(command[0]).name[:128],
+                "upstream_command_digest": "sha256:" + canonical_hash(command),
+                "schema_digest_pinned": self.config.upstream.schema_digest,
+                "schema_digest_seen": self.selection.digest,
+                "on_schema_change": self.config.upstream.on_schema_change,
+                "allow_unresolved_identity": self.config.allow_unresolved_identity,
+                "tools": {tool_id: {"claim": tool.claim, "facts": sorted(tool.facts)}
+                          for tool_id, tool in sorted(self.guard.tools.items())},
+                "signed_tools_not_listed": list(self.selection.missing)}
+        self.guard.record("mcp_proxy_started", body)
+
+    def _record_not_offered(self, name: Any) -> None:
+        try:
+            self.guard.record("tool_not_offered", {"origin": ORIGIN, **_ledger_name(name)})
+        except Exception as e:      # still refused; the ledger write failing is reported, never an allow
+            print(f"two-key: mcp-proxy: could not record tool_not_offered: {type(e).__name__}", file=sys.stderr)
 
     def call_tool(self, name: Any, arguments: Any) -> CallOutcome:
         if not isinstance(name, str) or name not in self._specs:
-            # Not a tool this proxy offers. No token can exist for it, so nothing is authorized or ledgered.
+            # Not a tool this proxy offers. No token can exist for it: nothing is authorized; the attempt is ledgered.
             shown = safe_reason(name)[:80] if isinstance(name, str) else type(name).__name__
             print(f"two-key: mcp-proxy: refused a call to a tool it does not offer: {shown!r}", file=sys.stderr)
+            self._record_not_offered(name)
             return CallOutcome(False, "tool_not_offered", stage="proxy")
-        policy = self.config.tool_policy(name)
-        if arguments is None:
-            arguments = {}
-        with self._lock:
-            decision = self.two_key.authorize(
-                claim_for(name, policy, self._specs[name]), arguments, proposal_for(name, policy),
-                agent_id=self.config.agent_id, hosting=self.config.hosting,
-                agent_session=self._agent_session, origin=ORIGIN)
-            if not decision.allowed or not decision.token:
-                return CallOutcome(False, decision.reason, stage="authorize")
-            result = self.gateway.invoke(decision.token, name, arguments)
-        if not result.allowed:
-            return CallOutcome(False, result.reason, stage="gateway")
-        return CallOutcome(True, result.reason, result.output, stage="gateway")
+        result = self.guard.call(name, arguments, agent_session=self._agent_session)
+        return CallOutcome(result.allowed, result.reason, result.output, stage=result.stage)
 
 
 def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:

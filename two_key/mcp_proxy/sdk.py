@@ -141,8 +141,13 @@ async def start_core(stack: AsyncExitStack, config: ProxyConfig, *, two_key: Any
     selection: ToolSelection = select_tools(upstream, tk.compiled.tool_specs, config.tools)
     for line in schema_check(selection, config.upstream.schema_digest, config.upstream.on_schema_change):
         print(line, file=sys.stderr)
-    return ProxyCore(tk, config, selection, upstream_caller(client, config.upstream.call_timeout_seconds),
+    core = ProxyCore(tk, config, selection, upstream_caller(client, config.upstream.call_timeout_seconds),
                      agent_session=session)
+    try:
+        core.record_start()
+    except Exception as e:      # a proxy that cannot write its own start to the ledger does not serve
+        raise ProxyConfigError(f"ledger_failed: could not record mcp_proxy_started ({type(e).__name__})") from None
+    return core
 
 
 def _refusal(error: BaseException) -> ProxyConfigError | None:

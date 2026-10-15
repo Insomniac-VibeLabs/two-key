@@ -12,14 +12,18 @@ from typing import Any, Mapping
 
 from .action import DATA_CLASSES
 from .canonical import canonical_bytes, canonical_hash
-from .fields import MAX_FIELDS_PER_TOOL, FieldError, check_path, validate_fields
+from .fields import MAX_FIELDS_PER_TOOL, FieldError, check_path, has_caller_fields, is_caller, validate_fields
 from .keys import fingerprint, sign, verify
 from .policy_vm import ConstitutionError, validate_rules
 
 FORMAT_V1 = "two-key-constitution-v1"
 # v2 may carry a custom-field registry (``fields``) and refuses any other unknown signed key.
 FORMAT_V2 = "two-key-constitution-v2"
-ENVELOPE_FORMATS = ("auto", "v2")
+# v3 may also declare caller-supplied fields (``source: caller``). The format label is outside the signed bytes,
+# so the meaning comes from the signed bytes only: a v1 or v2 label on a constitution with a caller field is
+# refused, never read as an argument field.
+FORMAT_V3 = "two-key-constitution-v3"
+ENVELOPE_FORMATS = ("auto", "v2", "v3")
 _V2_SIGNED_KEYS = {"prose", "hard_rules", "tool_specs", "fields"}
 
 
@@ -76,10 +80,26 @@ def _overlaps(a: str, b: str) -> bool:
     return a == b or a.startswith(b + ".") or b.startswith(a + ".")
 
 
-def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: list, take) -> dict:
-    """``tool_specs.<tool>.fields``: declared field name -> {json_path}. Adds each path to ``control_paths``.
+def _field_mapping(where: str, defn: Mapping, entry: Any) -> dict:
+    """One field's mapping: ``{json_path}`` for an argument field; ``{source: caller}`` or
+    ``{source: caller, json_path}`` for a caller-supplied fact (the path is where the tool receives it)."""
+    if is_caller(defn):
+        if not isinstance(entry, Mapping) or entry.get("source") != "caller" or set(entry) - {"source", "json_path"}:
+            raise ConstitutionError(f"{where}: a caller-supplied field maps as {{source: caller}} or "
+                                    "{source: caller, json_path: ...}")
+        return dict(entry)
+    if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
+        if isinstance(entry, Mapping) and "source" in entry:
+            raise ConstitutionError(f"{where}: source: caller needs the field declared source: caller under fields:")
+        raise ConstitutionError(f"{where}: expected json_path only")
+    return dict(entry)
 
-    A path must not equal, contain, or sit under another declared path, compared without regard to case.
+
+def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: list, take) -> dict:
+    """``tool_specs.<tool>.fields``: declared field name -> mapping. Adds each path to ``control_paths``.
+
+    A path must not equal, contain, or sit under another declared path, compared without regard to case. A
+    caller-supplied field may have no path (the tool does not receive it).
     """
     out: dict[str, dict] = {}
     if mapped is None:
@@ -92,8 +112,10 @@ def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: li
         where = f"tool_specs.{tool}.fields.{fname}"
         if not isinstance(fname, str) or fname not in registry:
             raise ConstitutionError(f"{where}: not a declared field (add it under fields:)")
-        if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
-            raise ConstitutionError(f"{where}: expected json_path only")
+        entry = _field_mapping(where, registry[fname], entry)
+        if "json_path" not in entry:
+            out[fname] = {"source": "caller"}
+            continue
         try:
             path = check_path(_json_path(entry["json_path"], where), where)
         except FieldError as e:
@@ -103,7 +125,7 @@ def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: li
             if _overlaps(path, other):
                 raise ConstitutionError(f"{where}: field path {path!r} overlaps the path {other!r}")
         control_paths.append(path)
-        out[fname] = {"json_path": path}
+        out[fname] = {"json_path": path, **({"source": "caller"} if is_caller(registry[fname]) else {})}
     return out
 
 
@@ -313,8 +335,10 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
     """Sign prose, hard rules, tool specs, and the optional custom-field registry.
 
     ``envelope_format`` is the principal's choice at signing time. ``auto`` (the default) writes
-    ``v1``, byte for byte as before, when there are no custom fields, and ``v2`` when there are.
-    ``v2`` always writes ``v2``. An install older than custom fields refuses a ``v2`` envelope.
+    ``v1``, byte for byte as before, when there are no custom fields, ``v2`` when there are, and ``v3`` when
+    a field is caller-supplied (``source: caller``). ``v2`` always writes at least ``v2``, and ``v3`` always
+    writes ``v3``. A caller-supplied field cannot be signed as ``v2``. An install older than custom fields
+    refuses a ``v2`` envelope; one older than caller-supplied fields (before 0.5.0) refuses ``v3``.
     """
     if envelope_format not in ENVELOPE_FORMATS:
         raise ConstitutionError(f"envelope_format must be one of {list(ENVELOPE_FORMATS)}")
@@ -334,9 +358,18 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
     }
     if registry:
         signed["fields"] = registry
+    caller = has_caller_fields(registry)
+    if caller and envelope_format == "v2":
+        raise ConstitutionError("caller-supplied fields (source: caller) need a v3 constitution")
+    if caller or envelope_format == "v3":
+        fmt = FORMAT_V3
+    elif registry or envelope_format == "v2":
+        fmt = FORMAT_V2
+    else:
+        fmt = FORMAT_V1
     signature = sign(private_key, canonical_bytes(signed))
     return {
-        "format": FORMAT_V2 if registry or envelope_format == "v2" else FORMAT_V1,
+        "format": fmt,
         "signed": signed,
         "signature": signature,
         "fingerprint": fingerprint(private_key.public_key()),
@@ -357,7 +390,7 @@ def load_envelope(path: Path | str) -> dict:
 
 def verify_signed(envelope: dict, public_key) -> Constitution:
     fmt = envelope.get("format") if isinstance(envelope, dict) else None
-    if fmt not in (FORMAT_V1, FORMAT_V2):
+    if fmt not in (FORMAT_V1, FORMAT_V2, FORMAT_V3):
         if isinstance(fmt, str) and fmt.startswith("two-key-concept-constitution"):
             raise ConstitutionSignatureError(
                 "constitution signed by two-key-concept (before two-key 0.4.0); re-sign it with "
@@ -368,10 +401,10 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
         raise ConstitutionSignatureError("missing signed body")
     if not verify(public_key, canonical_bytes(signed), envelope.get("signature") or ""):
         raise ConstitutionSignatureError("constitution signature failed")
-    if fmt == FORMAT_V2:
+    if fmt in (FORMAT_V2, FORMAT_V3):
         extra = set(signed) - _V2_SIGNED_KEYS
         if extra:
-            raise ConstitutionError(f"unknown signed key(s) {sorted(map(str, extra))} in a v2 constitution")
+            raise ConstitutionError(f"unknown signed key(s) {sorted(map(str, extra))} in a {fmt[-2:]} constitution")
     elif "fields" in signed:
         raise ConstitutionError("custom fields need a v2 constitution")
     prose = signed.get("prose")
@@ -382,6 +415,8 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
         registry = validate_fields(signed.get("fields"))
     except FieldError as e:
         raise _field_error(e) from None
+    if has_caller_fields(registry) and fmt != FORMAT_V3:
+        raise ConstitutionError("caller-supplied fields (source: caller) need a v3 constitution")
     rules = validate_rules(rules, fields=registry)
     if "tool_specs" not in signed:
         raise ConstitutionError("tool_specs required")

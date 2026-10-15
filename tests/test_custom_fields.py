@@ -537,8 +537,11 @@ class A9EnvelopeFormat(unittest.TestCase):
         a, b = verify_signed(v1, self.key.public_key()), verify_signed(v2, self.key.public_key())
         self.assertEqual((a.hard_rules, a.tool_specs, a.fields), (b.hard_rules, b.tool_specs, b.fields))
         self.assertEqual(sign_constitution("p", RULES, self.key, SPECS, fields=FIELDS)["format"], FORMAT_V2)
+        # v3 (0.5.0, caller-supplied fields) can be forced; the signed body is the same.
+        v3 = sign_constitution("p", self.plain_rules, self.key, self.plain_specs, envelope_format="v3")
+        self.assertEqual((v3["format"], v3["signed"]), ("two-key-constitution-v3", v1["signed"]))
         with self.assertRaises(ConstitutionError):
-            sign_constitution("p", self.plain_rules, self.key, self.plain_specs, envelope_format="v3")
+            sign_constitution("p", self.plain_rules, self.key, self.plain_specs, envelope_format="v4")
 
     def _resign(self, env, signed):
         env = dict(env, signed=signed)
@@ -560,7 +563,7 @@ class A9EnvelopeFormat(unittest.TestCase):
     def test_unknown_format_refused(self):
         env = sign_constitution("p", self.plain_rules, self.key, self.plain_specs)
         with self.assertRaises(ConstitutionSignatureError):
-            verify_signed(dict(env, format="two-key-constitution-v3"), self.key.public_key())
+            verify_signed(dict(env, format="two-key-constitution-v4"), self.key.public_key())
 
     def test_cli_and_loaders(self):
         from two_key.cli import main

@@ -80,6 +80,9 @@ def verdict(case, res, effects, entries):
         ok = sorted(res.get("listed") or []) == sorted(e["tools"])
         return ("PASS" if ok else "FAIL"), f"listed={res.get('listed')}"
     if eff == "denied_before_tool":
+        tried = [c for c in calls if c["call"].get("tool") == e.get("tool")]
+        if not tried and not executed:
+            return "INCONCLUSIVE", summary + " (the agent did not attempt the call, so Two-Key's deny was not exercised)"
         ok = not executed and any(t.startswith(DENY_PREFIX + e["reason"]) for t in denies)
         return ("PASS" if ok else "FAIL"), summary
     return "ERROR", f"unknown expectation {eff}"

@@ -161,9 +161,10 @@ Facts about the world must come from something other than the agent:
   say. Do this for every fact that matters, even with the next point in
   place.
 - **The integration supplies them.** The code that calls Two-Key looks the
-  fact up and passes it in, so the agent never writes it. Two-Key has no
-  input for caller-supplied facts yet (see the reference wrapper issue);
-  until then, keep such facts out of agent-written arguments.
+  fact up and passes it in, so the agent never writes it: a
+  `source: caller` field (see "Caller-supplied facts"; on branch
+  `mcp-proxy`, for 0.5.0). Until you use one, keep such facts out of
+  agent-written arguments.
 - **Do not make a fact an agent-written field and a rule the only check.**
   Fields and rules are right for what the call does (which environment,
   how many replicas, a dry run), not for what is true outside it.
@@ -301,13 +302,19 @@ Before 0.4.0 (in the two-key-concept repository) these were
 with a message to re-sign it. Installs older than custom fields refuse
 v2, so they cannot load it and ignore the fields. A v2 constitution
 refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
-`fields`.
+`fields`. A constitution with a caller-supplied field (`source: caller`)
+signs as `two-key-constitution-v3` (0.5.0, branch `mcp-proxy`); installs
+before 0.5.0 refuse v3 as an unsupported format. The format label is
+outside the signed bytes, so the meaning comes from the signed bytes only:
+a v1 or v2 label on a constitution with a caller-supplied field is refused,
+never read as an argument field.
 
 The format is the principal's choice at signing time:
 
 ```bash
 python -m two_key sign-constitution ... --envelope-format auto   # default
-python -m two_key sign-constitution ... --envelope-format v2     # always v2
+python -m two_key sign-constitution ... --envelope-format v2     # at least v2
+python -m two_key sign-constitution ... --envelope-format v3     # always v3
 ```
 
 In Python: `sign_constitution(prose, rules, key, specs, fields=fields,
@@ -317,6 +324,128 @@ install refuses it. Loading accepts both formats. A rules file with
 `fields:` is refused by `load_unsigned` (so its fields are never dropped
 silently); use `load_unsigned_with_fields`, which returns them as a fourth
 value.
+
+### Caller-supplied facts
+
+On branch `mcp-proxy`, for 0.5.0
+([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2) P1).
+
+**In plain words.** Some things a rule needs are facts about the world,
+such as "this invoice matches its purchase order". If the agent writes
+them, they are the agent's word (see "What Two-Key verifies"). A
+caller-supplied fact comes from your integration instead: your code looks
+it up in the system of record and passes it in.
+- If the agent writes it, the call is refused.
+- If your code does not supply it, the call is refused.
+- The token remembers the value. If your code reports a different value
+  just before the tool runs, the call is refused too.
+
+#### Declare and map
+
+```yaml
+fields:
+  po_matched: {type: boolean, default: true, source: caller}
+hard_rules:
+  - {id: tools, allow_only_tools: [pay_vendor]}
+  - {id: require-po-match, deny_if_fields: {po_matched: {eq: false}}}
+tool_specs:
+  pay_vendor:
+    # ...amount, counterparties, payload as usual...
+    fields:
+      po_matched: {source: caller}                      # policy only; the tool does not receive it
+      # or {source: caller, json_path: po_matched}      # also delivered to the tool at that path
+```
+
+- `source: caller` is declared once, under `fields:`. Such a field can only
+  be mapped as `{source: caller}` or `{source: caller, json_path: ...}`. An
+  ordinary field can only be mapped as `{json_path: ...}`. Signing refuses
+  a mix, so a fact is never agent-written on another tool.
+- A tool that does not map the field gets its signed `default`, as with any
+  custom field.
+- A constitution with a caller-supplied field signs as
+  `two-key-constitution-v3` (see "Envelope format").
+- `agent_vocabulary()` never lists a caller-supplied field, and the MCP
+  proxy hides it from the agent's `tools/list`.
+
+#### Pass the facts
+
+```python
+decision = tk.authorize({"tool": "pay_vendor", "data_class": "financial"}, args, "pay",
+                        facts={"po_matched": billing.po_matches(args["invoice"])})
+result = gw.invoke(decision.token, "pay_vendor", args,
+                   facts={"po_matched": billing.po_matches(args["invoice"])})
+```
+
+- `authorize(..., facts=)` reads each fact the tool maps from `facts`, and
+  nothing else.
+- The token's form carries the value. `gateway.invoke(..., facts=)`
+  recomputes the form with the facts you pass at redemption, so look the
+  fact up again just before the tool runs.
+- A fact with a `json_path` reaches the tool at that path, as its
+  normalized value.
+- `authorize_from_agent(agent, text, facts=resolver)` takes a resolver,
+  `resolver(tool, arguments) -> mapping`, called after parsing.
+- `two-key authorize --facts facts.json` takes a JSON object.
+- The action record judges see gains `fact_fields: ["po_matched"]` when the
+  tool maps one, so a judge can tell an integration's fact from an
+  agent-written field. `action_normalized` in the ledger records the same
+  list.
+
+| Reason | Where | Meaning |
+| --- | --- | --- |
+| `derive_failed:caller_field_in_arguments:<name>` | authorize | The agent wrote the fact: at its `json_path`, or, with no path, as a top-level argument with its name |
+| `derive_failed:field_missing:<name>` | authorize | No fact for a field the tool maps |
+| `derive_failed:field_unreadable:<name>`, `field_not_allowed:<name>` | authorize | The fact is not a valid value of its type |
+| `derive_failed:fact_not_mapped[:<name>]` | authorize | A fact the tool does not map as caller-supplied |
+| `derive_failed:facts_not_object`, `facts_too_large`, `facts_unreadable` | authorize | `facts` is not a JSON-like mapping within the argument caps |
+| `fact_mismatch` | gateway | At redemption a fact is missing or has another value than the token's |
+| `malformed_action:unknown action fields (n)` | authorize | The claim carries the fact, `fields`, or `fact_fields` |
+
+Every one of these denies with both paths run, and issues no token.
+
+#### The guard
+
+`two_key.guard.Guard` does the whole sequence for any agent loop:
+1. copy the arguments;
+2. run your hooks to get the facts;
+3. `authorize` with a fixed claim and proposal;
+4. run the hooks again;
+5. `invoke`.
+
+```python
+from two_key.guard import Guard
+
+guard = Guard(tk, agent_id="billing-agent")
+
+@guard.tool("pay_vendor", claim="floor",
+            facts={"po_matched": lambda tool, args: billing.po_matches(args["invoice"])})
+def pay_vendor(args):
+    return billing.pay(args)
+
+pay_vendor({"payee": "alpine", "amount": 50, "invoice": "AMS-1"})   # raises GuardDenied(reason)
+```
+
+- `claim` is `floor` (the signed `data_class_floor`), a data class, or
+  `none` (the default: omitted, so `classified`). Amount, counterparty, and
+  irreversible are never claimed.
+- The guard refuses to register:
+  - a tool that is not signed;
+  - a caller-supplied field without a hook;
+  - a hook for a field the tool does not map as caller-supplied;
+  - a bad claim.
+- `guard.call(name, arguments, agent_session=...)` returns
+  `GuardResult(allowed, reason, output, stage)`.
+- A hook that raises or returns `None` leaves its fact out (a
+  `field_missing` deny); its type goes to stderr.
+- Calls run one at a time.
+
+**Hooks are trusted code that receives agent-written arguments.** A hook
+must look the fact up by an id (the invoice number) in the system of record
+and never echo an argument (`return args["po_matched"]` brings the agent's
+word back). It runs twice per allowed call, so it must not change anything.
+The tool should still check the fact itself; the caller-supplied fact makes
+the policy and the judges see the truth, and the tool's own check is
+defense in depth.
 
 ### Using Two-Key in other languages
 
@@ -1114,8 +1243,8 @@ make it an error in tests or CI:
 ## Put Two-Key in front of an MCP server (`two-key mcp-proxy`)
 
 On branch `mcp-proxy`, for 0.5.0
-([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)). Caller-supplied
-facts are not in it yet (see "Limits" below).
+([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)). It supports
+caller-supplied facts through per-tool hooks (see "Caller-supplied facts").
 
 **In plain words.** An MCP client (a desktop assistant, an IDE, an agent
 framework) normally starts an MCP server and calls its tools directly. With
@@ -1144,13 +1273,14 @@ sequenceDiagram
   Note over Proxy,Up: At start the proxy launches the server, lists its tools, and checks schema_digest
   Host->>Proxy: tools/list
   Proxy-->>Host: the signed tools only
-  Host->>Proxy: tools/call pay_vendor with vendor, amount, memo, po_matched
-  Proxy->>Proxy: Path A on the form derived from the arguments and the fixed claim
-  Proxy->>Judges: normalized record
+  Host->>Proxy: tools/call pay_vendor with vendor, amount, invoice, memo
+  Proxy->>Proxy: fact hook looks the invoice up, po_matched comes from the system of record
+  Proxy->>Proxy: Path A on the form derived from the arguments, the facts, and the fixed claim
+  Proxy->>Judges: normalized record, with fact_fields
   Judges-->>Proxy: ballots
   alt both keys turn
-    Proxy->>Proxy: mint a token, the gateway checks it
-    Proxy->>Up: tools/call pay_vendor with vendor, amount, memo only
+    Proxy->>Proxy: mint a token, run the fact hook again, the gateway checks both
+    Proxy->>Up: tools/call pay_vendor with vendor, amount, invoice, memo, and the hook's po_matched
     Up-->>Proxy: result
     Proxy-->>Host: result
   else a key does not turn
@@ -1200,21 +1330,26 @@ in the draft). `irreversible` is `false` only where the server says
 `readOnlyHint: true`; a server's hints and descriptions are its claims.
 Remove every tool the agent should not have. A fact-like property
 (`*_matched`, `*_verified`, `*_approved`, `*_confirmed`, `*_validated`) is
-left out of the spec, so the tool never receives the agent's value: until
-caller-supplied facts ship, the tool must check that fact itself (see "What
-Two-Key verifies"). A reviewed `rules.yaml` might be:
+left out of the spec, so the tool never receives the agent's value. Make it
+a caller-supplied fact instead (see "Caller-supplied facts"), and keep the
+tool's own check too. A reviewed `rules.yaml` might be:
 
 ```yaml
+fields:
+  po_matched: {type: boolean, default: true, source: caller}
 hard_rules:
   - {id: tools, allow_only_tools: ["pay_vendor", "read_report"]}
   - {id: cap, deny_if: {amount_usd_gt: 500}}
+  - {id: require-po-match, deny_if_fields: {po_matched: {eq: false}}}
 tool_specs:
   pay_vendor:
     irreversible: true
     data_class_floor: "financial"
     amount: {"json_path": "amount", "unit": "usd"}
     counterparties: [{"json_path": "vendor", "allow": ["acme-supplies", "globex"]}]
-    payload: [{"json_path": "memo", "shape": "string", "max_length": 200}]
+    payload: [{"json_path": "memo", "shape": "string", "max_length": 200},
+              {"json_path": "invoice", "shape": "string", "max_length": 40}]
+    fields: {po_matched: {source: caller, json_path: po_matched}}
   read_report:
     irreversible: false
     data_class_floor: "financial"
@@ -1258,8 +1393,19 @@ upstream:
   on_schema_change: refuse
   call_timeout_seconds: 60
 tools:
-  pay_vendor: {claim: floor, proposal: "Pay a vendor invoice"}
+  pay_vendor:
+    claim: floor
+    proposal: "Pay a vendor invoice"
+    facts: {po_matched: {hook: "billing_facts:po_matches"}}   # your code: (tool, arguments) -> value
   read_report: {claim: floor}
+```
+
+`billing_facts.po_matches` is your module, on the proxy's Python path:
+
+```python
+def po_matches(tool, arguments):
+    # Look the invoice up by id in the system of record. Never return an argument the agent wrote.
+    return billing.purchase_order_matches(arguments["invoice"])
 ```
 
 **6. Point the agent host at the proxy.** In the client's MCP server list,
@@ -1303,6 +1449,7 @@ refused. Relative paths are relative to the file.
 | `tools.<id>.claim` | no | `floor` (the signed `data_class_floor`), a data class, or `none` (default: omitted, so `classified`) |
 | `tools.<id>.proposal` | no | Fixed proposal text (default `MCP tools/call <id>`); judges see it only with `judge_inputs: record_and_proposal` |
 | `tools.<id>.upstream_name` | no | The upstream's name for a signed tool whose name is not a lower-case id |
+| `tools.<id>.facts` | for caller-supplied fields | `{field: {hook: "module:function"}}`, one per `source: caller` field the tool maps. Trusted operator code, imported at start |
 
 The claim is the only thing the proxy says about a call, and the agent
 writes none of it. Amount, counterparty, and irreversible are never
@@ -1315,7 +1462,11 @@ claimed: they come from the argument bytes and the signed spec, as in
   library refusal stops it. Then it refuses an `unresolved_identity`
   warning, unless `allow_unresolved_identity: true`. Next it starts the
   upstream child, lists its tools (every page), and checks the schema
-  digest.
+  digest. It imports each fact hook and refuses to start when a
+  caller-supplied field a tool maps has no hook. Last, it ledgers
+  `mcp_proxy_started`: the upstream program and a digest of its command,
+  both schema digests, `on_schema_change`, `allow_unresolved_identity`, and
+  each tool's claim and fact fields.
 - **The upstream child** gets `upstream.command`, no shell, and only the
   variables in `upstream.env` plus the SDK's minimal set (`HOME`,
   `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`). The proxy's other variables,
@@ -1323,16 +1474,23 @@ claimed: they come from the argument bytes and the signed spec, as in
 - **`tools/list`** shows each upstream tool whose exact name is a signed tool
   id (or its `upstream_name`), under the signed id. Only `name`, `title`,
   `description`, `inputSchema`, `outputSchema`, and `annotations` are shown;
-  the digest covers exactly those fields. Tools are listed once, at start:
+  the digest covers exactly those fields, as the upstream sends them. A
+  caller-supplied field is removed from the `inputSchema` the agent sees
+  (its property and its `required` entry). Tools are listed once, at start:
   a later `tools/list_changed` is ignored, so restart the proxy to pick up a
   change, which checks the pin again. Resources, prompts, completions, and
   server instructions are not forwarded. The upstream gets no sampling,
   elicitation, or roots callbacks, so it cannot reach the agent's host.
-- **`tools/call`:** the proxy runs `TwoKey.authorize` (origin `mcp-proxy`),
-  then `gateway.invoke` in the same process (#45). The gateway's registered
-  tool is the upstream `tools/call`, with the projected arguments only: an
-  unnamed key, such as `po_matched` in the example, never reaches the
-  server. One call runs at a time. An allowed call returns the upstream's
+- **`tools/call`:** through the guard (see "Caller-supplied facts"):
+  1. the fact hooks;
+  2. `TwoKey.authorize` (origin `mcp-proxy`);
+  3. the hooks again;
+  4. `gateway.invoke` in the same process (#45).
+
+  The gateway's registered tool is the upstream `tools/call`, with the
+  projected arguments only: an unnamed key never reaches the server, and a
+  caller-supplied fact with a `json_path` arrives with the hook's value.
+  One call runs at a time. An allowed call returns the upstream's
   result without its `_meta`, unread; the proxy does not scan it.
 
 ### What each refusal or warning means
@@ -1351,6 +1509,9 @@ on stderr and exits 1.
 | `upstream_unavailable: <type>: ...` | The child did not start, or did not speak MCP | Check the command and its user |
 | `upstream_duplicate_tool`, `upstream_tool_unreadable`, `upstream_too_many_tools`, `upstream_too_many_pages` | The upstream's tool list cannot be pinned | Fix or replace the server |
 | `upstream_name_collision` | Two signed tools map to one upstream name | Fix `upstream_name` |
+| `tools.<id>.facts.<field>.hook: cannot import ...` | A fact hook's module or function is not importable by the proxy | Fix the path, or the proxy's `PYTHONPATH` |
+| `tools.<id>: '<id>': no fact hook for caller-supplied field(s) [...]` | The tool maps a caller-supplied field with no hook (or a hook names a field that is not one) | Add the hook under `tools.<id>.facts` |
+| `ledger_failed: could not record mcp_proxy_started` | The start could not be ledgered | See the ledger sections |
 | `upstream_schema_changed: ... (pinned X, now Y)` | What the agent would see differs from the pin: a description, a schema, an annotation, or a signed tool the upstream no longer lists | Re-run `mcp-draft-specs`, diff `schemas.json`, re-sign if a tool's meaning changed, then update `schema_digest`. Pin the server version to make this rare |
 
 With `on_schema_change: warn`, the last one starts with `two-key: WARNING:
@@ -1365,7 +1526,10 @@ an argument value.
 
 | Reason | Meaning |
 | --- | --- |
-| `tool_not_offered` | A name the proxy does not show. Nothing is authorized or ledgered, since no token can exist for it; a line goes to stderr |
+| `tool_not_offered` | A name the proxy does not show. Nothing is authorized, since no token can exist for it. The attempt is ledgered as `tool_not_offered` (the name only when it is a short identifier, else its size and digest), and a line goes to stderr |
+| `derive_failed:caller_field_in_arguments:<field>` | The agent wrote a caller-supplied fact itself, although the proxy hides it |
+| `derive_failed:field_missing:<field>` | The fact hook returned nothing (for example, an unknown invoice) or raised |
+| `fact_mismatch` | The hook's answer changed between authorize and the tool call, so the token no longer fits |
 | any `two-key authorize` reason | `rule_denied:<rule id>`, `counterparty_not_allowed`, `derive_failed:...`, `insufficient_yes:...`, `cloud_judge_session_required`, `args_too_large`, and the others in "Parsing and limits" and "Quorum policy" |
 | `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`. After a timeout the server may still have done the work. The proxy does not retry |
 | `upstream_result_unreadable` | The upstream returned something that is not a tool result |
@@ -1400,9 +1564,9 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 
 ### Limits
 
-- **No caller-supplied facts yet** (#2 P1, waiting on the maintainer's
-  security review). A fact-like field must stay out of the spec, as the
-  draft leaves it, and the tool must check it against the system of record.
+- **A fact hook is trusted code reading agent-written arguments.** It must
+  look the fact up by an id, never echo an argument, and change nothing (it
+  runs twice per allowed call). The tool should still check the fact.
 - **One upstream, over stdio.** HTTP transports come later. One call runs at
   a time, so a slow judge round delays the next call.
 - **The pin covers what the agent is shown,** not what the server does: a

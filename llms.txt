@@ -83,10 +83,17 @@ a field to an argument path; a mapped field is required, an unmapped tool gets t
 Rules name them with deny_if_fields (eq, neq, gt, gte, lt, lte, in, not_in by type). Values
 come from the argument bytes only; an agent cannot claim them, but the agent writes the
 arguments, so a field is the call's content, not a verified fact (po_matched: true is an
-assertion). Facts about the world must be checked by the tool or supplied by the integration. Enum and string values are
+assertion). Facts about the world must be checked by the tool or supplied by the integration:
+a field declared source: caller (mcp-proxy branch; signs as a v3 constitution, which 0.4.0 refuses)
+is mapped {source: caller} or {source: caller, json_path: P} and takes its value from
+authorize(..., facts={...}) only; the agent writing it is caller_field_in_arguments, a missing
+fact field_missing, an unmapped fact fact_not_mapped. Pass the same lookup to
+gateway.invoke(..., facts=...); a changed value is fact_mismatch. With a json_path the tool
+receives the fact there. two_key.guard.Guard does both lookups for any agent loop
+(GuardedTool(name, fn, claim, facts={field: hook(tool, arguments)})). Enum and string values are
 printable ASCII by default, or Unicode with a declared script (charset: unicode, scripts:).
 A description is never compiled, sent to a judge, or used in a reason. A rules file with
-fields signs as a v2 constitution; --envelope-format v2 forces v2 without fields.
+fields signs as a v2 constitution (v3 with a caller field); --envelope-format v2 forces v2 without fields.
 Ledger deny/error type labels use type_tag (≤32 chars); derive_failed and EncodingError paths are capped. Same-jti deny waiters time out (default 30s; deny_inflight_wait_seconds must be finite positive). Free text is not classified. There is no per-value information-flow tracking.
 two-key authorize omits claim fields the operator did not pass. An omitted
 amount or counterparty is read from the argument bytes. An omitted
@@ -117,12 +124,14 @@ on_schema_change: warn. It refuses an unresolved_identity warning unless allow_u
 true (the library only warns). Each tools/call: authorize with the per-tool claim (claim: floor, a
 data class, or none = classified; amount, counterparty, irreversible never claimed; fixed proposal),
 then gateway.invoke in the same process (#45), whose tool is the upstream tools/call with projected
-arguments only. Other names are tool_not_offered (not ledgered). A deny is an MCP tool error "two-key
+arguments only. tools.<id>.facts: {field: {hook: "module:function"}} runs a fact hook; caller
+paths are removed from the inputSchema shown. Other names are tool_not_offered (ledgered);
+mcp_proxy_started is ledgered at start. A deny is an MCP tool error "two-key
 denied this call: <reason>" (reason code only). One call at a time; tools listed once at start; no
 resources, prompts, sampling, elicitation, or roots. two-key mcp-draft-specs --out DIR -- COMMAND
 drafts tool_specs (signing refuses until each floor, amount unit, and allow list is decided;
 *_matched/*_verified/*_approved/... left out as caller-fact candidates) and prints the digest;
---constitution FILE prints the digest of a signed constitution's tools. No caller-supplied facts yet.
+--constitution FILE prints the digest of a signed constitution's tools.
 An agent that can reach the upstream directly bypasses the proxy; run the upstream as its own OS user.
 decision.reason names one cause (parse/limit/derive deny, then Path A, then Path B); read
 path_a.reason and path_b.reason too. judges.yaml and agents.yaml are trusted operator config:

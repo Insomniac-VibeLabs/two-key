@@ -45,6 +45,16 @@ class TwoKeyConfigError(ValueError):
     """Two-Key refuses to start with this configuration."""
 
 
+def resolve_facts(resolver: Any, tool: Any, arguments: Any) -> Mapping[str, Any] | None:
+    """``resolver(tool, copy of arguments)``. Any failure supplies no facts; the type goes to stderr only."""
+    try:
+        copy = to_plain(arguments, max_depth=MAX_INPUT_DEPTH, what="tool args are", max_items=MAX_ARGS_BYTES // 2)
+        return resolver(tool, copy)
+    except Exception as e:      # trusted code that failed: the call denies on the missing fact, never runs
+        print(f"two-key: fact resolver failed: {type_tag(e)}", file=sys.stderr)
+        return None
+
+
 _DERIVE_DENIALS = {"amount_mismatch", "counterparty_mismatch", "irreversible_mismatch"}
 
 
@@ -256,12 +266,17 @@ class TwoKey:
 
     def authorize(self, action: dict, arguments: dict, proposal: str, *,
                   agent_id: str | None = None, hosting: str | None = None,
-                  agent_session: str | None = None, origin: str = "library") -> Decision:
+                  agent_session: str | None = None, origin: str = "library",
+                  facts: Mapping[str, Any] | None = None) -> Decision:
         """Run both paths once the call is well-formed and within limits. Any exception is a deny that is written to the ledger (``internal_error:``).
 
         ``origin`` is recorded on the decision entry (the CLI passes ``"cli"``).
         ``origin``, ``agent_id``, and ``hosting`` are operator/library metadata for the
         ledger (at most 256 characters after strip; non-str refused). They are not trust.
+
+        ``facts`` holds the caller-supplied facts (``source: caller`` fields) the tool maps: trusted values
+        from the integration, never from the agent. A fact the agent wrote, a missing fact, or an unknown one
+        is a ``derive_failed:`` deny; both paths still run. Pass the same facts to ``gateway.invoke``.
         """
         try:
             origin = normalize_origin(origin)
@@ -274,13 +289,14 @@ class TwoKey:
             return self._deny(origin, e.reason, None, None, None, e.detail)
         try:
             return self._authorize(action, arguments, proposal, agent=agent,
-                                   agent_session=agent_session, origin=origin)
+                                   agent_session=agent_session, origin=origin, facts=facts)
         except Exception as e:  # fail closed: no exception reaches the caller as anything but a deny
             return self._deny(origin, f"internal_error:{type_tag(e)}", agent, None, None)
 
     def _authorize(self, action: dict, arguments: dict, proposal: str, *,
                    agent: dict | None = None,
-                   agent_session: str | None = None, origin: str = "library") -> Decision:
+                   agent_session: str | None = None, origin: str = "library",
+                   facts: Mapping[str, Any] | None = None) -> Decision:
         # agent was built by authorize()/authorize_from_agent via ledger_agent_record
         # (type and 256-char caps). Hosting is a deployment fact, not a trust decision.
         # The raw claim is measured before anything reads it: an oversized one keeps only size and digest.
@@ -342,6 +358,18 @@ class TwoKey:
                               {"proposal_omitted": True, "proposal_error": cap_ledger_text(str(e))})
         if args_too_large(proposal):
             return self._deny(origin, "proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
+        # Caller-supplied facts are copied once, under the same caps as the arguments. A copy that fails is a
+        # derive deny below (both paths still run), never a fact read from the original object.
+        facts_error = None
+        if facts is not None:
+            try:
+                facts = to_plain(facts, max_depth=MAX_INPUT_DEPTH, what="facts are", max_items=MAX_ARGS_BYTES // 2)
+                if args_too_large(facts):
+                    facts_error = "facts_too_large"
+            except OversizeError:
+                facts_error = "facts_too_large"
+            except EncodingError:
+                facts_error = "facts_unreadable"
         spec = None
         if self.compiled.specs_enforced:
             spec = self.compiled.tool_specs.get(normalized.tool)
@@ -354,7 +382,9 @@ class TwoKey:
             try:
                 if not isinstance(arguments, Mapping):
                     raise DeriveError("arguments_not_object")
-                derived = derive(spec, arguments, self.compiled.fields)
+                if facts_error:
+                    raise DeriveError(facts_error)
+                derived = derive(spec, arguments, self.compiled.fields, facts)
             except DeriveError as exc:
                 deny_reason = f"derive_failed:{cap_ledger_text(exc.reason)}"
                 # No custom field values were derived, so a deny_if_fields rule reaches LOAD_FIELD with
@@ -372,7 +402,8 @@ class TwoKey:
                     data_class=form["data_class"],
                     counterparty=party,
                     irreversible=bool(form["irreversible"]),
-                    fields=dict(derived.fields),     # from the bytes; Path A reads them with LOAD_FIELD
+                    fields=dict(derived.fields),     # from the bytes or facts; Path A reads them with LOAD_FIELD
+                    fact_fields=derived.fact_fields,
                 )
                 if (
                     deny_reason is None
@@ -429,14 +460,17 @@ class TwoKey:
 
             _bounded("proposal", {"tool": normalized.tool, "proposal": proposal, "agent": agent})
             if spec is not None:
-                _bounded("action_normalized", {
+                record = {
                     "tool": normalized.tool,
                     "form": form,
                     "claimed_data_class": claimed_data_class,
                     "deny_reason": deny_reason,
                     # Names of keys the tool will not receive. Never their values.
                     "dropped_keys": dropped_keys(spec, arguments),
-                })
+                }
+                if normalized.fact_fields:      # which form fields are caller-supplied facts; absent otherwise
+                    record["fact_fields"] = list(normalized.fact_fields)
+                _bounded("action_normalized", record)
             _bounded("path_a", path_a_rec)
             _bounded("path_b", path_b_rec)
             # body_omitted is only for an already-decided DENY audit entry. If it would
@@ -470,8 +504,13 @@ class TwoKey:
         return Decision(allowed, reason, token if allowed else None, path_a_rec, path_b_rec, self.ledger.size(), agent)
 
     def authorize_from_agent(self, agent, proposal_text: str, *, agent_session: str | None = None,
-                             origin: str = "library") -> Decision:
+                             origin: str = "library", facts: Any = None) -> Decision:
         """Parse an untrusted agent proposal, run both paths, and do not execute the tool.
+
+        ``facts`` is a resolver, ``facts(tool, arguments) -> mapping``, called after parsing with a copy of
+        the proposed arguments, because a fact depends on the call. It is trusted operator code that receives
+        agent-written arguments: it must look a fact up by an id in the system of record, never echo an
+        argument. A resolver that raises supplies no facts (a ``field_missing`` deny for a tool that needs one).
 
         The text is measured before it is parsed. Text over ``MAX_PROPOSAL_TEXT_CHARS`` is a
         ``proposal_too_large`` deny, and text that is not a string or does not parse is a
@@ -508,8 +547,11 @@ class TwoKey:
                                    "proposal_text_type": type_tag(proposal_text)})
         except Exception as e:  # fail closed, as in authorize()
             return self._deny(origin, f"internal_error:{type_tag(e)}", record, None, None)
+        resolved = None
+        if facts is not None:
+            resolved = resolve_facts(facts, action.get("tool") if isinstance(action, Mapping) else None, arguments)
         return self.authorize(action, arguments, proposal, agent_id=agent_id,
-                              hosting=hosting, agent_session=agent_session, origin=origin)
+                              hosting=hosting, agent_session=agent_session, origin=origin, facts=resolved)
 
     def revoke(self, reason: str) -> None:
         self.ledger.append("revocation", {"reason": reason})

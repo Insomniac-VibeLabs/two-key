@@ -18,11 +18,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-from ..action import DATA_CLASS_SEP, DATA_CLASSES, MAX_TOOL_NAME_CHARS, TOOL_NAME
+from ..action import MAX_TOOL_NAME_CHARS, TOOL_NAME
+from ..fields import FIELD_NAME
+from ..guard import GuardConfigError
+from ..guard import valid_claim as _guard_claim
 from ..strict import StrictParseError, load_file_strict
 
 ON_SCHEMA_CHANGE = ("refuse", "warn")
-CLAIM_POLICIES = ("floor", "none")          # or a data class, such as "personal" or "financial+medical"
+HOOK = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*")
 DEFAULT_CALL_TIMEOUT_SECONDS = 60.0
 MAX_CALL_TIMEOUT_SECONDS = 3600.0
 MAX_PROPOSAL_CHARS = 1000
@@ -36,7 +39,7 @@ _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
 _KEY_KEYS = {"principal"}
 _UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds"}
-_TOOL_KEYS = {"claim", "proposal", "upstream_name"}
+_TOOL_KEYS = {"claim", "proposal", "upstream_name", "facts"}
 
 
 class ProxyConfigError(ValueError):
@@ -45,10 +48,12 @@ class ProxyConfigError(ValueError):
 
 @dataclass(frozen=True)
 class ToolPolicy:
-    """Per-tool settings. ``claim`` is ``floor``, ``none`` (omitted, so ``classified``), or a data class."""
+    """Per-tool settings. ``claim`` is ``floor``, ``none`` (omitted, so ``classified``), or a data class.
+    ``facts`` maps each caller-supplied field the tool maps to its hook, ``module:function``."""
     claim: str = "none"
     proposal: str | None = None
     upstream_name: str | None = None
+    facts: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -203,17 +208,29 @@ def _upstream(base: Path, value: Any) -> UpstreamConfig:
 
 def valid_claim(value: Any, where: str) -> str:
     """``floor``, ``none``, or a data class (``financial+medical`` too), in canonical form."""
-    if not isinstance(value, str):
-        raise ProxyConfigError(f"{where}: expected floor, none, or a data class")
-    claim = value.strip().casefold()
-    if claim in CLAIM_POLICIES:
-        return claim
-    parts = claim.split(DATA_CLASS_SEP)
-    if not parts or any(p not in DATA_CLASSES for p in parts) or len(set(parts)) != len(parts):
-        raise ProxyConfigError(f"{where}: expected floor, none, or one of {list(DATA_CLASSES)}")
-    if len(parts) > 1 and set(parts) != {"financial", "medical"}:
-        raise ProxyConfigError(f"{where}: only financial+medical combines")
-    return DATA_CLASS_SEP.join(sorted(parts))
+    try:
+        return _guard_claim(value)
+    except GuardConfigError as e:
+        raise ProxyConfigError(f"{where}: {str(e).removeprefix('claim: ')}") from None
+
+
+def _facts(value: Any, where: str) -> dict[str, str]:
+    """``{field: {hook: "module:function"}}``. The hook is trusted operator code, imported at start."""
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ProxyConfigError(f"{where}: expected a mapping of caller-supplied field to {{hook: module:function}}")
+    out = {}
+    for name, entry in value.items():
+        if not isinstance(name, str) or not FIELD_NAME.fullmatch(name):
+            raise ProxyConfigError(f"{where}: {str(name)[:80]!r} is not a field name")
+        if not isinstance(entry, Mapping) or set(entry) != {"hook"}:
+            raise ProxyConfigError(f"{where}.{name}: expected {{hook: module:function}}")
+        hook = entry["hook"]
+        if not isinstance(hook, str) or not HOOK.fullmatch(hook):
+            raise ProxyConfigError(f"{where}.{name}.hook: expected module:function")
+        out[name] = hook
+    return out
 
 
 def _tools(value: Any) -> dict[str, ToolPolicy]:
@@ -240,7 +257,8 @@ def _tools(value: Any) -> dict[str, ToolPolicy]:
         if proposal is not None:
             proposal = _text(proposal, f"{where}.proposal", MAX_PROPOSAL_CHARS)
         out[tool] = ToolPolicy(claim=valid_claim(settings.get("claim", "none"), f"{where}.claim"),
-                               proposal=proposal, upstream_name=name)
+                               proposal=proposal, upstream_name=name,
+                               facts=_facts(settings.get("facts"), f"{where}.facts"))
     return out
 
 

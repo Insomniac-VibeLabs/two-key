@@ -30,6 +30,10 @@ is how to report a vulnerability. It is not the model.
   changed tool schema accepted under `on_schema_change: refuse`, an
   unresolved identity accepted without `allow_unresolved_identity: true`, or
   an argument value in a deny reason
+- A caller-supplied fact (`source: caller`) taken from the agent's
+  arguments or claim, a v1 or v2 constitution accepted with a caller field,
+  or a redemption that runs the tool after the fact changed (branch
+  `mcp-proxy`)
 - A judge that is the monitored agent being accepted at start-up: a judge
   holding the agent's credential (the same API token, or the same username
   and password) at any address, whether or not either side sends it, or
@@ -44,11 +48,14 @@ is how to report a vulnerability. It is not the model.
   upstream server run as the proxy's OS user. Both are deployment
   choices (HOWTO "Key custody").
 - Code run from operator configuration. `judges.yaml`, `agents.yaml`, and
-  the MCP proxy's `proxy.yaml` (which names the upstream command) are
-  trusted: an `auth: {type: callback, callback: "module:function"}` entry
+  the MCP proxy's `proxy.yaml` (which names the upstream command and the
+  fact hooks) are trusted: an `auth: {type: callback, callback: "module:function"}` entry
   imports that module when the file loads. Whoever can write those files
   can run code in the `TwoKey` process. A way to run code from a file the
   docs do not call trusted is in scope.
+- A fact hook that returns a wrong value, or the agent's own argument. Hooks
+  are operator code; Two-Key checks where a fact came from, not that it is
+  true.
 
 Ledger entries and the head are AES-256-GCM ciphertext. The data key is
 wrapped by a ledger key stored outside the ledger directory. The head needs
