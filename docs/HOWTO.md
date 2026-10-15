@@ -278,7 +278,7 @@ Types and the operators each allows:
 | `boolean` | `default` | JSON `true` or `false` only | `eq` |
 | `integer` | `min`, `max`, `default` | a JSON integer only (not `5.0`, `"5"`, `true`, or `null`), within `min`..`max` | `eq`, `neq`, `gt`, `gte`, `lt`, `lte` |
 | `enum` | `values`, `default`, optional `charset`/`scripts` | text equal, after normalization, to one declared value | `eq`, `neq`, `in`, `not_in` |
-| `string` | `max_length`, `default`, optional `charset`/`scripts` | text of at most `max_length` characters | `eq`, `neq`, `in`, `not_in` |
+| `string` | `max_length`, `default`, optional `charset`/`scripts`, or `case: exact` | text of at most `max_length` characters | `eq`, `neq`, `in`, `not_in` |
 
 Every value in a rule is checked against the field when the constitution
 is signed and loaded. An enum value that is not declared (`prdo`), an
@@ -298,8 +298,8 @@ not allow is refused, so a typo cannot become a rule that never fires.
   `default`, the way a tool with no amount spec has `amount_usd` 0. A field
   no rule reads needs no decision.
 - The tool receives the normalized value Path A checked (`" Staging "`
-  arrives as `staging`), and the token binds the values, so the gateway
-  recomputes and compares them.
+  arrives as `staging`; a `case: exact` field arrives as written), and the
+  token binds the values, so the gateway recomputes and compares them.
 - Judges see the values in the action record. They never see
   descriptions.
 
@@ -347,6 +347,41 @@ reads the default; a mark that makes the rule always deny the tool is a
 (`two_key.fields.not_applicable_notes`). A strict default has that cost:
 with `po_matched: {eq: false}` and `default: false`, every marked tool is
 denied.
+
+#### Case-sensitive identifiers (`case: exact`)
+
+An ASCII `string` field is trimmed and lower-cased before Path A compares
+it, and the tool receives that lower-cased value. For an identifier that
+your system of record compares exactly, such as a Drive folder id, that
+breaks a correct call: in live run 6x, `FLD-WM-G5-Science` reached the
+tool as `fld-wm-g5-science` and was refused. Declare such a field
+`case: exact`:
+
+```yaml
+fields:
+  folder: {type: string, max_length: 64, default: "", case: exact}
+hard_rules:
+  - id: known-folders
+    deny_if_fields: {folder: {not_in: [FLD-WM-G5-Science, FLD-WM-G5-Math]}}
+```
+
+- The value is compared, and passed to the tool, exactly as written: no
+  trimming, no lower-casing. `fld-wm-g5-science` and ` FLD-WM-G5-Science`
+  are other values, so the rule above denies them. Rule values and the
+  default keep their case too.
+- Only with `charset: ascii` (the default), on a `string` field. It signs
+  as `two-key-constitution-v3`.
+- Pair it with an allow list (`not_in`, `neq`). With a deny list (`in`,
+  `eq`), a case variant of a listed value does not match: right for a tool
+  that treats case as significant, where the variant is another object, and
+  wrong for one that ignores case, where it is the same object. Signing
+  warns about that combination, and about a case-insensitive `string`
+  field mapped to a path that looks like an identifier (`id`, `*_id`,
+  `*Id`) (`two_key.fields.case_warnings`).
+- The agent does not need to know: it copies the id from the instruction or
+  a tool result. Behind the MCP proxy the upstream schema's description is
+  its format guide; `agent_vocabulary()` says "letter case matters" for
+  such a field, and never lists a value.
 
 ### Descriptions
 
@@ -1973,7 +2008,9 @@ names the setting or declaration that controls it.
   mark is wrong; `in` and `eq` deny-lists do not.
 - A `string` field compares exact normalized text. A deny-list on it
   misses spelling variants (`prod`, `production`). Use `enum` where the
-  values can be listed.
+  values can be listed. A `case: exact` field also treats `FLD-A` and
+  `fld-a` as different values: pair it with an allow list unless the tool
+  itself is case-sensitive.
 - `charset: unicode` reads characters through Python's Unicode data, whose
   version differs by Python release. A character newer than the running
   Python's data is refused.

@@ -60,6 +60,7 @@
 - [Docs: roadmap order, README intro and MCP section, tables of contents — 2026-10-15](#docs-roadmap-order-readme-intro-and-mcp-section-tables-of-contents--2026-10-15)
 - [Roadmap: judge connection reuse (#6) and judge history summary (#1) placed — 2026-10-15](#roadmap-judge-connection-reuse-6-and-judge-history-summary-1-placed--2026-10-15)
 - [Every tool decides each field a rule reads (#10) — 2026-10-15](#every-tool-decides-each-field-a-rule-reads-10--2026-10-15)
+- [`case: exact` string fields (live run 6x, X19) — 2026-10-15](#case-exact-string-fields-live-run-6x-x19--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2330,3 +2331,30 @@ refuse, do not warn, for argument fields and caller-supplied facts alike, in
 - Docs: HOWTO "Map it, or mark it `not_applicable`", "Envelope format", and
   "Known trade-offs"; THREAT_MODEL; AGENTS.md; llms.txt. Upgrade steps are in
   "Upgrading from 0.4.0" above.
+
+## `case: exact` string fields (live run 6x, X19) — 2026-10-15
+
+On branch `working`. Maintainer's decision on run 6 finding 2.
+
+- An ASCII `string` field may declare `case: exact`: its value is compared,
+  and passed to the tool, exactly as written (no trimming, no
+  lower-casing). Rule values and the default keep their case. Before, every
+  ASCII field was trimmed and lower-cased, and the tool received the
+  lower-cased value, so a case-sensitive system of record refused a correct
+  id (X19: `FLD-WM-G5-Science` arrived as `fld-wm-g5-science`).
+- The original value is never forwarded after a lower-cased check: in a
+  case-sensitive system `FLD-A` and `fld-a` can be different objects, and
+  the tool must get the value Path A checked.
+- Only on `string` with `charset: ascii`; `case` on an enum, a unicode
+  field, or with any value but `exact` does not sign. A constitution with
+  such a field signs as `two-key-constitution-v3`, and a v1 or v2 label on
+  one is refused.
+- `sign-constitution` warns (`two_key.fields.case_warnings`) about an exact
+  field in a deny-list rule (`eq`, `in`), where a case variant does not
+  match, and about a case-insensitive `string` field mapped to a path that
+  looks like an identifier (`id`, `*_id`, `*Id`).
+- `agent_vocabulary()` says "letter case matters: copy it exactly" for such
+  a field; it still lists no value.
+- Tests: `tests/test_case_exact.py`. Docs: HOWTO "Case-sensitive
+  identifiers (`case: exact`)" and "Known trade-offs"; THREAT_MODEL;
+  llms.txt.

@@ -93,7 +93,10 @@ fact field_missing, an unmapped fact fact_not_mapped. Pass the same lookup to
 gateway.invoke(..., facts=...); a changed value is fact_mismatch. With a json_path the tool
 receives the fact there. two_key.guard.Guard does both lookups for any agent loop
 (GuardedTool(name, fn, claim, facts={field: hook(tool, arguments)})). Enum and string values are
-printable ASCII by default, or Unicode with a declared script (charset: unicode, scripts:).
+printable ASCII by default (trimmed, lower-cased; the tool receives that value), or Unicode with a
+declared script (charset: unicode, scripts:). An ASCII string field may declare case: exact: compared
+and passed to the tool as written (for case-sensitive ids; v3); signing warns when it sits in an eq/in
+deny-list rule, and when a lower-cased string field maps an id-like path (*_id).
 A description is never compiled, sent to a judge, or used in a reason. A rules file with
 fields signs as a v2 constitution (v3 with a caller field); --envelope-format v2 forces v2 without fields.
 Ledger deny/error type labels use type_tag (≤32 chars); derive_failed and EncodingError paths are capped. Same-jti deny waiters time out (default 30s; deny_inflight_wait_seconds must be finite positive). Free text is not classified. There is no per-value information-flow tracking.

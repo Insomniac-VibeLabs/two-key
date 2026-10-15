@@ -12,17 +12,18 @@ from typing import Any, Mapping
 
 from .action import DATA_CLASSES
 from .canonical import canonical_bytes, canonical_hash
-from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path, has_caller_fields, is_caller,
-                     rule_fields, validate_fields)
+from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path, has_caller_fields,
+                     has_exact_fields, is_caller, rule_fields, validate_fields)
 from .keys import fingerprint, sign, verify
 from .policy_vm import ConstitutionError, validate_rules
 
 FORMAT_V1 = "two-key-constitution-v1"
 # v2 may carry a custom-field registry (``fields``) and refuses any other unknown signed key.
 FORMAT_V2 = "two-key-constitution-v2"
-# v3 may also declare caller-supplied fields (``source: caller``) and mark a field ``not_applicable`` for a tool.
-# The format label is outside the signed bytes, so the meaning comes from the signed bytes only: a v1 or v2
-# label on a constitution that uses either is refused, never read as an argument field or a mapping.
+# v3 may also declare caller-supplied fields (``source: caller``) and ``case: exact`` string fields, and mark a
+# field ``not_applicable`` for a tool. The format label is outside the signed bytes, so the meaning comes from
+# the signed bytes only: a v1 or v2 label on a constitution that uses any of them is refused, never read as an
+# argument field, a case-insensitive field, or a mapping.
 FORMAT_V3 = "two-key-constitution-v3"
 ENVELOPE_FORMATS = ("auto", "v2", "v3")
 _V2_SIGNED_KEYS = {"prose", "hard_rules", "tool_specs", "fields"}
@@ -96,9 +97,13 @@ def _field_mapping(where: str, defn: Mapping, entry: Any) -> dict:
     return dict(entry)
 
 
+V3_FEATURES = "caller-supplied fields (source: caller), case: exact fields, and not_applicable marks"
+
+
 def uses_v3(registry: Mapping, specs: Mapping) -> bool:
-    """True when the signed bytes need a 0.5.0 reader: a caller-supplied field or a not_applicable mark."""
-    return has_caller_fields(registry) or any(
+    """True when the signed bytes need a 0.5.0 reader: a caller-supplied or ``case: exact`` field, or a
+    ``not_applicable`` mark."""
+    return has_caller_fields(registry) or has_exact_fields(registry) or any(
         entry == NOT_APPLICABLE for spec in specs.values() for entry in (spec.get("fields") or {}).values())
 
 
@@ -365,9 +370,10 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
 
     ``envelope_format`` is the principal's choice at signing time. ``auto`` (the default) writes
     ``v1``, byte for byte as before, when there are no custom fields, ``v2`` when there are, and ``v3`` when
-    a field is caller-supplied (``source: caller``) or a tool marks one ``not_applicable``. ``v2`` always
-    writes at least ``v2``, and ``v3`` always writes ``v3``. Neither feature can be signed as ``v2``. An
-    install older than custom fields refuses a ``v2`` envelope; one before 0.5.0 refuses ``v3``.
+    a field is caller-supplied (``source: caller``) or ``case: exact``, or a tool marks one
+    ``not_applicable``. ``v2`` always writes at least ``v2``, and ``v3`` always writes ``v3``. None of those
+    can be signed as ``v2``. An install older than custom fields refuses a ``v2`` envelope; one before 0.5.0
+    refuses ``v3``.
     """
     if envelope_format not in ENVELOPE_FORMATS:
         raise ConstitutionError(f"envelope_format must be one of {list(ENVELOPE_FORMATS)}")
@@ -389,8 +395,7 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
         signed["fields"] = registry
     v3 = uses_v3(registry, signed["tool_specs"])
     if v3 and envelope_format == "v2":
-        raise ConstitutionError("caller-supplied fields (source: caller) and not_applicable marks need a v3 "
-                                "constitution")
+        raise ConstitutionError(f"{V3_FEATURES} need a v3 constitution")
     if v3 or envelope_format == "v3":
         fmt = FORMAT_V3
     elif registry or envelope_format == "v2":
@@ -452,5 +457,5 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
         raise ConstitutionError("tool_specs required")
     specs = validate_tool_specs(signed["tool_specs"], rules, registry)
     if uses_v3(registry, specs) and fmt != FORMAT_V3:
-        raise ConstitutionError("not_applicable marks need a v3 constitution")
+        raise ConstitutionError(f"{V3_FEATURES} need a v3 constitution")
     return Constitution(prose, rules, envelope, specs, True, registry)

@@ -86,8 +86,9 @@ def user_prompt(constitution: str, instruction: str, vocabulary: str | None = No
 def _field_shape(decl: dict) -> dict:
     kind = decl.get("type")
     if kind == "string":
+        exact = "; letter case matters: copy it exactly" if decl.get("case") == "exact" else ""
         return {"type": "string", "value": f"text of at most {decl['max_length']} characters, "
-                                           "given in the instruction or the constitution"}
+                                           f"given in the instruction or the constitution{exact}"}
     return {"type": kind, "value": _FIELD_HINTS.get(kind, "given in the instruction or the constitution")}
 
 

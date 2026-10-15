@@ -20,7 +20,9 @@ Types: ``boolean``, ``integer`` (``min`` and ``max`` required, within +/-(2**53 
 exact), ``enum`` (a declared list of values), and ``string`` (``max_length`` required). Enum and string
 values use a character set:
 
-- ``ascii`` (the default): printable ASCII, trimmed and lower-cased.
+- ``ascii`` (the default): printable ASCII, trimmed and lower-cased. A ``string`` field may declare
+  ``case: exact`` instead: printable ASCII compared, and passed to the tool, exactly as written (no trim, no
+  lower-casing), for identifiers a case-sensitive system of record compares exactly (live run 6x, X19).
 - ``unicode`` with ``scripts``: one writing system (``latin``, ``cyrillic``, ``arabic``, ...) or one of the
   combinations ``japanese``, ``korean``, ``chinese``. Values are compared after NFKC normalization and case
   folding (NFKC_Casefold). A letter outside the declared scripts, a control or format character, a
@@ -75,8 +77,9 @@ _TYPE_KEYS = {
     "boolean": _COMMON_KEYS,
     "integer": _COMMON_KEYS | {"min", "max"},
     "enum": _COMMON_KEYS | {"values", "charset", "scripts"},
-    "string": _COMMON_KEYS | {"max_length", "charset", "scripts"},
+    "string": _COMMON_KEYS | {"max_length", "charset", "scripts", "case"},
 }
+CASES = ("exact",)          # an omitted case is case-insensitive; it is never written, so v1/v2 bytes do not change
 OPS = {
     "boolean": ("eq",),
     "integer": ("eq", "neq", "gt", "gte", "lt", "lte"),
@@ -210,8 +213,10 @@ def _check_unicode(text: str, scripts: frozenset[str]) -> None:
             run = 0
 
 
-def normalize_text(value: Any, charset: str, scripts: str | None = None) -> str:
-    """The canonical form of a text value, or ``FieldValueError``. Never reads past the declared rules."""
+def normalize_text(value: Any, charset: str, scripts: str | None = None, case: str | None = None) -> str:
+    """The canonical form of a text value, or ``FieldValueError``. Never reads past the declared rules.
+
+    ``case="exact"`` (ASCII only) keeps the value as written: what Path A compares is what the tool gets."""
     if not isinstance(value, str):
         raise FieldValueError("field_unreadable")
     if len(value) > 4 * MAX_STRING_BYTES:      # bounded before any normalization work
@@ -219,7 +224,7 @@ def normalize_text(value: Any, charset: str, scripts: str | None = None) -> str:
     if charset == "ascii":
         if any(not 0x20 <= ord(c) < 0x7F for c in value):
             raise FieldValueError("field_unreadable")
-        return value.strip().lower()
+        return value if case == "exact" else value.strip().lower()
     if charset != "unicode" or scripts not in SCRIPT_SETS:
         raise FieldValueError("field_unreadable")
     text = unicodedata.normalize("NFKC", unicodedata.normalize("NFKC", value).casefold()).strip()
@@ -244,7 +249,7 @@ def coerce_value(defn: Mapping[str, Any], raw: Any) -> Any:
         if not defn["min"] <= raw <= defn["max"]:
             raise FieldValueError("field_not_allowed")
         return int(raw)
-    text = normalize_text(raw, defn["charset"], defn.get("scripts"))
+    text = normalize_text(raw, defn["charset"], defn.get("scripts"), defn.get("case"))
     if kind == "enum":
         if text not in defn["values"]:
             raise FieldValueError("field_not_allowed")
@@ -283,7 +288,7 @@ def _safe_int(value: Any, where: str) -> int:
 
 def _text_member(defn: Mapping[str, Any], value: Any, where: str) -> str:
     try:
-        text = normalize_text(value, defn["charset"], defn.get("scripts"))
+        text = normalize_text(value, defn["charset"], defn.get("scripts"), defn.get("case"))
     except FieldValueError:
         raise FieldError(f"{where}: not a valid {defn['charset']} value for this field") from None
     if not _text_within(text, MAX_VALUE_CHARS, MAX_VALUE_BYTES):
@@ -360,6 +365,12 @@ def _definition(name: str, defn: Any) -> dict:
         _integer_bounds(out, defn, where)
     if kind in ("enum", "string"):
         _text_charset(out, defn, where)
+    if "case" in defn:          # string only (_TYPE_KEYS), set before the default is read
+        if defn["case"] not in CASES:
+            raise FieldError(f"{where}.case: expected exact (omit it for a case-insensitive field)")
+        if out["charset"] != "ascii":
+            raise FieldError(f"{where}.case: exact is only valid with charset: ascii")
+        out["case"] = defn["case"]
     if kind == "enum":
         _enum_values(out, defn, where)
     if kind == "string":
@@ -384,6 +395,10 @@ def is_caller(defn: Mapping[str, Any]) -> bool:
 
 def has_caller_fields(registry: Mapping[str, Mapping[str, Any]]) -> bool:
     return any(is_caller(defn) for defn in registry.values())
+
+
+def has_exact_fields(registry: Mapping[str, Mapping[str, Any]]) -> bool:
+    return any(defn.get("case") == "exact" for defn in registry.values())
 
 
 def field_mappings(spec: Mapping[str, Any]) -> dict:
@@ -509,3 +524,38 @@ def not_applicable_notes(rules: list, tool_specs: Mapping[str, Mapping[str, Any]
                                 f"not_applicable (default {given}), so the rule {effect}"))
     return out
 
+
+def _looks_like_id(path: str) -> bool:
+    segment = path.rsplit(".", 1)[-1]
+    return segment.casefold() == "id" or bool(re.search(r"_id$", segment, re.IGNORECASE)) or bool(
+        re.search(r"[a-z0-9]Id$", segment))
+
+
+def case_warnings(rules: list, tool_specs: Mapping[str, Mapping[str, Any]],
+                  registry: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """Advice for the signer about letter case in ``string`` fields. Takes the canonical documents.
+
+    - A ``case: exact`` field in a rule that lists values to deny (``eq``, ``in``): a case variant of a listed
+      value does not match it. Right for a case-sensitive tool, where the variant is another object; wrong
+      for one that ignores case, where it is the same object.
+    - A case-insensitive ``string`` field mapped to a path that looks like an identifier (``id``, ``*_id``,
+      ``*Id``): the tool receives it lower-cased, which a case-sensitive system of record refuses.
+    """
+    out: list[str] = []
+    for rule in rules:
+        body = rule.get("deny_if_fields") if isinstance(rule, Mapping) else None
+        for name, ops in sorted((body or {}).items()):
+            if registry.get(name, {}).get("case") == "exact" and set(ops) & {"eq", "in"}:
+                out.append(f"rule {rule.get('id')!r}: {name} is case: exact and the rule lists values to deny "
+                           "(eq/in), so a case variant of a listed value does not match. Write it with neq or "
+                           "not_in (values to allow), or be sure the tool treats letter case as significant")
+    for tool in sorted(tool_specs):
+        for name, entry in sorted(field_mappings(tool_specs[tool]).items()):
+            defn = registry.get(name, {})
+            path = entry.get("json_path")
+            if (defn.get("type") == "string" and defn.get("case") != "exact" and isinstance(path, str)
+                    and _looks_like_id(path)):
+                out.append(f"tool {tool!r}: the string field {name} maps {path!r}, which looks like an identifier; "
+                           "the tool receives it lower-cased. If the tool's ids are case-sensitive, declare "
+                           f"{name} with case: exact")
+    return out

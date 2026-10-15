@@ -302,7 +302,9 @@ claims to close.
   on load, but a wrong mark is still the principal's error. Rules written as
   allow-lists (`not_in`) and restrictive defaults fail closed in that case;
   rules written as deny-lists (`in`, `eq`) do not. A deny-list on a
-  `string` field also misses spelling variants (`prod` and `production`).
+  `string` field also misses spelling variants (`prod` and `production`),
+  and on a `case: exact` field it misses case variants (`FLD-A`, `fld-a`),
+  which is wrong when the tool itself ignores case; signing warns.
   Characters are controlled, meaning is not: lookalike letters from another
   script, invisible characters, and direction controls deny, but this
   package does not know that two words mean the same thing. A field
@@ -574,7 +576,7 @@ above, not here.
 ## What to re-check when the code changes
 
 - `two_key/core.py`: both paths run once the call is well-formed and within limits, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
-- `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies. A description is never compiled, sent to a judge, or used in a reason.
+- `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies; a `case: exact` ASCII string is compared and passed on as written, and signs only as v3. A description is never compiled, sent to a judge, or used in a reason.
 - `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
 - `two_key/constitution.py`: a caller field signs only as v3; a v1 or v2 envelope that declares one is refused. A constitution without caller fields keeps its v1 or v2 bytes.
 - `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
