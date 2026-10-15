@@ -3,7 +3,10 @@
 This is the design model for `two-key` 0.4.0. Tag `v0.4.0` on `main` is the tagged release. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
 Branch `working` (for 0.5.0) adds the MCP proxy (`two-key mcp-proxy`), the spec drafter
 (`two-key mcp-draft-specs`), caller-supplied facts (`source: caller`, constitution v3), and the
-guard core (`two_key/guard.py`), described below.
+guard core (`two_key/guard.py`), described below, and the run 6 follow-ups: every tool decides
+each field a rule reads (`not_applicable`), `case: exact` fields, `@domain` allow entries, no
+judges for a call that cannot be read, and warnings for one judge that can approve alone and
+for an undescribed payee or amount in a draft.
 It is not a penetration test and it is not an independent review. The package is
 beta (pre-1.0): maintainer-reviewed with live LLM testing and automated
 scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
@@ -288,6 +291,11 @@ claims to close.
   - The proxy does not verify the upstream server's identity beyond the
     command it runs. A changed package behind an unpinned `npx -y` shows
     up only if its schema changes.
+- Judges not asked about an unreadable call (0.5.0). A `derive_failed:`
+  call is denied without a judge opinion in the ledger, unless
+  `tool_args_on_derive_deny` sends the arguments to the judges; Path B is
+  recorded as `skipped:derive_failed`. The call was already denied, so no
+  allow is possible; the ledger simply has one opinion fewer.
 - Caller-supplied facts (branch `working`):
   - A fact hook is trusted code that receives agent-written arguments. A
     hook that returns an argument (`arguments["po_matched"]`) turns the
@@ -592,8 +600,8 @@ above, not here.
 - `two_key/core.py`: both paths run once the call is well-formed and within limits, except that a `derive_failed:` call skips the judges unless `tool_args_on_derive_deny` is set (ledgered `skipped:derive_failed`), and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
 - `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies; a `case: exact` ASCII string is compared and passed on as written, and signs only as v3. A description is never compiled, sent to a judge, or used in a reason.
 - `two_key/derive.py`: JSON paths only. `party_allowed`: an exact entry, or an `@domain` entry for an address whose domain equals it (ASCII host name, no subdomain) and whose local part is plain (atext and dots); `@domain` itself is not a party. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
-- `two_key/constitution.py`: a caller field signs only as v3; a v1 or v2 envelope that declares one is refused. A constitution without caller fields keeps its v1 or v2 bytes.
-- `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
+- `two_key/constitution.py`: a caller field, a `case: exact` field, a `not_applicable` mark, or an `@domain` allow entry signs only as v3; a v1 or v2 envelope with one is refused. A constitution without them keeps its v1 or v2 bytes. Every tool maps each field a `deny_if_fields` rule reads or marks it `not_applicable`, at signing and on load. An allow entry with `*`, or a domain entry that is not an ASCII host name, does not sign; `deny_counterparties` refuses domain entries.
+- `two_key/quorum.py`: `lone_judge_warning` warns, never refuses, when one judge can approve alone (required_yes 1, min_responding 1, two or more judges). An abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
 - `two_key/guard.py`: a fixed claim and proposal per tool, never the agent's. Facts are looked up before `authorize` and again before `invoke`, under one lock. A hook that raises or returns None leaves its fact out (deny). Every caller field of a guarded tool has a hook, and no other field does.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.

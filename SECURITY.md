@@ -30,6 +30,9 @@ is how to report a vulnerability. It is not the model.
   changed tool schema accepted under `on_schema_change: refuse`, an
   unresolved identity accepted without `allow_unresolved_identity: true`, or
   an argument value in a deny reason
+- A constitution that signs or loads although a tool neither maps nor marks
+  `not_applicable` a field a rule reads, or a `case: exact` value that
+  reaches the tool changed (branch `working`)
 - An `@domain` allow entry that admits a subdomain, a lookalike domain, an
   address whose local part is not plain (a space, a line break, a quoted
   part, a second `@`), or the entry itself as a party (branch `working`)

@@ -30,7 +30,9 @@ authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed, within limits, and readable (an oversized or
 malformed call is an early deny before either path; a derive_failed call skips the judges unless
 tool_args_on_derive_deny, and path_b is ledgered as skipped:derive_failed). The default needs one judge and has no diversity
-floors; required_yes defaults to min(2, judges). QuorumPolicy.high_assurance
+floors; required_yes defaults to min(2, judges). With required_yes 1, two or more judges, and
+min_responding 1 (its default then), one judge approves alone while the others are down: TwoKey warns
+at start (lone_judge_warning) and does not refuse. QuorumPolicy.high_assurance
 (profile: high_assurance) needs judges from 2 makers (min_makers; maker: is the operator's
 label for who made a judge's model, not verified, never compared with the agent), 1 local judge,
 and a local yes. The old names vendor/min_vendors are refused (removed in 0.2.3).
@@ -141,7 +143,8 @@ denied this call: <reason>" (reason code only). One call at a time; tools listed
 resources, prompts, sampling, elicitation, or roots. two-key mcp-draft-specs --out DIR -- COMMAND
 drafts tool_specs (signing refuses until each floor, amount unit, and allow list is decided;
 *_matched/*_verified/*_approved/... left out as caller-fact candidates) and prints the digest;
---constitution FILE prints the digest of a signed constitution's tools.
+it warns when a payee or amount it maps has no description in the upstream schema (the agent's only
+format guide behind the proxy). --constitution FILE prints the digest of a signed constitution's tools.
 An agent that can reach the upstream directly bypasses the proxy; run the upstream as its own OS user.
 decision.reason names one cause (parse/limit/derive deny, then Path A, then Path B); read
 path_a.reason and path_b.reason too. judges.yaml and agents.yaml are trusted operator config:

@@ -15,8 +15,10 @@ It has:
   `boolean`, `integer`, `enum`, or `string`, each with a signed default and
   an optional description that is never an authorization rule. Enum and
   string values are printable ASCII by default, or Unicode with a declared
-  script. Rules name them with `deny_if_fields`. A rules file that declares
-  fields signs as a v2 constitution. `deny_unmapped`
+  script, or, for a case-sensitive id, `case: exact` (0.5.0). Rules name
+  them with `deny_if_fields`, and every tool maps each field a rule reads
+  or marks it `not_applicable` (0.5.0). A rules file that declares fields
+  signs as a v2 constitution, or v3 with a 0.5.0 feature. `deny_unmapped`
   defaults off: an unnamed key does not reach the tool. Set the flag to deny
   it. A counterparty path requires `allow`. A payload `shape`, when set,
   locks the value to a string, a number, or a list of strings and does not
@@ -61,8 +63,10 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   field a rule reads or marks it `not_applicable` (a forgotten mapping does
   not sign or load); `case: exact` string fields for case-sensitive ids;
   `@domain` allow entries for every plain address at one domain, with a
-  signing warning; and no judge is asked about a call that cannot be read
-  (`skipped:derive_failed`)
+  signing warning; no judge is asked about a call that cannot be read
+  (`skipped:derive_failed`); a start-up warning when one judge can approve
+  alone; and a drafter warning for a payee or amount with no upstream
+  description
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),

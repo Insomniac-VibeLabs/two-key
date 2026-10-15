@@ -165,8 +165,12 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
    or a list of strings. `max_length` bounds a string or a list. Shape does
    not read the contents. The spec does not list every nested key. A counterparty
    path must list `allow`. A party that is not on that list is
-   `counterparty_not_allowed`. The tool receives the canonical party, not
-   the raw spelling. A value that cannot be read (for example `10**400`) is
+   `counterparty_not_allowed`; an `@example.org` entry (0.5.0) admits every
+   plain address at exactly that domain, with a signing warning. The tool
+   receives the canonical party, not the raw spelling. Every tool maps each
+   custom field a rule reads or marks it `not_applicable`, or the
+   constitution does not sign (0.5.0), and a `case: exact` string field
+   keeps a case-sensitive id as written. A value that cannot be read (for example `10**400`) is
    a `derive_failed` deny, and any other exception in `authorize` is an
    `internal_error:` deny, written to the ledger.
 2. Path B is a judge quorum. Judges are hooks for xAI/Grok, OpenAI,
@@ -185,7 +189,9 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
    with no local judge does not start. A judge is local only when it says
    so (`local_weights: true`) and its `base_url` host is on an allowlist:
    loopback, RFC 1918, or IPv6 unique-local. A `:cloud`/`-cloud` model is
-   never local, for any judge class. With `required_yes` unset, the approval threshold is `min(2, number_of_judges)`. The default policy permits a one-judge deployment, but the operator must still configure at least one judge; Two-Key does not create or select judges automatically. With one configured judge, one affirmative vote is required. With two or more judges, two affirmative votes are required by default. This is not a general majority rule: for example, a three-judge setup requires two affirmative votes, and a four-judge setup also requires two. Operators who want a different threshold, such as a majority or unanimity, must explicitly configure `required_yes` to the desired number of affirmative votes.
+   never local, for any judge class. With `required_yes` unset, the approval threshold is `min(2, number_of_judges)`. The default policy permits a one-judge deployment, but the operator must still configure at least one judge; Two-Key does not create or select judges automatically. With one configured judge, one affirmative vote is required. With two or more judges, two affirmative votes are required by default. This is not a general majority rule: for example, a three-judge setup requires two affirmative votes, and a four-judge setup also requires two. Operators who want a different threshold, such as a majority or unanimity, must explicitly configure `required_yes` to the desired number of affirmative votes. With `required_yes: 1` and
+   more than one judge, one judge approves alone while the others are down;
+   `TwoKey` warns at start, and `min_responding` closes it.
    `require_path_a_first` is not a floor and it is not a skip. After a derive
    deny, judges do not receive the argument bytes unless
    `tool_args_on_derive_deny` is set. A call that cannot be read under its
@@ -579,9 +585,12 @@ Upgrading from an older version: read the "Upgrading" notes in
 - 0.4.0 renames the package and its file formats. Key files still load;
   re-sign the constitution, start a new ledger, and export a new backup:
   "Upgrading from 0.3.1".
-- 0.5.0 (in testing on `working`) adds constitution v3 for caller-supplied
-  facts. Nothing changes until a field is declared `source: caller`:
-  "Upgrading from 0.4.0".
+- 0.5.0 (in testing on `working`) adds constitution v3, for caller-supplied
+  facts and the run 6 follow-ups. Check before upgrading: a constitution in
+  which a tool neither maps nor marks `not_applicable` a field a rule reads
+  no longer loads, and an `allow` entry that starts with `@` is now a whole
+  domain. A call that cannot be read under its spec is no longer sent to the
+  judges. "Upgrading from 0.4.0" and the run 6 entries in CHANGES.md.
 
 A clone installed with `pip install -e` follows the ranges in
 `pyproject.toml`. CI does not: it installs the versions in `uv.lock`

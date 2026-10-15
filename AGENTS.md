@@ -122,7 +122,9 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   When `required_yes` is unset, it resolves to
   `min(2, number_of_judges)` (at least one); this is **not** a majority
   rule. `min_responding` defaults to the effective `required_yes`
-  threshold. `QuorumPolicy.high_assurance` / `profile: high_assurance`
+  threshold. With `required_yes: 1`, two or more judges, and
+  `min_responding` 1, `TwoKey` warns at start (`lone_judge_warning`); it
+  does not refuse. `QuorumPolicy.high_assurance` / `profile: high_assurance`
   adds requirements for judges from two makers (`min_makers`), one
   local judge, and a local yes. Note that
   `QuorumPolicy.without_diversity_floors()` explicitly defaults
@@ -161,7 +163,9 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   `not_applicable` (then it gets the signed default); a forgotten decision
   is refused at signing and on load, never read as the default
   (`tests/test_field_decisions.py`). A description is never compiled, sent to a
-  judge, or used in a reason. A constitution with no custom fields must
+  judge, or used in a reason. A `case: exact` ASCII string is compared and passed to the tool as
+  written; never forward an original value after a case-folded check
+  (`tests/test_case_exact.py`). A constitution with no custom fields must
   stay byte-for-byte v1 (`tests/test_fields_compat.py`); one without a
   0.5.0 feature (a caller field, a `case: exact` field, a `not_applicable`
   mark, an `@domain` allow entry) must not sign as v3. Each signs only as
@@ -197,7 +201,8 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   the library keeps warning. The claim comes from `proxy.yaml` only, never
   from the agent. A deny returns a reason code, never a value. Nothing but
   MCP on stdout. Drafts must not sign until the principal decides; server
-  text stays in ASCII comments. SDK tests skip without the extra; CI installs
+  text stays in ASCII comments, and a payee or amount with no upstream
+  description is a draft WARNING, never a looser match. SDK tests skip without the extra; CI installs
   it (`--extra mcp`).
 - The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
   (`TwoKey.gateway()`). A gateway in another process or host is not

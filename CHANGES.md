@@ -66,6 +66,8 @@
 - [`@domain` allow entries (run 6 finding 7) — 2026-10-15](#domain-allow-entries-run-6-finding-7--2026-10-15)
 - [Docs: run 6 follow-ups in ROADMAP and SCOPE — 2026-10-15](#docs-run-6-follow-ups-in-roadmap-and-scope--2026-10-15)
 - [Run 6 follow-ups: drafter and quorum warnings, HOWTO guidance — 2026-10-15](#run-6-follow-ups-drafter-and-quorum-warnings-howto-guidance--2026-10-15)
+- [Live harness: run 6 referee fixes, quorum cases (for re-run 6z) — 2026-10-15](#live-harness-run-6-referee-fixes-quorum-cases-for-re-run-6z--2026-10-15)
+- [Docs: the run 6 follow-ups everywhere they apply — 2026-10-15](#docs-the-run-6-follow-ups-everywhere-they-apply--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2508,3 +2510,17 @@ From GrokBot's run 6 report (findings 4, 10, 11, 12 and recommendation d).
 - `tests/live/.gitignore` ignores `state/`, `selftest/`, and `cases.jsonl` at
   any depth, so a copied run tree (`run6x/state/`) cannot be committed by
   accident. `RELAY.md` is updated.
+
+## Docs: the run 6 follow-ups everywhere they apply — 2026-10-15
+
+On branch `working`. Docs only.
+
+- README: Path A names `@domain` entries, the `not_applicable` decision,
+  and `case: exact`; Path B names the one-judge warning; the 0.5.0 upgrade
+  bullet says what to check before upgrading (it said nothing changed
+  without caller fields, which is no longer true).
+- SCOPE, THREAT_MODEL (header, re-check list, residual risk of the judge
+  skip), FIT, SECURITY (in scope: a forgotten field decision that still
+  signs, a changed `case: exact` value), AGENTS.md (the one-judge warning,
+  `case: exact`, the drafter warning), llms.txt, and ROADMAP 0.5.0 list the
+  run 6 follow-ups.

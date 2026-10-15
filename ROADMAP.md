@@ -99,8 +99,11 @@ test run 6 runs before the release.
   proxy runs on it, with fact hooks in `proxy.yaml`. (Done.)
 - From live run 6 (maintainer's decisions, done): every tool decides each
   field a rule reads (#10); `case: exact` string fields; `@domain` allow
-  entries with a signing warning; no judges for a call that cannot be read.
-  A short live re-run (6z) covers them before the release.
+  entries with a signing warning; no judges for a call that cannot be read;
+  a start-up warning when one judge can approve alone; a drafter warning
+  for an undescribed payee or amount; HOWTO guidance; and the harness's
+  referee fixes and scripted quorum cases. A short live re-run (6z) covers
+  them before the release.
 - Start with stdio transport and one real server. HTTP and OAuth come later.
 - The proxy adds a trust boundary: an agent that can reach the MCP server
   directly bypasses it. THREAT_MODEL.md says so.
