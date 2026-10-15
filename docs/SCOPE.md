@@ -1,7 +1,7 @@
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.4.0. Tag
-`v0.4.0` on `main` is the tagged release. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
+`two-key` is beta (pre-1.0). Package version 0.5.0. Tag
+`v0.5.0` on `main` is the tagged release; `v0.4.0` is the one before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
 Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
 is on `main`. `v0.1.6` stays on the previous tree.
 
@@ -15,8 +15,10 @@ It has:
   `boolean`, `integer`, `enum`, or `string`, each with a signed default and
   an optional description that is never an authorization rule. Enum and
   string values are printable ASCII by default, or Unicode with a declared
-  script. Rules name them with `deny_if_fields`. A rules file that declares
-  fields signs as a v2 constitution. `deny_unmapped`
+  script, or, for a case-sensitive id, `case: exact` (0.5.0). Rules name
+  them with `deny_if_fields`, and every tool maps each field a rule reads
+  or marks it `not_applicable` (0.5.0). A rules file that declares fields
+  signs as a v2 constitution, or v3 with a 0.5.0 feature. `deny_unmapped`
   defaults off: an unnamed key does not reach the tool. Set the flag to deny
   it. A counterparty path requires `allow`. A payload `shape`, when set,
   locks the value to a string, a number, or a list of strings and does not
@@ -26,7 +28,7 @@ affirmative threshold is `min(2, number_of_judges)`: one judge requires
 one yes; two or more judges require two yes votes. This is not a majority
 rule. Diversity floors are off by default; `high_assurance` requires at
 least two operator-labelled model makers, at least one local judge, and
-a yes from a local judge. No judge may be the monitored agent (a judge holding its credential, the same API token or the same username and password, at any address and whether or not either side sends it; or both keyless on one address); other overlaps warn. After a derive deny, argument bytes are withheld from judges unless `tool_args_on_derive_deny` is set. Path B still runs
+a yes from a local judge. No judge may be the monitored agent (a judge holding its credential, the same API token or the same username and password, at any address and whether or not either side sends it; or both keyless on one address); other overlaps warn. After a derive deny, argument bytes are withheld from judges unless `tool_args_on_derive_deny` is set, and a call that cannot be read (`derive_failed:`) is not sent to the judges at all
 - monitored-agent hooks; `authorize_from_agent` does not execute a tool
 - an AES-256-GCM ledger, a ledger key, and a witness key outside the ledger directory. The witness public key is pinned in the ledger (`witness_pinned`) and, optionally, outside it (`witness_public_key=`, `--witness-public-key`); it changes only by a ledgered `witness_rotated` entry (`two-key rotate-witness`). A head anchor beside the ledger key (`head.anchor`, or `--head-anchor`) refuses a rollback or wipe of the ledger directory alone; deleting that file accepts the ledger as it stands. `two-key recover` drops an uncheckpointed tail and does not run on open. `two-key audit` reports both pins
 - a capability key outside the ledger directory. The gateway verifies
@@ -37,9 +39,37 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
 - a single-use token and a gateway intended to be the only component that
   invokes registered tools; this does not stop an agent from calling a
   tool directly through another path
+- since 0.5.0, behind the optional `mcp` extra (the
+  official MCP Python SDK): `two-key mcp-proxy`, a stdio proxy in front of
+  one upstream MCP server. It starts the server as a child process, shows
+  the agent only the signed tools, pins their schemas
+  (`upstream.schema_digest`; a mismatch refuses to start unless
+  `on_schema_change: warn`), refuses an unresolved judge or agent identity
+  unless `allow_unresolved_identity: true`, and runs each `tools/call`
+  through `authorize` and the in-process gateway with a per-tool claim
+  policy. `two-key mcp-draft-specs` drafts `tool_specs` and the digest for
+  the principal to review and sign; a draft does not sign until the
+  principal decides each floor, amount unit, and allow list. The proxy
+  speaks MCP to the agent's host but offers no tools of its own
+- since 0.5.0: caller-supplied facts. A field
+  declared `source: caller` (constitution v3) takes its value from the
+  integration's `facts=`, never from the agent's arguments; the gateway
+  takes the facts again at redemption (`fact_mismatch`). The guard core
+  (`two_key/guard.py`) runs one call through both keys for any agent loop,
+  with fact hooks before authorize and again before the tool; the MCP
+  proxy runs on it (`tools.<id>.facts`). Two-Key checks where a fact came
+  from, not whether the hook is right
+- since 0.5.0, from live run 6: every tool maps each
+  field a rule reads or marks it `not_applicable` (a forgotten mapping does
+  not sign or load); `case: exact` string fields for case-sensitive ids;
+  `@domain` allow entries for every plain address at one domain, with a
+  signing warning; no judge is asked about a call that cannot be read
+  (`skipped:derive_failed`); a start-up warning when one judge can approve
+  alone; and a drafter warning for a payee or amount with no upstream
+  description
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
-Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent),
+Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
 `two_key/strict.py` (duplicate-key JSON/YAML), `two_key/audit.py` (decision
 digest checks), `two_key/backup.py` (key backup), and the per-install fingerprint key beside the ledger
 (`*.ledger-key/fingerprint.key`).
@@ -49,43 +79,53 @@ anchoring, seed phrases, or hybrid ML-DSA.
 
 ## Planned additions
 
-[ROADMAP.md](../ROADMAP.md) lists optional additions to this repository. 0.3.0
-(key backup) is released and is described above. None of the later phases
-exists yet. When one ships, this file and [THREAT_MODEL.md](THREAT_MODEL.md)
-change in the same release.
+[ROADMAP.md](../ROADMAP.md) lists optional additions to this repository, in
+this order: the MCP adapter (0.5.0), DLP and antivirus hooks (0.6.0), and
+the SIEM export (0.7.0), then 1.0. Nothing below exists in a release yet.
+When an item ships, this file and [THREAT_MODEL.md](THREAT_MODEL.md) change
+in the same release.
 
-- Ledger export for SIEM (target 0.4): a command that verifies and decrypts
+- MCP adapter (0.5.0): the proxy, the drafter, caller-supplied facts,
+  and the framework-neutral guard core are built (above) and go through
+  live test run 6 before the release. HTTP transports come later. The proxy offers no tools of its own.
+- Inspection hooks for DLP and antivirus (0.6.0, next): an interface that
+  calls external scanners. This package still does not scan or classify
+  content itself.
+- Judge connection reuse (#6, 0.6.0): judge connections are not reused
+  today; each quorum round opens new ones.
+- Ledger export for SIEM (0.7.0): a command that verifies and decrypts
   the ledger locally and writes events without argument values. A field
   allowlist leaves out the proposal text and the derived amount and
   counterparty, which the ledger holds today.
-- Inspection hooks for DLP and antivirus (target 0.5): an interface that
-  calls external scanners. This package still does not scan or classify
-  content itself.
-- MCP adapter (target 0.6): an optional proxy in front of the gateway. This
-  package is still not an MCP server.
-- PKI and certificate recovery (target 0.7): X.509 identities for the
+- Judge history summary (#1, before 1.0): judges get a summary of recent
+  decisions built from the ledger, on by default, after its own security
+  review.
+
+After 1.0, not scheduled:
+
+- PKI and certificate recovery: X.509 identities for the
   principal, witness, capability issuer, and optionally agents, for personal
   use (a small local CA) and enterprise use (an existing CA and trust
   anchors), with revocation recorded in the ledger. Recovery is a backup
   bundle unlocked by a recovery key for personal use, and a key split k-of-n
   among custodians for enterprise use. This package does not become a
   general-purpose certificate authority.
-- Post-quantum signatures (target 0.8): hybrid Ed25519 plus ML-DSA-65 for the
+- Post-quantum signatures: hybrid Ed25519 plus ML-DSA-65 for the
   long-lived signatures (the constitution and the ledger head), sized to this
   repository's scope.
-- FIPS approved mode (target 0.9): an opt-in mode that refuses to start unless
+- FIPS approved mode: an opt-in mode that refuses to start unless
   the cryptography library runs on a FIPS 140-3 validated module in approved
   mode, and that refuses algorithms outside the approved set. This package is
   not FIPS validated today, and that mode would not make it validated.
   Running on a validated module is not the same as this package being
   validated or compliant, and the docs will not describe it that way.
-- Local GUI (target 0.10): a loopback-only interface for configuration and
+- Local GUI: a loopback-only interface for configuration and
   ledger auditing, built on the CLI and the existing file formats. It does not
   hold the principal key, and it is not a hosted or multi-user service.
-  Filtering by judge needs per-judge ballot records (judge id, vote, and
-  capped error only, never the rationale text), which the ledger does not
-  hold today.
-- More spec field types (planned, not scheduled): decimal, URL, path,
+  Filtering by judge uses the per-judge ballot records planned for 1.0
+  (judge id, vote, confidence, error class, and a rationale digest, never
+  the rationale text); the ledger does not hold them today.
+- More spec field types: decimal, URL, path,
   email, and opaque bytes. `amount` and `counterparty` become ordinary typed
   fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped
   in 0.3.0 and are described above.

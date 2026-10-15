@@ -223,6 +223,10 @@ def validate_rules(rules: Any, *, require_allow_list: bool = True, fields: Mappi
             val: Any = _str_list(body, f"{where}.allow_only_tools")
         elif rtype == "deny_counterparties":
             val = _str_list(body, f"{where}.deny_counterparties")
+            if any(item.startswith("@") for item in val):
+                # A block list is exact. A domain entry here would read as a party named "@x" and block nothing.
+                raise ConstitutionError(f"{where}.deny_counterparties: @domain entries are only for a tool "
+                                        "spec's allow list; list each blocked party")
         elif rtype == "deny_if_irreversible_over":
             val = _nonneg_number(body, f"{where}.deny_if_irreversible_over")
         elif rtype == "deny_if_fields":

@@ -59,8 +59,9 @@ Quorum protocol specifics:
   normalized action record and the constitution, never the agent's proposal
   text (transcript) or tool outputs. "record_and_proposal" restores the
   earlier behaviour. After a derive deny, ``tool_args`` is omitted unless
-  ``tool_args_on_derive_deny`` is set. Path B still runs.
-- Both paths run once the call is well-formed and within limits. A Path A deny does not skip Path B.
+  ``tool_args_on_derive_deny`` is set; a ``derive_failed:`` call is then not sent to the judges at all.
+- Both paths run once the call is well-formed and within limits. A Path A deny does not skip Path B, except
+  for a ``derive_failed:`` call without ``tool_args_on_derive_deny``, which has nothing to judge.
   ``require_path_a_first`` is stored on the policy and copied into
   ``to_record``. ``TwoKey.authorize`` does not read it. There is no
   ``short_circuit_path_b`` setting in this package.
@@ -103,8 +104,8 @@ class QuorumPolicy:
     # Deprecated, no effect: the same provider with a different model is allowed (identity.py).
     # Still accepted and recorded so older configurations load.
     allow_same_provider_judge: bool = False
-    # After a derive deny, do not attach tool arguments to the judge record.
-    # Set true to send those bytes anyway. Path B still runs either way.
+    # After a derive deny, do not attach tool arguments to the judge record, and do not ask the judges about a
+    # derive_failed call at all (it has nothing to judge). Set true to send those bytes and ask them anyway.
     tool_args_on_derive_deny: bool = False
     # Deprecated, no effect (2026-10-08): a judge is refused when it uses the monitored agent's credential, or is
     # keyless on a keyless agent's address (identity.compare), so there is nothing left for this flag to lift.
@@ -276,6 +277,19 @@ def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | Non
         return f"insufficient_local_judges:{local}<{policy.min_local_judges}"
     if policy.require_local_yes and local == 0:
         return "require_local_yes_without_local_judge"
+    return None
+
+
+def lone_judge_warning(judges: Sequence, policy: QuorumPolicy) -> str | None:
+    """Text for a start-up warning when one judge's yes approves a call while every other judge is down, times
+    out, or abstains: two or more judges, ``required_yes`` 1, and ``min_responding`` 1 (its default then).
+    Allowed, and sometimes meant; but the second judge is then no check at all while it is unreachable
+    (live run 6x, X03). Not a refusal."""
+    n = len(judges)
+    if n >= 2 and policy.required_yes == 1 and (policy.effective_min_responding or 0) <= 1:
+        return (f"quorum: required_yes 1 with {n} judges and min_responding {policy.effective_min_responding}: one "
+                "judge approves a call alone whenever the others are down, time out, or abstain. Set "
+                f"min_responding: {n} to require every judge to answer, or required_yes: 2")
     return None
 
 

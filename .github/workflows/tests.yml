@@ -17,5 +17,5 @@ jobs:
       - name: Install from uv.lock
         run: |
           pip install --only-binary :all: "uv==0.13.0"
-          uv sync --locked --no-build --extra yaml --no-dev --python python --no-managed-python --no-python-downloads
+          uv sync --locked --no-build --extra yaml --extra mcp --no-dev --python python --no-managed-python --no-python-downloads
       - run: .venv/bin/python -m unittest discover -s tests

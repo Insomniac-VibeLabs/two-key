@@ -454,7 +454,7 @@ class ProblemFTests(unittest.TestCase):
         with self.assertRaises(ConstitutionError):
             sign_constitution(PROSE, RULES, key, specs)
 
-    def test_derive_deny_hides_arguments_from_judges_unless_opted_in(self):
+    def test_derive_deny_skips_judges_unless_they_may_see_the_arguments(self):
         key = generate_private_key()
         envelope = sign_constitution(PROSE, RULES, key, SPECS)
 
@@ -486,12 +486,41 @@ class ProblemFTests(unittest.TestCase):
                 self.assertTrue(allowed.allowed, allowed.reason)
             return seen
 
+        # By default an unreadable call reaches no judge (each judge scores only the allowed call); the ledger
+        # still records path_b, as skipped. With tool_args_on_derive_deny the judges see the arguments.
         hidden = run(QuorumPolicy(required_yes=2, parallel=False))
-        self.assertTrue(hidden)
-        self.assertNotIn("tool_args", hidden[0])
-        self.assertEqual(hidden[-1]["tool_args"]["memo"], "visible-on-allow")
+        self.assertEqual(len(hidden), 2)
+        self.assertTrue(all(seen["tool_args"]["memo"] == "visible-on-allow" for seen in hidden))
         shown = run(QuorumPolicy(required_yes=2, parallel=False, tool_args_on_derive_deny=True))
+        self.assertEqual(len(shown), 4)
         self.assertEqual(shown[0]["tool_args"]["secret"], "hide-me")
+
+    def test_a_readable_deny_still_asks_the_judges(self):
+        # Only an unreadable call (derive_failed) skips Path B. A claim that disagrees with the bytes, or a rule
+        # deny, has a real form, so the judges are asked and both results are ledgered.
+        key = generate_private_key()
+        envelope = sign_constitution(PROSE, RULES, key, SPECS)
+        seen = []
+
+        class Rec(FixedJudge):
+            def score(self, constitution_text, action, proposal):
+                seen.append(action.to_record())
+                return super().score(constitution_text, action, proposal)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tk = TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(envelope, key.public_key()),
+                        [Rec("j0", "yes")], private_key=key, quorum=QuorumPolicy(required_yes=1),
+                        allow_test_doubles=True, monitored_agent=TEST_AGENT)
+            claim = {"tool": "pay_bill", "amount_usd": 99, "data_class": "financial", "irreversible": True,
+                     "counterparty": "power-co.example"}
+            d = tk.authorize(claim, {"amount": 10, "currency": "usd", "to": "power-co.example"}, "pay")
+            self.assertEqual(d.reason, "amount_mismatch")
+            self.assertEqual(len(seen), 1)
+            self.assertEqual(d.path_b["reason"], "quorum_pass")
+            d = tk.authorize({"tool": "pay_bill", "data_class": "financial", "irreversible": True},
+                             {"currency": "usd", "to": "power-co.example"}, "pay")
+            self.assertEqual((d.reason, d.path_b.get("skipped")), ("derive_failed:amount_missing", True))
+            self.assertEqual(len(seen), 1)
 
     def test_payload_shape_locks_kind_and_does_not_read_contents(self):
         specs = {name: dict(spec) for name, spec in SPECS.items()}

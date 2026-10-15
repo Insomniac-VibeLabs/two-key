@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "two-key"
-version = "0.4.0"
+version = "0.5.0"
 description = "Two-Key: a dual-authorization layer for AI agents (policy VM, judge quorum, single-use tokens, encrypted ledger)."
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -14,6 +14,8 @@ dependencies = ["cryptography>=41"]
 
 [project.optional-dependencies]
 yaml = ["pyyaml>=6"]
+# two-key mcp-proxy: the official MCP Python SDK, and PyYAML for the proxy config.
+mcp = ["mcp>=2.2,<3", "pyyaml>=6"]
 
 [project.urls]
 Homepage = "https://github.com/Insomniac-VibeLabs/two-key"

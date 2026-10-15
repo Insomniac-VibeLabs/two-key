@@ -1,7 +1,7 @@
 # Is this for you?
 
-Beta (pre-1.0), maintainer-reviewed, not independently audited. Not a FIPS 140-3 validated module. Not on PyPI. There is no MCP
-adapter in this release (planned next, issue #2). Package `two-key` version 0.4.0. Tag `v0.4.0` on `main` is the tagged release. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`.
+Beta (pre-1.0), maintainer-reviewed, not independently audited. Not a FIPS 140-3 validated module. Not on PyPI. 0.5.0 adds an MCP
+adapter (a stdio proxy, a spec drafter, caller-supplied facts, and a guard core for any agent loop; issue #2), with the live run 6 follow-ups (CHANGES). Package `two-key` version 0.5.0. Tag `v0.5.0` on `main` is the tagged release; `v0.4.0` is the one before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`.
 `v0.1.6` stays on the previous tree.
 Apache-2.0.
 Crypto is Ed25519 and SHA-256.
@@ -13,6 +13,14 @@ rollback or wipe of the ledger directory alone, but it is not an external
 anchor and does not protect against someone who can also delete or roll
 back that anchor. It can back up its own keys under passphrases (0.3.0).
 That backup is not a seed phrase.
+
+## Contents
+
+<!-- toc -->
+- [Use this if](#use-this-if)
+- [Do not use this if](#do-not-use-this-if)
+- [Smallest working shape](#smallest-working-shape)
+<!-- /toc -->
 
 ## Use this if
 

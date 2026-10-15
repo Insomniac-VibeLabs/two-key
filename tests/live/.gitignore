@@ -1,0 +1,14 @@
+# Keys, ledgers, and signed state from a pass, and the self-test's copy of them, at any depth (a copied run tree
+# such as run6x/state/ too). Never commit them.
+state/
+selftest/
+# The private answer key (python3 tests/live/make_cases.py writes it), in any tree. Never send it to a bot.
+cases.jsonl
+__pycache__/
+# A run's outputs at the top of tests/live/, until they are moved into run<N>/ for a test branch (RELAY.md "After
+# COMPLETE"): so a pass in progress is never committed to working by mistake. Anchored, so run<N>/relay/ is not.
+/relay/
+/logs/
+/constitution/
+/RESULTS.md
+/results.json

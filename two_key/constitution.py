@@ -12,14 +12,21 @@ from typing import Any, Mapping
 
 from .action import DATA_CLASSES
 from .canonical import canonical_bytes, canonical_hash
-from .fields import MAX_FIELDS_PER_TOOL, FieldError, check_path, validate_fields
+from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path, has_caller_fields,
+                     has_exact_fields, is_caller, rule_fields, validate_fields)
+from .derive import DOMAIN, is_domain_entry
 from .keys import fingerprint, sign, verify
 from .policy_vm import ConstitutionError, validate_rules
 
 FORMAT_V1 = "two-key-constitution-v1"
 # v2 may carry a custom-field registry (``fields``) and refuses any other unknown signed key.
 FORMAT_V2 = "two-key-constitution-v2"
-ENVELOPE_FORMATS = ("auto", "v2")
+# v3 may also declare caller-supplied fields (``source: caller``) and ``case: exact`` string fields, and mark a
+# field ``not_applicable`` for a tool. The format label is outside the signed bytes, so the meaning comes from
+# the signed bytes only: a v1 or v2 label on a constitution that uses any of them is refused, never read as an
+# argument field, a case-insensitive field, or a mapping.
+FORMAT_V3 = "two-key-constitution-v3"
+ENVELOPE_FORMATS = ("auto", "v2", "v3")
 _V2_SIGNED_KEYS = {"prose", "hard_rules", "tool_specs", "fields"}
 
 
@@ -76,10 +83,85 @@ def _overlaps(a: str, b: str) -> bool:
     return a == b or a.startswith(b + ".") or b.startswith(a + ".")
 
 
-def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: list, take) -> dict:
-    """``tool_specs.<tool>.fields``: declared field name -> {json_path}. Adds each path to ``control_paths``.
+def _field_mapping(where: str, defn: Mapping, entry: Any) -> dict:
+    """One field's mapping: ``{json_path}`` for an argument field; ``{source: caller}`` or
+    ``{source: caller, json_path}`` for a caller-supplied fact (the path is where the tool receives it)."""
+    if is_caller(defn):
+        if not isinstance(entry, Mapping) or entry.get("source") != "caller" or set(entry) - {"source", "json_path"}:
+            raise ConstitutionError(f"{where}: a caller-supplied field maps as {{source: caller}} or "
+                                    "{source: caller, json_path: ...}")
+        return dict(entry)
+    if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
+        if isinstance(entry, Mapping) and "source" in entry:
+            raise ConstitutionError(f"{where}: source: caller needs the field declared source: caller under fields:")
+        raise ConstitutionError(f"{where}: expected json_path only, or not_applicable")
+    return dict(entry)
 
-    A path must not equal, contain, or sit under another declared path, compared without regard to case.
+
+V3_FEATURES = ("caller-supplied fields (source: caller), case: exact fields, not_applicable marks, and @domain "
+               "allow entries")
+
+
+def uses_v3(registry: Mapping, specs: Mapping) -> bool:
+    """True when the signed bytes need a 0.5.0 reader: a caller-supplied or ``case: exact`` field, or a
+    ``not_applicable`` mark."""
+    return has_caller_fields(registry) or has_exact_fields(registry) or any(
+        entry == NOT_APPLICABLE for spec in specs.values() for entry in (spec.get("fields") or {}).values()) or any(
+        is_domain_entry(item) for spec in specs.values() for party in spec.get("counterparties") or []
+        for item in party.get("allow") or [])
+
+
+def domain_allow_notes(specs: Mapping) -> list[tuple[bool, str]]:
+    """What each @domain allow entry admits, for the signer. Takes canonical tool specs.
+
+    ``warn`` is true when the tool also passes text Path A does not read (a payload that is not a number): anyone at
+    that domain can receive it, and only the judges check what it says (live run 6x, X31)."""
+    out: list[tuple[bool, str]] = []
+    for tool in sorted(specs):
+        spec = specs[tool]
+        unread = [p["json_path"] for p in spec.get("payload") or [] if p.get("shape") != "number"]
+        for party in spec.get("counterparties") or []:
+            domains = [item for item in party.get("allow") or [] if is_domain_entry(item)]
+            if not domains:
+                continue
+            text = f"tool {tool!r}: {party['json_path']} allows any address at {', '.join(domains)}"
+            if unread:
+                text += (f"; Path A does not read {', '.join(unread)}, so anyone there can receive what it carries, "
+                         "and only the judges check it")
+            out.append((bool(unread), text))
+    return out
+
+
+MAX_MISSING_SHOWN = 100
+
+
+def _require_field_decisions(specs: Mapping, rules: list) -> None:
+    """Every tool decides each field a deny_if_fields rule reads: it maps the field, or marks it not_applicable.
+
+    A forgotten mapping would hand the tool the field's default, which can switch the rule off for it without
+    a word. It is refused here, at signing and on load, for argument and caller-supplied fields alike.
+    """
+    read = rule_fields(rules)
+    missing = [f"tool_specs.{tool}.fields.{name} ({'rule' if len(ids) == 1 else 'rules'} "
+               f"{', '.join(repr(i) for i in ids)})"
+               for tool in sorted(specs) for name, ids in sorted(read.items())
+               if name not in (specs[tool].get("fields") or {})]
+    if missing:
+        # Every one, so a principal fixes them in one pass (live run 6z: eight of eleven were shown); bounded only
+        # against a pathological file.
+        shown = "; ".join(missing[:MAX_MISSING_SHOWN]) + (
+            f"; and {len(missing) - MAX_MISSING_SHOWN} more" if len(missing) > MAX_MISSING_SHOWN else "")
+        raise ConstitutionError(
+            "each tool must map every field a deny_if_fields rule reads, or mark it not_applicable "
+            f"(name: not_applicable under the tool's fields:): {shown}")
+
+
+def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: list, take) -> dict:
+    """``tool_specs.<tool>.fields``: declared field name -> mapping, or ``not_applicable`` for a field this tool
+    does not carry (it gets the signed default). Adds each path to ``control_paths``.
+
+    A path must not equal, contain, or sit under another declared path, compared without regard to case. A
+    caller-supplied field may have no path (the tool does not receive it).
     """
     out: dict[str, dict] = {}
     if mapped is None:
@@ -92,8 +174,13 @@ def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: li
         where = f"tool_specs.{tool}.fields.{fname}"
         if not isinstance(fname, str) or fname not in registry:
             raise ConstitutionError(f"{where}: not a declared field (add it under fields:)")
-        if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
-            raise ConstitutionError(f"{where}: expected json_path only")
+        if entry == NOT_APPLICABLE:
+            out[fname] = NOT_APPLICABLE
+            continue
+        entry = _field_mapping(where, registry[fname], entry)
+        if "json_path" not in entry:
+            out[fname] = {"source": "caller"}
+            continue
         try:
             path = check_path(_json_path(entry["json_path"], where), where)
         except FieldError as e:
@@ -103,7 +190,7 @@ def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: li
             if _overlaps(path, other):
                 raise ConstitutionError(f"{where}: field path {path!r} overlaps the path {other!r}")
         control_paths.append(path)
-        out[fname] = {"json_path": path}
+        out[fname] = {"json_path": path, **({"source": "caller"} if is_caller(registry[fname]) else {})}
     return out
 
 
@@ -200,6 +287,13 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
             if not isinstance(allow, list) or not allow or any(not isinstance(item, str) or not item.strip() for item in allow):
                 raise ConstitutionError(f"{where}.allow: expected a non-empty list of strings")
             canonical = sorted({item.strip().casefold() for item in allow})
+            for item in canonical:
+                if "*" in item:
+                    raise ConstitutionError(f"{where}.allow: {item!r}: wildcards are not supported; list each "
+                                            "party, or use @domain for every address at one domain")
+                if is_domain_entry(item) and not DOMAIN.fullmatch(item[1:]):
+                    raise ConstitutionError(f"{where}.allow: {item!r} is not a domain entry: @ and an ASCII "
+                                            "host name such as @example.org (no subdomain patterns)")
             party_out.append({"json_path": path, "allow": canonical})
         # A payload path is copied unread. It must not cover, or sit under, a path Path A reads,
         # compared without regard to case.
@@ -251,6 +345,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
     extra_tools = [tool for tool in out if allow and tool not in allow]
     if extra_tools:
         raise ConstitutionError(f"tool_specs for tool(s) not in the allow list: {extra_tools}")
+    _require_field_decisions(out, rules)
     return out
 
 
@@ -313,8 +408,11 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
     """Sign prose, hard rules, tool specs, and the optional custom-field registry.
 
     ``envelope_format`` is the principal's choice at signing time. ``auto`` (the default) writes
-    ``v1``, byte for byte as before, when there are no custom fields, and ``v2`` when there are.
-    ``v2`` always writes ``v2``. An install older than custom fields refuses a ``v2`` envelope.
+    ``v1``, byte for byte as before, when there are no custom fields, ``v2`` when there are, and ``v3`` when
+    a field is caller-supplied (``source: caller``) or ``case: exact``, or a tool marks one
+    ``not_applicable``. ``v2`` always writes at least ``v2``, and ``v3`` always writes ``v3``. None of those
+    can be signed as ``v2``. An install older than custom fields refuses a ``v2`` envelope; one before 0.5.0
+    refuses ``v3``.
     """
     if envelope_format not in ENVELOPE_FORMATS:
         raise ConstitutionError(f"envelope_format must be one of {list(ENVELOPE_FORMATS)}")
@@ -334,9 +432,18 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
     }
     if registry:
         signed["fields"] = registry
+    v3 = uses_v3(registry, signed["tool_specs"])
+    if v3 and envelope_format == "v2":
+        raise ConstitutionError(f"{V3_FEATURES} need a v3 constitution")
+    if v3 or envelope_format == "v3":
+        fmt = FORMAT_V3
+    elif registry or envelope_format == "v2":
+        fmt = FORMAT_V2
+    else:
+        fmt = FORMAT_V1
     signature = sign(private_key, canonical_bytes(signed))
     return {
-        "format": FORMAT_V2 if registry or envelope_format == "v2" else FORMAT_V1,
+        "format": fmt,
         "signed": signed,
         "signature": signature,
         "fingerprint": fingerprint(private_key.public_key()),
@@ -357,7 +464,7 @@ def load_envelope(path: Path | str) -> dict:
 
 def verify_signed(envelope: dict, public_key) -> Constitution:
     fmt = envelope.get("format") if isinstance(envelope, dict) else None
-    if fmt not in (FORMAT_V1, FORMAT_V2):
+    if fmt not in (FORMAT_V1, FORMAT_V2, FORMAT_V3):
         if isinstance(fmt, str) and fmt.startswith("two-key-concept-constitution"):
             raise ConstitutionSignatureError(
                 "constitution signed by two-key-concept (before two-key 0.4.0); re-sign it with "
@@ -368,10 +475,10 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
         raise ConstitutionSignatureError("missing signed body")
     if not verify(public_key, canonical_bytes(signed), envelope.get("signature") or ""):
         raise ConstitutionSignatureError("constitution signature failed")
-    if fmt == FORMAT_V2:
+    if fmt in (FORMAT_V2, FORMAT_V3):
         extra = set(signed) - _V2_SIGNED_KEYS
         if extra:
-            raise ConstitutionError(f"unknown signed key(s) {sorted(map(str, extra))} in a v2 constitution")
+            raise ConstitutionError(f"unknown signed key(s) {sorted(map(str, extra))} in a {fmt[-2:]} constitution")
     elif "fields" in signed:
         raise ConstitutionError("custom fields need a v2 constitution")
     prose = signed.get("prose")
@@ -382,8 +489,12 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
         registry = validate_fields(signed.get("fields"))
     except FieldError as e:
         raise _field_error(e) from None
+    if has_caller_fields(registry) and fmt != FORMAT_V3:
+        raise ConstitutionError("caller-supplied fields (source: caller) need a v3 constitution")
     rules = validate_rules(rules, fields=registry)
     if "tool_specs" not in signed:
         raise ConstitutionError("tool_specs required")
     specs = validate_tool_specs(signed["tool_specs"], rules, registry)
+    if uses_v3(registry, specs) and fmt != FORMAT_V3:
+        raise ConstitutionError(f"{V3_FEATURES} need a v3 constitution")
     return Constitution(prose, rules, envelope, specs, True, registry)

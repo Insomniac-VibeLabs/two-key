@@ -1,6 +1,12 @@
 # Threat model
 
-This is the design model for `two-key` 0.4.0. Tag `v0.4.0` on `main` is the tagged release. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+This is the design model for `two-key` 0.5.0. Tag `v0.5.0` on `main` is the tagged release; `v0.4.0` renamed the package and its formats. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+0.5.0 adds the MCP proxy (`two-key mcp-proxy`), the spec drafter
+(`two-key mcp-draft-specs`), caller-supplied facts (`source: caller`, constitution v3), and the
+guard core (`two_key/guard.py`), described below, and the run 6 follow-ups: every tool decides
+each field a rule reads (`not_applicable`), `case: exact` fields, `@domain` allow entries, no
+judges for a call that cannot be read, and warnings for one judge that can approve alone and
+for an undescribed payee or amount in a draft.
 It is not a penetration test and it is not an independent review. The package is
 beta (pre-1.0): maintainer-reviewed with live LLM testing and automated
 scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
@@ -9,6 +15,20 @@ SHA-256, and AES-256-GCM from the `cryptography` package.
 How to report a vulnerability is [SECURITY.md](../SECURITY.md). The longer
 narrative is the README. This file is the register. If the two disagree,
 the code wins, then this file should be corrected.
+
+## Contents
+
+<!-- toc -->
+- [Assets](#assets)
+- [Actors](#actors)
+- [Trust boundaries](#trust-boundaries)
+- [What this design is meant to stop](#what-this-design-is-meant-to-stop)
+- [Assumptions](#assumptions)
+- [Residual risks](#residual-risks)
+- [Out of scope](#out-of-scope)
+- [Planned changes to this model](#planned-changes-to-this-model)
+- [What to re-check when the code changes](#what-to-re-check-when-the-code-changes)
+<!-- /toc -->
 
 ## Assets
 
@@ -44,7 +64,17 @@ the code wins, then this file should be corrected.
 - The wrapped data key stored inside the ledger directory.
 - Judge credentials and monitored-agent credentials. They are not the same secret.
 - The capability token and the argument bytes it is bound to.
-- Tool credentials, which only the gateway should hold.
+- Tool credentials, which only the gateway should hold. Behind the MCP
+  proxy, the upstream server's credential (`upstream.env`), which only the
+  proxy and its upstream child should hold.
+- The MCP proxy's `proxy.yaml`, above all `upstream.schema_digest`,
+  `upstream.command`, `tools.<id>.facts`, and `allow_unresolved_identity`.
+  Whoever can change it can accept a changed tool schema, run another
+  server, point a fact hook at other code, or start beside an unresolved
+  judge identity. It is policy, like the constitution, but it is not signed.
+- Fact hooks and the system of record they read. A `source: caller` field
+  is whatever the hook returns; whoever can change the hook or the record
+  decides that fact.
 - The ledger head and the hash chain.
 
 ## Actors
@@ -52,7 +82,12 @@ the code wins, then this file should be corrected.
 - The principal, who holds the signing key and writes the constitution.
 - An untrusted agent, local or cloud. Hosting is not trust.
 - Path B judges, each with its own credential. A judge can be wrong.
-- The caller that invokes authorize, then the gateway.
+- The caller that invokes authorize, then the gateway, and supplies
+  caller facts (`facts=`) from its own system of record. Trusted, like the
+  operator: a fact hook is operator code.
+- The upstream MCP server behind the proxy: third-party code, often
+  fetched fresh. Its tool descriptions, hints, and results are untrusted
+  text.
 - Anyone who can read or write the ledger directory, the ledger key, or the
   witness key.
 
@@ -70,17 +105,27 @@ the code wins, then this file should be corrected.
   already could with a bad proposal; it cannot turn a decline into an allow. A cloud judge must not reuse an agent credential.
   A missing session is a deny (`cloud_judge_session_required`).
 - Caller to Path A. The VM sees the normalized action record, not the proposal.
+- Caller facts to Path A. A `source: caller` field (constitution v3) takes
+  its value from `facts=` only, never from the arguments, the claim, or
+  `Action.raw`. Arguments that write it deny (`caller_field_in_arguments`),
+  a missing fact denies (`field_missing`), and a fact the tool does not map
+  denies (`fact_not_mapped`). The record names these fields in
+  `fact_fields`. The gateway takes the facts again at redemption; a value
+  that differs from the token's form is `fact_mismatch`.
 - Caller to Path B. Judges see the constitution prose and the normalized
   record. Non-empty tool arguments are attached on that record as
   `tool_args`, except after a derive deny (`derive_failed:*`,
   `amount_mismatch`, `counterparty_mismatch`, `irreversible_mismatch`).
   `tool_args_on_derive_deny` defaults false. Set it true to send those
-  bytes. Path B still runs either way. Other denies still attach the
-  arguments. The proposal is withheld unless that judge sets
+  bytes. Without it, a `derive_failed:` call reaches no judge (Path B is
+  ledgered as `skipped:derive_failed`); mismatches and other denies still
+  go to the judges, which attach the arguments. The proposal is withheld unless that judge sets
   `receives_proposal` or the quorum policy is `judge_inputs: record_and_proposal`.
   The default is record-only.
 - Both paths run once the call is well-formed and within limits; a malformed or oversized
-  call is denied before either path (size and digest only). `require_path_a_first` is stored on the policy and
+  call is denied before either path (size and digest only). A call that cannot be read under its
+  spec (`derive_failed:`) skips the judges unless `tool_args_on_derive_deny` is set: Path A has denied
+  it, and the judges would get an empty form. `require_path_a_first` is stored on the policy and
   copied into `to_record`. `TwoKey.authorize` does not read it. There is no
   `short_circuit_path_b` setting on `TwoKey`.
 - Gateway to the tool. The token is checked against the caller's argument
@@ -88,6 +133,22 @@ the code wins, then this file should be corrected.
   function is called with declared paths only. Unnamed keys are not passed
   in. A counterparty path is the canonical party, not the raw spelling.
   Nothing in this package scans those bytes.
+- Agent host to the MCP proxy (stdio). The host sees the signed tools only,
+  under their signed ids, with the pinned fields (`name`, `title`,
+  `description`, `inputSchema`, `outputSchema`, `annotations`). Each
+  `tools/call` is authorized with a fixed claim and proposal from
+  `proxy.yaml`; the agent writes only the arguments. Caller-supplied
+  paths are removed from the `inputSchema` the host sees; their values
+  come from the `tools.<id>.facts` hooks, which run in the proxy. A name
+  the proxy does not show is refused and ledgered (`tool_not_offered`). A
+  refusal returns a reason code, never a value.
+- MCP proxy to the upstream server (stdio, a child process). The server
+  receives only the projected arguments of a redeemed token, and only the
+  variables in `upstream.env` plus the SDK's minimal set. It gets no
+  sampling, elicitation, or roots callbacks, and its resources, prompts,
+  and instructions are not forwarded. Its tool list is read once, at start,
+  and checked against `upstream.schema_digest`: a mismatch refuses to start
+  unless `on_schema_change: warn`.
 - Process to the ledger. Appends and checkpoints take a POSIX `flock` on
   `<ledger>.lock` next to the ledger directory. If the file changed since
   this process loaded it, the write is refused. Redemption also takes a
@@ -149,6 +210,10 @@ the code wins, then this file should be corrected.
 
 ## Assumptions
 
+- Behind the MCP proxy: the agent host cannot reach the upstream server or
+  its credential by another path, cannot read the proxy's keys,
+  environment, or `proxy.yaml`, and the upstream server runs as an OS user
+  that cannot read them either (HOWTO "Key custody").
 - The gateway is the only holder of tool credentials. This package cannot
   stop an agent that can call the tool by another path.
 - The principal key and the ledger key are not both in the attacker's
@@ -160,18 +225,26 @@ the code wins, then this file should be corrected.
   names. Every loaded constitution has `tool_specs`. A tool with no spec
   does not redeem. A counterparty path requires `allow`. A party off that
   list does not authorize (`counterparty_not_allowed`), unless a blocked
-  party is also present, in which case the block rule still denies.
+  party is also present, in which case the block rule still denies. A
+  domain entry (`@example.org`, v3) admits a plain address at exactly that
+  ASCII domain, never a subdomain or an address with a non-plain local
+  part; block lists stay exact.
   `deny_unmapped` defaults off. An unnamed key does not reach the tool.
   Setting the flag denies the call instead (`unmapped_field`). Custom
   fields (`fields:`, `deny_if_fields`) are read the same way: from the
-  argument path the signed spec names, never from the agent's claim. A tool
-  that does not map a field gets that field's signed default.
+  argument path the signed spec names, never from the agent's claim, or,
+  for a `source: caller` field, from `facts=` only. Every tool maps each
+  field a rule reads or marks it `not_applicable`; a marked tool gets the
+  field's signed default. A forgotten decision does not sign or load.
 - Two-Key does not verify facts about the world. The agent writes the
   arguments, so a custom field such as `po_matched` is the agent's
   assertion; a rule on it checks consistency, not truth (live run 5c, C05:
   `po_matched: true` on a mismatched invoice was paid). The tool, or the
   integration calling Two-Key, must check such facts against the system of
-  record. There is no input for caller-supplied facts yet.
+  record. A `source: caller` field moves that check into the integration's
+  fact hook: Two-Key then checks that the agent did not write the fact and
+  that it did not change between authorize and redemption, not that the
+  hook is right.
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are off by default; `high_assurance`
   turns them on. A judge that is not the same agent may still share a
@@ -181,6 +254,12 @@ the code wins, then this file should be corrected.
   `model_prefix` resolution are operator-attested and not verified; they
   change which warnings print, not what is refused. Two names for one
   server (a CNAME, or a host name and its IP) are two addresses.
+- Each judge answers a ballot from that request alone. Two-Key sends no
+  earlier calls, at temperature 0. A judge endpoint that keeps memory across
+  ballots (a persistent agent, a chat with saved memory) lets text the agent
+  wrote in one call reach the vote on another, outside what the ledger
+  records. Two-Key cannot detect it; give each judge a fresh context per
+  ballot (JUDGES_AND_QUORUM "What a judge is").
 - Without a local judge, the constitution prose, the action record, and any
   attached tool arguments go to the cloud judges' vendors.
 
@@ -190,12 +269,67 @@ These are accepted or still open. They are not bugs the design already
 claims to close.
 
 - No independent review, and no production deployment.
-- Custom Path A fields (0.3.0). A tool that does not map a field gets the
-  field's signed default, as a tool with no amount spec has `amount_usd` 0.
-  A mapping the operator forgot is therefore silent. Rules written as
+- MCP proxy (0.5.0):
+  - An agent that can reach the upstream server directly, or holds its
+    credential, bypasses the proxy entirely. The proxy cannot see or stop
+    that.
+  - An upstream server run as the proxy's OS user can read every key the
+    proxy holds (principal, ledger, witness, capability), the judge keys,
+    and the proxy's environment through `/proc`. The proxy does not change
+    users itself; `upstream.command` must (HOWTO "Key custody").
+  - The schema pin covers what the agent is shown, not what the server
+    does. A server can change its behavior, or read an argument
+    differently, without changing a schema.
+  - `on_schema_change: warn` starts with a changed, possibly poisoned,
+    description; the warning goes to stderr only.
+  - An upstream result reaches the agent unread. Injected text in a result
+    is not scanned; each later call is still authorized on its own.
+  - A call that times out (`call_timeout_seconds`) is recorded as
+    `redemption_aborted`, but the server may still have done the work.
+  - A fact-like argument still mapped by `json_path` alone is the agent's
+    assertion; the drafter leaves such properties out of the spec, but a
+    principal who maps one back accepts the agent's word (run 5c, C05).
+    Declare it `source: caller` instead.
+  - Deny reasons show the agent the rule id that denied
+    (`rule_denied:<id>`). A rule id that encodes a threshold tells the agent
+    that threshold.
+  - One call runs at a time; a slow judge round delays the next call.
+  - The proxy does not verify the upstream server's identity beyond the
+    command it runs. A changed package behind an unpinned `npx -y` shows
+    up only if its schema changes.
+- Judges not asked about an unreadable call (0.5.0). A `derive_failed:`
+  call is denied without a judge opinion in the ledger, unless
+  `tool_args_on_derive_deny` sends the arguments to the judges; Path B is
+  recorded as `skipped:derive_failed`. The call was already denied, so no
+  allow is possible; the ledger simply has one opinion fewer.
+- Caller-supplied facts (0.5.0):
+  - A fact hook is trusted code that receives agent-written arguments. A
+    hook that returns an argument (`arguments["po_matched"]`) turns the
+    fact back into the agent's assertion. A hook that looks a record up by
+    an id the agent wrote must also compare the record to the call (payee,
+    amount); otherwise the agent can cite a matched invoice for another
+    payment.
+  - Facts are looked up before authorize and again just before the tool
+    runs. A value that changes after the second lookup is not seen: the
+    window is narrowed, not closed.
+  - A hand-written integration that passes facts to `authorize` and not to
+    `invoke` gets `fact_mismatch` (closed). One that passes facts it took
+    from the agent defeats the field; the library cannot tell.
+  - Judges see the fact values in the record, as they see other fields.
+- Domain allow entries (0.5.0). `@example.org` admits every plain address
+  at that domain, including mailboxes created later and ones an attacker
+  controls inside it. Path A then checks the domain, not the person; when
+  the tool carries free text, only the judges check the content (run 6x,
+  X31). It is the principal's signed choice, and signing warns.
+- Custom Path A fields (0.3.0). A tool marked `not_applicable` for a field
+  gets the field's signed default, as a tool with no amount spec has
+  `amount_usd` 0. Since 0.5.0 a forgotten mapping is refused at signing and
+  on load, but a wrong mark is still the principal's error. Rules written as
   allow-lists (`not_in`) and restrictive defaults fail closed in that case;
   rules written as deny-lists (`in`, `eq`) do not. A deny-list on a
-  `string` field also misses spelling variants (`prod` and `production`).
+  `string` field also misses spelling variants (`prod` and `production`),
+  and on a `case: exact` field it misses case variants (`FLD-A`, `fld-a`),
+  which is wrong when the tool itself ignores case; signing warns.
   Characters are controlled, meaning is not: lookalike letters from another
   script, invisible characters, and direction controls deny, but this
   package does not know that two words mean the same thing. A field
@@ -249,10 +383,13 @@ claims to close.
   `deny_counterparties`, so a blocked party is not hidden behind an allowed
   one. A derived amount that is not finite or above the action sanity cap
   is `amount_unreadable`.
-- A derive deny does not skip Path B. Judges still receive the normalized
-  action record. They do not receive `tool_args` unless
-  `tool_args_on_derive_deny` is true. A deny that is not a derive deny still
-  attaches non-empty arguments. The tool still does not run on a deny.
+- A derive mismatch (`amount_mismatch`, `counterparty_mismatch`,
+  `irreversible_mismatch`) does not skip Path B. Judges still receive the
+  normalized action record, without `tool_args` unless
+  `tool_args_on_derive_deny` is true. A `derive_failed:` call skips the
+  judges unless that flag is true, since they would get a form with nothing
+  derived in it. A deny that is not a derive deny still attaches non-empty
+  arguments. The tool still does not run on a deny.
 - The gateway's verifier has no capability-minting private key. The minting
   key is the capability key outside the ledger directory. The principal
   key remains on the shared ledger object because the ledger head needs it.
@@ -381,85 +518,101 @@ claims to close.
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md). None of what follows is in 0.3.0, and nothing in
-this section describes current behavior. Each item is added to the sections
-above in the release that ships it. Key backup and custom Path A fields
-shipped in 0.3.0 and are described above, not here.
+These come from [ROADMAP.md](../ROADMAP.md), in its order: the MCP adapter
+(0.5.0), DLP and antivirus hooks (0.6.0), the SIEM export (0.7.0), then 1.0;
+the rest come after 1.0. None of what follows is in a release yet, and
+nothing here describes current behavior except where an item says it is
+built. Each item is added to the sections above in the release that ships
+it. Key backup and custom Path A fields shipped in 0.3.0 and are described
+above, not here.
 
-- Ledger export for SIEM (target 0.4). New boundary: ledger to exporter to
+- MCP adapter (0.5.0). The stdio proxy, the spec drafter, and
+  caller-supplied facts with the guard core (#2 P1, design reviewed by the
+  maintainer) are built and described above; live test run 6 runs before
+  the release. HTTP transports come later. A `tool_specs` draft made from
+  MCP schemas stays a proposal for the principal to review and sign, not
+  trusted input.
+- Inspection hooks for DLP and antivirus (0.6.0, next). New trust boundary:
+  the scanner. A scanner error, timeout, or missing result is meant to be a
+  deny. A scanner sees only what the tool spec lets through, so a payload
+  value it cannot read stays a residual risk. Where the hook runs relative to
+  the judges is an open choice, because cloud judges receive `tool_args`
+  today.
+- Ledger export for SIEM (0.7.0). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.
   It is meant to use a field allowlist that leaves out the proposal text and
   the derived amount, counterparty, and custom field values, which the
   ledger holds today.
   Whoever can read the SIEM becomes a new audience for ledger metadata.
-- Inspection hooks for DLP and antivirus (target 0.5). New trust boundary:
-  the scanner. A scanner error, timeout, or missing result is meant to be a
-  deny. A scanner sees only what the tool spec lets through, so a payload
-  value it cannot read stays a residual risk. Where the hook runs relative to
-  the judges is an open choice, because cloud judges receive `tool_args`
-  today.
-- MCP adapter (target 0.6). New boundary: MCP client to proxy to MCP server.
-  The assumption that the gateway is the only holder of tool credentials
-  becomes the central one, because an agent that can reach an MCP server
-  directly bypasses the proxy. A `tool_specs` draft made from MCP schemas is
-  a proposal for the principal to review and sign, not trusted input.
-- PKI and certificate recovery (target 0.7). New assets: the certificate
-  authority key (a personal local CA or an enterprise CA), issued
-  certificates, the revocation list, and recovery material (a backup bundle,
-  a recovery key, or key shares). New boundary: certificate validation, meaning
-  chain building to a configured trust anchor, validity period, key usage, and
-  revocation. A stolen CA key lets an attacker mint identities the package
-  accepts, so it is treated as equal to the principal key or higher. Recovery
-  is itself an attack path: a stolen recovery key, enough colluding or
-  coerced custodians, or a social-engineered recovery request can replace an
-  identity. Recovery is meant to be a ledger event and to end with the old
-  certificate revoked. Validity checks depend on a correct clock. Existing
-  bare-key setups stay valid.
-- Post-quantum signatures (target 0.8). New assets: a second signing key per
-  signing role, and larger signatures in the constitution, ledger head, and
-  possibly tokens. A hybrid signature is meant to verify only when both
-  halves verify. New risk to design against: a downgrade, where the
-  post-quantum half is stripped. Every signed format carries an algorithm
-  identifier, and a verifier that expects the hybrid form refuses a
-  classical-only one. Existing 0.2.x ledgers stay readable.
-- FIPS approved mode (target 0.9). New boundary: the cryptographic provider.
-  The mode is meant to refuse to start unless the library runs on a FIPS
-  140-3 validated module in approved mode, and to refuse algorithms outside
-  the approved set. The module's certificate and version are meant to be
-  recorded in `constitution_loaded`. The claim is limited to "runs on a
-  validated module". This package stays unvalidated, and the mode does not
-  cover the rest of the host. How a hybrid signature is treated in approved
-  mode depends on what the validated module supports, and is decided when
-  the mode is built.
-- Local GUI (target 0.10). New boundary: browser to a local server. It is
-  meant to bind to loopback only and to require a per-session token, which
-  is meant to address other local pages, cross-site requests, and DNS
-  rebinding. It is the first place decrypted ledger content is displayed, so
-  anyone who can see the screen or reach the local port is a new audience. It
-  is meant to show digests, sizes, and reason codes, not argument values.
-  Filtering by judge needs per-judge ballot records, which the ledger does
-  not hold today. They are meant to carry the judge id, the vote, and a
-  capped error only, never the rationale text, which is model output and may
-  quote arguments.
-  Configuration edits change policy, so the GUI is meant never to hold the
-  principal key. It prepares a constitution and hands it to the existing
-  signing command. A GUI that is reachable from another machine is out of
-  scope.
-- More spec field types (planned, not scheduled). Custom `boolean`,
-  `integer`, `enum`, and `string` fields shipped in 0.3.0 and are described
-  above. Decimal, URL, path, email, and opaque-bytes kinds are not built,
-  and `amount` and `counterparty` remain special kinds.
+- Judge history summary (#1, before 1.0). Judges are meant to receive a
+  summary of recent decisions that `TwoKey` builds from its own ledger, on
+  by default. New flows: the ledger is read during authorization, and cloud
+  judges receive the counterparty's history on every call. The summary is
+  meant to carry structured fields and library reason codes only, never
+  proposal text, decline reasons, or rationales, and a counterparty or tool
+  name only when it is signed; its digest is meant to be ledgered with the
+  decision. It needs its own maintainer security review before code.
+- After 1.0, not scheduled:
+  - PKI and certificate recovery. New assets: the certificate
+    authority key (a personal local CA or an enterprise CA), issued
+    certificates, the revocation list, and recovery material (a backup bundle,
+    a recovery key, or key shares). New boundary: certificate validation, meaning
+    chain building to a configured trust anchor, validity period, key usage, and
+    revocation. A stolen CA key lets an attacker mint identities the package
+    accepts, so it is treated as equal to the principal key or higher. Recovery
+    is itself an attack path: a stolen recovery key, enough colluding or
+    coerced custodians, or a social-engineered recovery request can replace an
+    identity. Recovery is meant to be a ledger event and to end with the old
+    certificate revoked. Validity checks depend on a correct clock. Existing
+    bare-key setups stay valid.
+  - Post-quantum signatures. New assets: a second signing key per
+    signing role, and larger signatures in the constitution, ledger head, and
+    possibly tokens. A hybrid signature is meant to verify only when both
+    halves verify. New risk to design against: a downgrade, where the
+    post-quantum half is stripped. Every signed format carries an algorithm
+    identifier, and a verifier that expects the hybrid form refuses a
+    classical-only one. Existing 0.2.x ledgers stay readable.
+  - FIPS approved mode. New boundary: the cryptographic provider.
+    The mode is meant to refuse to start unless the library runs on a FIPS
+    140-3 validated module in approved mode, and to refuse algorithms outside
+    the approved set. The module's certificate and version are meant to be
+    recorded in `constitution_loaded`. The claim is limited to "runs on a
+    validated module". This package stays unvalidated, and the mode does not
+    cover the rest of the host. How a hybrid signature is treated in approved
+    mode depends on what the validated module supports, and is decided when
+    the mode is built.
+  - Local GUI. New boundary: browser to a local server. It is
+    meant to bind to loopback only and to require a per-session token, which
+    is meant to address other local pages, cross-site requests, and DNS
+    rebinding. It is the first place decrypted ledger content is displayed, so
+    anyone who can see the screen or reach the local port is a new audience. It
+    is meant to show digests, sizes, and reason codes, not argument values.
+    Filtering by judge uses the per-judge ballot records planned for 1.0
+    with the judge history summary (#1): judge id, vote, confidence, error
+    class, and a rationale digest, never the rationale text, which is model
+    output and may quote arguments. The ledger does not hold them today.
+    Configuration edits change policy, so the GUI is meant never to hold the
+    principal key. It prepares a constitution and hands it to the existing
+    signing command. A GUI that is reachable from another machine is out of
+    scope.
+  - More spec field types. Custom `boolean`,
+    `integer`, `enum`, and `string` fields shipped in 0.3.0 and are described
+    above. Decimal, URL, path, email, and opaque-bytes kinds are not built,
+    and `amount` and `counterparty` remain special kinds.
 
 ## What to re-check when the code changes
 
-- `two_key/core.py`: both paths run once the call is well-formed and within limits, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
-- `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies. A description is never compiled, sent to a judge, or used in a reason.
-- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children.
-- `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
-- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
+- `two_key/core.py`: both paths run once the call is well-formed and within limits, except that a `derive_failed:` call skips the judges unless `tool_args_on_derive_deny` is set (ledgered `skipped:derive_failed`), and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
+- `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies; a `case: exact` ASCII string is compared and passed on as written, and signs only as v3. A description is never compiled, sent to a judge, or used in a reason.
+- `two_key/derive.py`: JSON paths only. `party_allowed`: an exact entry, or an `@domain` entry for an address whose domain equals it (ASCII host name, no subdomain) and whose local part is plain (atext and dots); `@domain` itself is not a party. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
+- `two_key/constitution.py`: a caller field, a `case: exact` field, a `not_applicable` mark, or an `@domain` allow entry signs only as v3; a v1 or v2 envelope with one is refused. A constitution without them keeps its v1 or v2 bytes. Every tool maps each field a `deny_if_fields` rule reads or marks it `not_applicable`, at signing and on load. An allow entry with `*`, or a domain entry that is not an ASCII host name, does not sign; `deny_counterparties` refuses domain entries.
+- `two_key/quorum.py`: `lone_judge_warning` warns, never refuses, when one judge can approve alone (required_yes 1, min_responding 1, two or more judges). An abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
+- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
+- `two_key/guard.py`: a fixed claim and proposal per tool, never the agent's. Facts are looked up before `authorize` and again before `invoke`, under one lock. A hook that raises or returns None leaves its fact out (deny). Every caller field of a guarded tool has a hook, and no other field does.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
+- `two_key/mcp_proxy/`: only `sdk.py` imports the MCP SDK. Each `tools/call` runs `authorize`, then `gateway.invoke` in the same process; the upstream call is the gateway's registered tool, with projected arguments. Only signed tools are shown, under their signed ids; any other name is `tool_not_offered`, ledgered. Caller-supplied paths are removed from the `inputSchema` shown. `mcp_proxy_started` is ledgered before serving; if that fails, the proxy does not start. Fact hooks load at start; one that does not import refuses to start. The schema digest covers exactly the fields shown, as the upstream lists them (before caller paths are removed); a mismatch refuses unless `on_schema_change: warn`. `unresolved_identity` refuses unless `allow_unresolved_identity: true`. The claim is the per-tool policy only (`floor`, a class, or none = classified). The child gets `upstream.env` plus the SDK's minimal set. Nothing but MCP goes to stdout. `draft.py`: placeholders that signing refuses, fact-like properties left out, server text in ASCII comments only. `undescribed_inputs` warns, never refuses, for each input Path A reads that the upstream schema does not describe.
 - `two_key/backup.py`: three bundles; the ledger key and the witness key are never in one file; a wrong passphrase or a tampered bundle is a refusal; restore writes `head.anchor` from the same moment as the ledger and does not delete it. `--replace-ledger` is the only path that overwrites a different ledger, and it also overwrites a key file that differs. A missing anchor on a newer ledger is left missing; the next open adopts that head.

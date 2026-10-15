@@ -6,9 +6,9 @@ testing and automated scanners, not independently audited. Apache-2.0.
 
 Package: two-key
 Import: two_key
-Package version: 0.4.0 (package renamed from two-key-concept). Tag v0.4.0 is on main. Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
+Package version: 0.5.0 (MCP proxy, caller-supplied facts, constitution v3). Tag v0.5.0 is on main; v0.4.0 (package renamed from two-key-concept) too. Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-Not on PyPI. Install the tagged release from git ref v0.4.0 (two-key[yaml] for YAML configs).
+Not on PyPI. Install the tagged release from git ref v0.5.0 (two-key[yaml] for YAML configs, two-key[mcp] for the MCP proxy).
 uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
@@ -27,12 +27,17 @@ before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m u
 (no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
-Both paths run once the call is well-formed and within limits (an oversized or
-malformed call is an early deny before either path). The default needs one judge and has no diversity
-floors; required_yes defaults to min(2, judges). QuorumPolicy.high_assurance
+Both paths run once the call is well-formed, within limits, and readable (an oversized or
+malformed call is an early deny before either path; a derive_failed call skips the judges unless
+tool_args_on_derive_deny, and path_b is ledgered as skipped:derive_failed). The default needs one judge and has no diversity
+floors; required_yes defaults to min(2, judges). With required_yes 1, two or more judges, and
+min_responding 1 (its default then), one judge approves alone while the others are down: TwoKey warns
+at start (lone_judge_warning) and does not refuse. QuorumPolicy.high_assurance
 (profile: high_assurance) needs judges from 2 makers (min_makers; maker: is the operator's
 label for who made a judge's model, not verified, never compared with the agent), 1 local judge,
-and a local yes. The old names vendor/min_vendors are refused (removed in 0.2.3).
+and a local yes. The old names vendor/min_vendors are refused (removed in 0.2.3). Each ballot is one
+stateless request at temperature 0; a judge endpoint that keeps memory across ballots carries agent text from one
+call into the vote on another, which Two-Key cannot see: give each judge a fresh context per ballot.
 TwoKey needs monitored_agent, declared by the operator. A judge may run any
 model from any vendor. A judge is not the monitored agent: TwoKey refuses to
 start (judge_matches_agent:) when a judge holds the agent's credential (the
@@ -62,7 +67,7 @@ It is not an external anchor. two-key recover drops an uncheckpointed tail and d
 Creating a ledger at a new path warns on stderr. A non-empty agent_session satisfies the cloud-judge
 presence check, including a placeholder; that does not fail closed. The check fails closed only when
 the session is missing or equals a judge credential. revoke ends earlier tokens only; an optional
-reputation halt is roadmap 0.11 and is not built.
+reputation halt is on the roadmap after 1.0 and is not built.
 The token TTL default is 120 seconds, at most 300. It is signed by the capability key, not
 the principal key. The gateway verifies only. It runs in the TwoKey process on the
 TwoKey ledger object (TwoKey.gateway()); a gateway in another process or host is not
@@ -76,17 +81,33 @@ The tool receives the canonical party. A payload path is not interpreted.
 Optional shape locks it to a string, a number, or a list of strings and
 does not read the contents. Omit shape and the value's children are copied
 unread. After a derive deny, tool_args are withheld from
-judges unless tool_args_on_derive_deny is set. Path B still runs.
+judges unless tool_args_on_derive_deny is set. A derive_failed call (unreadable under its spec)
+then reaches no judge (0.5.0); amount/counterparty/irreversible mismatches and rule denies still do.
 Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer, enum, or
 string; up to 64), each with a signed default and an optional description. A tool spec maps
-a field to an argument path; a mapped field is required, an unmapped tool gets the default.
+a field to an argument path; a mapped field is required. A counterparty allow entry "@example.org"
+(0.5.0, v3) admits any plain email address at exactly that ASCII domain (no subdomains, no lookalike
+letters, no header-carrying local parts; never in deny_counterparties; no wildcards); signing warns when
+the tool also passes free text Path A does not read. Every tool must map each field a
+deny_if_fields rule reads or mark it not_applicable (fields: {name: not_applicable}; it then gets
+the default; signs as v3); a forgotten decision is refused at signing and on load (0.5.0).
 Rules name them with deny_if_fields (eq, neq, gt, gte, lt, lte, in, not_in by type). Values
 come from the argument bytes only; an agent cannot claim them, but the agent writes the
 arguments, so a field is the call's content, not a verified fact (po_matched: true is an
-assertion). Facts about the world must be checked by the tool or supplied by the integration. Enum and string values are
-printable ASCII by default, or Unicode with a declared script (charset: unicode, scripts:).
+assertion). Facts about the world must be checked by the tool or supplied by the integration:
+a field declared source: caller (0.5.0; signs as a v3 constitution, which 0.4.0 refuses)
+is mapped {source: caller} or {source: caller, json_path: P} and takes its value from
+authorize(..., facts={...}) only; the agent writing it is caller_field_in_arguments, a missing
+fact field_missing, an unmapped fact fact_not_mapped. Pass the same lookup to
+gateway.invoke(..., facts=...); a changed value is fact_mismatch. With a json_path the tool
+receives the fact there. two_key.guard.Guard does both lookups for any agent loop
+(GuardedTool(name, fn, claim, facts={field: hook(tool, arguments)})). Enum and string values are
+printable ASCII by default (trimmed, lower-cased; the tool receives that value), or Unicode with a
+declared script (charset: unicode, scripts:). An ASCII string field may declare case: exact: compared
+and passed to the tool as written (for case-sensitive ids; v3); signing warns when it sits in an eq/in
+deny-list rule, and when a lower-cased string field maps an id-like path (*_id).
 A description is never compiled, sent to a judge, or used in a reason. A rules file with
-fields signs as a v2 constitution; --envelope-format v2 forces v2 without fields.
+fields signs as a v2 constitution (v3 with a caller field); --envelope-format v2 forces v2 without fields.
 Ledger deny/error type labels use type_tag (≤32 chars); derive_failed and EncodingError paths are capped. Same-jti deny waiters time out (default 30s; deny_inflight_wait_seconds must be finite positive). Free text is not classified. There is no per-value information-flow tracking.
 two-key authorize omits claim fields the operator did not pass. An omitted
 amount or counterparty is read from the argument bytes. An omitted
@@ -94,8 +115,8 @@ irreversible follows the tool spec. An omitted data_class is classified,
 then the tool floor, which never lowers it. Classes combine: public < personal < financial,
 medical < classified; financial and medical together are financial+medical (a data_class_in rule
 naming either matches), never an invented classified. A claim may be financial+medical in either order;
-a repeated class (financial+financial) is malformed_action. sign-constitution warns on stderr for each tool
-that does not map a field a deny_if_fields rule reads (always denies / never denies / reads the default). --amount-usd, --counterparty,
+a repeated class (financial+financial) is malformed_action. sign-constitution prints a note for each
+not_applicable mark (never denies / reads the default; always denies is a WARNING). --amount-usd, --counterparty,
 --data-class, and --irreversible / --no-irreversible set a claim. A claim
 that disagrees with the bytes or the spec is a deny.
 MonitoredAgent.complete sends the agent the constitution prose and the instruction. It sends
@@ -107,6 +128,27 @@ instruction or the prose; ids in the prose reach the agent too. An agent proposa
 No display-name-to-id mapping or fuzzy matching. An agent declines with {"decline": "<reason>"}
 (call keys may be present only if empty): authorize_from_agent denies agent_declined, neither path
 runs, no token; complete() raises AgentDeclined. A decline mixed with a call is malformed_proposal. Judges do not enforce allow lists or data classes; Path A does.
+MCP proxy (branch mcp-proxy, for 0.5.0; extra two-key[mcp], the official MCP Python SDK, only
+two_key/mcp_proxy/sdk.py imports it): two-key mcp-proxy --config proxy.yaml starts one upstream MCP
+server as a child over stdio (upstream.command as a list, no shell; only upstream.env, literal or
+{env: NAME}, plus HOME/LOGNAME/PATH/SHELL/TERM/USER), shows the agent only signed tools under their
+signed ids (name, title, description, inputSchema, outputSchema, annotations), and refuses to start
+when upstream.schema_digest does not match those fields (upstream_schema_changed) unless
+on_schema_change: warn. It refuses an unresolved_identity warning unless allow_unresolved_identity:
+true (the library only warns). Each tools/call: authorize with the per-tool claim (claim: floor, a
+data class, or none = classified; amount, counterparty, irreversible never claimed; fixed proposal),
+then gateway.invoke in the same process (#45), whose tool is the upstream tools/call with projected
+arguments only. tools.<id>.facts: {field: {hook: "module:function"}} runs a fact hook; caller
+paths are removed from the inputSchema shown. Other names are tool_not_offered (ledgered);
+mcp_proxy_started is ledgered at start. A deny is an MCP tool error "two-key
+denied this call: <reason>" (reason code only). One call at a time; tools listed once at start; no
+resources, prompts, sampling, elicitation, or roots. two-key mcp-draft-specs --out DIR -- COMMAND
+drafts tool_specs (signing refuses until each floor, amount unit, and allow list is decided;
+*_matched/*_verified/*_approved/... left out as caller-fact candidates) and prints the digest;
+it warns when a payee or amount it maps has no description in the upstream schema (the agent's only
+format guide behind the proxy); --constitution and proxy start warn the same way for every input the
+signed specs read (amount, currency, counterparties, argument-mapped custom fields), whatever the data. --constitution FILE prints the digest of a signed constitution's tools.
+An agent that can reach the upstream directly bypasses the proxy; run the upstream as its own OS user.
 decision.reason names one cause (parse/limit/derive deny, then Path A, then Path B); read
 path_a.reason and path_b.reason too. judges.yaml and agents.yaml are trusted operator config:
 a callback auth entry imports the module it names.

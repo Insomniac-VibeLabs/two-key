@@ -4,7 +4,7 @@ A tool call runs only if Path A (policy VM) and Path B (judge quorum) both
 allow. It has no scanning, antivirus, or DLP hooks.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 from .core import Decision, TwoKey
 

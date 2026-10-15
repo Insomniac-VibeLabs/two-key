@@ -24,6 +24,22 @@ is how to report a vulnerability. It is not the model.
 - Agent proposal that causes tool execution inside `authorize_from_agent`
 - An agent decline that issues a token, runs either path, or is read as a call
 - A redeeming gateway that can mint a token it will accept
+- Behind the MCP proxy: a `tools/call` that reaches the
+  upstream server without both keys, a tool the proxy shows that is not
+  signed, an argument that reaches the server outside the signed spec, a
+  changed tool schema accepted under `on_schema_change: refuse`, an
+  unresolved identity accepted without `allow_unresolved_identity: true`, or
+  an argument value in a deny reason
+- A constitution that signs or loads although a tool neither maps nor marks
+  `not_applicable` a field a rule reads, or a `case: exact` value that
+  reaches the tool changed
+- An `@domain` allow entry that admits a subdomain, a lookalike domain, an
+  address whose local part is not plain (a space, a line break, a quoted
+  part, a second `@`), or the entry itself as a party
+- A caller-supplied fact (`source: caller`) taken from the agent's
+  arguments or claim, a v1 or v2 constitution accepted with a caller field,
+  or a redemption that runs the tool after the fact changed (branch
+  `mcp-proxy`)
 - A judge that is the monitored agent being accepted at start-up: a judge
   holding the agent's credential (the same API token, or the same username
   and password) at any address, whether or not either side sends it, or
@@ -34,11 +50,18 @@ is how to report a vulnerability. It is not the model.
 
 - Malware or DLP scanning of tool payloads. It is intentionally absent here.
 - FIPS validation. Algorithms are Ed25519 and SHA-256 from `cryptography`.
-- Code run from operator configuration. `judges.yaml` and `agents.yaml` are
-  trusted: an `auth: {type: callback, callback: "module:function"}` entry
+- An agent that reaches an MCP server directly, around the proxy, and an
+  upstream server run as the proxy's OS user. Both are deployment
+  choices (HOWTO "Key custody").
+- Code run from operator configuration. `judges.yaml`, `agents.yaml`, and
+  the MCP proxy's `proxy.yaml` (which names the upstream command and the
+  fact hooks) are trusted: an `auth: {type: callback, callback: "module:function"}` entry
   imports that module when the file loads. Whoever can write those files
   can run code in the `TwoKey` process. A way to run code from a file the
   docs do not call trusted is in scope.
+- A fact hook that returns a wrong value, or the agent's own argument. Hooks
+  are operator code; Two-Key checks where a fact came from, not that it is
+  true.
 
 Ledger entries and the head are AES-256-GCM ciphertext. The data key is
 wrapped by a ledger key stored outside the ledger directory. The head needs

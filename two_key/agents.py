@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 
 from .action import DATA_CLASSES, DEFAULT_DATA_CLASS
 from .derive import MAX_ARGS_BYTES
+from .fields import field_mappings
 from .judges.config import JudgeConfigError, build_credential
 from .judges.credentials import CredentialError, CredentialProvider, NoCredential, basic_authorization
 from .judges.llm import LOOPBACK
@@ -85,8 +86,9 @@ def user_prompt(constitution: str, instruction: str, vocabulary: str | None = No
 def _field_shape(decl: dict) -> dict:
     kind = decl.get("type")
     if kind == "string":
+        exact = "; letter case matters: copy it exactly" if decl.get("case") == "exact" else ""
         return {"type": "string", "value": f"text of at most {decl['max_length']} characters, "
-                                           "given in the instruction or the constitution"}
+                                           f"given in the instruction or the constitution{exact}"}
     return {"type": kind, "value": _FIELD_HINTS.get(kind, "given in the instruction or the constitution")}
 
 
@@ -99,9 +101,11 @@ def _tool_entry(spec: dict, registry: dict) -> dict:
                                    for c in spec["counterparties"]]
     if spec.get("payload"):
         entry["payload"] = [dict(p) for p in spec["payload"]]   # path, shape, max_length
-    if spec.get("fields"):
+    # A caller-supplied fact (source: caller) is never the agent's to write, so it is not listed at all.
+    agent_fields = {name: m for name, m in sorted(field_mappings(spec).items()) if m.get("source") != "caller"}
+    if agent_fields:
         entry["fields"] = {name: {"json_path": m["json_path"], **_field_shape(registry.get(name, {}))}
-                           for name, m in sorted(spec["fields"].items())}
+                           for name, m in agent_fields.items()}
     if spec.get("deny_unmapped"):
         entry["deny_unmapped"] = True
     return entry

@@ -48,8 +48,8 @@ from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVe
 from .agent_meta import cap_ledger_text, type_tag
 from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
 from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, digest_hex, to_plain
-from .derive import (MAX_ARGS_BYTES, DeriveError, blocked_from_rules, canonical_too_large, derive, dropped_keys, form_for, forms_match,
-                     project_arguments, size_record)
+from .derive import (MAX_ARGS_BYTES, DeriveError, args_too_large, blocked_from_rules, caller_fields, canonical_too_large,
+                     derive, dropped_keys, form_for, forms_match, project_arguments, size_record)
 from .ledger import LedgerError
 
 
@@ -169,8 +169,12 @@ class ToolGateway:
             wait if math.isfinite(wait) and wait > 0 else _DENY_INFLIGHT_WAIT_SECONDS
         )
 
-    def invoke(self, token: str, tool: str, arguments: dict) -> GatewayResult:
+    def invoke(self, token: str, tool: str, arguments: dict, *, facts: dict | None = None) -> GatewayResult:
         """Redeem ``token`` for ``tool(arguments)``.
+
+        ``facts`` are the caller-supplied facts at redemption, for a tool that maps ``source: caller``
+        fields. The form is recomputed with them: a fact whose value is not the one the token was issued for,
+        or a missing fact, is ``fact_mismatch``. A fact with a ``json_path`` reaches the tool there.
 
         A token that does not verify (bad signature, expired, malformed) is refused without a
         ledger entry, so an unauthenticated caller cannot write to the ledger. Any later refusal of
@@ -182,7 +186,7 @@ class ToolGateway:
             payload = self.issuer.verify(token)
         except TokenError as e:
             return GatewayResult(False, str(e))
-        result, encoded = self._invoke_verified(payload, tool, arguments)
+        result, encoded = self._invoke_verified(payload, tool, arguments, facts)
         if result.allowed or result.reason.startswith(("ledger_failed:", "tool_error:")):
             return result      # a tool error is already ledgered (redemption_aborted); a ledger failure cannot be
         return self._record_deny(result, payload, tool, encoded)
@@ -238,13 +242,25 @@ class ToolGateway:
                     self._deny_inflight.discard(jti)
                     self._denied_jtis_guard.notify_all()
 
-    def _invoke_verified(self, payload: dict, tool: str, arguments: dict) -> tuple[GatewayResult, dict]:
+    def _invoke_verified(self, payload: dict, tool: str, arguments: dict,
+                         facts: dict | None = None) -> tuple[GatewayResult, dict]:
         """Run the checks and the tool; also return the plain copy and encoded bytes, as far as they got."""
         encoded: dict = {}
-        result = self._redeem(payload, tool, arguments, encoded)
+        result = self._redeem(payload, tool, arguments, encoded, facts)
         return result, encoded
 
-    def _redeem(self, payload: dict, tool: str, arguments: dict, encoded: dict) -> GatewayResult:
+    @staticmethod
+    def _facts_changed(spec, signed_form, fresh_form) -> bool:
+        """True when a caller-supplied field's value is not the one the token's form holds (type-exact)."""
+        signed_fields, fresh_fields = signed_form.get("fields") or {}, fresh_form.get("fields") or {}
+        try:
+            return any(canonical_bytes(signed_fields.get(n)) != canonical_bytes(fresh_fields.get(n))
+                       for n in caller_fields(spec))
+        except (TypeError, ValueError, EncodingError):
+            return True
+
+    def _redeem(self, payload: dict, tool: str, arguments: dict, encoded: dict,
+                facts: dict | None = None) -> GatewayResult:
         if any(name not in payload for name in _BOUND_FIELDS):
             return GatewayResult(False, "malformed_token")  # a signed token without a binding field
         # Copied once into built-in types (any Mapping becomes a dict); every check, the hash, and the
@@ -281,13 +297,25 @@ class ToolGateway:
             return GatewayResult(False, "tool_specs_required")
         if "form" not in payload or "claimed_data_class" not in payload:
             return GatewayResult(False, "derived_mismatch")
+        has_facts = bool(caller_fields(spec))
+        if facts is not None:
+            try:      # copied once, under the same caps as the arguments
+                facts = to_plain(facts, max_depth=MAX_INPUT_DEPTH, what="facts are", max_items=MAX_ARGS_BYTES // 2)
+            except (OversizeError, EncodingError):
+                return GatewayResult(False, "fact_mismatch" if has_facts else "derived_mismatch")
+            if args_too_large(facts):
+                return GatewayResult(False, "fact_mismatch" if has_facts else "derived_mismatch")
         try:
-            derived = derive(spec, arguments, self.compiled.fields)
+            derived = derive(spec, arguments, self.compiled.fields, facts)
             fresh = form_for(derived, payload["claimed_data_class"],
                              blocked_from_rules(self.compiled.rules))
-        except DeriveError:
-            return GatewayResult(False, "derived_mismatch")
+        except DeriveError as e:
+            fact_error = e.reason.startswith(("fact", "caller_field")) or any(
+                e.reason.endswith(f":{n}") for n in caller_fields(spec))
+            return GatewayResult(False, "fact_mismatch" if fact_error and has_facts else "derived_mismatch")
         if not forms_match(payload["form"], fresh):
+            if has_facts and isinstance(payload["form"], dict) and self._facts_changed(spec, payload["form"], fresh):
+                return GatewayResult(False, "fact_mismatch")
             return GatewayResult(False, "derived_mismatch")
         size = payload["ledger_size"]
         if not isinstance(size, int) or size < 0 or size > self.ledger.size():

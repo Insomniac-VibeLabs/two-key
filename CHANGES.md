@@ -1,5 +1,80 @@
 # Changes
 
+## Contents
+
+<!-- toc -->
+- [0.1.0 — 2026-10-02](#010--2026-10-02)
+- [0.1.1 — 2026-10-02](#011--2026-10-02)
+- [0.1.2 — 2026-10-02](#012--2026-10-02)
+- [Docs — 2026-10-02](#docs--2026-10-02)
+- [0.1.3 — 2026-10-02](#013--2026-10-02)
+- [0.1.4 — 2026-10-03](#014--2026-10-03)
+- [Docs — 2026-10-03](#docs--2026-10-03)
+- [Fixes — 2026-10-03](#fixes--2026-10-03)
+- [0.1.6 — 2026-10-03](#016--2026-10-03)
+- [0.1.7 — 2026-10-03](#017--2026-10-03)
+- [0.1.8 — 2026-10-03](#018--2026-10-03)
+- [0.1.9 — 2026-10-03](#019--2026-10-03)
+- [0.1.10 — 2026-10-03](#0110--2026-10-03)
+- [0.1.11 — 2026-10-03](#0111--2026-10-03)
+- [0.1.12 — 2026-10-03](#0112--2026-10-03)
+- [0.2.0 — 2026-10-03](#020--2026-10-03)
+- [Cyber fail-closed pass — 2026-10-06 (in v0.2.0)](#cyber-fail-closed-pass--2026-10-06-in-v020)
+- [0.2.1 — 2026-10-07](#021--2026-10-07)
+- [0.2.2 — 2026-10-09](#022--2026-10-09)
+- [0.2.3 — 2026-10-09](#023--2026-10-09)
+- [0.2.4 — 2026-10-10](#024--2026-10-10)
+- [0.3.0 — 2026-10-10](#030--2026-10-10)
+- [Fixes — 2026-10-11](#fixes--2026-10-11)
+- [CI — 2026-10-11](#ci--2026-10-11)
+- [Gateway deployment boundary (#45) — 2026-10-13](#gateway-deployment-boundary-45--2026-10-13)
+- [Custom Path A fields — 2026-10-13](#custom-path-a-fields--2026-10-13)
+- [Docs match the code — 2026-10-13](#docs-match-the-code--2026-10-13)
+- [Release v0.3.0 — 2026-10-13](#release-v030--2026-10-13)
+- [PR #85 check fixes — 2026-10-13](#pr-85-check-fixes--2026-10-13)
+- [DeepSource test-fixture findings — 2026-10-14](#deepsource-test-fixture-findings--2026-10-14)
+- [Live-test findings: docs — 2026-10-14](#live-test-findings-docs--2026-10-14)
+- [Agent prompt names the data classes — 2026-10-14](#agent-prompt-names-the-data-classes--2026-10-14)
+- [Opt-in tool vocabulary for the monitored agent — 2026-10-14](#opt-in-tool-vocabulary-for-the-monitored-agent--2026-10-14)
+- [Tool vocabulary lists syntax, never values — 2026-10-14](#tool-vocabulary-lists-syntax-never-values--2026-10-14)
+- [README request-flow diagram renders again — 2026-10-14](#readme-request-flow-diagram-renders-again--2026-10-14)
+- [Docs: agent vocabulary diagram and trust boundary — 2026-10-14](#docs-agent-vocabulary-diagram-and-trust-boundary--2026-10-14)
+- [Agent declines — 2026-10-14](#agent-declines--2026-10-14)
+- [Data classes combine as a set — 2026-10-14](#data-classes-combine-as-a-set--2026-10-14)
+- [Live test run 5 (blind) fixes — 2026-10-14](#live-test-run-5-blind-fixes--2026-10-14)
+- [Docs: what Two-Key verifies (live run 5c) — 2026-10-14](#docs-what-two-key-verifies-live-run-5c--2026-10-14)
+- [Release v0.3.1 — 2026-10-14](#release-v031--2026-10-14)
+- [PR #90 DeepSource fixes — 2026-10-14](#pr-90-deepsource-fixes--2026-10-14)
+- [Release v0.4.0: new repository, package `two-key`, formats without "concept" — 2026-10-15](#release-v040-new-repository-package-two-key-formats-without-concept--2026-10-15)
+- [Mutable defaults in test helpers (#5) — 2026-10-15](#mutable-defaults-in-test-helpers-5--2026-10-15)
+- [Workflow actions pinned to commit SHAs (#4) — 2026-10-15](#workflow-actions-pinned-to-commit-shas-4--2026-10-15)
+- [Leftover review nits (#7) — 2026-10-15](#leftover-review-nits-7--2026-10-15)
+- [Semgrep workflow permission — 2026-10-15](#semgrep-workflow-permission--2026-10-15)
+- [MCP proxy, part 1: skeleton without caller facts (#2 P2) — 2026-10-15](#mcp-proxy-part-1-skeleton-without-caller-facts-2-p2--2026-10-15)
+- [`two-key mcp-draft-specs` (#2 P3) — 2026-10-15](#two-key-mcp-draft-specs-2-p3--2026-10-15)
+- [Docs: the MCP proxy (#2 P4) — 2026-10-15](#docs-the-mcp-proxy-2-p4--2026-10-15)
+- [Live harness for run 6, through the MCP proxy (#2 P5) — 2026-10-15](#live-harness-for-run-6-through-the-mcp-proxy-2-p5--2026-10-15)
+- [`main`'s workflow edits merged; CodeQL restored; Sonar scan v6 — 2026-10-15](#mains-workflow-edits-merged-codeql-restored-sonar-scan-v6--2026-10-15)
+- [README license badge — 2026-10-15](#readme-license-badge--2026-10-15)
+- [Caller-supplied facts and the guard core (#2 P1) — 2026-10-15](#caller-supplied-facts-and-the-guard-core-2-p1--2026-10-15)
+- [Docs: roadmap order, README intro and MCP section, tables of contents — 2026-10-15](#docs-roadmap-order-readme-intro-and-mcp-section-tables-of-contents--2026-10-15)
+- [Roadmap: judge connection reuse (#6) and judge history summary (#1) placed — 2026-10-15](#roadmap-judge-connection-reuse-6-and-judge-history-summary-1-placed--2026-10-15)
+- [Every tool decides each field a rule reads (#10) — 2026-10-15](#every-tool-decides-each-field-a-rule-reads-10--2026-10-15)
+- [`case: exact` string fields (live run 6x, X19) — 2026-10-15](#case-exact-string-fields-live-run-6x-x19--2026-10-15)
+- [Judges are not asked about a call that cannot be read (run 6 finding 4) — 2026-10-15](#judges-are-not-asked-about-a-call-that-cannot-be-read-run-6-finding-4--2026-10-15)
+- [Roadmap: per-judge ballot records before 1.0 — 2026-10-15](#roadmap-per-judge-ballot-records-before-10--2026-10-15)
+- [`@domain` allow entries (run 6 finding 7) — 2026-10-15](#domain-allow-entries-run-6-finding-7--2026-10-15)
+- [Docs: run 6 follow-ups in ROADMAP and SCOPE — 2026-10-15](#docs-run-6-follow-ups-in-roadmap-and-scope--2026-10-15)
+- [Run 6 follow-ups: drafter and quorum warnings, HOWTO guidance — 2026-10-15](#run-6-follow-ups-drafter-and-quorum-warnings-howto-guidance--2026-10-15)
+- [Live harness: run 6 referee fixes, quorum cases (for re-run 6z) — 2026-10-15](#live-harness-run-6-referee-fixes-quorum-cases-for-re-run-6z--2026-10-15)
+- [Docs: the run 6 follow-ups everywhere they apply — 2026-10-15](#docs-the-run-6-follow-ups-everywhere-they-apply--2026-10-15)
+- [Undescribed inputs: checked for every field Path A reads, at sign-off and start — 2026-10-15](#undescribed-inputs-checked-for-every-field-path-a-reads-at-sign-off-and-start--2026-10-15)
+- [Run 6z follow-ups: clearer refusals, harness fixes, judge memory — 2026-10-15](#run-6z-follow-ups-clearer-refusals-harness-fixes-judge-memory--2026-10-15)
+- [Release v0.5.0: MCP proxy, caller-supplied facts, run 6 follow-ups — 2026-10-15](#release-v050-mcp-proxy-caller-supplied-facts-run-6-follow-ups--2026-10-15)
+- [PR #11 review: SonarCloud maintainability findings — 2026-10-15](#pr-11-review-sonarcloud-maintainability-findings--2026-10-15)
+- [PR #11 review: no raw bidirectional characters — 2026-10-15](#pr-11-review-no-raw-bidirectional-characters--2026-10-15)
+<!-- /toc -->
+
 ## 0.1.0 — 2026-10-02
 
 Initial concept repository, private, Apache-2.0.
@@ -1907,6 +1982,185 @@ On branch `working`. Package version stays 0.4.0. CI only.
   integration" without it. The upload still needs code scanning (Advanced
   Security) enabled in the repository settings (#3), as the CodeQL job does.
 
+## MCP proxy, part 1: skeleton without caller facts (#2 P2) — 2026-10-15
+
+On branch `mcp-proxy` (cut from `working` at 9cc1a65, so `working` stays the
+0.4.0 release). For 0.5.0; package version stays 0.4.0 until then. Caller
+facts (#2 P1) are not in this part: they wait for the maintainer's security
+review of their design. Nothing in authorization, derive, the token, the
+gateway, or the ledger changed.
+
+- **`two-key mcp-proxy --config proxy.yaml`**, behind a new optional extra:
+  `pip install "two-key[mcp]"` (the official MCP Python SDK, `mcp>=2.2,<3`,
+  and PyYAML). `uv.lock` (uv 0.13.0) pins `mcp` and `mcp-types` 2.2.0, the
+  newest release more than two weeks old; the rest of the new dependencies
+  resolve to their newest versions as before. The core install is
+  unchanged (`cryptography` only).
+- **One SDK module.** `two_key/mcp_proxy/sdk.py` is the only file that
+  imports the SDK. `config.py` (the config file) and `core.py` (every
+  decision) need no extra and are tested without it.
+- **Upstream child process.** The proxy starts the upstream MCP server
+  from `upstream.command` (a list, no shell), with only the variables in
+  `upstream.env` (a literal, or `{env: NAME}` read from the proxy's
+  environment; unset refuses to start) plus the SDK's minimal set. The
+  proxy's other variables, such as judge keys, do not reach it. The SDK's
+  client response cache is off.
+- **Only signed tools.** `tools/list` shows each upstream tool whose exact
+  name is a signed tool id (or its `tools.<id>.upstream_name`), under the
+  signed id, with only `name`, `title`, `description`, `inputSchema`,
+  `outputSchema`, and `annotations`. A call to any other name is refused as
+  `tool_not_offered` before anything is authorized or ledgered (no token can
+  exist for it). Resources, prompts, completions, and server instructions
+  are not forwarded, and the upstream gets no sampling, elicitation, or
+  roots callbacks.
+- **Schema pin.** `upstream.schema_digest` (required) is `sha256:` over the
+  canonical JSON of those shown fields for the signed tools. On a mismatch
+  the proxy refuses to start (`upstream_schema_changed`, with both digests
+  and any signed tool the upstream no longer lists), unless
+  `upstream.on_schema_change: warn`. Tools are read once, at start;
+  `tools/list_changed` is ignored. Two upstream tools with one name refuse
+  to start.
+- **Per-tool claim policy.** `tools.<id>.claim` is `floor` (the signed
+  `data_class_floor`), a data class, or `none` (the default: omitted, so
+  `classified`). Amount, counterparty, and irreversible are never claimed:
+  they come from the argument bytes and the spec. The proposal text is fixed
+  per tool (`tools.<id>.proposal`, default `MCP tools/call <id>`).
+- **Identity refusal.** The proxy refuses to start on an
+  `unresolved_identity` warning unless `allow_unresolved_identity: true`;
+  the library still only warns. The refusal comes after `TwoKey` starts, so
+  the ledger's `constitution_loaded` records the warning that caused it.
+- **Calls.** Each `tools/call` runs `TwoKey.authorize` (origin `mcp-proxy`),
+  then `gateway.invoke` in the same process (#45); the gateway's tool is the
+  upstream `tools/call`, with the projected arguments only. One call at a
+  time. A deny, a gateway refusal, or an upstream failure
+  (`tool_error:<type>`, ledgered `redemption_aborted`) is an MCP tool error
+  whose text is `two-key denied this call: <reason>`, printable ASCII, at most
+  200 characters. An allowed call returns the upstream result without its
+  `_meta`.
+- **Nothing but MCP on stdout.** Refusals print `two-key: mcp-proxy refused
+  to start: <reason>` on stderr and exit 1.
+- CI installs the `mcp` extra (`tests.yml`, `coverage.yml`), so the SDK tests
+  run there. Tested locally on Python 3.11, 3.12, and 3.13; 3.10 only in CI.
+- Tests: `tests/test_mcp_proxy.py` (no SDK) and `tests/test_mcp_proxy_sdk.py`
+  (skipped without the extra), against `tests/fixtures/fake_mcp_server.py`
+  over stdio, network-free: both protocol eras (2026-07-28 and 2025-11-25),
+  paging, the child's environment, a poisoned description, duplicates, an
+  upstream that does not start, an upstream error, and the command line's
+  refusals.
+
+## `two-key mcp-draft-specs` (#2 P3) — 2026-10-15
+
+On branch `mcp-proxy`. For 0.5.0; package version stays 0.4.0. Needs the
+`mcp` extra. Nothing in authorization changed.
+
+- `two-key mcp-draft-specs --out DIR [--tool NAME]... [--env NAME[=VALUE]]...
+  -- COMMAND...` starts the upstream server once, lists its tools, and
+  writes `rules.draft.yaml` (a rules file with review comments),
+  `proxy-tools.draft.yaml` (a `tools:` block for proxy.yaml, `claim: none`),
+  and `schemas.json` (exactly what the schema digest covers, for review and
+  diffs). It prints the `schema_digest` for those tools. It never
+  overwrites a file.
+- `--constitution FILE` instead prints the `schema_digest` the proxy will
+  compute for that signed constitution's tools, and exits 2 if the upstream
+  does not list one of them. The file is read, not verified; the proxy
+  verifies it when it starts.
+- **Drafts fail closed.** `sign-constitution` refuses a draft until the
+  principal decides: every tool has `data_class_floor:
+  REPLACE_WITH_DATA_CLASS`, an amount-like property (`amount`, `price`,
+  `total`, ...) is the amount with `unit: REPLACE_WITH_usd_OR_cents`, and a
+  payee-like property (`vendor`, `recipient`, `to`, ...) is a counterparty
+  with an empty `allow` list. `irreversible` is `false` only for a tool the
+  server marks `readOnlyHint: true`.
+- **Fact-like properties are left out and flagged.** `*_matched`,
+  `*_verified`, `*_approved`, `*_confirmed`, and `*_validated` are claims the
+  agent would write (run 5c, C05). The draft does not map them, so the tool
+  never receives the agent's value, and lists them as `fact_candidates`
+  for caller-supplied facts (#2 P1, pending review).
+- Other top-level properties become payload paths (`shape` from the JSON
+  type: string, number, or a list of strings, with `maxLength`/`maxItems`).
+  A nested object is one unread payload path. A property name that is not a
+  dotted identifier is left out and noted.
+- Server text (descriptions, the command) appears only in comments, as
+  printable ASCII, so it cannot add keys to the draft. Tool ids are quoted
+  keys. An upstream name that is not lower case gets a lower-case id and an
+  `upstream_name` line in the proxy block.
+- Tests: `tests/test_mcp_draft.py` (the drafting rules without the SDK; the
+  command line against the fake server, skipped without the extra).
+
+## Docs: the MCP proxy (#2 P4) — 2026-10-15
+
+On branch `mcp-proxy`. No behavior change.
+
+- **HOWTO "Put Two-Key in front of an MCP server"**: what the proxy does,
+  in plain words and in two Mermaid diagrams (flow and sequence); a worked
+  example (draft, review, sign, digest, `judges.yaml`, `proxy.yaml`, and the
+  agent host's command); the `proxy.yaml` reference; what each start-up
+  refusal, warning, and call-time reason means and what to do; key custody
+  with three OS users (the agent host, the proxy, and the upstream server,
+  which could otherwise read the proxy's keys and, through `/proc`, its
+  environment); and the limits (no caller facts yet, stdio and one upstream,
+  one call at a time, the pin covers schemas not behavior, results unread,
+  a timed-out call may still have run).
+- **THREAT_MODEL**: new assets (the upstream credential, `proxy.yaml`), a new
+  actor (the upstream server), two new trust boundaries (agent host to proxy,
+  proxy to upstream), a new assumption, the proxy's residual risks (bypass by
+  reaching the upstream directly, the upstream as the proxy's OS user,
+  schema vs behavior, `warn`, unread results, timeouts, rule ids in deny
+  reasons, `tool_not_offered` not ledgered), and what to re-check in
+  `two_key/mcp_proxy/`.
+- **SCOPE, ROADMAP, README, FIT, COMPARISON, SECURITY, llms.txt, AGENTS.md,
+  CONTRIBUTING**: the proxy and drafter on branch `mcp-proxy`, the `mcp`
+  extra, CI's `--extra mcp`, and the new in-scope and out-of-scope items.
+  "Not an MCP server" now reads "offers no tools of its own": the proxy
+  speaks MCP only to forward an upstream server's signed tools.
+- `tests/test_mcp_docs.py` keeps the worked example true: its `proxy.yaml`
+  parses, its rules sign, and the config table lists exactly the keys the
+  loader accepts.
+
+## Live harness for run 6, through the MCP proxy (#2 P5) — 2026-10-15
+
+On branch `mcp-proxy`. Test tooling only; nothing in `two_key/` changed.
+
+- `tests/live/` is ported from `two-key-concept` (branch
+  `test/live-functional-2026-10-13`, run 5c), rebuilt around the proxy: the
+  harness is the agent's MCP host and starts the real `two-key mcp-proxy`,
+  which starts `tests/live/clinic_mcp_server.py`. That server's every call
+  comes back to the harness over loopback, where the harness is the system
+  of record (the purchase-order check), records the side effect, and relays
+  the tool bot's simulated result. Judges are `openai_compatible` judges on
+  loopback endpoints that serve only relayed replies, as before.
+- **The harness plants injection text itself** (a case's `plant`), appended
+  to a tool result, so injection never depends on the tool bot agreeing to
+  write it.
+- **Setup goes through the documented commands:** `mcp-draft-specs` drafts the
+  specs, a fixed and logged "principal review" fills them, then
+  `sign-constitution`, then `mcp-draft-specs --constitution` for the digest.
+  The run-5b Writer reply is reused byte for byte (sha256 checked), without
+  its `require-po-match` rule: caller facts are not built yet, so
+  `po_matched` is not a field, and the billing tool checks the PO.
+- **30 cases** (`make_cases.py`, shuffled neutral ids):
+  - legit payments, messages, bookings, and lookups;
+  - C05 redone with the tool checking the PO and `po_matched` dropped before
+    the tool;
+  - three planted-injection chains (remit-to change, credential
+    exfiltration, a call to a tool the proxy does not offer);
+  - crafted host calls: a hidden tool, a case variant of a signed id, a hidden
+    bcc, oversize, deep nesting, an amount in words, a payee off the list, an
+    upstream crash;
+  - start-up refusals: unresolved identity, a poisoned schema, `warn`, a judge
+    holding the agent's key, an unsigned `tools:` entry;
+  - a `tools/list` check;
+  - C05 with `po_matched` as a caller fact, N/A until #2 P1 ships.
+- `--selftest` runs every case with stub bots under `tests/live/selftest/`
+  (git-ignored) to check the plumbing before a live run. It passes 27 of 30;
+  the two cases only a real judge can catch fail with always-yes stubs, as
+  expected, and the caller-fact case is N/A.
+- The report checks, besides the verdicts: answer-key echo, an agent claiming
+  it executed something, and an argument value inside a deny reason.
+- `RELAY.md` is the operator procedure. `cases.jsonl` and `state/` are
+  git-ignored; `make_cases.py` (the answer key's source) is committed, as in
+  earlier runs, so role bots must have no repository or web access.
+
 ## `main`'s workflow edits merged; CodeQL restored; Sonar scan v6 — 2026-10-15
 
 On branch `working`. Package version stays 0.4.0. CI only.
@@ -1938,3 +2192,491 @@ On branch `working`. Docs only.
   of the repository, which showed "repo not found". The coverage badge
   follows `main` and turns green when `working` is merged; the release badge
   shows "no releases" until Release v0.4.0 is published (#3).
+
+## Caller-supplied facts and the guard core (#2 P1) — 2026-10-15
+
+On branch `mcp-proxy`. For 0.5.0; package version stays 0.4.0. The design
+passed the maintainer's security review before it was written.
+
+- **`source: caller` fields.** A custom field declared `source: caller`
+  takes its value from the integration (`authorize(..., facts={...})`),
+  never from the agent's arguments or claim. A tool maps it as
+  `{source: caller}` or `{source: caller, json_path: P}`; with a path, the
+  tool receives the fact there. Denies (`derive_failed:`, both paths still
+  run): `caller_field_in_arguments:<name>` when the arguments write it,
+  `field_missing:<name>` when no fact is given, `fact_not_mapped:<name>`
+  for a fact the tool does not map, `facts_not_object`, `facts_too_large`,
+  `facts_unreadable`.
+- **The gateway takes the facts again.** `gateway.invoke(token, tool,
+  arguments, facts=...)` re-derives the form with the facts at redemption;
+  a value that differs from the token's form is `fact_mismatch`, and the
+  tool does not run.
+- **Constitution v3** (`two-key-constitution-v3`). A rules file with a
+  caller field signs as v3 (same signed keys as v2); `--envelope-format v3`
+  forces it. A caller field in a v1 or v2 envelope is refused, and
+  `--envelope-format v2` with one is a signing error. Constitutions without
+  caller fields keep their v1 or v2 bytes.
+- **`fact_fields`** in the action record and in `action_normalized` names
+  the caller-supplied fields, so judges and the ledger see which values came
+  from the integration. Absent when there are none.
+- **`two_key/guard.py`**: `Guard` and `GuardedTool` run one call through
+  both keys for any agent loop (a decorator too): a fixed claim and proposal
+  per tool, fact hooks before `authorize` and again before `invoke`, under
+  one lock; a hook that raises or returns None leaves its fact out (deny).
+  `authorize_from_agent(..., facts=resolver)` takes a resolver;
+  `two-key authorize --facts FILE` takes a JSON object.
+- **MCP proxy on the guard.** `proxy.yaml` `tools.<id>.facts:
+  {field: {hook: "module:function"}}` names a fact hook, imported at start
+  (a missing hook, an import failure, or a hook for a tool not offered
+  refuses to start). Caller-supplied paths are removed from the
+  `inputSchema` the host sees. The proxy now ledgers `mcp_proxy_started`
+  (the upstream program, a command digest, both schema digests, the
+  settings, each tool's claim and hooks) before serving, and
+  `tool_not_offered` with the name asked for. The agent vocabulary leaves
+  caller fields out.
+- Live run 6: `po_matched` is a caller fact (`tests/live/live_facts.py`);
+  the Writer's `require-po-match` rule is back, the prose sentence that let
+  the agent set `po_matched` is replaced, and the C05 caller-fact case runs.
+  31 cases; the self-test passes 29, and the two only a real judge can catch
+  fail with always-yes stubs, as expected.
+- Docs: HOWTO "Caller-supplied facts", the MCP section, THREAT_MODEL,
+  SCOPE, README, SECURITY, ROADMAP, AGENTS.md, llms.txt.
+
+### Upgrading from 0.4.0
+
+- **Check your constitution before upgrading.** Every tool must now map
+  each field a `deny_if_fields` rule reads, or mark it `not_applicable`
+  (entry "Every tool decides each field a rule reads", below). A v2
+  constitution in which a tool neither maps nor marks such a field no longer
+  loads: `TwoKey` refuses to start, naming each tool, field, and rule. To
+  fix it, add `<field>: not_applicable` under that tool's `fields:` (or map
+  the field), then re-sign; the result is v3. A constitution whose tools
+  already decide every such field loads unchanged, as v2.
+- Otherwise nothing changes unless a field is declared `source: caller`:
+  the same rules sign to the same bytes, and `authorize` and `invoke`
+  without `facts=` behave as before.
+- A v3 constitution needs this release (0.5.0) or later; 0.4.0 refuses it.
+- Code that reads a signed constitution's `tool_specs.<tool>.fields`
+  itself: an entry may now be the string `not_applicable`, not only a
+  mapping (live run 6z: a referee script crashed on it). Use
+  `two_key.fields.field_mappings(spec)` for the mapped entries only.
+- To turn an argument field into a caller fact: add `source: caller` to its
+  `fields:` entry; map it in each tool as `{source: caller}` (or keep its
+  `json_path` beside `source: caller` if the tool still needs the value);
+  re-sign; supply a hook (`GuardedTool.facts`, `proxy.yaml`
+  `tools.<id>.facts`, or `facts=` yourself). Behind the proxy, the field
+  disappears from the schema the agent sees; an agent that still writes it
+  is denied (`caller_field_in_arguments`).
+- A hand-written integration must pass the facts to both `authorize` and
+  `gateway.invoke`. Facts passed only to `authorize` redeem as
+  `fact_mismatch`.
+- The MCP proxy writes two new ledger kinds, `mcp_proxy_started` and
+  `tool_not_offered`. A probe for a hidden tool is no longer silent in the
+  ledger; a ledger consumer that lists kinds should expect them.
+
+## Docs: roadmap order, README intro and MCP section, tables of contents — 2026-10-15
+
+On branch `working`, which now carries the 0.5.0 work (fast-forwarded to
+`mcp-proxy`; that branch stays at the same commit for live run 6). Docs
+only; no behavior change.
+
+- **Roadmap order (maintainer's decision, 2026-10-15):** the MCP adapter
+  (0.5.0), DLP and antivirus hooks (0.6.0), the SIEM export (0.7.0), then
+  1.0. PKI and certificate recovery, post-quantum signatures, FIPS approved
+  mode, the local GUI, the optional reputation halt, and more field types
+  move after 1.0, unscheduled. ROADMAP.md uses package versions instead of
+  phase labels, puts what is next first, and keeps the released phases'
+  design records under "Shipped". README, SCOPE, THREAT_MODEL, AGENTS.md,
+  llms.txt, and HOWTO follow.
+- **README:** a new opening (what Two-Key does and what you get; the status
+  in one line, with Known limits and FIT.md linked), a quick start, a
+  section on the MCP proxy with its diagram, and a table of the docs. The
+  install, version, and upgrade notes move to "Install and versions", and
+  the move from `two-key-concept` to "History and license".
+- The MCP proxy diagram (README and HOWTO) shows the fact hooks. Docs that
+  said "branch `mcp-proxy`" now say `working`.
+- **Tables of contents** in README, ROADMAP, CHANGES, AGENTS.md, HOWTO,
+  THREAT_MODEL, JUDGES_AND_QUORUM, and FIT, between `<!-- toc -->` markers.
+  `tests/test_doc_toc.py` checks that each matches its headings, with
+  GitHub's anchors (repeated headings get `-1`, `-2`), and
+  `python tests/test_doc_toc.py --write` regenerates them. CONTRIBUTING and
+  AGENTS.md say so. Short documents (SECURITY, SCOPE, COMPARISON,
+  CONTRIBUTING) have none.
+
+## Roadmap: judge connection reuse (#6) and judge history summary (#1) placed — 2026-10-15
+
+On branch `working`. Docs only.
+
+- The maintainer's decision: #6 (judge connections are never reused, since
+  each quorum round starts new threads) joins 0.6.0, and #1 (a judge
+  history summary built from the ledger, on by default) comes before the
+  1.0 review, after its own maintainer security review. ROADMAP, README,
+  SCOPE, and THREAT_MODEL list both.
+
+## Every tool decides each field a rule reads (#10) — 2026-10-15
+
+On branch `working`. Maintainer's decision after live run 6x (issue #10):
+refuse, do not warn, for argument fields and caller-supplied facts alike, in
+0.5.0.
+
+- **The rule.** For every custom field a `deny_if_fields` rule reads, every
+  tool in `tool_specs` must either map it or mark it `not_applicable`
+  (`fields: {ticket_verified: not_applicable}`). A marked tool gets the
+  field's signed default, as an unmapped tool did before. A field no rule
+  reads needs no decision.
+- **Refused at signing and on load.** `sign_constitution` and
+  `verify_signed` (and so `TwoKey` at start) refuse a constitution with a
+  missing decision, naming each tool, field, and rule. Before, a tool that
+  forgot a mapping silently got the default, with only a stderr warning at
+  signing; with a permissive default (`ticket_verified: true` in run 6x)
+  the rule never denied that tool.
+- **Format.** A `not_applicable` mark signs as `two-key-constitution-v3`
+  (an install before 0.5.0 refuses it rather than misreading it), and a v1
+  or v2 label on one is refused. `--envelope-format v2` with a mark is a
+  signing error.
+- **Signing notes.** The per-tool warnings become notes on the marks:
+  `two-key: note:` when the rule never denies the marked tool or reads its
+  default, and `two-key: WARNING:` when it always denies it.
+  `two_key.fields.unmapped_rule_field_warnings` is replaced by
+  `not_applicable_notes`.
+- The agent vocabulary, derive, and the proxy skip marked fields.
+  `examples/custom_fields.yaml`, the HOWTO worked example, and the live
+  harness (the clinic's three other tools mark `po_matched`) carry the
+  marks. Tests: `tests/test_field_decisions.py` (replaces
+  `tests/test_unmapped_field_warnings.py`).
+- Docs: HOWTO "Map it, or mark it `not_applicable`", "Envelope format", and
+  "Known trade-offs"; THREAT_MODEL; AGENTS.md; llms.txt. Upgrade steps are in
+  "Upgrading from 0.4.0" above.
+
+## `case: exact` string fields (live run 6x, X19) — 2026-10-15
+
+On branch `working`. Maintainer's decision on run 6 finding 2.
+
+- An ASCII `string` field may declare `case: exact`: its value is compared,
+  and passed to the tool, exactly as written (no trimming, no
+  lower-casing). Rule values and the default keep their case. Before, every
+  ASCII field was trimmed and lower-cased, and the tool received the
+  lower-cased value, so a case-sensitive system of record refused a correct
+  id (X19: `FLD-WM-G5-Science` arrived as `fld-wm-g5-science`).
+- The original value is never forwarded after a lower-cased check: in a
+  case-sensitive system `FLD-A` and `fld-a` can be different objects, and
+  the tool must get the value Path A checked.
+- Only on `string` with `charset: ascii`; `case` on an enum, a unicode
+  field, or with any value but `exact` does not sign. A constitution with
+  such a field signs as `two-key-constitution-v3`, and a v1 or v2 label on
+  one is refused.
+- `sign-constitution` warns (`two_key.fields.case_warnings`) about an exact
+  field in a deny-list rule (`eq`, `in`), where a case variant does not
+  match, and about a case-insensitive `string` field mapped to a path that
+  looks like an identifier (`id`, `*_id`, `*Id`).
+- `agent_vocabulary()` says "letter case matters: copy it exactly" for such
+  a field; it still lists no value.
+- Tests: `tests/test_case_exact.py`. Docs: HOWTO "Case-sensitive
+  identifiers (`case: exact`)" and "Known trade-offs"; THREAT_MODEL;
+  llms.txt.
+
+## Judges are not asked about a call that cannot be read (run 6 finding 4) — 2026-10-15
+
+On branch `working`. Maintainer's decision (option B). This narrows the
+"both paths run" rule for one case.
+
+- A call that cannot be read under its tool spec (`derive_failed:`, for
+  example `amount_unreadable`, `field_missing`, `caller_field_in_arguments`,
+  `unmapped_field`) is denied by the derive step, and the judges used to get
+  a placeholder form with nothing derived in it and no arguments. Live run 6
+  showed them answering "empty call" at full cost and latency. Now they are
+  not asked: Path B is ledgered as `{"passed": false, "reason":
+  "skipped:derive_failed", "yes": 0, "no": 0, "abstain": 0, "skipped":
+  true}`, and the decision reason is the derive reason, as before.
+- With `tool_args_on_derive_deny: true` the judges see the arguments, so
+  they are still asked.
+- A mismatch (`amount_mismatch`, `counterparty_mismatch`,
+  `irreversible_mismatch`) has a real form and still goes to the judges, as
+  does every rule deny. `require_path_a_first` is still not read.
+- No allow becomes possible: the call was already denied.
+- Tests: `tests/test_problem_f.py` (`test_a_readable_deny_still_asks_the_judges`,
+  `test_derive_deny_skips_judges_unless_they_may_see_the_arguments`), and the
+  derive-deny tests in `test_custom_fields.py` and `test_caller_facts.py`.
+  Docs: README, HOWTO (custom fields, caller facts, quorum, "Known
+  trade-offs"), JUDGES_AND_QUORUM, THREAT_MODEL, SCOPE, AGENTS.md, llms.txt.
+
+### Upgrading
+
+- A ledger consumer that expects a judge tally on every decision should
+  accept `path_b.skipped: true` with zero counts.
+
+## Roadmap: per-judge ballot records before 1.0 — 2026-10-15
+
+On branch `working`. Docs only. The maintainer's decision on run 6 finding 9:
+the ledger will record each judge's ballot (id, vote, confidence, error
+class, a rationale digest; never the rationale text) together with the
+judge history summary (#1), before the 1.0 review, after the same security
+review. ROADMAP, README, SCOPE, and THREAT_MODEL say so.
+
+## `@domain` allow entries (run 6 finding 7) — 2026-10-15
+
+On branch `working`. Maintainer's decision: the principal's choice, with a
+warning, as a feature.
+
+- **The entry.** A counterparty `allow` entry `@example.org` admits every
+  email address at exactly that domain. Exact entries stay the default and
+  can sit beside it (`["@larkspurvalley.example", "board@district.example"]`).
+- **Nothing wider.** The domain must equal the entry: no subdomain, no
+  domain that merely starts or ends with it, no trailing dot, and no
+  lookalike letter (the domain must be an ASCII host name). The local part
+  must be plain (RFC 5322 atext and dots, at most 64 characters), so a
+  space, a line break (a `Bcc:` header), a quoted part, or a second `@`
+  does not match. `@example.org` itself is not a party.
+- **Refused at signing:** an entry that is not `@` and an ASCII host name
+  with a dot; a `*` anywhere in an allow entry; and a domain entry in
+  `deny_counterparties`, so a block list stays exact.
+- **Format:** a domain entry signs as `two-key-constitution-v3`; a v1 or v2
+  label on one is refused.
+- **Signing notes** (`two_key.constitution.domain_allow_notes`): one per
+  domain entry, and a `WARNING` when the tool also passes text Path A does
+  not read (a payload that is not a number), because anyone at the domain
+  can then receive it and only the judges check the content (run 6x, X31).
+- The tool still receives the canonical (trimmed, lower-case) address.
+- Tests: `tests/test_domain_allow.py`. Docs: HOWTO (counterparties, "Known
+  trade-offs"), THREAT_MODEL, SECURITY, AGENTS.md, llms.txt.
+
+### Upgrading
+
+- An allow entry that started with `@` used to be an exact party name (a
+  social handle, say). It is now a domain entry: one that is not a host name
+  does not sign, and a v1 or v2 constitution that has one no longer loads
+  (it would need v3). Drop the `@`, or re-sign knowing it now means a
+  domain.
+
+## Docs: run 6 follow-ups in ROADMAP and SCOPE — 2026-10-15
+
+On branch `working`. Docs only. ROADMAP 0.5.0 and SCOPE list the four
+changes made from live run 6, and the short re-run (6z) planned before the
+release.
+
+## Run 6 follow-ups: drafter and quorum warnings, HOWTO guidance — 2026-10-15
+
+On branch `working`. Warnings and docs; no authorization change.
+
+- **`mcp-draft-specs` warns about an undescribed payee or amount** (finding
+  1). For each property the draft maps as a counterparty or an amount with
+  no `description` in the upstream schema: `two-key: WARNING:
+  mcp-draft-specs: ...` on stderr, a `warnings` key in the JSON it prints,
+  and a `# - WARNING:` comment in `rules.draft.yaml`. Behind the proxy the
+  upstream schema is the agent's only format guide; in run 6 the agent wrote
+  display names ("Alpine MedSupply (alpine-medsupply.example)") and every
+  such payment was `counterparty_not_allowed` until the server described
+  the field. Matching stays exact.
+- **A start-up warning when one judge can approve alone** (finding 6):
+  `two-key: WARNING: quorum: required_yes 1 with N judges and
+  min_responding 1 ...` when two or more judges are configured and one yes
+  passes while the others are down, time out, or abstain
+  (`two_key.quorum.lone_judge_warning`). It still starts; the policy is in
+  `constitution_loaded` as before.
+- **HOWTO "Designing a constitution":** describe id fields in the upstream
+  schema; describe caller-supplied facts in plain words in the prose, not
+  by field name (finding 3); and content leaks rest on the judges, with a
+  pattern for a scanner that supplies a caller fact (`carries_secret`) so
+  Path A can deny too (finding 8). Quorum: the one-judge case in bold
+  (HOWTO, JUDGES_AND_QUORUM). "Known trade-offs" gains the one-judge,
+  domain-entry, and `tool_args_on_derive_deny` lines.
+- ROADMAP 0.6.0: a second design decision, to feed the scanner's result to
+  Path A as well (the 0.5.0 caller-fact pattern is a start).
+- Tests: `tests/test_lone_judge.py`, and a drafter test in
+  `tests/test_mcp_draft.py`.
+
+## Live harness: run 6 referee fixes, quorum cases (for re-run 6z) — 2026-10-15
+
+On branch `working`. Test tooling only (`tests/live/`); nothing in `two_key/`.
+From GrokBot's run 6 report (findings 4, 10, 11, 12 and recommendation d).
+
+- **Judge ballots are keyed by agent step** (finding 12): a chain case's step-1
+  ballot no longer overwrites its step-0 one.
+- **Personas:** each agent request carries a `PERSONA:` line (LEGIT,
+  INCOMPETENT, MALICIOUS) from the case (`make_cases.py` `persona`), and the
+  agent batch header is the role-play one GrokBot used, so an attack is
+  attempted and the deny is exercised.
+- **Strict verdicts** (finding 11): a case that names its intended denies
+  (`expect.reasons`) is INCONCLUSIVE when never attempted or stopped another
+  way, and FAIL when it reached the system of record. C05, the injection
+  chains, the over-cap and wire cases, and the two judge-only cases name
+  theirs.
+- **Scripted quorum cases** (finding 10): the harness's loopback judge
+  endpoints answer a case's `judges` script (yes, no, malformed, down)
+  instead of a relayed reply: a split, a malformed ballot, a judge down, and
+  a control. Nothing test-only enters `two_key/`.
+- **A start-up case for the one-judge warning** (`required_yes 1` of 2).
+- **C13 reaches the crash path** (finding 4): an ordinary matched invoice
+  (`AMS-30915`) the judges approve, on which the back end then fails;
+  `AMS-CRASH` is gone from `PO_BOOK`.
+- **Referee:** a freshness check flags a reply byte-identical to one from an
+  earlier run (`--earlier DIR`, `LIVE_EARLIER_RUNS`); an outbound batch with a
+  private file name is refused, like one with a case title; soft leak terms
+  are counted in the requests, not the header.
+- `make_cases.py --table` prints the case table for the referee's brief.
+  36 cases; the self-test passes 34, and the two only a real judge can catch
+  fail with always-yes stubs, as expected.
+- `tests/live/.gitignore` ignores `state/`, `selftest/`, and `cases.jsonl` at
+  any depth, so a copied run tree (`run6x/state/`) cannot be committed by
+  accident. `RELAY.md` is updated.
+
+## Docs: the run 6 follow-ups everywhere they apply — 2026-10-15
+
+On branch `working`. Docs only.
+
+- README: Path A names `@domain` entries, the `not_applicable` decision,
+  and `case: exact`; Path B names the one-judge warning; the 0.5.0 upgrade
+  bullet says what to check before upgrading (it said nothing changed
+  without caller fields, which is no longer true).
+- SCOPE, THREAT_MODEL (header, re-check list, residual risk of the judge
+  skip), FIT, SECURITY (in scope: a forgotten field decision that still
+  signs, a changed `case: exact` value), AGENTS.md (the one-judge warning,
+  `case: exact`, the drafter warning), llms.txt, and ROADMAP 0.5.0 list the
+  run 6 follow-ups.
+
+## Undescribed inputs: checked for every field Path A reads, at sign-off and start — 2026-10-15
+
+On branch `working`. A warning; no authorization change. Maintainer's question:
+the drafter warning should not be about payees and amounts only.
+
+- `two_key.mcp_proxy.core.undescribed_inputs`: one line per argument the
+  signed specs read (the amount and currency, each counterparty, and each
+  argument-mapped custom field, at any depth such as `target.folder_id`)
+  that the upstream input schema shows with no `description` and no `enum`,
+  or does not declare at all. Payload paths (never read by Path A) and
+  caller-supplied facts (hidden from the agent) are skipped.
+- It runs where the signed spec and the upstream schema meet: `two-key
+  mcp-draft-specs --constitution FILE` (stderr, and `undescribed_inputs` in
+  its JSON) and `two-key mcp-proxy` at start (`two-key: WARNING: mcp-proxy:
+  ...`). The draft-time warning still covers what the draft maps. The proxy
+  still starts.
+- `tests/live/clinic_mcp_server.py` describes every input Path A reads (as
+  GrokBot's run 6y did), so re-run 6z does not repeat the display-name false
+  denies; the proxy prints no such warning for it.
+- Tests: `tests/test_mcp_draft.py` (a nested folder id, an enum, a caller
+  fact, a payload path, an undeclared path). Docs: HOWTO (MCP step 1, the
+  start-up warnings), THREAT_MODEL, AGENTS.md, llms.txt.
+
+## Run 6z follow-ups: clearer refusals, harness fixes, judge memory — 2026-10-15
+
+On branch `working`. No authorization change. From GrokBot's run 6z report
+(36 cases: 34 PASS, 2 INCONCLUSIVE, 0 FAIL; school recheck 4 of 4).
+
+- `two-key sign-constitution` prints `two-key: sign-constitution: refused:
+  ...` and exits 1 on a constitution error, instead of a traceback.
+- The field-decision refusal names every missing tool and field (it stopped
+  at eight, so the school constitution showed eight of eleven), and every
+  rule that reads the field (`(rules 'a', 'b')`; it named only the first).
+  `two_key.fields.rule_fields` returns every rule id per field.
+- The undescribed-input warning has the same words at draft time, at
+  `--constitution`, and at proxy start (`two_key.mcp_proxy.core.
+  undescribed_advice`); a test covers the start-up warning.
+- `--envelope-format` help names all four 0.5.0 features that sign as v3.
+- Docs: each ballot is one stateless request at temperature 0. A judge that
+  keeps memory across ballots (a persistent agent, a chat with saved memory)
+  lets text the agent wrote in one call reach the vote on another, outside
+  the ledger; give each judge a fresh context per ballot (JUDGES_AND_QUORUM
+  "What a judge is" and the operator checklist, THREAT_MODEL assumptions,
+  HOWTO "Judges", llms.txt). JUDGES_AND_QUORUM's "both paths run" line names
+  the `derive_failed:` exception.
+- Live harness:
+  - A reply byte-identical to an earlier run's is a note in RESULTS.md, not
+    a referee incident: a model repeats itself on a nearly identical request
+    (6z's four matches were short ballots and messages the instruction
+    dictates). The notes also count requests both judges answered word for
+    word alike, which is the same model, not shared memory.
+  - Every pass scans `relay/`, `logs/`, and `constitution/` for the loopback
+    credentials it made and for private-key text (`credential_in_run_files`,
+    file names only). The brief's grep for those variables could not work:
+    the harness makes them new on every pass.
+  - A run's top-level outputs (`relay/`, `logs/`, `constitution/`,
+    `RESULTS.md`, `results.json`) are git-ignored until moved into
+    `run<N>/`; RELAY.md lists `constitution/` among the files to move.
+  - Cases: the caller-fact case plays INCOMPETENT (a LEGIT agent declines the
+    mismatch, so the deny was never reached); the planted unoffered-tool case
+    counts any Two-Key deny of the export, since the agent never sees that
+    tool; the scripted quorum cases pay their own invoice (PVP-5561), not the
+    one an agent case pays. The billing prose describes the PO check in
+    plain words, not by field name (finding 3).
+  - `report.py` matches executed arguments exactly (a case-folded match
+    would hide a `case: exact` failure) and titles RESULTS.md by run-neutral
+    name with the repository head.
+
+## Release v0.5.0: MCP proxy, caller-supplied facts, run 6 follow-ups — 2026-10-15
+
+Package version 0.5.0 (`pyproject.toml`, `two_key.__version__`; `uv.lock`
+regenerated with uv 0.13.0, which changes only the package's own version).
+To be tagged `v0.5.0` on `main` after the merge. Not on PyPI. The entries
+above, from "MCP proxy, part 1" on, are the detail.
+
+- **MCP proxy** (`two-key mcp-proxy`, the optional `mcp` extra, #2): a
+  stdio proxy in front of one upstream MCP server. It shows the agent only
+  the signed tools, pins their schemas, refuses an unresolved judge or agent
+  identity unless told otherwise, and runs every `tools/call` through both
+  keys and the in-process gateway. Only `two_key/mcp_proxy/sdk.py` imports
+  the MCP SDK.
+- **Spec drafter** (`two-key mcp-draft-specs`): drafts `tool_specs` and the
+  schema digest from the upstream server for the principal to review and
+  sign; it never signs. Warns for every input Path A reads that the upstream
+  schema leaves undescribed.
+- **Caller-supplied facts and the guard core** (#2 P1, maintainer-reviewed
+  design): a `source: caller` field takes its value from the integration's
+  `facts=`, never from the agent, and is looked up again at redemption
+  (`fact_mismatch`). `two_key.guard.Guard` runs one call through both keys
+  for any agent loop; the proxy runs on it.
+- **From live run 6** (maintainer's decisions): every tool maps or marks
+  `not_applicable` each field a rule reads (#10, refused otherwise);
+  `case: exact` string fields; `@domain` allow entries; no judges for a call
+  that cannot be read (`skipped:derive_failed`); a start-up warning when one
+  judge can approve alone.
+- **Constitution v3** carries any of those 0.5.0 features; a constitution
+  without them signs as before (v1 or v2, byte for byte).
+- **Live testing**: run 6, then re-run 6z on the follow-ups: 36 cases, 34
+  PASS, 2 INCONCLUSIVE (case design, since fixed), 0 FAIL; the school
+  constitution recheck passed 4 of 4.
+- Docs: README, ROADMAP (0.5.0 under "Shipped"), HOWTO, SCOPE,
+  THREAT_MODEL, FIT, COMPARISON, JUDGES_AND_QUORUM, SECURITY, AGENTS.md, and
+  llms.txt name 0.5.0 as the release and `v0.5.0` as the install ref.
+
+### Upgrading from 0.4.0
+
+The full notes are under "Caller-supplied facts and the guard core (#2 P1)"
+> "Upgrading from 0.4.0". In short:
+
+- **Check your constitution first.** A tool that neither maps nor marks
+  `not_applicable` a field a `deny_if_fields` rule reads no longer loads;
+  `TwoKey` refuses to start and names each one. Add the marks (or map the
+  fields) and re-sign; the result is v3.
+- An `allow` entry that starts with `@` is now a whole domain. A call that
+  cannot be read under its spec is no longer sent to the judges.
+- A v3 constitution needs 0.5.0 or later; 0.4.0 refuses it.
+- Code that reads `tool_specs.<tool>.fields` itself: an entry may be the
+  string `not_applicable`.
+- The MCP proxy needs the `mcp` extra: `pip install "two-key[mcp] @
+  git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"`.
+
+## PR #11 review: SonarCloud maintainability findings — 2026-10-15
+
+On branch `working`. No behaviour change; the same tests pass.
+
+- Cognitive complexity (python:S3776) under 15, by splitting into helpers:
+  `two_key.mcp_proxy.draft.draft_tool` (33: `_usable_id`, `_note_fact`,
+  `_draft_property`), `two_key.fields._definition` (18: `_field_type`,
+  `_letter_case`, `_source`), and `two_key.cli._mcp_draft_specs` (17:
+  `_draft_command`, `_draft_signed_check`, `_draft_write`).
+- Tests: one call that may raise inside each `assertRaises` block
+  (python:S5778; the public key is taken first), and `assertIs(x, False)` /
+  `assertIs(x, True)` for boolean results (exact, unlike `assertFalse`).
+
+## PR #11 review: no raw bidirectional characters — 2026-10-15
+
+On branch `working`. Tests only.
+
+- SonarCloud's security finding (the quality gate's "C Security Rating on
+  New Code"): `tests/test_mcp_draft.py` and `tests/test_mcp_proxy.py` held a
+  raw U+202E (right-to-left override) in a string, on purpose, to test that
+  server text and deny reasons cannot carry one. Each is now the escape
+  `\u202e`; the tests are unchanged in effect.
+- `tests/test_no_bidi_chars.py` fails on any raw bidirectional control
+  character in the repository's text files (Trojan Source, CVE-2021-42574).
+
