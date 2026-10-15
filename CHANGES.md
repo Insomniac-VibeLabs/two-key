@@ -85,6 +85,7 @@
 - [Windows CI blocks (0.6.0 Phase 2 done) — 2026-10-15](#windows-ci-blocks-060-phase-2-done--2026-10-15)
 - [Judge connection reuse (#6, 0.6.0 Phase 5) — 2026-10-15](#judge-connection-reuse-6-060-phase-5--2026-10-15)
 - [Content scanning, part 1: the core (0.6.0 Phase 3) — 2026-10-15](#content-scanning-part-1-the-core-060-phase-3--2026-10-15)
+- [Content scanning, part 2: adapters and the proxy (0.6.0 Phase 4) — 2026-10-15](#content-scanning-part-2-adapters-and-the-proxy-060-phase-4--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2947,3 +2948,40 @@ block, and the docs follow in Phases 4 and 6.
   outside the folder, what judges and the ledger get, the token and the
   gateway, the guard, and the warnings.
 - AGENTS.md: the scanner invariants.
+
+## Content scanning, part 2: adapters and the proxy (0.6.0 Phase 4) — 2026-10-15
+
+On branch `working`. Reference adapters that call an external scanner; no
+scanning engine is added. All four are standard library only.
+
+- `two_key/scanners.py`:
+  - `ClamdInspector`: ClamAV `clamd` INSTREAM over TCP (`host:3310`) or a
+    unix socket. `FOUND` is `malware`; ClamAV's own limits
+    (`Heuristics.Limits.Exceeded`, `size limit exceeded`) are
+    `limits_exceeded`, so the call is flagged.
+  - `IcapInspector`: ICAP REQMOD or RESPMOD (RFC 3507), `icap://` or
+    `icaps://` (TLS, system trust store), with `Allow: 204`. 204 is clean;
+    403, an infection header, or a blocked encapsulated response is flagged;
+    anything else is `unavailable`. Each part is sent with
+    `X-Two-Key-Tool` and `X-Two-Key-Part`.
+  - `CommandInspector`: runs a command with the part on stdin, a minimal
+    environment, and the time left; exit 0 is clean, 1 is flagged (optional
+    `two-key-categories:` line), anything else is `unavailable`.
+  - `hook_inspector("module:function")`: your own Python code.
+  - `scanner_from_config` builds a `Scanner` from a `scan:` block.
+- `proxy.yaml`: a top-level `scan:` block (`type: clamd|icap|command|python`
+  and its keys, `timeout_seconds`, `max_file_bytes`, `field`, `label`) and
+  per-tool `files:` (`path`, `kind`, `folder`; a relative folder is relative
+  to `proxy.yaml`). Files without a `scan:` block are refused.
+- `two-key mcp-draft-specs`: inputs that look like files (a base64
+  `contentEncoding`, `format: binary`, a `contentMediaType`, or a file-like
+  name) get a note and a commented `files:` entry in the drafted
+  `proxy.yaml`; the drafted rules end with a commented scan-field template.
+  Nothing is declared or signed for you.
+- `two-key mcp-proxy`: a start-up WARNING for each file-like input of a
+  scanned tool that `files:` does not declare (it is scanned as text).
+- Tests: `tests/test_scanners.py` (fake clamd and ICAP servers on
+  127.0.0.1, a command, a hook, the config, and end-to-end denies) and
+  `tests/test_mcp_scan.py` (the config, the hints, and a `tools/call` with an
+  attached file through the scanner, both paths, and the gateway).
+- HOWTO: the `proxy.yaml` table lists `scan` and `tools.<id>.files`.

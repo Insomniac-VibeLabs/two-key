@@ -187,7 +187,8 @@ class FileArg:
         return rec
 
 
-def _file_arg(value: Any, where: str) -> FileArg:
+def file_arg(value: Any, where: str) -> FileArg:
+    """A checked ``FileArg`` from a ``FileArg`` or ``{path, kind, folder}``. Raises ``ScanConfigError``."""
     if isinstance(value, FileArg):
         item = value
     elif isinstance(value, Mapping):
@@ -326,7 +327,7 @@ class Scanner:
                 raise ScanConfigError(f"files: {str(tool)[:80]!r} is not a signed tool id")
             if isinstance(items, (str, bytes, Mapping)) or not isinstance(items, Iterable):
                 raise ScanConfigError(f"files.{tool}: expected a list of file arguments")
-            parsed = tuple(_file_arg(item, f"files.{tool}[{i}]") for i, item in enumerate(items))
+            parsed = tuple(file_arg(item, f"files.{tool}[{i}]") for i, item in enumerate(items))
             if len(parsed) > MAX_FILES_PER_TOOL:
                 raise ScanConfigError(f"files.{tool}: more than {MAX_FILES_PER_TOOL} file arguments")
             if len({f.path for f in parsed}) != len(parsed):
@@ -613,5 +614,5 @@ def warn(message: str) -> None:
     print(f"two-key: {message}", file=sys.stderr)
 
 
-__all__ = ["CATEGORIES", "FILE_KINDS", "FileArg", "Inspector", "Outcome", "ScanConfigError", "ScanPart",
+__all__ = ["CATEGORIES", "FILE_KINDS", "FileArg", "file_arg", "Inspector", "Outcome", "ScanConfigError", "ScanPart",
            "ScanRequest", "ScanResult", "Scanner", "VERDICTS", "combine", "stance_of"]

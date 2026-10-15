@@ -175,6 +175,77 @@ def undescribed_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str
     return out
 
 
+# Names that suggest an input holds a file. A hint for the operator, never a decision: what is a file is declared.
+FILE_LIKE_NAME = re.compile(r"(^|_)(file|files|path|filepath|attachment|attachments|blob|base64|b64|upload|uploads)$")
+_CONTENT_NAMES = ("content", "data", "bytes", "body")
+MAX_SCHEMA_DEPTH = 8
+
+
+def _file_like(name: str, node: Mapping[str, Any], in_file_container: bool) -> bool:
+    if node.get("contentEncoding") in ("base64", "base64url") or node.get("format") in ("byte", "binary") \
+            or isinstance(node.get("contentMediaType"), str):
+        return True
+    if node.get("type") not in ("string", None):
+        return False
+    low = name.casefold()
+    return bool(FILE_LIKE_NAME.search(low)) or (in_file_container and low in _CONTENT_NAMES)
+
+
+def file_like_inputs(schema: Any) -> list[tuple[str, str]]:
+    """Inputs the upstream schema suggests hold a file, as (path, kind guess). ``[]`` marks each item of a list.
+    The kind is ``path`` for a path-like name, ``base64url`` or ``base64`` from ``contentEncoding``, else
+    ``base64``. A hint for the drafter and the start-up warning only."""
+    out: list[tuple[str, str]] = []
+
+    def guess(name: str, node: Mapping[str, Any]) -> str:
+        if node.get("contentEncoding") == "base64url":
+            return "base64url"
+        if node.get("contentEncoding") == "base64" or node.get("format") in ("byte", "binary"):
+            return "base64"
+        return "path" if "path" in name.casefold() else "base64"
+
+    def walk(node: Any, prefix: str, depth: int, container: bool) -> None:
+        props = node.get("properties") if isinstance(node, Mapping) else None
+        if not isinstance(props, Mapping) or depth > MAX_SCHEMA_DEPTH:
+            return
+        for name, sub in sorted(props.items()):
+            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) or \
+                    not isinstance(sub, Mapping):
+                continue
+            path = f"{prefix}.{name}" if prefix else name
+            items = sub.get("items")
+            if sub.get("type") == "array" and isinstance(items, Mapping):
+                inner = container or bool(FILE_LIKE_NAME.search(name.casefold()))
+                if items.get("type") == "object" or "properties" in items:
+                    walk(items, f"{path}[]", depth + 1, inner)
+                elif _file_like(name, items, container):
+                    out.append((f"{path}[]", guess(name, items)))
+            elif sub.get("type") == "object" or "properties" in sub:
+                walk(sub, path, depth + 1, container or bool(FILE_LIKE_NAME.search(name.casefold())))
+            elif _file_like(name, sub, container):
+                out.append((path, guess(name, sub)))
+
+    walk(schema, "", 0, False)
+    return out
+
+
+def undeclared_file_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str, Any]], scanner: Any) -> list[str]:
+    """One line per input of a scanned tool that looks like a file in the upstream schema but is not declared under
+    ``tools.<id>.files``: it is scanned as text, not as a file. Advice, never a refusal."""
+    if scanner is None:
+        return []
+    out = []
+    for tool in sorted(selection.views):
+        if not scanner.scans(specs.get(tool)):
+            continue
+        declared = {f.path for f in scanner.files.get(tool, ())}
+        for path, kind in file_like_inputs(selection.views[tool].get("inputSchema")):
+            if path not in declared:
+                out.append(f"{tool}: {path} looks like a file in the upstream schema but is not declared under "
+                           f"tools.{tool}.files (kind: {kind}?), so it is scanned as text, not as a file")
+    return out
+
+
 def identity_refusal(separation: Any, allow_unresolved: bool) -> str | None:
     """The proxy refuses an unresolved judge or agent identity unless ``allow_unresolved_identity: true``.
 
@@ -361,16 +432,23 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
     from ..judges.config import JudgeConfigError, load_config_file
     from ..keys import load_private_key_file, load_public_key
     from ..ledger import Ledger, LedgerError
+    from ..scan import ScanConfigError
+    from ..scanners import scanner_from_config
     try:
+        scanner = None
+        if config.scan is not None:
+            scanner = scanner_from_config(config.scan, {tool: policy.files for tool, policy in config.tools.items()
+                                                        if policy.files})
         key = load_private_key_file(config.principal_key)
         judges, policy = load_config_file(config.judges, judge_transport)
         agent = load_monitored_agent_file(config.judges)
         witness = load_public_key(config.witness_public_key) if config.witness_public_key else None
         ledger = Ledger(config.ledger, key, witness_public_key=witness, anchor_path=config.head_anchor)
         return TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
-                           private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds)
+                           private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
+                           scanner=scanner)
     except (OSError, ValueError, JudgeConfigError, IdentityError, LedgerError, ConstitutionError,
-            ConstitutionSignatureError, TwoKeyConfigError) as e:
+            ConstitutionSignatureError, TwoKeyConfigError, ScanConfigError) as e:
         raise ProxyConfigError(f"{type(e).__name__}: {e}") from None
 
 

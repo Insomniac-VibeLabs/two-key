@@ -23,6 +23,8 @@ from ..fields import FIELD_NAME
 from ..guard import GuardConfigError
 from ..guard import valid_claim as _guard_claim
 from ..judges.config import HOOK
+from ..scan import FileArg, ScanConfigError, file_arg
+from ..scanners import check_scan_block
 from ..strict import StrictParseError, load_file_strict
 
 ON_SCHEMA_CHANGE = ("refuse", "warn")
@@ -35,11 +37,11 @@ ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")
 UPSTREAM_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
 _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "head_anchor", "ttl_seconds",
-             "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools"}
+             "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools", "scan"}
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
 _KEY_KEYS = {"principal"}
 _UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds"}
-_TOOL_KEYS = {"claim", "proposal", "upstream_name", "facts"}
+_TOOL_KEYS = {"claim", "proposal", "upstream_name", "facts", "files"}
 
 
 class ProxyConfigError(ValueError):
@@ -49,11 +51,13 @@ class ProxyConfigError(ValueError):
 @dataclass(frozen=True)
 class ToolPolicy:
     """Per-tool settings. ``claim`` is ``floor``, ``none`` (omitted, so ``classified``), or a data class.
-    ``facts`` maps each caller-supplied field the tool maps to its hook, ``module:function``."""
+    ``facts`` maps each caller-supplied field the tool maps to its hook, ``module:function``. ``files`` lists
+    the arguments that hold a file, for the content scanner (``scan:``)."""
     claim: str = "none"
     proposal: str | None = None
     upstream_name: str | None = None
     facts: Mapping[str, str] = field(default_factory=dict)
+    files: tuple[FileArg, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -104,6 +108,8 @@ class ProxyConfig:
     agent_id: str | None = None
     hosting: str | None = None
     allow_unresolved_identity: bool = False
+    # The content scanner block (two_key.scanners), checked for shape; built when the proxy starts.
+    scan: Mapping[str, Any] | None = None
 
     def tool_policy(self, tool: str) -> ToolPolicy:
         return self.tools.get(tool) or ToolPolicy()
@@ -233,7 +239,27 @@ def _facts(value: Any, where: str) -> dict[str, str]:
     return out
 
 
-def _tools(value: Any) -> dict[str, ToolPolicy]:
+def _files(base: Path, value: Any, where: str) -> tuple[FileArg, ...]:
+    """``[{path: attachments[].content, kind: base64|base64url|path, folder: dir}]``; a relative folder is
+    relative to the config file's directory."""
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ProxyConfigError(f"{where}: expected a list of {{path, kind, folder}}")
+    out = []
+    for i, item in enumerate(value):
+        if isinstance(item, Mapping) and isinstance(item.get("folder"), str) and item["folder"]:
+            item = dict(item, folder=str(_path(base, item["folder"], f"{where}[{i}].folder")))
+        try:
+            out.append(file_arg(item, f"{where}[{i}]"))
+        except ScanConfigError as e:
+            raise ProxyConfigError(str(e)) from None
+    if len({f.path for f in out}) != len(out):
+        raise ProxyConfigError(f"{where}: a path is declared twice")
+    return tuple(out)
+
+
+def _tools(value: Any, base: Path | None = None) -> dict[str, ToolPolicy]:
     if value is None:
         return {}
     if not isinstance(value, Mapping):
@@ -258,7 +284,8 @@ def _tools(value: Any) -> dict[str, ToolPolicy]:
             proposal = _text(proposal, f"{where}.proposal", MAX_PROPOSAL_CHARS)
         out[tool] = ToolPolicy(claim=valid_claim(settings.get("claim", "none"), f"{where}.claim"),
                                proposal=proposal, upstream_name=name,
-                               facts=_facts(settings.get("facts"), f"{where}.facts"))
+                               facts=_facts(settings.get("facts"), f"{where}.facts"),
+                               files=_files(base or Path("."), settings.get("files"), f"{where}.files"))
     return out
 
 
@@ -283,6 +310,17 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
     for key in ("agent_id", "hosting"):
         if key in top:
             meta[key] = _text(top[key], key, 256)
+    tools = _tools(top.get("tools"), base)
+    scan = None
+    if "scan" in top:
+        try:
+            scan = check_scan_block(top["scan"])
+        except ScanConfigError as e:
+            raise ProxyConfigError(str(e)) from None
+    with_files = sorted(tool for tool, policy in tools.items() if policy.files)
+    if with_files and scan is None:
+        raise ProxyConfigError(f"tools: {with_files} declare files, which are for the content scanner; add a "
+                               "scan: block")
     return ProxyConfig(
         path=path,
         constitution=_path(base, top["constitution"], "constitution"),
@@ -290,7 +328,8 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
         ledger=_path(base, top["ledger"], "ledger"),
         judges=_path(base, top["judges"], "judges"),
         upstream=_upstream(base, top["upstream"]),
-        tools=_tools(top.get("tools")),
+        tools=tools,
+        scan=scan,
         witness_public_key=(_path(base, top["witness_public_key"], "witness_public_key")
                             if "witness_public_key" in top else None),
         head_anchor=_path(base, top["head_anchor"], "head_anchor") if "head_anchor" in top else None,

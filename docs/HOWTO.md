@@ -1692,6 +1692,8 @@ refused. Relative paths are relative to the file.
 | `tools.<id>.proposal` | no | Fixed proposal text (default `MCP tools/call <id>`); judges see it only with `judge_inputs: record_and_proposal` |
 | `tools.<id>.upstream_name` | no | The upstream's name for a signed tool whose name is not a lower-case id |
 | `tools.<id>.facts` | for caller-supplied fields | `{field: {hook: "module:function"}}`, one per `source: caller` field the tool maps. Trusted operator code, imported at start |
+| `tools.<id>.files` | no | Arguments that hold a file, for the content scanner: `[{path: "attachments[].content", kind: base64}]`, `kind: base64url`, or `{path: file_path, kind: path, folder: /srv/outbox}`. Needs `scan` (0.6.0) |
+| `scan` | no | The content scanner (antivirus or DLP): `type: clamd`, `icap`, `command`, or `python`, with `timeout_seconds` (default 15) and `max_file_bytes` (default 25 MiB). See [docs/SCANNERS.md](SCANNERS.md) (0.6.0) |
 
 The claim is the only thing the proxy says about a call, and the agent
 writes none of it. Amount, counterparty, and irreversible are never
