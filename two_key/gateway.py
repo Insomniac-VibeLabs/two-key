@@ -38,11 +38,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - POSIX only
-    fcntl = None
-
+from . import _platform
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          capability_key_fingerprint)
 from .agent_meta import cap_ledger_text, type_tag
@@ -386,12 +382,10 @@ class ToolGateway:
                     gateway._unref(jti)
                     raise
                 self.fd = None
-                if fcntl is None:
-                    return self
                 try:
                     path = gateway.ledger.redeem_lock_path(jti)
-                    self.fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
-                    fcntl.flock(self.fd, fcntl.LOCK_EX)
+                    self.fd = _platform.open_lock_file(path)
+                    _platform.lock(self.fd)
                     return self
                 except BaseException:
                     if self.fd is not None:
@@ -404,7 +398,7 @@ class ToolGateway:
                 try:
                     if self.fd is not None:
                         try:
-                            fcntl.flock(self.fd, fcntl.LOCK_UN)
+                            _platform.unlock(self.fd)
                         finally:
                             os.close(self.fd)
                 finally:

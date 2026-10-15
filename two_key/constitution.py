@@ -451,7 +451,7 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
 
 
 def save_envelope(path: Path | str, envelope: dict) -> None:
-    Path(path).write_text(json.dumps(envelope, indent=2) + "\n", encoding="utf-8")
+    Path(path).write_text(json.dumps(envelope, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 def load_envelope(path: Path | str) -> dict:

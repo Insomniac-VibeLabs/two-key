@@ -80,6 +80,7 @@
 - [Semgrep findings suppressed with reasons; judge hooks checked like proxy hooks — 2026-10-15](#semgrep-findings-suppressed-with-reasons-judge-hooks-checked-like-proxy-hooks--2026-10-15)
 - [CodeQL action v4; the maintainer's 0.6.0 decisions in ROADMAP — 2026-10-15](#codeql-action-v4-the-maintainers-060-decisions-in-roadmap--2026-10-15)
 - [CI on Linux, macOS, and Windows (0.6.0 Phase 1) — 2026-10-15](#ci-on-linux-macos-and-windows-060-phase-1--2026-10-15)
+- [Windows support, part 1: owner-only files, locks, no-follow opens (0.6.0 Phase 2) — 2026-10-15](#windows-support-part-1-owner-only-files-locks-no-follow-opens-060-phase-2--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2807,3 +2808,36 @@ On branch `working`. CI and tests only.
   The upstream-environment test also allows the MCP SDK's own minimal list
   (`DEFAULT_INHERITED_ENV_VARS`), which differs on Windows; the proxy still
   passes only the declared and minimal variables.
+
+## Windows support, part 1: owner-only files, locks, no-follow opens (0.6.0 Phase 2) — 2026-10-15
+
+On branch `working`. Maintainer-reviewed design (the Windows design note,
+approved 2026-10-15). Linux and macOS behave as before.
+
+- New `two_key/_platform.py`, standard library only (`ctypes` on Windows, no
+  pywin32): `create_new`, `open_nofollow`, `access_problem`, `owner_only_dir`,
+  `open_lock_file`, `lock`/`unlock`, `inside`, `replace`, `fsync_dir`,
+  `is_link`, `dir_writable_by_others`, and `resolve_program`. On POSIX each
+  does what the callers did before (mode 0600 and 0700, `O_NOFOLLOW`,
+  `flock`, `chmod 600` in the messages).
+- On Windows a key file is created with a protected access list for the
+  current user only (in `CreateFileW` itself, so it is never readable by
+  others); a key directory gets the same, inheritable. A key is accepted
+  when its owner and every "allow" entry are the current user, SYSTEM, or
+  Administrators; anything else is `*_insecure`, with the `icacls` command
+  that fixes it. Files open with `FILE_FLAG_OPEN_REPARSE_POINT`, so a
+  symlink or junction is refused without a gap between check and open. The
+  ledger and redemption locks are `LockFileEx` on the separate lock files
+  (before, Windows had no cross-process lock at all). Every descriptor is
+  binary (`O_BINARY`).
+- Moved to it: `ledger.py` (key reads and writes, the key, witness,
+  redemption-lock and recovery directories, the ledger lock, the anchor,
+  `os.replace`, the directory fsyncs, the outside-the-ledger checks),
+  `identity.py`, `keys.py`, `capability.py`, `backup.py`, `gateway.py`
+  (redemption lock), `cli.py` (token and draft files).
+- Text files Two-Key writes use `newline="\n"` (the ledger entries, the
+  signed constitution, token and draft files), and every text open names
+  its encoding; `tests/test_text_io.py` fails on one that does not.
+- The MCP upstream command (proxy and drafter) is resolved with
+  `shutil.which` on Windows, so `npx` finds `npx.cmd`. No shell.
+- `tests/test_platform.py` tests each function on the platform it runs on.

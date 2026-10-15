@@ -135,6 +135,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
 
+from . import _platform
 from .agent_meta import type_tag
 from .netloc import fold_model_id, host_is_local, host_is_loopback, model_is_cloud
 
@@ -170,9 +171,8 @@ def load_fingerprint_key(path: str | os.PathLike) -> bytes:
     if not os.path.lexists(path):
         try:
             os.makedirs(os.path.dirname(path) or ".", mode=0o700, exist_ok=True)
-            # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
-            os.chmod(os.path.dirname(path) or ".", 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            _platform.owner_only_dir(os.path.dirname(path) or ".")
+            fd = _platform.create_new(path)
         except FileExistsError:
             fd = None                      # another process created it first: read theirs
         except OSError as e:
@@ -183,15 +183,16 @@ def load_fingerprint_key(path: str | os.PathLike) -> bytes:
                 fh.flush()
                 os.fsync(fh.fileno())
     try:
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        fd = _platform.open_nofollow(path)
     except OSError as e:
         raise IdentityError(f"fingerprint_key_unreadable: {path}: {e.strerror}") from None
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             raise IdentityError(f"fingerprint_key_unreadable: {path} is not a regular file")
-        if st.st_mode & 0o077:
-            raise IdentityError(f"fingerprint_key_insecure: {path} is readable by group or others; chmod 600 it")
+        problem = _platform.access_problem(fd, st)
+        if problem:
+            raise IdentityError(f"fingerprint_key_insecure: {_platform.insecure(path, problem)}")
         data = os.read(fd, FINGERPRINT_KEY_BYTES + 1)
     finally:
         os.close(fd)

@@ -57,6 +57,7 @@ import os
 import sys
 from pathlib import Path
 
+from . import _platform
 from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, load_unsigned_with_fields, save_envelope,
                            sign_constitution)
 from .fields import case_warnings, not_applicable_notes
@@ -216,9 +217,8 @@ def _audit(args) -> int:
 
 def _write_token(path: Path, token: str) -> None:
     """Write the bearer token to a new file, mode 0600 from creation. Never overwrite."""
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(path, flags, 0o600)
-    with os.fdopen(fd, "w", encoding="ascii") as fh:
+    fd = _platform.create_new(path)
+    with os.fdopen(fd, "w", encoding="ascii", newline="\n") as fh:
         fh.write(token + "\n")
 
 
@@ -329,8 +329,7 @@ def _draft_env(items: list[str] | None) -> dict[str, str]:
 
 
 def _write_new(path: Path, text: str) -> None:
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    with os.fdopen(os.open(path, flags, 0o644), "w", encoding="utf-8") as fh:
+    with os.fdopen(_platform.create_new(path, owner_only=False), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
 
 

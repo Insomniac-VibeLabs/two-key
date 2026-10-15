@@ -51,16 +51,12 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - POSIX only
-    fcntl = None
-
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from . import _platform
 from .canonical import EncodingError, canonical_bytes, canonical_hash
 from .agent_meta import cap_ledger_text, type_tag
 from .keys import (
@@ -106,12 +102,12 @@ def _witness_public(raw, what: str):
 
 
 def _write_new_secret(path, data: bytes) -> None:
-    """Create ``path`` with O_CREAT | O_EXCL | O_NOFOLLOW at mode 0600 and write ``data``.
+    """Create ``path`` owner-only (mode 0600, or a private access list on Windows) and write ``data``.
 
     An existing file or a planted symlink raises FileExistsError instead of being
     overwritten, and there is no window in which the bytes are readable before a chmod.
     """
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    fd = _platform.create_new(path)
     with os.fdopen(fd, "wb") as fh:
         fh.write(data)
         fh.flush()
@@ -121,15 +117,16 @@ def _write_new_secret(path, data: bytes) -> None:
 def _read_secret(path, size: int, label: str) -> bytes:
     """Read a ``size``-byte key with O_NOFOLLOW; refuse a non-regular file, group/other access, or a wrong length."""
     try:
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        fd = _platform.open_nofollow(path)
     except OSError as e:
         raise LedgerError(f"{label}_unreadable: {path}: {e.strerror}") from None
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             raise LedgerError(f"{label}_unreadable: {path} is not a regular file")
-        if st.st_mode & 0o077:
-            raise LedgerError(f"{label}_insecure: {path} is readable by group or others; chmod 600 it")
+        problem = _platform.access_problem(fd, st)
+        if problem:
+            raise LedgerError(f"{label}_insecure: {_platform.insecure(path, problem)}")
         data = os.read(fd, size + 1)
     finally:
         os.close(fd)
@@ -303,11 +300,11 @@ class Ledger:
         self.witness_path = Path(witness_path) if witness_path else self.path.parent / f"{self.path.name}.witness" / "witness.pem"
         self.ledger_key_path = Path(ledger_key_path) if ledger_key_path else self.path.parent / f"{self.path.name}.ledger-key" / "ledger.key"
         self._anchor_path = Path(anchor_path) if anchor_path else self.ledger_key_path.parent / "head.anchor"
-        if self.witness_path.resolve().is_relative_to(self.path.resolve()):
+        if _platform.inside(self.witness_path, self.path):
             raise LedgerError("witness key must live outside the ledger directory")
-        if self.ledger_key_path.resolve().is_relative_to(self.path.resolve()):
+        if _platform.inside(self.ledger_key_path, self.path):
             raise LedgerError("ledger key must live outside the ledger directory")
-        if self._anchor_path.resolve().is_relative_to(self.path.resolve()):
+        if _platform.inside(self._anchor_path, self.path):
             raise LedgerError("head anchor must live outside the ledger directory")
         self._lock = threading.Lock()
         self.entries: list[Entry] = []
@@ -340,13 +337,13 @@ class Ledger:
     def capability_key_path(self) -> Path:
         """Minting key. Outside the ledger directory. The gateway does not read it."""
         path = self.path.parent / f"{self.path.name}.capability" / "capability.pem"
-        if path.resolve().is_relative_to(self.path.resolve()):
+        if _platform.inside(path, self.path):
             raise LedgerError("capability key must live outside the ledger directory")
         return path
 
     def lock_path(self) -> Path:
         path = self.path.parent / f"{self.path.name}.lock"
-        if path.resolve().is_relative_to(self.path.resolve()):
+        if _platform.inside(path, self.path):
             raise LedgerError("ledger lock must live outside the ledger directory")
         return path
 
@@ -354,11 +351,10 @@ class Ledger:
         if not isinstance(jti, str) or not jti:
             raise LedgerError("jti required")
         directory = self.path.parent / f"{self.path.name}.redeem-locks"
-        if directory.resolve().is_relative_to(self.path.resolve()):
+        if _platform.inside(directory, self.path):
             raise LedgerError("redemption lock must live outside the ledger directory")
         directory.mkdir(parents=True, exist_ok=True)
-        # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
-        os.chmod(directory, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+        _platform.owner_only_dir(directory)
         return directory / hashlib.sha256(jti.encode("utf-8")).hexdigest()
 
     def _entries_file_size(self) -> int:
@@ -380,9 +376,8 @@ class Ledger:
                 self.held = True
                 self.fd = None
                 try:
-                    if fcntl is not None:
-                        self.fd = os.open(ledger.lock_path(), os.O_CREAT | os.O_RDWR, 0o600)
-                        fcntl.flock(self.fd, fcntl.LOCK_EX)
+                    self.fd = _platform.open_lock_file(ledger.lock_path())
+                    _platform.lock(self.fd)
                     if check_stale and ledger._entries_size is not None and ledger._entries_file_size() != ledger._entries_size:
                         raise LedgerError("ledger file changed by another writer; reopen the ledger")
                     return self
@@ -396,8 +391,10 @@ class Ledger:
 
             def _release(self):
                 if self.fd is not None:
-                    fcntl.flock(self.fd, fcntl.LOCK_UN)
-                    os.close(self.fd)
+                    try:
+                        _platform.unlock(self.fd)
+                    finally:
+                        os.close(self.fd)
                     self.fd = None
                 if self.held:
                     ledger._lock.release()
@@ -435,8 +432,7 @@ class Ledger:
             if self.wrap_path.exists():
                 raise LedgerError("ledger key missing; refusing to open ciphertext with the principal key")
             path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
-            os.chmod(path.parent, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+            _platform.owner_only_dir(path.parent)
             try:
                 _write_new_secret(path, os.urandom(LEDGER_KEY_BYTES))
             except FileExistsError:
@@ -457,13 +453,13 @@ class Ledger:
                     tmp = self.wrap_path.with_name(f".keywrap.{os.getpid()}.{os.urandom(4).hex()}.tmp")
                     try:
                         _write_new_secret(tmp, (json.dumps(blob, indent=2) + "\n").encode("utf-8"))
-                        os.replace(tmp, self.wrap_path)
+                        _platform.replace(tmp, self.wrap_path)
                     finally:
                         if os.path.lexists(tmp):
                             os.unlink(tmp)
                     return data_key
         try:
-            fd = os.open(self.wrap_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            fd = _platform.open_nofollow(self.wrap_path)
         except OSError as e:
             raise LedgerError(f"ledger key file unreadable: {e.strerror}") from None
         try:
@@ -499,8 +495,7 @@ class Ledger:
             return key
         if self._default_witness_dir():
             try:
-                # <ledger>.witness is Two-Key's own directory. Owner only (0o700): the rule's 0o644 would let others read.
-                os.chmod(self.witness_path.parent, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+                _platform.owner_only_dir(self.witness_path.parent)   # <ledger>.witness is Two-Key's own directory
             except OSError:
                 pass                                        # not ours to change; the key file is still checked
         return self._load_witness()
@@ -695,7 +690,7 @@ class Ledger:
         entry_hash = self._hash(seq, prev, kind, body)
         entry = Entry(seq, prev, kind, body, entry_hash)
         line = _seal(self._data_key, json.dumps(entry.to_json(), separators=(",", ":"), sort_keys=True))
-        with self.entries_path.open("a", encoding="utf-8") as fh:
+        with self.entries_path.open("a", encoding="utf-8", newline="\n") as fh:
             fh.write(line + "\n")
             fh.flush()
             os.fsync(fh.fileno())
@@ -741,7 +736,7 @@ class Ledger:
         """
         tmp = self.head_path.with_suffix(".json.tmp")
         data = text.encode("utf-8")
-        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _platform.O_BINARY, 0o666)
         try:
             view = memoryview(data)
             while view:
@@ -752,12 +747,8 @@ class Ledger:
             os.fsync(fd)
         finally:
             os.close(fd)
-        os.replace(tmp, self.head_path)
-        dirfd = os.open(self.path, os.O_RDONLY)
-        try:
-            os.fsync(dirfd)
-        finally:
-            os.close(dirfd)
+        _platform.replace(tmp, self.head_path)
+        _platform.fsync_dir(self.path)
 
     def _ledger_files_incomplete(self) -> bool:
         """True when a wiped directory would otherwise open as a new, empty ledger."""
@@ -784,15 +775,16 @@ class Ledger:
         if not os.path.lexists(path):
             return None
         try:
-            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            fd = _platform.open_nofollow(path)
         except OSError as e:
             raise LedgerError(f"head_anchor_unreadable: {path}: {e.strerror}") from None
         try:
             st = os.fstat(fd)
             if not stat.S_ISREG(st.st_mode):
                 raise LedgerError(f"head_anchor_unreadable: {path} is not a regular file")
-            if st.st_mode & 0o077:
-                raise LedgerError(f"head_anchor_insecure: {path} is readable by group or others; chmod 600 it")
+            problem = _platform.access_problem(fd, st)
+            if problem:
+                raise LedgerError(f"head_anchor_insecure: {_platform.insecure(path, problem)}")
             raw = os.read(fd, 64 * 1024 + 1)
         finally:
             os.close(fd)
@@ -845,21 +837,16 @@ class Ledger:
         parent = self._anchor_path.parent
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if parent == self.ledger_key_path.parent:
-            # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
-            os.chmod(parent, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+            _platform.owner_only_dir(parent)
         data = (json.dumps(stored, indent=2) + "\n").encode("utf-8")
         tmp = parent / f".head.anchor.{os.getpid()}.{os.urandom(4).hex()}.tmp"
         try:
             _write_new_secret(tmp, data)
-            os.replace(tmp, self._anchor_path)
+            _platform.replace(tmp, self._anchor_path)
         finally:
             if os.path.lexists(tmp):
                 os.unlink(tmp)
-        dirfd = os.open(parent, os.O_RDONLY)
-        try:
-            os.fsync(dirfd)
-        finally:
-            os.close(dirfd)
+        _platform.fsync_dir(parent)
 
     def _reject_if_behind_anchor(self) -> None:
         anchor = self._read_anchor()
@@ -1004,18 +991,17 @@ class Ledger:
                     "dropped_bytes": 0}
         digest = hashlib.sha256(tail).hexdigest()
         dest_dir = self.path.parent / f"{self.path.name}.recovery"
-        if dest_dir.resolve().is_relative_to(self.path.resolve()):
+        if _platform.inside(dest_dir, self.path):
             raise LedgerError("recovery notes must live outside the ledger directory")
         dest_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-        # Owner only (0o700): the rule's suggested 0o644 would let others read this key directory.
-        os.chmod(dest_dir, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+        _platform.owner_only_dir(dest_dir)
         dest = dest_dir / f"dropped-{digest[:16]}.bin"
         if not os.path.lexists(dest):
             _write_new_secret(dest, tail)
         with self._exclusive(check_stale=False):
             if self.entries_path.read_bytes() != raw:
                 raise LedgerError("ledger changed during recovery; stop other writers and run recover again")
-            fd = os.open(self.entries_path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+            fd = _platform.open_nofollow(self.entries_path, os.O_RDWR)
             try:
                 os.ftruncate(fd, kept)
                 os.fsync(fd)
@@ -1023,11 +1009,7 @@ class Ledger:
                 os.close(fd)
             if os.path.lexists(tmp) and not tmp.is_symlink():
                 os.unlink(tmp)
-            dirfd = os.open(self.path, os.O_RDONLY)
-            try:
-                os.fsync(dirfd)
-            finally:
-                os.close(dirfd)
+            _platform.fsync_dir(self.path)
         body = {"dropped_bytes": len(tail), "dropped_sha256": "sha256:" + digest,
                 "dropped_nonempty_lines": tail_lines, "tail_torn": tail_torn,
                 "head_size": head["size"], "tail_file": str(dest)}
@@ -1105,7 +1087,7 @@ class Ledger:
                                   "will not open until that entry is removed (HOWTO \"If the ledger will not open "
                                   f"after a crash\"); then delete {staged}") from e
             try:
-                os.replace(staged, self.witness_path)
+                _platform.replace(staged, self.witness_path)
             except OSError as e:
                 raise LedgerError(f"witness rotated in the ledger, but {staged} could not be moved to "
                                   f"{self.witness_path} ({e.strerror}); move it by hand") from None
