@@ -133,7 +133,7 @@ def build_credential(auth: Any) -> CredentialProvider:
     if t == "username_password":
         raise JudgeConfigError("username_password is now auth type basic (username_env and password_env; HTTPS only)")
     if t == "oauth_device_code":
-        raise JudgeConfigError(f"{t} is not in the concept line; use auth type env or callback")
+        raise JudgeConfigError(f"{t} is not supported; use auth type env or callback")
     if t == "callback":
         return CallbackTokenProvider(_hook(auth["callback"]))
     raise JudgeConfigError(f"unknown auth type {t!r}")

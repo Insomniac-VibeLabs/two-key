@@ -239,7 +239,7 @@ class ProblemFTests(unittest.TestCase):
         rules = validate_rules(RULES)
         signed = {"prose": PROSE, "hard_rules": rules}
         envelope = {
-            "format": "two-key-concept-constitution-v1",
+            "format": "two-key-constitution-v1",
             "signed": signed,
             "signature": sign(key, canonical_bytes(signed)),
             "fingerprint": fingerprint(key.public_key()),

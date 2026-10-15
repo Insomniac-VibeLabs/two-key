@@ -22,10 +22,10 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.3.2 (package name `two-key`) is tag `v0.3.2` on `main`, the first
+- Package 0.4.0 (package name `two-key`) is tag `v0.4.0` on `main`, the first
   release from this repository. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`.
   Tag `v0.2.4` stays on `fc836bb`.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.3.2`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
   where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
@@ -36,7 +36,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key`, import name `two_key`,
-version `0.3.2`, tag `v0.3.2` on `main`. Not on PyPI.
+version `0.4.0`, tag `v0.4.0` on `main`. Not on PyPI.
 
 ```bash
 python3 -m venv .venv
@@ -60,7 +60,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 
 Git install:  
-`pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.3.2"`
+`pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.4.0"`
 
 ## Tests and docs
 
@@ -130,7 +130,11 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   fields load with `LOAD_FIELD`. A mapped field is required; an unmapped
   tool gets the signed default. A description is never compiled, sent to a
   judge, or used in a reason. A constitution with no custom fields must
-  stay byte-for-byte v1 (`tests/test_fields_compat.py`). Path A evaluates
+  stay byte-for-byte v1 (`tests/test_fields_compat.py`).
+- Format identifiers are `two-key-...` (0.4.0). Files with the old
+  `two-key-concept-...` formats are refused with a clear message, never
+  read (`tests/test_legacy_formats.py`). Do not change a format name
+  again without a new version suffix and a migration note. Path A evaluates
   structured data, not English-language policy prose.
 - No judge may be the monitored agent: a judge holding the agent's
   credential (the same API token, or the same username and password) is

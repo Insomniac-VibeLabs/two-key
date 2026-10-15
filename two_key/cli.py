@@ -1,4 +1,4 @@
-"""Command line for the concept build.
+"""Command line for Two-Key.
 
   two-key init-key DIR
   two-key sign-constitution --key KEY --prose FILE --rules FILE --out FILE [--envelope-format auto|v2]

@@ -18,7 +18,7 @@ from two_key.canonical import canonical_bytes
 from two_key.keys import generate_private_key, public_raw, save_private_key, sign
 from two_key.ledger import Ledger, LedgerError, _seal, witness_key_fingerprint
 
-from test_concept import _engine
+from test_two_key import _engine
 
 
 def fp(key) -> str:
@@ -319,7 +319,7 @@ class Rotation(unittest.TestCase):
     def test_forged_rotation_without_the_old_witness_key_is_refused(self):
         # The principal key and the ledger key, but not the old witness key: sign "old" with a stand-in.
         led, new, stand_in = self.led, generate_private_key(), generate_private_key()
-        statement = {"format": "two-key-concept-witness-rotation/1", "seq": led.size(),
+        statement = {"format": "two-key-witness-rotation/1", "seq": led.size(),
                      "prev": led.entries[-1].entry_hash, "old_witness_public_key": public_raw(self.old.public_key()),
                      "new_witness_public_key": public_raw(new.public_key()), "reason": ""}
         message = canonical_bytes(statement)

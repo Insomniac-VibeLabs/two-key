@@ -1,11 +1,10 @@
-"""Two-Key concept: dual-path authorization for AI agents.
+"""Two-Key: dual-path authorization for AI agents.
 
 A tool call runs only if Path A (policy VM) and Path B (judge quorum) both
-allow. This package is the initial concept. It has no scanning, antivirus,
-or DLP hooks.
+allow. It has no scanning, antivirus, or DLP hooks.
 """
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 from .core import Decision, TwoKey
 

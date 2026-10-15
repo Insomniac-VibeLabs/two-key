@@ -1,4 +1,4 @@
-"""Two-Key concept: a tool call runs only if Path A and Path B both allow.
+"""Two-Key: a tool call runs only if Path A and Path B both allow.
 
 ``authorize_from_agent`` runs both paths once the call is well-formed and within limits,
 and does not execute tools. A malformed or oversized call is an early deny before either path.
@@ -25,7 +25,7 @@ from .canonical import (MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical
                         to_plain)
 from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, AgentDeclined, parse_proposal, tool_vocabulary
 from .agent_meta import (AgentMetadataError, REASON_LEDGER_BODY, cap_ledger_text, check_agent_meta_field,
-                         concept_agent_record, normalize_origin, type_tag)
+                         ledger_agent_record, normalize_origin, type_tag)
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
                          valid_ttl)
 from .compiler import CompiledConstitution, compile_both
@@ -269,7 +269,7 @@ class TwoKey:
             # Fail closed: never echo the bad origin onto the ledger.
             return self._deny(None, e.reason, None, None, None, e.detail)
         try:
-            agent = concept_agent_record(agent_id, hosting)
+            agent = ledger_agent_record(agent_id, hosting)
         except AgentMetadataError as e:
             return self._deny(origin, e.reason, None, None, None, e.detail)
         try:
@@ -281,7 +281,7 @@ class TwoKey:
     def _authorize(self, action: dict, arguments: dict, proposal: str, *,
                    agent: dict | None = None,
                    agent_session: str | None = None, origin: str = "library") -> Decision:
-        # agent was built by authorize()/authorize_from_agent via concept_agent_record
+        # agent was built by authorize()/authorize_from_agent via ledger_agent_record
         # (type and 256-char caps). Hosting is a deployment fact, not a trust decision.
         # The raw claim is measured before anything reads it: an oversized one keeps only size and digest.
         # Each input is copied once into built-in types (any Mapping becomes a dict), and everything below
@@ -488,7 +488,7 @@ class TwoKey:
         try:
             agent_id = check_agent_meta_field("agent_id", getattr(agent, "agent_id", None))
             hosting = check_agent_meta_field("hosting", getattr(agent, "hosting", None))
-            record = concept_agent_record(agent_id, hosting)
+            record = ledger_agent_record(agent_id, hosting)
         except AgentMetadataError as e:
             return self._deny(origin, e.reason, None, None, None, e.detail)
         try:

@@ -45,8 +45,8 @@ class BackupError(ValueError):
     before the restore write, and a rejected bundle is never treated as empty."""
 
 
-FORMAT = "two-key-concept-key-backup/1"
-PAYLOAD_FORMAT = "two-key-concept-key-backup-payload/1"
+FORMAT = "two-key-key-backup/1"
+PAYLOAD_FORMAT = "two-key-key-backup-payload/1"
 BACKUP_VERSION = 1
 ALG = "pbkdf2-sha256+aes-256-gcm"
 KDF_NAME = "pbkdf2-sha256"
@@ -252,6 +252,9 @@ def _decrypt(blob: bytes, passphrase: str, expect_role: str) -> dict:
         raise BackupError(f"backup_refused: {e}") from None
     header = _exact_fields(header, _HEADER_FIELDS, "bundle")
     if header["format"] != FORMAT or type(header["version"]) is not int or header["version"] != BACKUP_VERSION:
+        if isinstance(header["format"], str) and header["format"].startswith("two-key-concept-"):
+            raise BackupError("backup_refused: bundle made by two-key-concept (before two-key 0.4.0); "
+                              "export a new backup with two-key")
         raise BackupError("backup_refused: unsupported backup format")
     if header["role"] not in ROLES or header["role"] != expect_role:
         raise BackupError("backup_refused: bundle role does not match the file")

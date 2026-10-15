@@ -110,7 +110,7 @@ class Callers(unittest.TestCase):
             load_unsigned(prose, rules)
 
     def test_constitution_envelope_duplicate(self):
-        p = self.write("c.json", '{"format": "two-key-concept-constitution-v1", "signed": {}, "signed": {}}')
+        p = self.write("c.json", '{"format": "two-key-constitution-v1", "signed": {}, "signed": {}}')
         with self.assertRaisesRegex(ConstitutionError, "duplicate key 'signed'"):
             load_envelope(p)
 

@@ -68,16 +68,24 @@ from .keys import (
     public_raw, save_private_key, save_public_key, sign, verify,
 )
 
-WRAP_FORMAT = "two-key-concept-ledger-wrap/1"
-RECORD_FORMAT = "two-key-concept-ledger-enc/1"
-ANCHOR_FORMAT = "two-key-concept-head-anchor/1"
-_WRAP_INFO = b"two-key-concept-ledger-wrap/1"
-_RECORD_AAD = b"two-key-concept-ledger-enc/1"
+WRAP_FORMAT = "two-key-ledger-wrap/1"
+RECORD_FORMAT = "two-key-ledger-enc/1"
+ANCHOR_FORMAT = "two-key-head-anchor/1"
+_WRAP_INFO = b"two-key-ledger-wrap/1"
+_RECORD_AAD = b"two-key-ledger-enc/1"
 
 
 LEDGER_KEY_BYTES = 32
 
-WITNESS_ROTATION_FORMAT = "two-key-concept-witness-rotation/1"
+WITNESS_ROTATION_FORMAT = "two-key-witness-rotation/1"
+# Formats written by the two-key-concept repository (before two-key 0.4.0). They are not read; a file in
+# one gets a clear error instead of a decryption or parse failure.
+LEGACY_PREFIX = "two-key-concept-"
+LEGACY_MESSAGE = "made by two-key-concept (before two-key 0.4.0); two-key cannot read it"
+
+
+def _legacy(fmt) -> bool:
+    return isinstance(fmt, str) and fmt.startswith(LEGACY_PREFIX)
 # Written only by the ledger itself: Ledger.append refuses these kinds.
 _WITNESS_KINDS = frozenset({"witness_pinned", "witness_rotated"})
 _ANCHOR_FIELDS = ("format", "size", "tip", "merkle_root", "public_key", "witness_public_key")
@@ -188,7 +196,7 @@ def merkle_root_incremental(leaves: list[bytes]) -> bytes:
 def _kek(ledger_key: bytes) -> bytes:
     if len(ledger_key) != 32:
         raise LedgerError("ledger key must be 32 bytes")
-    return HKDF(SHA256(), 32, salt=b"two-key-concept-ledger", info=_WRAP_INFO).derive(ledger_key)
+    return HKDF(SHA256(), 32, salt=b"two-key-ledger", info=_WRAP_INFO).derive(ledger_key)
 
 
 def _seal(data_key: bytes, plaintext: str) -> str:
@@ -466,9 +474,11 @@ class Ledger:
         try:
             blob = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, ValueError):
-            raise LedgerError("ledger key file is not a concept wrapped data key") from None
+            raise LedgerError("ledger key file is not a two-key wrapped data key") from None
         if not isinstance(blob, dict) or blob.get("format") != WRAP_FORMAT:
-            raise LedgerError("ledger key file is not a concept wrapped data key")
+            if isinstance(blob, dict) and _legacy(blob.get("format")):
+                raise LedgerError(f"ledger key file {LEGACY_MESSAGE}: start a new ledger")
+            raise LedgerError("ledger key file is not a two-key wrapped data key")
         try:
             return AESGCM(kek).decrypt(bytes.fromhex(blob["nonce"]), bytes.fromhex(blob["wrapped"]), _WRAP_INFO)
         except Exception as e:
@@ -788,18 +798,20 @@ class Ledger:
         try:
             stored = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, ValueError):
-            raise LedgerError("head anchor is not a concept head anchor") from None
+            raise LedgerError("head anchor is not a two-key head anchor") from None
         if not isinstance(stored, dict) or stored.get("format") != ANCHOR_FORMAT:
-            raise LedgerError("head anchor is not a concept head anchor")
+            if isinstance(stored, dict) and _legacy(stored.get("format")):
+                raise LedgerError(f"head anchor {LEGACY_MESSAGE}: start a new ledger")
+            raise LedgerError("head anchor is not a two-key head anchor")
         try:
             body = {k: stored[k] for k in _ANCHOR_FIELDS}
         except KeyError:
-            raise LedgerError("head anchor is not a concept head anchor") from None
+            raise LedgerError("head anchor is not a two-key head anchor") from None
         if type(body["size"]) is not int or body["size"] < 0:
             raise LedgerError("head anchor size is not a valid count")
         for field in ("tip", "merkle_root", "public_key", "witness_public_key"):
             if type(body[field]) is not str:
-                raise LedgerError("head anchor is not a concept head anchor")
+                raise LedgerError("head anchor is not a two-key head anchor")
         if body["public_key"] != public_raw(self.public_key):
             raise LedgerError("head anchor was signed by a different principal key")
         message = canonical_bytes(body)

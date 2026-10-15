@@ -560,7 +560,7 @@ class A9EnvelopeFormat(unittest.TestCase):
     def test_unknown_format_refused(self):
         env = sign_constitution("p", self.plain_rules, self.key, self.plain_specs)
         with self.assertRaises(ConstitutionSignatureError):
-            verify_signed(dict(env, format="two-key-concept-constitution-v3"), self.key.public_key())
+            verify_signed(dict(env, format="two-key-constitution-v3"), self.key.public_key())
 
     def test_cli_and_loaders(self):
         from two_key.cli import main

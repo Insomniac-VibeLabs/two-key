@@ -1802,30 +1802,44 @@ On branch `working`. Package version stays 0.3.1. Tests only.
   pick the module value inside. No helper mutated them, so no test result
   changes.
 
-## Release v0.3.2: new repository, package `two-key` — 2026-10-15
+## Release v0.4.0: new repository, package `two-key`, formats without "concept" — 2026-10-15
 
-Package version 0.3.2. Development moved from
+Package version 0.4.0. Development moved from
 `Insomniac-VibeLabs/two-key-concept` (to be archived) to
 `Insomniac-VibeLabs/two-key`, with the full history of `main` (259 commits,
-through `dd2f341`, the 0.3.1 merge). To be tagged `v0.3.2` on `main` here;
-tags `v0.3.1` and earlier stay in `two-key-concept`.
+through `dd2f341`, the 0.3.1 merge). To be tagged `v0.4.0` on `main` here;
+tags `v0.3.1` and earlier stay in `two-key-concept`. ROADMAP phase numbers
+(0.4 = SIEM export, ...) stay labels; package 0.4.0 is this move.
 
-- The package is renamed `two-key-concept` to `two-key` (`pyproject.toml`,
+- **Package `two-key`.** `two-key-concept` is renamed `two-key` (`pyproject.toml`,
   `uv.lock` regenerated with uv 0.13.0). The import name stays `two_key`.
-  Install with `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.3.2"`.
+  Install with `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.4.0"`.
+- **Format identifiers drop "concept"** (maintainer decision: the old files
+  were test data): `two-key-constitution-v1`/`-v2`, `two-key-ledger-wrap/1`,
+  `two-key-ledger-enc/1` (also the AES-GCM associated data), the ledger
+  HKDF salt `two-key-ledger`, `two-key-head-anchor/1`,
+  `two-key-witness-rotation/1`, `two-key-key-backup/1`, and
+  `two-key-key-backup-payload/1`. Nothing else in signing, hashing, or
+  encryption changed: the golden test's digest, `bytecode_hash`,
+  `spec_hash`, and `nl_hash` are unchanged (the envelope format is outside
+  the signed bytes).
+- **Old files are refused with a clear message**, never read: a
+  `two-key-concept-*` constitution ("re-sign it"), ledger key wrap or head
+  anchor ("start a new ledger"), or backup bundle ("export a new backup").
+  `tests/test_legacy_formats.py`.
+- **No "concept" left in code or docs** except those refusals and history:
+  docstrings, messages (`not a two-key wrapped data key`), the judge auth
+  message, `agent_meta.concept_agent_record` is now `ledger_agent_record`,
+  and `tests/test_concept.py` is now `tests/test_two_key.py` (`CoreTests`).
 - Repository URLs, badges, and the SonarCloud project key
-  (`Insomniac-VibeLabs_two-key`) point to the new repository. "Concept"
-  wording is gone from README, HOWTO, AGENTS.md, CONTRIBUTING, llms.txt,
-  and the package description.
-- **Unchanged on purpose:** the wire and file format identifiers keep their
-  `two-key-concept-` prefix (`two-key-concept-constitution-v1`/`-v2`, the
-  ledger wrap, record, anchor, and witness-rotation formats, the HKDF salt,
-  and the key-backup formats). They are signed or encrypted into existing
-  constitutions, ledgers, and backups; renaming them would make every one
-  unreadable.
+  (`Insomniac-VibeLabs_two-key`) point here; issue references point to this
+  repository's issues (#2 is the reference wrapper).
 
 ### Upgrading from 0.3.1
 
-- Uninstall `two-key-concept` and install `two-key`; both provide the
-  `two_key` module, so do not keep both. Code that imports `two_key` does not
-  change. Keys, ledgers, signed constitutions, and backups open unchanged.
+- Uninstall `two-key-concept`, install `two-key`. Both provide the `two_key`
+  module, so do not keep both. Code that imports `two_key` does not change,
+  except `two_key.agent_meta.concept_agent_record`, now `ledger_agent_record`.
+- Key files (PEM) still load. Constitutions, ledgers, head anchors, and
+  backups made before 0.4.0 do not: re-sign the constitution, start a new
+  ledger with the same keys, and export a new backup.

@@ -392,7 +392,7 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 The plan from 0.2.4 to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-0.3.0 (key backup), 0.3.1 (live-test fixes, beta), and 0.3.2 (the move to
+0.3.0 (key backup), 0.3.1 (live-test fixes, beta), and 0.4.0 (the move to
 this repository and the package rename to `two-key`) are released. The MCP adapter (0.6) moves ahead of 0.4 and
 0.5. Nothing after 0.3 in that plan exists yet.
 The detail is in [ROADMAP.md](ROADMAP.md).
@@ -428,8 +428,8 @@ flowchart LR
 | 0.11, any time before 1.0 | Optional reputation halt. Off unless configured. Not a change to `revoke` |
 | After 1.0, not scheduled | More spec field types (decimal, URL, path, email, opaque bytes), and `amount` / `counterparty` as ordinary typed fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped in 0.3.0 |
 
-Install from git. It is not published to PyPI. Package version is 0.3.2,
-the first release from this repository: tag `v0.3.2` on `main`. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. In
+Install from git. It is not published to PyPI. Package version is 0.4.0,
+the first release from this repository: tag `v0.4.0` on `main`. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. In
 that repository tag `v0.3.0` stays on
 `e44be56`. Tag `v0.2.4` stays on
 `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on
@@ -452,10 +452,10 @@ that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.3.2"
+pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.4.0"
 ```
 
-That ref is the tagged 0.3.2 release: 0.3.1 under the new package name `two-key` (0.3.0's key backup, custom Path A
+That ref is the tagged 0.4.0 release: 0.3.1 under the new package name `two-key` (0.3.0's key backup, custom Path A
 fields, and #45 gateway boundary, plus the live-test fixes: agent declines,
 the syntax-only agent vocabulary, and data classes that combine as a set).
 `main` is that release. `working` is where the next changes land. For the
@@ -508,7 +508,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, custom fields, judges, agents |
-| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.3.2 is tagged `v0.3.2` |
+| `ROADMAP.md` | Plan from 0.2.4 to 1.0. 0.4.0 is tagged `v0.4.0` |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/JUDGES_AND_QUORUM.md` | How judges vote and how Path A and Path B combine |
 | `docs/FIT.md` | Whether this package is the right control |

@@ -1,4 +1,4 @@
-"""Canonical encoding for the concept ledger, tokens, and judge bindings.
+"""Canonical encoding for the ledger, tokens, and judge bindings.
 
 JSON with sorted keys and no insignificant whitespace. Non-finite numbers
 are rejected so two encoders cannot disagree on NaN. Containers nested more

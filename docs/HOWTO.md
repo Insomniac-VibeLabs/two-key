@@ -293,10 +293,12 @@ leading or trailing whitespace are refused.
 
 ### Envelope format
 
-A rules file without `fields:` signs exactly as before: format
-`two-key-concept-constitution-v1`, with the same digest, `bytecode_hash`,
-and `spec_hash`. With `fields:`, it signs as
-`two-key-concept-constitution-v2`. Installs older than custom fields refuse
+A rules file without `fields:` signs as format `two-key-constitution-v1`,
+with the same digest, `bytecode_hash`, and `spec_hash` as before custom
+fields existed. With `fields:`, it signs as `two-key-constitution-v2`.
+Before 0.4.0 (in the two-key-concept repository) these were
+`two-key-concept-constitution-v1` and `-v2`; such an envelope is refused
+with a message to re-sign it. Installs older than custom fields refuse
 v2, so they cannot load it and ignore the fields. A v2 constitution
 refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
 `fields`.
@@ -1213,7 +1215,7 @@ every key a signed head needs:
 | `witness.bundle.json` | `witness.pem` | principal key, ledger key |
 
 The bundle names its key derivation: `pbkdf2-sha256` at 600,000 iterations,
-then AES-256-GCM. Format `two-key-concept-key-backup/1`. 0.3 ships that
+then AES-256-GCM. Format `two-key-key-backup/1` (before 0.4.0, `two-key-concept-key-backup/1`, now refused). 0.3 ships that
 function only. PBKDF2 slows guessing and is not memory-hard. A short
 passphrase, or two bundles that share a passphrase, is warned about. All
 three sharing one passphrase is warned about too. A bundle file over 64 MiB

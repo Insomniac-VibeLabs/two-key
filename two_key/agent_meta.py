@@ -130,8 +130,8 @@ def normalize_origin(origin: Any = None) -> str:
     return normalized or "library"
 
 
-def concept_agent_record(agent_id: Any = None, hosting: Any = None) -> dict | None:
-    """Build the concept ledger ``agent`` dict, or ``None`` when both fields are omitted."""
+def ledger_agent_record(agent_id: Any = None, hosting: Any = None) -> dict | None:
+    """Build the ledger ``agent`` dict, or ``None`` when both fields are omitted."""
     aid = check_agent_meta_field("agent_id", agent_id)
     host = check_agent_meta_field("hosting", hosting)
     if aid or host:
