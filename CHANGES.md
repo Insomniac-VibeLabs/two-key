@@ -62,6 +62,7 @@
 - [Every tool decides each field a rule reads (#10) — 2026-10-15](#every-tool-decides-each-field-a-rule-reads-10--2026-10-15)
 - [`case: exact` string fields (live run 6x, X19) — 2026-10-15](#case-exact-string-fields-live-run-6x-x19--2026-10-15)
 - [Judges are not asked about a call that cannot be read (run 6 finding 4) — 2026-10-15](#judges-are-not-asked-about-a-call-that-cannot-be-read-run-6-finding-4--2026-10-15)
+- [Roadmap: per-judge ballot records before 1.0 — 2026-10-15](#roadmap-per-judge-ballot-records-before-10--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2389,3 +2390,11 @@ On branch `working`. Maintainer's decision (option B). This narrows the
 
 - A ledger consumer that expects a judge tally on every decision should
   accept `path_b.skipped: true` with zero counts.
+
+## Roadmap: per-judge ballot records before 1.0 — 2026-10-15
+
+On branch `working`. Docs only. The maintainer's decision on run 6 finding 9:
+the ledger will record each judge's ballot (id, vote, confidence, error
+class, a rationale digest; never the rationale text) together with the
+judge history summary (#1), before the 1.0 review, after the same security
+review. ROADMAP, README, SCOPE, and THREAT_MODEL say so.

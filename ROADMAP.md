@@ -44,7 +44,7 @@ flowchart LR
 | 0.5.0 | MCP adapter: `two-key mcp-proxy`, `two-key mcp-draft-specs`, caller-supplied facts, and the guard core | Built on `working`; live test run 6 next |
 | 0.6.0 | DLP and antivirus hooks that call external scanners; judge connection reuse (#6) | Next |
 | 0.7.0 | Ledger export for a SIEM | Planned |
-| 1.0.0 | Judge history summary (#1), then a public community review and release on PyPI | Planned |
+| 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
@@ -144,6 +144,11 @@ test run 6 runs before the release.
   is signed. It changes what judges receive and reads the ledger during
   authorization, so it gets its own maintainer security review before any
   code. The design is in the issue.
+- With it, per-judge ballot records in the ledger (maintainer's decision
+  after live run 6): each judge's id, vote, confidence, and error class, and
+  a digest of its rationale, never the text, which is model output and may
+  quote arguments. Today the ledger keeps only the tally, so a pass with one
+  judge down cannot be told from the ledger alone. Reviewed with #1.
 - A time-boxed, public community review with a stated scope.
 - Release only with no unresolved Medium or higher findings from that review.
 - Publish to PyPI with trusted publishing, signed tags, and an SBOM.
@@ -261,10 +266,9 @@ CLI and file formats, so it adds no new logic of its own.
 - Ledger auditing: browse decisions, filter by tool, reason, judge, and
   time, and show both paths' results for each call. It runs the Merkle and
   digest checks (`check_decision_digests`) and shows failures plainly.
-- Filtering by judge needs per-judge ballot records, which the ledger does
-  not hold today. Planned: ledger each ballot's judge id, vote, and capped
-  error only, never the rationale text, which is model output and may quote
-  arguments.
+- Filtering by judge uses the per-judge ballot records planned for 1.0
+  (above): judge id, vote, confidence, error class, and a rationale digest,
+  never the rationale text.
 - Export from the audit view reuses the SIEM export (0.7.0), so digests and reason
   codes leave the screen, not argument values.
 - Key and backup status: fingerprints, backup age, and a prompt to run the

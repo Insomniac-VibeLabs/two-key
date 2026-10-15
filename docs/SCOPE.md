@@ -112,9 +112,9 @@ After 1.0, not scheduled:
 - Local GUI: a loopback-only interface for configuration and
   ledger auditing, built on the CLI and the existing file formats. It does not
   hold the principal key, and it is not a hosted or multi-user service.
-  Filtering by judge needs per-judge ballot records (judge id, vote, and
-  capped error only, never the rationale text), which the ledger does not
-  hold today.
+  Filtering by judge uses the per-judge ballot records planned for 1.0
+  (judge id, vote, confidence, error class, and a rationale digest, never
+  the rationale text); the ledger does not hold them today.
 - More spec field types: decimal, URL, path,
   email, and opaque bytes. `amount` and `counterparty` become ordinary typed
   fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped

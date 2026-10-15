@@ -540,7 +540,7 @@ flowchart LR
 | 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | In testing on `working` |
 | 0.6.0 | DLP and antivirus hooks that call external scanners (ClamAV, a secret scanner); judge connection reuse (#6) | Next |
 | 0.7.0 | Ledger export for a SIEM: verified, decrypted locally, no argument values | Planned |
-| 1.0.0 | Judge history summary (#1), then a public community review and release on PyPI. Described as community-reviewed, not audited | Planned |
+| 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI. Described as community-reviewed, not audited | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions

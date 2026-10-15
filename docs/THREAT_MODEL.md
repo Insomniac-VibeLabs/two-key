@@ -566,10 +566,10 @@ above, not here.
     rebinding. It is the first place decrypted ledger content is displayed, so
     anyone who can see the screen or reach the local port is a new audience. It
     is meant to show digests, sizes, and reason codes, not argument values.
-    Filtering by judge needs per-judge ballot records, which the ledger does
-    not hold today. They are meant to carry the judge id, the vote, and a
-    capped error only, never the rationale text, which is model output and may
-    quote arguments.
+    Filtering by judge uses the per-judge ballot records planned for 1.0
+    with the judge history summary (#1): judge id, vote, confidence, error
+    class, and a rationale digest, never the rationale text, which is model
+    output and may quote arguments. The ledger does not hold them today.
     Configuration edits change policy, so the GUI is meant never to hold the
     principal key. It prepares a constitution and hands it to the existing
     signing command. A GUI that is reachable from another machine is out of
