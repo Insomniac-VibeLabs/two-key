@@ -116,7 +116,8 @@ class ThroughTheSdk(unittest.TestCase):
         self.assertNotIn("TWO_KEY_TEST_JUDGE_SECRET", names)
         self.assertIn("FAKE_MCP_LOG", names)
         self.assertLessEqual(names - {"FAKE_MCP_LOG", "FAKE_MCP_VARIANT"},
-                             {"HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER", "LC_CTYPE"})
+                             {"HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER", "LC_CTYPE",
+                              "__CF_USER_TEXT_ENCODING"})   # macOS sets it in every process: a text encoding code
 
     def test_paged_tools_list(self):
         cfg = proxy_config(self.tmp, anyio.run(pinned_digest, self.tmp, "paged"), variant="paged")

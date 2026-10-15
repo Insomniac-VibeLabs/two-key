@@ -76,6 +76,7 @@
 - [Semgrep findings printed to the job log — 2026-10-15](#semgrep-findings-printed-to-the-job-log--2026-10-15)
 - [Roadmap: where we are, and the plan to 0.6.0 — 2026-10-15](#roadmap-where-we-are-and-the-plan-to-060--2026-10-15)
 - [CI: an informational macOS and Windows run — 2026-10-15](#ci-an-informational-macos-and-windows-run--2026-10-15)
+- [macOS: the one failing test; first portability results — 2026-10-15](#macos-the-one-failing-test-first-portability-results--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2722,4 +2723,23 @@ On branch `working`. CI only.
   `uv.lock`), on pushes to `working` and by hand. It does not block
   (`continue-on-error`): Linux (`tests.yml`) stays the gate until those
   platforms are supported.
+
+## macOS: the one failing test; first portability results — 2026-10-15
+
+On branch `working`. Tests and CI only.
+
+- First run of `portability.yml`: macOS passes 721 of 722 tests and the demo.
+  The one failure was the test's own assumption: macOS adds
+  `__CF_USER_TEXT_ENCODING` (a text encoding code, no secret) to every
+  process it starts, so the upstream MCP server's environment had one more
+  name than the Linux list. The test now allows it; the proxy still passes
+  only the declared and minimal variables.
+- Windows fails 422 of 722 tests and the demo, almost all for one reason:
+  the key-file check refuses a key readable by group or others, and Python
+  reports every file on Windows as mode 0666, so no key loads and no ledger
+  opens (fail-closed). Also on Windows: no cross-process lock, `chmod 0700`
+  does not restrict access, and tests that start a child with only `PATH`
+  lose `SYSTEMROOT`, which Windows networking needs. ROADMAP's 0.6.0 plan
+  takes this up.
+- `portability.yml` jobs stop after 30 minutes.
 

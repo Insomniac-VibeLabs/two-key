@@ -91,6 +91,12 @@ in the same release.
   setup after the move) has maintainer settings left to confirm.
 - **Branches**: `main` and `working`. `mcp-proxy` is merged into `main`
   and can be deleted.
+- **Platforms** (first `portability.yml` run): Linux is supported and tested.
+  macOS passes 721 of 722 tests and the demo; the one failure was a test
+  assumption, since fixed. Windows does not run: the key-file check refuses
+  every key there (Python reports Windows files as mode 0666), so no ledger
+  opens. It fails closed, but it fails. It also lacks a cross-process lock
+  and owner-only directories.
 
 ## Ground rules
 
@@ -147,6 +153,14 @@ AGENTS.md requires.
      and take Dependabot's action updates.
    - Close #2 and #10, finish #3, delete the merged `mcp-proxy` branch, and
      push the run 6 and 6z results to their test branches.
+   - **Platforms.** Make macOS a required CI job once it passes. For
+     Windows, the maintainer decides between full support in 0.6.0 and
+     "not yet supported" in the docs. Full support means an owner-only check
+     on Windows access lists instead of mode bits, Windows file locking,
+     owner-only directories, and test environments that keep `SYSTEMROOT`.
+     It touches key and ledger handling, so it gets the security review too.
+     Either way, every hook works on Linux, macOS, and Windows, and its tests
+     run on all three.
 2. **Design note for the hook** (for the maintainer's review). It settles:
    - **How third-party software plugs in.** The maintainer's intent is an
      optional hook for an outside product. Proposed:
@@ -157,6 +171,15 @@ AGENTS.md requires.
        ClamAV's `clamd` socket;
      - no scanning engine in this package.
    - **Fail-closed rules:** a timeout, an error, or no result is a deny.
+     Superseded on 2026-10-15 by the maintainer's direction, pending their
+     review of the details: the scanner is optional, and Two-Key runs without
+     one. A configured scanner fails open by default after a time limit
+     (proposed 15 s, configurable), which leaves both keys deciding as
+     today. Fail-closed is the option for an enterprise or high-assurance
+     stance. A result the scanner could not finish (size or time limits)
+     counts as flagged. The stance is a signed rule on the scanner's verdict
+     (`clean`, `flagged`, `unavailable`); monitor mode only records it. An
+     unavailable scan is ledgered, warned about, and told to the judges.
    - **What is scanned:** the arguments the signed spec names (payload
      paths and files), before the judges see any argument text.
    - **How a result reaches Path A:** as a fact such as
