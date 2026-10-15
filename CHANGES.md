@@ -1855,3 +1855,17 @@ On branch `working`. Package version stays 0.4.0. Tests only.
   and `warned()` default `agent` to a sentinel, not the `AGENT` dict, because
   `agent=None` is itself a test case (no monitored agent declared).
 - No helper mutated those values, so no test result changes.
+
+## Workflow actions pinned to commit SHAs (#4) — 2026-10-15
+
+On branch `working`. Package version stays 0.4.0. CI only.
+
+- `coverage.yml`: `SonarSource/sonarqube-scan-action@v5` is now pinned to
+  `2f77a1ec69fb1d595b06f35ab27e97605bdef703`, the commit the `v5` tag
+  (`v5.3.2`) points to (Semgrep
+  `github-actions-mutable-action-tag`).
+- `semgrep.yml`: `actions/checkout@v4` and
+  `github/codeql-action/upload-sarif@v3` are pinned to the same SHAs the
+  other workflows already use. Every `uses:` line in `.github/workflows/`
+  now names a full commit SHA. The `semgrep/semgrep` container image is
+  still the floating `latest` tag.
