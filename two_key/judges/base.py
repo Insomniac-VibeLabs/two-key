@@ -38,7 +38,7 @@ class Ballot:
     confidence: float | None
     rationale: str
     error: str | None = None
-    # §4 (iii) binding: H(action record), H(constitution) and the two compilation hashes.
+    # Ballot binding: H(action record), H(constitution) and the two compilation hashes.
     action_hash: str | None = None
     constitution_hash: str | None = None
     nl_hash: str | None = None

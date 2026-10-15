@@ -1869,3 +1869,31 @@ On branch `working`. Package version stays 0.4.0. CI only.
   other workflows already use. Every `uses:` line in `.github/workflows/`
   now names a full commit SHA. The `semgrep/semgrep` container image is
   still the floating `latest` tag.
+
+## Leftover review nits (#7) — 2026-10-15
+
+On branch `working`. Package version stays 0.4.0. No change to any
+authorization decision, refusal, or warning.
+
+- **"§4" citations removed.** `two_key/quorum.py` and `two_key/judges/base.py`
+  cited "§4 (ii)/(iii)" of a design document outside the repository. The
+  comments now say what the code does (ballot binding, the judge-set floors,
+  the availability floor K).
+- **gpt-oss is recorded with the right upstream.** The OpenAI family regex in
+  `two_key/identity.py` listed `gpt-oss` after `^gpt`, so it never decided
+  anything, and open-weight gpt-oss was recorded with `api.openai.com` as an
+  upstream, which does not serve it. Its maker stays `openai` (maker counts
+  and `min_makers` are unchanged); its upstream is now the host that serves
+  it plus `maker:openai`, the same label a maker without an API gets
+  (`maker:meta`). For example, Groq is `api.groq.com` + `maker:openai`, and a
+  local Ollama `-cloud` model is `localhost:11434` + `maker:openai` +
+  `ollama.com`. Whether an identity is resolved is unchanged. The
+  `upstream` list in a new `constitution_loaded` entry can differ from 0.4.0
+  for gpt-oss judges and agents.
+- **The `checks` list is documented as the check set.**
+  `judge_agent_separation.checks` and `warning_checks` list the checks
+  applied to every agent and judge pair, not which fired (`warnings` says
+  that), and `refusals` is always empty because a refusal stops startup
+  first. The record keeps its shape; `SeparationReport` and HOWTO say so.
+- Tests: `test_open_weight_gpt_oss_is_not_served_by_the_openai_api`, and the
+  record test checks that `refusals` is empty.

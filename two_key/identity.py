@@ -45,7 +45,8 @@ Each judge and agent is resolved to:
   A direct provider host is itself (``api.openai.com``). A recognized router
   (OpenRouter, Azure OpenAI and Azure AI, Bedrock, Vertex, Cloudflare AI
   Gateway, Portkey) or a ``provider/model`` id (LiteLLM style) resolves to the
-  model maker's API host, or ``maker:<name>`` for a maker without one. A
+  model maker's API host, or ``maker:<name>`` for a maker without one or an
+  open-weight model its maker's API does not serve (``gpt-oss``). A
   loopback or private host is itself. An unrecognized host or router that
   cannot be resolved from the model id stays **unresolved**. Upstream labels
   are normalized (``host`` or ``host:port``, default port removed). A shared
@@ -263,7 +264,7 @@ _PREFIX_MAKERS = {
 # LiteLLM-style prefixes that name a router, not a maker; the rest of the id is resolved again.
 _ROUTER_PREFIXES = {"bedrock", "vertex_ai", "vertex", "azure", "azure_ai", "openrouter", "litellm_proxy"}
 _FAMILIES = [
-    (re.compile(r"^(gpt|chatgpt|o[1-9]\b|o[1-9]-|text-davinci|davinci|babbage|gpt-oss)"), "openai"),
+    (re.compile(r"^(gpt|chatgpt|o[1-9]\b|o[1-9]-|text-davinci|davinci|babbage)"), "openai"),
     (re.compile(r"^claude"), "anthropic"),
     (re.compile(r"^(gemini|gemma|palm|text-bison|chat-bison)"), "google"),
     (re.compile(r"^grok"), "xai"),
@@ -277,6 +278,9 @@ _FAMILIES = [
     (re.compile(r"^(kimi|moonshot)"), "moonshot"),
     (re.compile(r"^glm"), "zhipu"),
 ]
+# Open-weight families that their maker's own API does not serve: the maker is known, but its API host is
+# not an upstream. gpt-oss is served by Ollama, Groq, and other hosts, not by api.openai.com.
+_OPEN_WEIGHT_ONLY = re.compile(r"^gpt-oss")
 _ALIASES = {"chatgpt-4o": "gpt-4o", "gemini-pro": "gemini-1.0-pro", "gpt-4-turbo-preview": "gpt-4-turbo"}
 _SUFFIXES = [
     re.compile(r"-20\d{2}-\d{2}-\d{2}$"),     # -2024-08-06
@@ -347,7 +351,10 @@ def model_maker(model: str) -> str | None:
     return None
 
 
-def _maker_upstream(maker: str) -> str:
+def _maker_upstream(maker: str, bare: str = "") -> str:
+    """The maker's API host, or ``maker:<name>`` for a maker without one or a model (``bare``) it does not serve."""
+    if _OPEN_WEIGHT_ONLY.match(bare):
+        return f"maker:{maker}"
     return _MAKER_HOSTS.get(maker, f"maker:{maker}")
 
 
@@ -506,32 +513,32 @@ def resolve_upstream_info(base_url: str, model: str) -> tuple[frozenset[str], st
     if host in _DIRECT_HOSTS:
         up.add(_maker_upstream(_DIRECT_HOSTS[host]))
         if maker:
-            up.add(_maker_upstream(maker))
+            up.add(_maker_upstream(maker, bare))
         by = "endpoint"
     elif router == "azure-openai":
         up.add(_maker_upstream("openai"))        # deployment names are free text; the maker is OpenAI
         by = "endpoint"
     elif router is not None:
         if maker:
-            up.add(_maker_upstream(maker))
+            up.add(_maker_upstream(maker, bare))
             by = "model_prefix"
     elif host in _INFERENCE_HOSTS:
         up.add(endpoint_key(base_url))
         if maker:
-            up.add(_maker_upstream(maker))
+            up.add(_maker_upstream(maker, bare))
         by = "endpoint"
     elif host_is_local(host):
         if maker or model_is_cloud(model):
             up.add(endpoint_key(base_url))
             if maker:
-                up.add(_maker_upstream(maker))
+                up.add(_maker_upstream(maker, bare))
             if model_is_cloud(model):
                 up.add("ollama.com")             # an Ollama cloud model, proxied by the local daemon
             by = "model_prefix"
         # otherwise unresolved: a local proxy (LiteLLM and the like) can route an alias to anything
     else:
         if prefixed:                             # LiteLLM-style provider/model id on an unrecognized host
-            up.add(_maker_upstream(prefixed))
+            up.add(_maker_upstream(prefixed, bare))
             by = "model_prefix"
         # otherwise unresolved: an unrecognized host may be a router to anything
     up = {normalize_upstream(x) for x in up}
@@ -945,10 +952,15 @@ def configured_agent_identity(agent: Any, fp_key: bytes | None = None) -> Resolv
 
 @dataclass(frozen=True)
 class SeparationReport:
+    """The judge-agent separation result recorded in ``constitution_loaded``.
+
+    ``checks`` and ``warning_checks`` in the record are the check set that ``check_separation`` applies to every
+    agent and judge pair, not per-check results. ``refusals`` is always empty in a report: a refusal raises
+    ``IdentityError`` before a report exists. Both fields are kept so the ledger record keeps its shape."""
     ok: bool
     agents: tuple[ResolvedIdentity, ...]
     judges: tuple[ResolvedIdentity, ...]
-    refusals: tuple[str, ...]
+    refusals: tuple[str, ...]                  # always empty: a refusal raises first
 
     tenant_optin: bool = False                 # deprecated flag, recorded as set; it lifts nothing
     tenant_optin_pairs: tuple[dict, ...] = ()  # always empty now; kept so the ledger record keeps its shape

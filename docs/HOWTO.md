@@ -601,7 +601,10 @@ well as a cloud one, and also when its connector never sends it (an
 `auth_header: none`): Two-Key cannot show it differs from the agent's. The result is the `judge_agent_separation`
 field of the `constitution_loaded` ledger entry: every resolved identity
 (fingerprints only), the fingerprint scheme and key id, and
-`identities_digest`. The entry also holds the full quorum policy
+`identities_digest`. Its `checks` and `warning_checks` list the check set
+applied to every agent and judge pair, not which checks fired (that is
+`warnings`), and its `refusals` is always empty, because a refusal stops
+startup before the entry is written. The entry also holds the full quorum policy
 (`quorum_policy`) and its `policy_digest`. Each `decision` entry carries
 `identities_digest` and `policy_digest`, not the full policy. To check
 them, `two_key.audit.check_decision_digests(ledger)` recomputes both from

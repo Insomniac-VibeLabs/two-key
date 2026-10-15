@@ -115,6 +115,18 @@ class Normalization(unittest.TestCase):
             self.assertEqual(resolve_upstreams(url, model)[0], frozenset(), (url, model))
         self.assertIn("ollama.com", resolve_upstreams("http://localhost:11434", "gpt-oss:120b-cloud")[0])
 
+    def test_open_weight_gpt_oss_is_not_served_by_the_openai_api(self):
+        """gpt-oss is made by OpenAI but not served by api.openai.com: its upstream is the host plus maker:openai."""
+        cases = {("https://api.groq.com/openai/v1", "openai/gpt-oss-120b"): {"api.groq.com", "maker:openai"},
+                 ("http://localhost:11434", "gpt-oss:20b"): {"localhost:11434", "maker:openai"},
+                 ("http://localhost:11434", "gpt-oss:120b-cloud"): {"localhost:11434", "maker:openai", "ollama.com"},
+                 ("https://openrouter.ai/api/v1", "openai/gpt-oss-120b"): {"maker:openai"},
+                 ("https://openrouter.ai/api/v1", "openai/gpt-4o"): {"api.openai.com"}}
+        for (url, model), want in cases.items():
+            self.assertEqual(set(resolve_upstreams(url, model)[0]), want, (url, model))
+        self.assertEqual(model_maker("gpt-oss:120b-cloud"), "openai")
+        self.assertEqual(model_maker("GPT-OSS-20B"), "openai")
+
     def test_tenants_from_the_url_and_the_declaration(self):
         self.assertEqual(resolve_tenants("https://acme.openai.azure.com/openai/deployments/d"),
                          {"azure:resource:acme", "azure:deployment:acme/d"})
@@ -252,6 +264,7 @@ class SameProvider(Env):
         self.assertEqual(rec["same_agent"], "same_held_credential_or_keyless_same_address")
         self.assertEqual(rec["checks"], ["same_credential", "same_address_no_credential"])
         self.assertNotIn("same_credential_other_address", rec["warning_checks"])
+        self.assertEqual(rec["refusals"], [])          # a refusal stops startup before the entry is written
         self.assertEqual(rec["warnings"], [])
         self.warned([oai("same", "gpt-4o-2024-08-06", "https://api.openai.com/v1", "k2")],
                     "same_model_same_address", agent=agent)
