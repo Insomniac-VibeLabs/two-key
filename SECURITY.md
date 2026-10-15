@@ -24,7 +24,7 @@ is how to report a vulnerability. It is not the model.
 - Agent proposal that causes tool execution inside `authorize_from_agent`
 - An agent decline that issues a token, runs either path, or is read as a call
 - A redeeming gateway that can mint a token it will accept
-- Behind the MCP proxy (branch `working`): a `tools/call` that reaches the
+- Behind the MCP proxy: a `tools/call` that reaches the
   upstream server without both keys, a tool the proxy shows that is not
   signed, an argument that reaches the server outside the signed spec, a
   changed tool schema accepted under `on_schema_change: refuse`, an
@@ -32,10 +32,10 @@ is how to report a vulnerability. It is not the model.
   an argument value in a deny reason
 - A constitution that signs or loads although a tool neither maps nor marks
   `not_applicable` a field a rule reads, or a `case: exact` value that
-  reaches the tool changed (branch `working`)
+  reaches the tool changed
 - An `@domain` allow entry that admits a subdomain, a lookalike domain, an
   address whose local part is not plain (a space, a line break, a quoted
-  part, a second `@`), or the entry itself as a party (branch `working`)
+  part, a second `@`), or the entry itself as a party
 - A caller-supplied fact (`source: caller`) taken from the agent's
   arguments or claim, a v1 or v2 constitution accepted with a caller field,
   or a redemption that runs the tool after the fact changed (branch

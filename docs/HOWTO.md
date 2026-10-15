@@ -234,8 +234,7 @@ Facts about the world must come from something other than the agent:
   place.
 - **The integration supplies them.** The code that calls Two-Key looks the
   fact up and passes it in, so the agent never writes it: a
-  `source: caller` field (see "Caller-supplied facts"; 0.5.0, on branch
-  `working`). Until you use one, keep such facts out of agent-written
+  `source: caller` field (see "Caller-supplied facts"; 0.5.0). Until you use one, keep such facts out of agent-written
   arguments.
 - **Do not make a fact an agent-written field and a rule the only check.**
   Fields and rules are right for what the call does (which environment,
@@ -457,7 +456,7 @@ with a message to re-sign it. Installs older than custom fields refuse
 v2, so they cannot load it and ignore the fields. A v2 constitution
 refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
 `fields`. A constitution with any 0.5.0 feature signs as
-`two-key-constitution-v3` (branch `working`): a caller-supplied field
+`two-key-constitution-v3`: a caller-supplied field
 (`source: caller`), a `case: exact` field, a `not_applicable` mark, or an
 `@domain` allow entry. Installs before 0.5.0 refuse v3 as an unsupported
 format. The format label is outside the signed bytes, so the meaning comes
@@ -476,16 +475,17 @@ python -m two_key sign-constitution ... --envelope-format v3     # always v3
 ```
 
 In Python: `sign_constitution(prose, rules, key, specs, fields=fields,
-envelope_format="v2")`. `auto` writes v1 unless there are fields. `v2`
-writes v2 even without fields; that loads the same way, and an older
-install refuses it. Loading accepts both formats. A rules file with
+envelope_format="v2")`. `auto` writes v1 unless there are fields, and v3
+when a 0.5.0 feature is used. `v2` writes v2 even without fields; that
+loads the same way, and an older install refuses it. Loading accepts all
+three formats. A rules file with
 `fields:` is refused by `load_unsigned` (so its fields are never dropped
 silently); use `load_unsigned_with_fields`, which returns them as a fourth
 value.
 
 ### Caller-supplied facts
 
-On branch `working`, for 0.5.0
+New in 0.5.0
 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2) P1).
 
 **In plain words.** Some things a rule needs are facts about the world,
@@ -1419,7 +1419,7 @@ make it an error in tests or CI:
 
 ## Put Two-Key in front of an MCP server (`two-key mcp-proxy`)
 
-On branch `working`, for 0.5.0
+New in 0.5.0
 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)). It supports
 caller-supplied facts through per-tool hooks (see "Caller-supplied facts").
 
@@ -1475,7 +1475,8 @@ messages and decides nothing.
 ### Install
 
 ```bash
-pip install -e ".[mcp]"          # from a checkout of the mcp-proxy branch
+pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"
+pip install -e ".[mcp]"          # or from a checkout
 ```
 
 ### Worked example: a billing server

@@ -1,7 +1,7 @@
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.4.0. Tag
-`v0.4.0` on `main` is the tagged release. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
+`two-key` is beta (pre-1.0). Package version 0.5.0. Tag
+`v0.5.0` on `main` is the tagged release; `v0.4.0` is the one before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
 Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
 is on `main`. `v0.1.6` stays on the previous tree.
 
@@ -39,7 +39,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
 - a single-use token and a gateway intended to be the only component that
   invokes registered tools; this does not stop an agent from calling a
   tool directly through another path
-- on branch `working` (for 0.5.0), behind the optional `mcp` extra (the
+- since 0.5.0, behind the optional `mcp` extra (the
   official MCP Python SDK): `two-key mcp-proxy`, a stdio proxy in front of
   one upstream MCP server. It starts the server as a child process, shows
   the agent only the signed tools, pins their schemas
@@ -51,7 +51,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   the principal to review and sign; a draft does not sign until the
   principal decides each floor, amount unit, and allow list. The proxy
   speaks MCP to the agent's host but offers no tools of its own
-- on branch `working` (for 0.5.0): caller-supplied facts. A field
+- since 0.5.0: caller-supplied facts. A field
   declared `source: caller` (constitution v3) takes its value from the
   integration's `facts=`, never from the agent's arguments; the gateway
   takes the facts again at redemption (`fact_mismatch`). The guard core
@@ -59,7 +59,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   with fact hooks before authorize and again before the tool; the MCP
   proxy runs on it (`tools.<id>.facts`). Two-Key checks where a fact came
   from, not whether the hook is right
-- on branch `working` (for 0.5.0), from live run 6: every tool maps each
+- since 0.5.0, from live run 6: every tool maps each
   field a rule reads or marks it `not_applicable` (a forgotten mapping does
   not sign or load); `case: exact` string fields for case-sensitive ids;
   `@domain` allow entries for every plain address at one domain, with a

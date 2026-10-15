@@ -6,9 +6,9 @@ testing and automated scanners, not independently audited. Apache-2.0.
 
 Package: two-key
 Import: two_key
-Package version: 0.4.0 (package renamed from two-key-concept). Tag v0.4.0 is on main. Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
+Package version: 0.5.0 (MCP proxy, caller-supplied facts, constitution v3). Tag v0.5.0 is on main; v0.4.0 (package renamed from two-key-concept) too. Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-Not on PyPI. Install the tagged release from git ref v0.4.0 (two-key[yaml] for YAML configs).
+Not on PyPI. Install the tagged release from git ref v0.5.0 (two-key[yaml] for YAML configs, two-key[mcp] for the MCP proxy).
 uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
@@ -95,7 +95,7 @@ Rules name them with deny_if_fields (eq, neq, gt, gte, lt, lte, in, not_in by ty
 come from the argument bytes only; an agent cannot claim them, but the agent writes the
 arguments, so a field is the call's content, not a verified fact (po_matched: true is an
 assertion). Facts about the world must be checked by the tool or supplied by the integration:
-a field declared source: caller (mcp-proxy branch; signs as a v3 constitution, which 0.4.0 refuses)
+a field declared source: caller (0.5.0; signs as a v3 constitution, which 0.4.0 refuses)
 is mapped {source: caller} or {source: caller, json_path: P} and takes its value from
 authorize(..., facts={...}) only; the agent writing it is caller_field_in_arguments, a missing
 fact field_missing, an unmapped fact fact_not_mapped. Pass the same lookup to

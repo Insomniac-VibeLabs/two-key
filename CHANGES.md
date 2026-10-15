@@ -70,6 +70,7 @@
 - [Docs: the run 6 follow-ups everywhere they apply — 2026-10-15](#docs-the-run-6-follow-ups-everywhere-they-apply--2026-10-15)
 - [Undescribed inputs: checked for every field Path A reads, at sign-off and start — 2026-10-15](#undescribed-inputs-checked-for-every-field-path-a-reads-at-sign-off-and-start--2026-10-15)
 - [Run 6z follow-ups: clearer refusals, harness fixes, judge memory — 2026-10-15](#run-6z-follow-ups-clearer-refusals-harness-fixes-judge-memory--2026-10-15)
+- [Release v0.5.0: MCP proxy, caller-supplied facts, run 6 follow-ups — 2026-10-15](#release-v050-mcp-proxy-caller-supplied-facts-run-6-follow-ups--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2598,3 +2599,57 @@ On branch `working`. No authorization change. From GrokBot's run 6z report
   - `report.py` matches executed arguments exactly (a case-folded match
     would hide a `case: exact` failure) and titles RESULTS.md by run-neutral
     name with the repository head.
+
+## Release v0.5.0: MCP proxy, caller-supplied facts, run 6 follow-ups — 2026-10-15
+
+Package version 0.5.0 (`pyproject.toml`, `two_key.__version__`; `uv.lock`
+regenerated with uv 0.13.0, which changes only the package's own version).
+To be tagged `v0.5.0` on `main` after the merge. Not on PyPI. The entries
+above, from "MCP proxy, part 1" on, are the detail.
+
+- **MCP proxy** (`two-key mcp-proxy`, the optional `mcp` extra, #2): a
+  stdio proxy in front of one upstream MCP server. It shows the agent only
+  the signed tools, pins their schemas, refuses an unresolved judge or agent
+  identity unless told otherwise, and runs every `tools/call` through both
+  keys and the in-process gateway. Only `two_key/mcp_proxy/sdk.py` imports
+  the MCP SDK.
+- **Spec drafter** (`two-key mcp-draft-specs`): drafts `tool_specs` and the
+  schema digest from the upstream server for the principal to review and
+  sign; it never signs. Warns for every input Path A reads that the upstream
+  schema leaves undescribed.
+- **Caller-supplied facts and the guard core** (#2 P1, maintainer-reviewed
+  design): a `source: caller` field takes its value from the integration's
+  `facts=`, never from the agent, and is looked up again at redemption
+  (`fact_mismatch`). `two_key.guard.Guard` runs one call through both keys
+  for any agent loop; the proxy runs on it.
+- **From live run 6** (maintainer's decisions): every tool maps or marks
+  `not_applicable` each field a rule reads (#10, refused otherwise);
+  `case: exact` string fields; `@domain` allow entries; no judges for a call
+  that cannot be read (`skipped:derive_failed`); a start-up warning when one
+  judge can approve alone.
+- **Constitution v3** carries any of those 0.5.0 features; a constitution
+  without them signs as before (v1 or v2, byte for byte).
+- **Live testing**: run 6, then re-run 6z on the follow-ups: 36 cases, 34
+  PASS, 2 INCONCLUSIVE (case design, since fixed), 0 FAIL; the school
+  constitution recheck passed 4 of 4.
+- Docs: README, ROADMAP (0.5.0 under "Shipped"), HOWTO, SCOPE,
+  THREAT_MODEL, FIT, COMPARISON, JUDGES_AND_QUORUM, SECURITY, AGENTS.md, and
+  llms.txt name 0.5.0 as the release and `v0.5.0` as the install ref.
+
+### Upgrading from 0.4.0
+
+The full notes are under "Caller-supplied facts and the guard core (#2 P1)"
+> "Upgrading from 0.4.0". In short:
+
+- **Check your constitution first.** A tool that neither maps nor marks
+  `not_applicable` a field a `deny_if_fields` rule reads no longer loads;
+  `TwoKey` refuses to start and names each one. Add the marks (or map the
+  fields) and re-sign; the result is v3.
+- An `allow` entry that starts with `@` is now a whole domain. A call that
+  cannot be read under its spec is no longer sent to the judges.
+- A v3 constitution needs 0.5.0 or later; 0.4.0 refuses it.
+- Code that reads `tool_specs.<tool>.fields` itself: an entry may be the
+  string `not_applicable`.
+- The MCP proxy needs the `mcp` extra: `pip install "two-key[mcp] @
+  git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"`.
+

@@ -1,7 +1,7 @@
 # Threat model
 
-This is the design model for `two-key` 0.4.0. Tag `v0.4.0` on `main` is the tagged release. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
-Branch `working` (for 0.5.0) adds the MCP proxy (`two-key mcp-proxy`), the spec drafter
+This is the design model for `two-key` 0.5.0. Tag `v0.5.0` on `main` is the tagged release; `v0.4.0` renamed the package and its formats. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+0.5.0 adds the MCP proxy (`two-key mcp-proxy`), the spec drafter
 (`two-key mcp-draft-specs`), caller-supplied facts (`source: caller`, constitution v3), and the
 guard core (`two_key/guard.py`), described below, and the run 6 follow-ups: every tool decides
 each field a rule reads (`not_applicable`), `case: exact` fields, `@domain` allow entries, no
@@ -269,7 +269,7 @@ These are accepted or still open. They are not bugs the design already
 claims to close.
 
 - No independent review, and no production deployment.
-- MCP proxy (branch `working`):
+- MCP proxy (0.5.0):
   - An agent that can reach the upstream server directly, or holds its
     credential, bypasses the proxy entirely. The proxy cannot see or stop
     that.
@@ -302,7 +302,7 @@ claims to close.
   `tool_args_on_derive_deny` sends the arguments to the judges; Path B is
   recorded as `skipped:derive_failed`. The call was already denied, so no
   allow is possible; the ledger simply has one opinion fewer.
-- Caller-supplied facts (branch `working`):
+- Caller-supplied facts (0.5.0):
   - A fact hook is trusted code that receives agent-written arguments. A
     hook that returns an argument (`arguments["po_matched"]`) turns the
     fact back into the agent's assertion. A hook that looks a record up by

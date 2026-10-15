@@ -42,8 +42,8 @@ What you get:
 - **Small on purpose.** Python 3.10 or later, one required dependency
   (`cryptography`), Apache-2.0.
 
-**Status:** beta. 0.4.0 is the current release; 0.5.0, with the MCP proxy
-and caller-supplied facts, is in testing on the `working` branch.
+**Status:** beta. 0.5.0 is the current release: it adds the MCP proxy and
+caller-supplied facts.
 Maintainer-reviewed and tested with live LLM agents and judges. Read
 [Known limits](#known-limits) and [docs/FIT.md](docs/FIT.md) before you rely
 on it.
@@ -67,10 +67,10 @@ on it.
 
 ## Quick start
 
-Install the 0.4.0 release from git (it is not on PyPI yet):
+Install the 0.5.0 release from git (it is not on PyPI yet):
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.4.0"
+pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"
 ```
 
 Or run the offline demo from a clone. It uses test-double judges, so it
@@ -89,11 +89,10 @@ Real judges are configured in `examples/judges.yaml`. The operator guide is
 
 ## Put Two-Key in front of an MCP server
 
-New in 0.5.0, in testing on the `working` branch
-([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
+New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@working"
+pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -146,8 +145,8 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
 - **Monitored Agent**: The untrusted agent under constraint. It proposes actions; it has no direct access to any registered tool.
 - **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported (#45). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
 - **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
-- **MCP proxy** (0.5.0, on `working`; the `mcp` extra): `two-key mcp-proxy` sits between an MCP client and one upstream MCP server. It shows the agent only the signed tools, pins their schemas, and runs every `tools/call` through both keys and the in-process gateway. `two-key mcp-draft-specs` drafts the tool specs for the principal to review and sign. See HOWTO "Put Two-Key in front of an MCP server".
-- **Caller-supplied facts and the guard** (0.5.0, on `working`): a field declared `source: caller` gets its value from your integration (`facts=`), never from the agent's arguments, and is looked up again before the tool runs. `two_key.guard.Guard` does both lookups and both keys in one call for any agent loop; the MCP proxy runs on it. See HOWTO "Caller-supplied facts".
+- **MCP proxy** (0.5.0; the `mcp` extra): `two-key mcp-proxy` sits between an MCP client and one upstream MCP server. It shows the agent only the signed tools, pins their schemas, and runs every `tools/call` through both keys and the in-process gateway. `two-key mcp-draft-specs` drafts the tool specs for the principal to review and sign. See HOWTO "Put Two-Key in front of an MCP server".
+- **Caller-supplied facts and the guard** (0.5.0): a field declared `source: caller` gets its value from your integration (`facts=`), never from the agent's arguments, and is looked up again before the tool runs. `two_key.guard.Guard` does both lookups and both keys in one call for any agent loop; the MCP proxy runs on it. See HOWTO "Caller-supplied facts".
 
 ## Dual-path authorization
 
@@ -492,7 +491,7 @@ audited. It is not a FIPS 140-3 validated module.
   It does not verify facts the agent asserts: a custom field read from the
   arguments (for example `po_matched: true`) is the agent's word. The tool
   or the integration must check such facts against the system of record
-  (HOWTO "What Two-Key verifies"). From 0.5.0 (on `working`), a `source: caller`
+  (HOWTO "What Two-Key verifies"). From 0.5.0, a `source: caller`
   field takes the fact from the integration's own lookup instead; that
   fact is as good as the lookup, which Two-Key does not check.
 - No external anchor for the ledger. Someone holding the principal and
@@ -525,15 +524,16 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Roadmap
 
-Next come the MCP adapter (0.5.0), DLP and antivirus hooks (0.6.0), and a
-ledger export for a SIEM (0.7.0), then a public review and the 1.0 release.
+The MCP adapter shipped in 0.5.0. Next come DLP and antivirus hooks
+(0.6.0) and a ledger export for a SIEM (0.7.0), then a public review and the
+1.0 release.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
 flowchart LR
-  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter"]
+  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
   r05 --> r06["0.6.0<br/>DLP and AV hooks"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM"]
   r07 --> r10["1.0.0<br/>Review and release"]
@@ -543,7 +543,7 @@ flowchart LR
 | Version | What | Status |
 | --- | --- | --- |
 | 0.4.0 | This repository and the package name `two-key` | Released, tag `v0.4.0` |
-| 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | In testing on `working` |
+| 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | DLP and antivirus hooks that call external scanners (ClamAV, a secret scanner); judge connection reuse (#6) | Next |
 | 0.7.0 | Ledger export for a SIEM: verified, decrypted locally, no argument values | Planned |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI. Described as community-reviewed, not audited | Planned |
@@ -554,17 +554,17 @@ flowchart LR
 Two-Key is not on PyPI yet. Install a tagged release from git:
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.4.0"
+pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"
 ```
 
-`v0.4.0` is the 0.3.1 code under the new package name `two-key`: key
-backup, custom Path A fields, the #45 gateway boundary, agent declines, the
-syntax-only agent vocabulary, and data classes that combine as a set. `main`
-holds that release and the fixes merged since; `working` is where the next
-changes land. For the previous release, use `@v0.3.0`. Tags `v0.3.1` and
-earlier are in the archived `two-key-concept` repository, where `v0.3.0`
-stays on `e44be56`, `v0.2.4` on `fc836bb`, `v0.2.3` on `4a4352e`, and
-`v0.2.0` on `2f756ac`.
+`v0.5.0` adds the MCP proxy (`two-key mcp-proxy`, with the `mcp` extra),
+the spec drafter (`two-key mcp-draft-specs`), caller-supplied facts, the
+guard core, and the live run 6 follow-ups (constitution v3). `main` holds
+that release and the fixes merged since; `working` is where the next changes
+land. For the previous release, use `@v0.4.0`: the 0.3.1 code under the new
+package name `two-key`. Tags `v0.3.1` and earlier are in the archived
+`two-key-concept` repository, where `v0.3.0` stays on `e44be56`, `v0.2.4` on
+`fc836bb`, `v0.2.3` on `4a4352e`, and `v0.2.0` on `2f756ac`.
 
 Upgrading from an older version: read the "Upgrading" notes in
 [CHANGES.md](CHANGES.md) for every version you skip.
@@ -585,7 +585,7 @@ Upgrading from an older version: read the "Upgrading" notes in
 - 0.4.0 renames the package and its file formats. Key files still load;
   re-sign the constitution, start a new ledger, and export a new backup:
   "Upgrading from 0.3.1".
-- 0.5.0 (in testing on `working`) adds constitution v3, for caller-supplied
+- 0.5.0 adds constitution v3, for caller-supplied
   facts and the run 6 follow-ups. Check before upgrading: a constitution in
   which a tool neither maps nor marks `not_applicable` a field a rule reads
   no longer loads, and an `allow` entry that starts with `@` is now a whole

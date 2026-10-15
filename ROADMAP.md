@@ -1,6 +1,6 @@
 # Roadmap
 
-Where `two-key` goes from 0.4.0 to a 1.0 release. It states intent, not a
+Where `two-key` goes from 0.5.0 to a 1.0 release. It states intent, not a
 promise: the order may change, and version numbers are targets, not dates.
 
 ## Contents
@@ -8,7 +8,6 @@ promise: the order may change, and version numbers are targets, not dates.
 <!-- toc -->
 - [The path to 1.0](#the-path-to-10)
 - [Ground rules](#ground-rules)
-- [0.5.0: MCP adapter](#050-mcp-adapter)
 - [0.6.0: DLP and AV hooks](#060-dlp-and-av-hooks)
 - [0.7.0: Ledger export for SIEM](#070-ledger-export-for-siem)
 - [1.0.0: Review and release](#100-review-and-release)
@@ -21,6 +20,7 @@ promise: the order may change, and version numbers are targets, not dates.
   - [More spec field types](#more-spec-field-types)
 - [Not planned for this repository](#not-planned-for-this-repository)
 - [Shipped](#shipped)
+  - [0.5.0: MCP adapter](#050-mcp-adapter)
   - [0.4.0: This repository and the package `two-key`](#040-this-repository-and-the-package-two-key)
   - [0.3.1: Live-test fixes (beta)](#031-live-test-fixes-beta)
   - [0.3.0: Key backup and recovery](#030-key-backup-and-recovery)
@@ -31,7 +31,7 @@ promise: the order may change, and version numbers are targets, not dates.
 
 ```mermaid
 flowchart LR
-  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter"]
+  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
   r05 --> r06["0.6.0<br/>DLP and AV hooks"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM"]
   r07 --> r10["1.0.0<br/>Review and release"]
@@ -41,7 +41,7 @@ flowchart LR
 | Version | What | Status |
 | --- | --- | --- |
 | 0.4.0 | This repository and the package name `two-key` (0.3.1 under the new name) | Released, tag `v0.4.0` |
-| 0.5.0 | MCP adapter: `two-key mcp-proxy`, `two-key mcp-draft-specs`, caller-supplied facts, and the guard core | Built on `working`; live test run 6 next |
+| 0.5.0 | MCP adapter: `two-key mcp-proxy`, `two-key mcp-draft-specs`, caller-supplied facts, and the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | DLP and antivirus hooks that call external scanners; judge connection reuse (#6) | Next |
 | 0.7.0 | Ledger export for a SIEM | Planned |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI | Planned |
@@ -73,40 +73,6 @@ in the same release.
   without breaking existing ledgers or backups.
 - Keep the README's "Known limits" section current: no independent review,
   no external anchor, not FIPS validated, signatures not quantum resistant.
-
-## 0.5.0: MCP adapter
-
-Issue #2. Built on branch `working` (also `mcp-proxy`): the stdio proxy,
-the spec drafter, caller-supplied facts, and the guard core. The facts
-design passed the maintainer's security review before it was built. Live
-test run 6 runs before the release.
-
-- A proxy for `tools/call` that runs `authorize` and forwards through the
-  gateway, in the same process (`TwoKey.gateway()`), only with a valid
-  token. It speaks MCP to the agent's host but offers no tools of its own.
-  Built on the official MCP Python SDK as the optional `mcp` extra; only
-  one module imports it. (Done.)
-- Schema pinning: refuse to start when the signed tools' schemas change,
-  unless `on_schema_change: warn`. The proxy refuses an unresolved judge or
-  agent identity unless `allow_unresolved_identity: true`. (Done.)
-- A helper that drafts `tool_specs` from an MCP server's tool schemas
-  (`two-key mcp-draft-specs`). The output is a draft for the principal to
-  review and sign, and does not sign until they decide. (Done.)
-- Caller-supplied facts (`source: caller` fields, constitution v3), so a
-  fact such as `po_matched` comes from the integration, not the agent, and
-  is looked up again at redemption (`fact_mismatch`). A framework-neutral
-  guard core (`two_key/guard.py`) for agent loops that do not use MCP; the
-  proxy runs on it, with fact hooks in `proxy.yaml`. (Done.)
-- From live run 6 (maintainer's decisions, done): every tool decides each
-  field a rule reads (#10); `case: exact` string fields; `@domain` allow
-  entries with a signing warning; no judges for a call that cannot be read;
-  a start-up warning when one judge can approve alone; a drafter warning
-  for an undescribed payee or amount; HOWTO guidance; and the harness's
-  referee fixes and scripted quorum cases. A short live re-run (6z) covers
-  them before the release.
-- Start with stdio transport and one real server. HTTP and OAuth come later.
-- The proxy adds a trust boundary: an agent that can reach the MCP server
-  directly bypasses it. THREAT_MODEL.md says so.
 
 ## 0.6.0: DLP and AV hooks
 
@@ -341,6 +307,41 @@ neither.
 
 The design records of released phases, kept as written. CHANGES.md is the
 record of what each release did.
+
+### 0.5.0: MCP adapter
+
+Tag `v0.5.0` on `main`. Issue #2: the stdio proxy, the spec drafter,
+caller-supplied facts, and the guard core. The facts design passed the
+maintainer's security review before it was built. Live test run 6 and the
+re-run 6z checked it; CHANGES "Release v0.5.0" is the record.
+
+- A proxy for `tools/call` that runs `authorize` and forwards through the
+  gateway, in the same process (`TwoKey.gateway()`), only with a valid
+  token. It speaks MCP to the agent's host but offers no tools of its own.
+  Built on the official MCP Python SDK as the optional `mcp` extra; only
+  one module imports it. (Done.)
+- Schema pinning: refuse to start when the signed tools' schemas change,
+  unless `on_schema_change: warn`. The proxy refuses an unresolved judge or
+  agent identity unless `allow_unresolved_identity: true`. (Done.)
+- A helper that drafts `tool_specs` from an MCP server's tool schemas
+  (`two-key mcp-draft-specs`). The output is a draft for the principal to
+  review and sign, and does not sign until they decide. (Done.)
+- Caller-supplied facts (`source: caller` fields, constitution v3), so a
+  fact such as `po_matched` comes from the integration, not the agent, and
+  is looked up again at redemption (`fact_mismatch`). A framework-neutral
+  guard core (`two_key/guard.py`) for agent loops that do not use MCP; the
+  proxy runs on it, with fact hooks in `proxy.yaml`. (Done.)
+- From live run 6 (maintainer's decisions, done): every tool decides each
+  field a rule reads (#10); `case: exact` string fields; `@domain` allow
+  entries with a signing warning; no judges for a call that cannot be read;
+  a start-up warning when one judge can approve alone; a drafter warning
+  for an undescribed payee or amount; HOWTO guidance; and the harness's
+  referee fixes and scripted quorum cases. The live re-run 6z covered them:
+  34 of 36 cases passed, and the 2 inconclusive ones were case design, since
+  fixed.
+- Start with stdio transport and one real server. HTTP and OAuth come later.
+- The proxy adds a trust boundary: an agent that can reach the MCP server
+  directly bypasses it. THREAT_MODEL.md says so.
 
 ### 0.4.0: This repository and the package `two-key`
 
