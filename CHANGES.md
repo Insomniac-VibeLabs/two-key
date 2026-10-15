@@ -2108,3 +2108,12 @@ On branch `working`. Package version stays 0.4.0. CI only.
 - Still a SonarCloud setting, not code: the CI scan fails while the project's
   Automatic Analysis is on ("You are running CI analysis while Automatic
   Analysis is enabled"). Turn Automatic Analysis off (#3).
+
+## README license badge — 2026-10-15
+
+On branch `working`. Docs only.
+
+- The license badge is static (`Apache-2.0`) instead of a shields.io lookup
+  of the repository, which showed "repo not found". The coverage badge
+  follows `main` and turns green when `working` is merged; the release badge
+  shows "no releases" until Release v0.4.0 is published (#3).
