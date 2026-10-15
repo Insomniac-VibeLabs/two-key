@@ -757,8 +757,16 @@ refuse to load (fail closed) until it is edited and signed again.
 ## Judges
 
 `examples/judges.yaml` is the hook list: OpenAI-compatible (OpenAI and xAI),
-Anthropic, Gemini, and Ollama. No vendor SDK is used. Each thread keeps one
-connection per origin and does not follow redirects.
+Anthropic, Gemini, and Ollama. No vendor SDK is used, and redirects are not
+followed.
+
+Connections are reused (#6, 0.6.0). They are pooled per origin (scheme,
+host, and port) and shared across quorum rounds, so a busy proxy does not
+open a new TLS connection to each judge for every call. A connection goes
+back to the pool only after a clean response; one that errored, was
+redirected, answered `Connection: close`, or returned an HTTP error is
+closed. Judges on the same origin in one round each get their own
+connection. At most four idle connections per origin are kept.
 
 Cloud OpenAI and xAI send a strict ballot schema. xAI also sends
 `reasoning_effort: low`. A single HTTP 400 drops those knobs and retries

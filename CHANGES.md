@@ -83,6 +83,7 @@
 - [Windows support, part 1: owner-only files, locks, no-follow opens (0.6.0 Phase 2) — 2026-10-15](#windows-support-part-1-owner-only-files-locks-no-follow-opens-060-phase-2--2026-10-15)
 - [Windows support, part 2: docs; one message (0.6.0 Phase 2) — 2026-10-15](#windows-support-part-2-docs-one-message-060-phase-2--2026-10-15)
 - [Windows CI blocks (0.6.0 Phase 2 done) — 2026-10-15](#windows-ci-blocks-060-phase-2-done--2026-10-15)
+- [Judge connection reuse (#6, 0.6.0 Phase 5) — 2026-10-15](#judge-connection-reuse-6-060-phase-5--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2873,4 +2874,21 @@ On branch `working`. CI and docs only.
   `9c6f850`). The golden-hash tests pass unchanged on all three.
 - `tests.yml` and `build.yml` drop `continue-on-error` for Windows: a
   Windows failure now fails the check. CONTRIBUTING says so.
+
+## Judge connection reuse (#6, 0.6.0 Phase 5) — 2026-10-15
+
+On branch `working`.
+
+- `two_key/judges/transport.py` pools connections per origin (scheme, host,
+  port) behind a lock, shared across threads, so a quorum round reuses the
+  connection the last round opened. Before, each thread kept its own, and
+  every round runs its judges on new threads, so nothing was reused. A
+  connection is pooled again only after a clean response; one that errored,
+  was redirected, said `Connection: close`, or returned an HTTP error is
+  closed. At most four idle per origin. Parallel judges on one origin each
+  get a connection.
+- `tests/test_judge_connection_reuse.py` (a loopback HTTP server): a second
+  round on another thread reuses the connection; `Connection: close` and an
+  error status are not reused; parallel requests do not share one.
+- HOWTO "Judges" says so.
 
