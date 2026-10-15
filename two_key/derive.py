@@ -29,7 +29,7 @@ from typing import Any, Mapping
 from .action import DATA_CLASS_SEP, DATA_CLASSES, MAX_AMOUNT_USD, SPECIFIC_DATA_CLASSES
 from .agent_meta import type_tag
 from .canonical import canonical_bytes
-from .fields import FIELD_NAME, FieldValueError, coerce_value, defaults
+from .fields import FIELD_NAME, FieldValueError, coerce_value, defaults, field_mappings
 
 
 # Size cap on tool arguments and on the proposal text, in UTF-8 bytes of their compact JSON.
@@ -390,7 +390,7 @@ def _custom_fields(spec: Mapping[str, Any], arguments: Mapping[str, Any],
     ``facts`` (required); any other its signed default."""
     facts = _check_facts(facts, caller_fields(spec))
     values = defaults(registry)
-    for name, entry in (spec.get("fields") or {}).items():
+    for name, entry in field_mappings(spec).items():      # a not_applicable field keeps its default
         if name not in registry:
             raise DeriveError(f"field_unreadable:{name}")
         if entry.get("source") == "caller":

@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 
 from .action import DATA_CLASSES, DEFAULT_DATA_CLASS
 from .derive import MAX_ARGS_BYTES
+from .fields import field_mappings
 from .judges.config import JudgeConfigError, build_credential
 from .judges.credentials import CredentialError, CredentialProvider, NoCredential, basic_authorization
 from .judges.llm import LOOPBACK
@@ -100,7 +101,7 @@ def _tool_entry(spec: dict, registry: dict) -> dict:
     if spec.get("payload"):
         entry["payload"] = [dict(p) for p in spec["payload"]]   # path, shape, max_length
     # A caller-supplied fact (source: caller) is never the agent's to write, so it is not listed at all.
-    agent_fields = {name: m for name, m in sorted((spec.get("fields") or {}).items()) if m.get("source") != "caller"}
+    agent_fields = {name: m for name, m in sorted(field_mappings(spec).items()) if m.get("source") != "caller"}
     if agent_fields:
         entry["fields"] = {name: {"json_path": m["json_path"], **_field_shape(registry.get(name, {}))}
                            for name, m in agent_fields.items()}

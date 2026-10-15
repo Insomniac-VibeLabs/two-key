@@ -293,8 +293,10 @@ not allow is refused, so a typo cannot become a rule that never fires.
   Two-Key verifies](#what-two-key-verifies-and-what-it-does-not)). An agent that sends `environment`
   in its claim is `malformed_action`; a value in the claim's `raw` is
   ignored.
-- A tool that does not map a field gets the field's signed `default`, the
-  way a tool with no amount spec has `amount_usd` 0.
+- Every tool must decide each field a `deny_if_fields` rule reads: map it,
+  or mark it `not_applicable` (below). A marked tool gets the field's signed
+  `default`, the way a tool with no amount spec has `amount_usd` 0. A field
+  no rule reads needs no decision.
 - The tool receives the normalized value Path A checked (`" Staging "`
   arrives as `staging`), and the token binds the values, so the gateway
   recomputes and compares them.
@@ -315,14 +317,36 @@ staging]}` still denies when someone adds `prod2` to the field, or when a
 tool that should map the field does not. `environment: {in: [prod]}` does
 not. Pick each `default` as the value your rules treat most strictly.
 
-A strict default has a cost: every tool that does not map the field gets
-it, so a rule such as `po_matched: {eq: false}` with `default: false`
-denies every non-payment tool. `two-key sign-constitution` warns on stderr
-for each tool that does not map a field a `deny_if_fields` rule reads, and
-says whether that rule then always denies the tool, never denies it, or
-reads the default. Signing still succeeds; the warning is advice
-(`two_key.fields.unmapped_rule_field_warnings`). Map the field on every
-tool the rule is meant for, and read the warnings before you sign.
+#### Map it, or mark it `not_applicable`
+
+A tool that a rule's field does not concern says so, by name:
+
+```yaml
+tool_specs:
+  deploy:
+    fields: {environment: {json_path: target.env}}
+  search:
+    fields: {environment: not_applicable}   # search has no environment; it gets the default
+```
+
+Signing refuses a constitution in which a tool neither maps nor marks a
+field a rule reads, and loading refuses one too, so a tool added later
+cannot inherit a permissive default by accident:
+
+```text
+each tool must map every field a deny_if_fields rule reads, or mark it not_applicable
+(name: not_applicable under the tool's fields:): tool_specs.search.fields.environment (rule 'no-prod')
+```
+
+This holds for argument fields and caller-supplied facts alike. A
+`not_applicable` mark signs as `two-key-constitution-v3` (see "Envelope
+format"). For each mark, `two-key sign-constitution` prints a note on
+stderr saying what the rule then does to that tool: never denies it, or
+reads the default; a mark that makes the rule always deny the tool is a
+`WARNING`, because that is rarely what "not applicable" means
+(`two_key.fields.not_applicable_notes`). A strict default has that cost:
+with `po_matched: {eq: false}` and `default: false`, every marked tool is
+denied.
 
 ### Descriptions
 
@@ -347,11 +371,14 @@ with a message to re-sign it. Installs older than custom fields refuse
 v2, so they cannot load it and ignore the fields. A v2 constitution
 refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
 `fields`. A constitution with a caller-supplied field (`source: caller`)
-signs as `two-key-constitution-v3` (0.5.0, branch `working`); installs
-before 0.5.0 refuse v3 as an unsupported format. The format label is
-outside the signed bytes, so the meaning comes from the signed bytes only:
-a v1 or v2 label on a constitution with a caller-supplied field is refused,
-never read as an argument field.
+or a `not_applicable` mark signs as `two-key-constitution-v3` (0.5.0,
+branch `working`); installs before 0.5.0 refuse v3 as an unsupported
+format. The format label is outside the signed bytes, so the meaning comes
+from the signed bytes only: a v1 or v2 label on a constitution with either
+is refused, never read as an argument field or a mapping. A v2
+constitution signed before 0.5.0 still loads if every tool maps every
+field a rule reads; otherwise it is refused, and re-signing with the marks
+it needs makes it v3 (CHANGES "Upgrading from 0.4.0").
 
 The format is the principal's choice at signing time:
 
@@ -404,8 +431,8 @@ tool_specs:
   be mapped as `{source: caller}` or `{source: caller, json_path: ...}`. An
   ordinary field can only be mapped as `{json_path: ...}`. Signing refuses
   a mix, so a fact is never agent-written on another tool.
-- A tool that does not map the field gets its signed `default`, as with any
-  custom field.
+- Every tool must map the field or mark it `not_applicable`, as with any
+  field a rule reads. A marked tool gets its signed `default`.
 - A constitution with a caller-supplied field signs as
   `two-key-constitution-v3` (see "Envelope format").
 - `agent_vocabulary()` never lists a caller-supplied field, and the MCP
@@ -1399,6 +1426,7 @@ tool_specs:
   read_report:
     irreversible: false
     data_class_floor: "financial"
+    fields: {po_matched: not_applicable}    # every tool decides each field a rule reads
 ```
 
 **3. Sign it, then get the digest of the signed tools:**
@@ -1938,11 +1966,11 @@ names the setting or declaration that controls it.
   memory-hard: against someone who holds the key directory it slows a
   guessable password less than scrypt did, in exchange for running on a
   FIPS-only OpenSSL.
-- A tool that does not map a custom field gets the field's signed
-  `default`. `sign-constitution` warns about each unmapped tool a field
-  rule reads, but signing and loading do not refuse it. Rules written with `not_in`,
-  and defaults your rules treat strictly, fail closed in that case; `in`
-  and `eq` deny-lists do not.
+- A tool marked `not_applicable` for a field gets the field's signed
+  `default`. Forgetting the decision is refused (0.5.0), but a mark is the
+  principal's word that the rule does not concern that tool. Rules written
+  with `not_in`, and defaults your rules treat strictly, fail closed if a
+  mark is wrong; `in` and `eq` deny-lists do not.
 - A `string` field compares exact normalized text. A deny-list on it
   misses spelling variants (`prod`, `production`). Use `enum` where the
   values can be listed.

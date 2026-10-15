@@ -12,16 +12,17 @@ from typing import Any, Mapping
 
 from .action import DATA_CLASSES
 from .canonical import canonical_bytes, canonical_hash
-from .fields import MAX_FIELDS_PER_TOOL, FieldError, check_path, has_caller_fields, is_caller, validate_fields
+from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path, has_caller_fields, is_caller,
+                     rule_fields, validate_fields)
 from .keys import fingerprint, sign, verify
 from .policy_vm import ConstitutionError, validate_rules
 
 FORMAT_V1 = "two-key-constitution-v1"
 # v2 may carry a custom-field registry (``fields``) and refuses any other unknown signed key.
 FORMAT_V2 = "two-key-constitution-v2"
-# v3 may also declare caller-supplied fields (``source: caller``). The format label is outside the signed bytes,
-# so the meaning comes from the signed bytes only: a v1 or v2 label on a constitution with a caller field is
-# refused, never read as an argument field.
+# v3 may also declare caller-supplied fields (``source: caller``) and mark a field ``not_applicable`` for a tool.
+# The format label is outside the signed bytes, so the meaning comes from the signed bytes only: a v1 or v2
+# label on a constitution that uses either is refused, never read as an argument field or a mapping.
 FORMAT_V3 = "two-key-constitution-v3"
 ENVELOPE_FORMATS = ("auto", "v2", "v3")
 _V2_SIGNED_KEYS = {"prose", "hard_rules", "tool_specs", "fields"}
@@ -91,12 +92,36 @@ def _field_mapping(where: str, defn: Mapping, entry: Any) -> dict:
     if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
         if isinstance(entry, Mapping) and "source" in entry:
             raise ConstitutionError(f"{where}: source: caller needs the field declared source: caller under fields:")
-        raise ConstitutionError(f"{where}: expected json_path only")
+        raise ConstitutionError(f"{where}: expected json_path only, or not_applicable")
     return dict(entry)
 
 
+def uses_v3(registry: Mapping, specs: Mapping) -> bool:
+    """True when the signed bytes need a 0.5.0 reader: a caller-supplied field or a not_applicable mark."""
+    return has_caller_fields(registry) or any(
+        entry == NOT_APPLICABLE for spec in specs.values() for entry in (spec.get("fields") or {}).values())
+
+
+def _require_field_decisions(specs: Mapping, rules: list) -> None:
+    """Every tool decides each field a deny_if_fields rule reads: it maps the field, or marks it not_applicable.
+
+    A forgotten mapping would hand the tool the field's default, which can switch the rule off for it without
+    a word. It is refused here, at signing and on load, for argument and caller-supplied fields alike.
+    """
+    read = rule_fields(rules)
+    missing = [f"tool_specs.{tool}.fields.{name} (rule {rule!r})"
+               for tool in sorted(specs) for name, rule in sorted(read.items())
+               if name not in (specs[tool].get("fields") or {})]
+    if missing:
+        shown = "; ".join(missing[:8]) + (f"; and {len(missing) - 8} more" if len(missing) > 8 else "")
+        raise ConstitutionError(
+            "each tool must map every field a deny_if_fields rule reads, or mark it not_applicable "
+            f"(name: not_applicable under the tool's fields:): {shown}")
+
+
 def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: list, take) -> dict:
-    """``tool_specs.<tool>.fields``: declared field name -> mapping. Adds each path to ``control_paths``.
+    """``tool_specs.<tool>.fields``: declared field name -> mapping, or ``not_applicable`` for a field this tool
+    does not carry (it gets the signed default). Adds each path to ``control_paths``.
 
     A path must not equal, contain, or sit under another declared path, compared without regard to case. A
     caller-supplied field may have no path (the tool does not receive it).
@@ -112,6 +137,9 @@ def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: li
         where = f"tool_specs.{tool}.fields.{fname}"
         if not isinstance(fname, str) or fname not in registry:
             raise ConstitutionError(f"{where}: not a declared field (add it under fields:)")
+        if entry == NOT_APPLICABLE:
+            out[fname] = NOT_APPLICABLE
+            continue
         entry = _field_mapping(where, registry[fname], entry)
         if "json_path" not in entry:
             out[fname] = {"source": "caller"}
@@ -273,6 +301,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
     extra_tools = [tool for tool in out if allow and tool not in allow]
     if extra_tools:
         raise ConstitutionError(f"tool_specs for tool(s) not in the allow list: {extra_tools}")
+    _require_field_decisions(out, rules)
     return out
 
 
@@ -336,9 +365,9 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
 
     ``envelope_format`` is the principal's choice at signing time. ``auto`` (the default) writes
     ``v1``, byte for byte as before, when there are no custom fields, ``v2`` when there are, and ``v3`` when
-    a field is caller-supplied (``source: caller``). ``v2`` always writes at least ``v2``, and ``v3`` always
-    writes ``v3``. A caller-supplied field cannot be signed as ``v2``. An install older than custom fields
-    refuses a ``v2`` envelope; one older than caller-supplied fields (before 0.5.0) refuses ``v3``.
+    a field is caller-supplied (``source: caller``) or a tool marks one ``not_applicable``. ``v2`` always
+    writes at least ``v2``, and ``v3`` always writes ``v3``. Neither feature can be signed as ``v2``. An
+    install older than custom fields refuses a ``v2`` envelope; one before 0.5.0 refuses ``v3``.
     """
     if envelope_format not in ENVELOPE_FORMATS:
         raise ConstitutionError(f"envelope_format must be one of {list(ENVELOPE_FORMATS)}")
@@ -358,10 +387,11 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
     }
     if registry:
         signed["fields"] = registry
-    caller = has_caller_fields(registry)
-    if caller and envelope_format == "v2":
-        raise ConstitutionError("caller-supplied fields (source: caller) need a v3 constitution")
-    if caller or envelope_format == "v3":
+    v3 = uses_v3(registry, signed["tool_specs"])
+    if v3 and envelope_format == "v2":
+        raise ConstitutionError("caller-supplied fields (source: caller) and not_applicable marks need a v3 "
+                                "constitution")
+    if v3 or envelope_format == "v3":
         fmt = FORMAT_V3
     elif registry or envelope_format == "v2":
         fmt = FORMAT_V2
@@ -421,4 +451,6 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
     if "tool_specs" not in signed:
         raise ConstitutionError("tool_specs required")
     specs = validate_tool_specs(signed["tool_specs"], rules, registry)
+    if uses_v3(registry, specs) and fmt != FORMAT_V3:
+        raise ConstitutionError("not_applicable marks need a v3 constitution")
     return Constitution(prose, rules, envelope, specs, True, registry)

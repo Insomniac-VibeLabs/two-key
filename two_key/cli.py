@@ -58,7 +58,7 @@ import sys
 from pathlib import Path
 
 from .constitution import ENVELOPE_FORMATS, load_unsigned_with_fields, save_envelope, sign_constitution
-from .fields import unmapped_rule_field_warnings
+from .fields import not_applicable_notes
 from .keys import generate_private_key, load_private_key_file, load_public_key, save_private_key, save_public_key
 
 
@@ -81,8 +81,8 @@ def _sign(args) -> int:
     envelope = sign_constitution(prose, rules, key, specs, fields=fields, envelope_format=args.envelope_format)
     save_envelope(args.out, envelope)
     signed = envelope["signed"]
-    for line in unmapped_rule_field_warnings(signed["hard_rules"], signed["tool_specs"], signed.get("fields") or {}):
-        print(f"two-key: WARNING: {line}", file=sys.stderr)
+    for warn, line in not_applicable_notes(signed["hard_rules"], signed["tool_specs"], signed.get("fields") or {}):
+        print(f"two-key: {'WARNING' if warn else 'note'}: {line}", file=sys.stderr)
     print(f"wrote {args.out}")
     return 0
 

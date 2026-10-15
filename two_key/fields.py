@@ -4,7 +4,9 @@ The principal declares each field once, at the top of the rules file (``fields:`
 ``default``. A tool spec maps the fields it carries to argument paths (``tool_specs.<tool>.fields``). A
 mapped field is required: a missing value is a deny. A tool that does not map a field gets its signed
 default, the way a tool with no amount spec has ``amount_usd`` 0. Rules name fields with
-``deny_if_fields``.
+``deny_if_fields``. Every tool must decide each field a ``deny_if_fields`` rule reads: map it, or mark it
+``not_applicable`` (then it gets the default). A forgotten mapping is refused at signing and on load, never
+read as the default (constitution.py).
 
 Values come only from the argument bytes, never from the agent's claim. The policy VM reads them with
 ``LOAD_FIELD`` from the derived mapping; nothing here ever reads ``Action.raw``.
@@ -66,6 +68,9 @@ FIELD_TYPES = ("boolean", "integer", "enum", "string")
 CHARSETS = ("ascii", "unicode")
 _COMMON_KEYS = {"type", "default", "description", "source"}
 SOURCES = ("caller",)       # an omitted source is the arguments; it is never written, so v1/v2 bytes do not change
+# A tool spec's mark for a field the tool does not carry: ``fields: {name: not_applicable}``. The tool gets the
+# field's signed default. Signed as v3, so an install before 0.5.0 refuses it instead of misreading it.
+NOT_APPLICABLE = "not_applicable"
 _TYPE_KEYS = {
     "boolean": _COMMON_KEYS,
     "integer": _COMMON_KEYS | {"min", "max"},
@@ -381,6 +386,21 @@ def has_caller_fields(registry: Mapping[str, Mapping[str, Any]]) -> bool:
     return any(is_caller(defn) for defn in registry.values())
 
 
+def field_mappings(spec: Mapping[str, Any]) -> dict:
+    """A tool spec's field mappings, without the fields it marks ``not_applicable``."""
+    return {name: entry for name, entry in (spec.get("fields") or {}).items() if isinstance(entry, Mapping)}
+
+
+def rule_fields(rules: list) -> dict[str, str]:
+    """Each custom field a ``deny_if_fields`` rule reads, with the id of the first rule that reads it."""
+    out: dict[str, str] = {}
+    for rule in rules:
+        body = rule.get("deny_if_fields") if isinstance(rule, Mapping) else None
+        for name in sorted(body or {}):
+            out.setdefault(name, str(rule.get("id")))
+    return out
+
+
 def validate_fields(registry: Any) -> dict:
     """Canonical field registry. ``None`` and an empty mapping both mean no custom fields."""
     if registry is None:
@@ -461,30 +481,31 @@ _HOLDS = {
 }
 
 
-def unmapped_rule_field_warnings(rules: list, tool_specs: Mapping[str, Mapping[str, Any]],
-                                 registry: Mapping[str, Mapping[str, Any]]) -> list[str]:
-    """Advice for the signer, not a check: each tool that does not map a field a deny_if_fields rule reads.
+def not_applicable_notes(rules: list, tool_specs: Mapping[str, Mapping[str, Any]],
+                         registry: Mapping[str, Mapping[str, Any]]) -> list[tuple[bool, str]]:
+    """What each ``not_applicable`` mark does to the rules that read the field, for the signer.
 
-    That tool gets the field's signed default. When every condition of the rule reads a default, the rule
-    either always or never denies the tool, and a forgotten mapping is otherwise silent (HOWTO "Known
-    trade-offs by configuration"). Takes the canonical rules, specs, and registry of a signed document.
+    The tool gets the field's signed default. When every condition of a rule reads a default, the rule
+    always or never denies that tool. Returns (warn, text): ``warn`` is true when the rule always denies the
+    tool, which is rarely what a not_applicable mark means. Takes the canonical rules, specs, and registry.
     """
-    out: list[str] = []
+    out: list[tuple[bool, str]] = []
     for rule in rules:
         body = rule.get("deny_if_fields") if isinstance(rule, Mapping) else None
         if not body:
             continue
         for tool in sorted(tool_specs):
-            missing = sorted(set(body) - set(tool_specs[tool].get("fields") or {}))
-            if not missing:
+            marked = sorted(set(body) - set(field_mappings(tool_specs[tool])))
+            if not marked:
                 continue
-            given = ", ".join(f"{n}={json.dumps(registry[n]['default'])}" for n in missing)
-            if len(missing) == len(body):
+            given = ", ".join(f"{n}={json.dumps(registry[n]['default'])}" for n in marked)
+            denies = False
+            if len(marked) == len(body):
                 denies = all(_HOLDS[op](registry[n]["default"], lit) for n in body for op, lit in body[n].items())
                 effect = "always denies it" if denies else "never denies it"
             else:
                 effect = "reads that default"
-            out.append(f"rule {rule.get('id')!r}: tool {tool!r} does not map {', '.join(missing)} "
-                       f"(default {given}), so the rule {effect}")
+            out.append((denies, f"rule {rule.get('id')!r}: tool {tool!r} marks {', '.join(marked)} "
+                                f"not_applicable (default {given}), so the rule {effect}"))
     return out
 

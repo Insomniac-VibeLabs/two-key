@@ -292,8 +292,9 @@ class Calls(unittest.TestCase):
 
 FACT_FIELDS = {"po_matched": {"type": "boolean", "default": True, "source": "caller"}}
 FACT_RULES = RULES + [{"id": "require-po-match", "deny_if_fields": {"po_matched": {"eq": False}}}]
-FACT_SPECS = dict(SPECS, pay_vendor=dict(SPECS["pay_vendor"],
-                                         fields={"po_matched": {"source": "caller", "json_path": "po_matched"}}))
+FACT_SPECS = {name: dict(spec, fields={"po_matched": "not_applicable"}) for name, spec in SPECS.items()}
+FACT_SPECS["pay_vendor"] = dict(SPECS["pay_vendor"],
+                                fields={"po_matched": {"source": "caller", "json_path": "po_matched"}})
 FACT_UPSTREAM = [dict(UPSTREAM[0], inputSchema={
     "type": "object", "required": ["vendor", "amount", "po_matched"],
     "properties": {"vendor": {"type": "string"}, "amount": {"type": "number"}, "po_matched": {"type": "boolean"}}}),

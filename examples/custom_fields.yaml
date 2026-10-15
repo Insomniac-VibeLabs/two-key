@@ -1,10 +1,12 @@
 # Custom Path A fields. Sign it with examples/constitution.md or your own prose:
 #   python -m two_key sign-constitution --key ./keys/principal.pem \
 #     --prose examples/constitution.md --rules examples/custom_fields.yaml --out custom.signed.json
-# A rules file with `fields:` signs as a v2 constitution. Installs before custom fields refuse it.
+# This file signs as a v3 constitution (0.5.0): `search` marks fields not_applicable. A rules file with
+# `fields:` and no such mark signs as v2. Installs before custom fields refuse v2; before 0.5.0, v3.
 #
-# Each field is declared once, with a type and a default. The default is the value for every tool
-# that does not map the field. A tool maps a field to an argument path; a mapped field is required.
+# Each field is declared once, with a type and a default. A tool maps a field to an argument path; a
+# mapped field is required. Every tool must decide each field a deny_if_fields rule reads: map it, or
+# mark it not_applicable, and then it gets the default. A forgotten mapping does not sign.
 # Values come from the argument bytes only. A description is a note for people: it is signed, but it
 # is never compiled, never sent to a judge, and never an authorization rule.
 fields:
@@ -67,3 +69,8 @@ tool_specs:
   search:
     irreversible: false
     data_class_floor: public
+    fields:                     # search carries none of them; it says so, and gets each default
+      environment: not_applicable
+      dry_run: not_applicable
+      replicas: not_applicable
+      abteilung: not_applicable

@@ -24,7 +24,8 @@ SPECS = {"pay_vendor": {"irreversible": True, "data_class_floor": "financial",
                         "payload": [{"json_path": "invoice", "shape": "string"}],
                         "fields": {"po_matched": {"source": "caller"}}},
          "lookup": {"irreversible": False, "data_class_floor": "public",
-                    "payload": [{"json_path": "query", "shape": "string"}]}}
+                    "payload": [{"json_path": "query", "shape": "string"}],
+                    "fields": {"po_matched": "not_applicable"}}}
 ARGS = {"payee": "alpine", "amount": 50, "invoice": "AMS-1"}
 
 

@@ -48,7 +48,9 @@ SPECS = {
                           "dry_run": {"json_path": "dry_run"},
                           "team": {"json_path": "team"}},
                "payload": [{"json_path": "note", "shape": "string"}]},
-    "search": {"irreversible": False, "data_class_floor": "public", "payload": [{"json_path": "q"}]},
+    "search": {"irreversible": False, "data_class_floor": "public", "payload": [{"json_path": "q"}],
+               # Every tool decides each field a rule reads: search does not carry them, so it says so.
+               "fields": {"environment": "not_applicable", "replicas": "not_applicable", "team": "not_applicable"}},
 }
 DEPLOY = {"tool": "deploy", "data_class": "public", "irreversible": True}
 SEARCH = {"tool": "search", "data_class": "public", "irreversible": False}
@@ -104,7 +106,7 @@ class HappyPath(Harness, unittest.TestCase):
         form = self.entries("action_normalized")[-1]["form"]
         self.assertEqual(form["fields"], {"environment": "staging", "replicas": 3, "dry_run": False, "team": "ops"})
         self.assertTrue(self.gw.invoke(d.token, "deploy", args).allowed)
-        self.assertEqual(self.env["format"], FORMAT_V2)
+        self.assertEqual(self.env["format"], "two-key-constitution-v3")     # search marks not_applicable
 
 
 class A1ValuesOnlyFromBytes(Harness, unittest.TestCase):
@@ -525,7 +527,7 @@ class A9EnvelopeFormat(unittest.TestCase):
     def setUp(self):
         self.key = generate_private_key()
         self.plain_rules = [{"id": "tools", "allow_only_tools": ["search"]}]
-        self.plain_specs = {"search": SPECS["search"]}
+        self.plain_specs = {"search": {k: v for k, v in SPECS["search"].items() if k != "fields"}}
 
     def test_auto_and_forced(self):
         v1 = sign_constitution("p", self.plain_rules, self.key, self.plain_specs)
@@ -536,7 +538,14 @@ class A9EnvelopeFormat(unittest.TestCase):
         self.assertEqual(v1["signed"], v2["signed"])
         a, b = verify_signed(v1, self.key.public_key()), verify_signed(v2, self.key.public_key())
         self.assertEqual((a.hard_rules, a.tool_specs, a.fields), (b.hard_rules, b.tool_specs, b.fields))
-        self.assertEqual(sign_constitution("p", RULES, self.key, SPECS, fields=FIELDS)["format"], FORMAT_V2)
+        # Every tool maps every rule-read field: v2. A not_applicable mark (search, in SPECS) needs v3.
+        deploy_only = [{"id": "tools", "allow_only_tools": ["deploy"]}, *RULES[1:]]
+        self.assertEqual(sign_constitution("p", deploy_only, self.key, {"deploy": SPECS["deploy"]},
+                                           fields=FIELDS)["format"], FORMAT_V2)
+        self.assertEqual(sign_constitution("p", RULES, self.key, SPECS, fields=FIELDS)["format"],
+                         "two-key-constitution-v3")
+        with self.assertRaisesRegex(ConstitutionError, "need a v3"):
+            sign_constitution("p", RULES, self.key, SPECS, fields=FIELDS, envelope_format="v2")
         # v3 (0.5.0, caller-supplied fields) can be forced; the signed body is the same.
         v3 = sign_constitution("p", self.plain_rules, self.key, self.plain_specs, envelope_format="v3")
         self.assertEqual((v3["format"], v3["signed"]), ("two-key-constitution-v3", v1["signed"]))
@@ -580,7 +589,7 @@ class A9EnvelopeFormat(unittest.TestCase):
             from two_key.keys import save_private_key
             save_private_key(keyfile, self.key)
             out = Path(tmp, "c.json")
-            for rules_file, flag, fmt in ((rules, [], FORMAT_V2), (plain, [], FORMAT_V1),
+            for rules_file, flag, fmt in ((rules, [], "two-key-constitution-v3"), (plain, [], FORMAT_V1),
                                           (plain, ["--envelope-format", "v2"], FORMAT_V2)):
                 with self.subTest(rules=rules_file.name, flag=flag):
                     with mock.patch("sys.stdout"):
@@ -643,12 +652,17 @@ class A10Limits(unittest.TestCase):
     def test_conditions_and_list_items(self):
         ints = {f"i{n}": {"type": "integer", "min": 0, "max": 2000, "default": 0} for n in range(F.MAX_CONDITIONS + 1)}
 
+        def x_marks(names):
+            return {"x": {"irreversible": False, "data_class_floor": "public",
+                          "fields": {name: "not_applicable" for name in names}}}
+
         def conditions(n):
-            return {"fields": ints, "rules": [{"id": "tools", "allow_only_tools": ["x"]},
-                                              {"id": "c", "deny_if_fields": {f"i{k}": {"gt": 1} for k in range(n)}}]}
+            return {"fields": ints, "specs": x_marks(ints),
+                    "rules": [{"id": "tools", "allow_only_tools": ["x"]},
+                              {"id": "c", "deny_if_fields": {f"i{k}": {"gt": 1} for k in range(n)}}]}
 
         def items(n):
-            return {"fields": {"s": {"type": "string", "max_length": 8, "default": ""}},
+            return {"fields": {"s": {"type": "string", "max_length": 8, "default": ""}}, "specs": x_marks(["s"]),
                     "rules": [{"id": "tools", "allow_only_tools": ["x"]},
                               {"id": "c", "deny_if_fields": {"s": {"in": [f"v{k}" for k in range(n)]}}}]}
         self.assert_limit(conditions, F.MAX_CONDITIONS, F.MAX_CONDITIONS + 1)
@@ -692,7 +706,7 @@ class ExampleFile(unittest.TestCase):
                                                                root / "examples" / "custom_fields.yaml")
         key = generate_private_key()
         env = sign_constitution(prose, rules, key, specs, fields=fields)
-        self.assertEqual(env["format"], FORMAT_V2)
+        self.assertEqual(env["format"], "two-key-constitution-v3")      # search marks fields not_applicable
         con = verify_signed(env, key.public_key())
         claim = {"tool": "deploy", "data_class": "public", "irreversible": True}
 

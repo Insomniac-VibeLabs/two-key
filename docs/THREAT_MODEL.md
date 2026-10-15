@@ -224,8 +224,9 @@ the code wins, then this file should be corrected.
   Setting the flag denies the call instead (`unmapped_field`). Custom
   fields (`fields:`, `deny_if_fields`) are read the same way: from the
   argument path the signed spec names, never from the agent's claim, or,
-  for a `source: caller` field, from `facts=` only. A tool that does not
-  map a field gets that field's signed default.
+  for a `source: caller` field, from `facts=` only. Every tool maps each
+  field a rule reads or marks it `not_applicable`; a marked tool gets the
+  field's signed default. A forgotten decision does not sign or load.
 - Two-Key does not verify facts about the world. The agent writes the
   arguments, so a custom field such as `po_matched` is the agent's
   assertion; a rule on it checks consistency, not truth (live run 5c, C05:
@@ -295,9 +296,10 @@ claims to close.
     `invoke` gets `fact_mismatch` (closed). One that passes facts it took
     from the agent defeats the field; the library cannot tell.
   - Judges see the fact values in the record, as they see other fields.
-- Custom Path A fields (0.3.0). A tool that does not map a field gets the
-  field's signed default, as a tool with no amount spec has `amount_usd` 0.
-  A mapping the operator forgot is therefore silent. Rules written as
+- Custom Path A fields (0.3.0). A tool marked `not_applicable` for a field
+  gets the field's signed default, as a tool with no amount spec has
+  `amount_usd` 0. Since 0.5.0 a forgotten mapping is refused at signing and
+  on load, but a wrong mark is still the principal's error. Rules written as
   allow-lists (`not_in`) and restrictive defaults fail closed in that case;
   rules written as deny-lists (`in`, `eq`) do not. A deny-list on a
   `string` field also misses spelling variants (`prod` and `production`).

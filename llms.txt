@@ -79,7 +79,9 @@ unread. After a derive deny, tool_args are withheld from
 judges unless tool_args_on_derive_deny is set. Path B still runs.
 Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer, enum, or
 string; up to 64), each with a signed default and an optional description. A tool spec maps
-a field to an argument path; a mapped field is required, an unmapped tool gets the default.
+a field to an argument path; a mapped field is required. Every tool must map each field a
+deny_if_fields rule reads or mark it not_applicable (fields: {name: not_applicable}; it then gets
+the default; signs as v3); a forgotten decision is refused at signing and on load (0.5.0).
 Rules name them with deny_if_fields (eq, neq, gt, gte, lt, lte, in, not_in by type). Values
 come from the argument bytes only; an agent cannot claim them, but the agent writes the
 arguments, so a field is the call's content, not a verified fact (po_matched: true is an
@@ -101,8 +103,8 @@ irreversible follows the tool spec. An omitted data_class is classified,
 then the tool floor, which never lowers it. Classes combine: public < personal < financial,
 medical < classified; financial and medical together are financial+medical (a data_class_in rule
 naming either matches), never an invented classified. A claim may be financial+medical in either order;
-a repeated class (financial+financial) is malformed_action. sign-constitution warns on stderr for each tool
-that does not map a field a deny_if_fields rule reads (always denies / never denies / reads the default). --amount-usd, --counterparty,
+a repeated class (financial+financial) is malformed_action. sign-constitution prints a note for each
+not_applicable mark (never denies / reads the default; always denies is a WARNING). --amount-usd, --counterparty,
 --data-class, and --irreversible / --no-irreversible set a claim. A claim
 that disagrees with the bytes or the spec is a deny.
 MonitoredAgent.complete sends the agent the constitution prose and the instruction. It sends

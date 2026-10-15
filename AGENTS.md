@@ -148,12 +148,15 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   fact, and a caller fact is as true as its hook; do not describe fields as
   verification
   (HOWTO "What Two-Key verifies"); `LOAD` refuses any name but a built-in field, and custom
-  fields load with `LOAD_FIELD`. A mapped field is required; an unmapped
-  tool gets the signed default. A description is never compiled, sent to a
+  fields load with `LOAD_FIELD`. A mapped field is required. Every tool
+  maps each field a `deny_if_fields` rule reads or marks it
+  `not_applicable` (then it gets the signed default); a forgotten decision
+  is refused at signing and on load, never read as the default
+  (`tests/test_field_decisions.py`). A description is never compiled, sent to a
   judge, or used in a reason. A constitution with no custom fields must
   stay byte-for-byte v1 (`tests/test_fields_compat.py`); one without caller
-  fields must not sign as v3. A caller field signs only as v3, and a v1 or
-  v2 envelope that declares one is refused.
+  fields or `not_applicable` marks must not sign as v3. Either signs only
+  as v3, and a v1 or v2 envelope that carries one is refused.
 - Format identifiers are `two-key-...` (0.4.0). Files with the old
   `two-key-concept-...` formats are refused with a clear message, never
   read (`tests/test_legacy_formats.py`). Do not change a format name

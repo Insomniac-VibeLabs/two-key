@@ -59,6 +59,7 @@
 - [Caller-supplied facts and the guard core (#2 P1) — 2026-10-15](#caller-supplied-facts-and-the-guard-core-2-p1--2026-10-15)
 - [Docs: roadmap order, README intro and MCP section, tables of contents — 2026-10-15](#docs-roadmap-order-readme-intro-and-mcp-section-tables-of-contents--2026-10-15)
 - [Roadmap: judge connection reuse (#6) and judge history summary (#1) placed — 2026-10-15](#roadmap-judge-connection-reuse-6-and-judge-history-summary-1-placed--2026-10-15)
+- [Every tool decides each field a rule reads (#10) — 2026-10-15](#every-tool-decides-each-field-a-rule-reads-10--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2230,9 +2231,17 @@ passed the maintainer's security review before it was written.
 
 ### Upgrading from 0.4.0
 
-- Nothing changes unless a field is declared `source: caller`: the same
-  rules sign to the same bytes, and `authorize` and `invoke` without
-  `facts=` behave as before.
+- **Check your constitution before upgrading.** Every tool must now map
+  each field a `deny_if_fields` rule reads, or mark it `not_applicable`
+  (entry "Every tool decides each field a rule reads", below). A v2
+  constitution in which a tool neither maps nor marks such a field no longer
+  loads: `TwoKey` refuses to start, naming each tool, field, and rule. To
+  fix it, add `<field>: not_applicable` under that tool's `fields:` (or map
+  the field), then re-sign; the result is v3. A constitution whose tools
+  already decide every such field loads unchanged, as v2.
+- Otherwise nothing changes unless a field is declared `source: caller`:
+  the same rules sign to the same bytes, and `authorize` and `invoke`
+  without `facts=` behave as before.
 - A v3 constitution needs this release (0.5.0) or later; 0.4.0 refuses it.
 - To turn an argument field into a caller fact: add `source: caller` to its
   `fields:` entry; map it in each tool as `{source: caller}` (or keep its
@@ -2286,3 +2295,38 @@ On branch `working`. Docs only.
   history summary built from the ledger, on by default) comes before the
   1.0 review, after its own maintainer security review. ROADMAP, README,
   SCOPE, and THREAT_MODEL list both.
+
+## Every tool decides each field a rule reads (#10) — 2026-10-15
+
+On branch `working`. Maintainer's decision after live run 6x (issue #10):
+refuse, do not warn, for argument fields and caller-supplied facts alike, in
+0.5.0.
+
+- **The rule.** For every custom field a `deny_if_fields` rule reads, every
+  tool in `tool_specs` must either map it or mark it `not_applicable`
+  (`fields: {ticket_verified: not_applicable}`). A marked tool gets the
+  field's signed default, as an unmapped tool did before. A field no rule
+  reads needs no decision.
+- **Refused at signing and on load.** `sign_constitution` and
+  `verify_signed` (and so `TwoKey` at start) refuse a constitution with a
+  missing decision, naming each tool, field, and rule. Before, a tool that
+  forgot a mapping silently got the default, with only a stderr warning at
+  signing; with a permissive default (`ticket_verified: true` in run 6x)
+  the rule never denied that tool.
+- **Format.** A `not_applicable` mark signs as `two-key-constitution-v3`
+  (an install before 0.5.0 refuses it rather than misreading it), and a v1
+  or v2 label on one is refused. `--envelope-format v2` with a mark is a
+  signing error.
+- **Signing notes.** The per-tool warnings become notes on the marks:
+  `two-key: note:` when the rule never denies the marked tool or reads its
+  default, and `two-key: WARNING:` when it always denies it.
+  `two_key.fields.unmapped_rule_field_warnings` is replaced by
+  `not_applicable_notes`.
+- The agent vocabulary, derive, and the proxy skip marked fields.
+  `examples/custom_fields.yaml`, the HOWTO worked example, and the live
+  harness (the clinic's three other tools mark `po_matched`) carry the
+  marks. Tests: `tests/test_field_decisions.py` (replaces
+  `tests/test_unmapped_field_warnings.py`).
+- Docs: HOWTO "Map it, or mark it `not_applicable`", "Envelope format", and
+  "Known trade-offs"; THREAT_MODEL; AGENTS.md; llms.txt. Upgrade steps are in
+  "Upgrading from 0.4.0" above.

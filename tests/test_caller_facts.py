@@ -29,7 +29,8 @@ SPECS = {"pay_vendor": {"irreversible": True, "data_class_floor": "financial",
                         "fields": {"po_matched": {"source": "caller", "json_path": "po_matched"},
                                    "risk_tier": {"json_path": "tier"}}},
          "lookup": {"irreversible": False, "data_class_floor": "public",
-                    "payload": [{"json_path": "query", "shape": "string"}]}}
+                    "payload": [{"json_path": "query", "shape": "string"}],
+                    "fields": {"po_matched": "not_applicable"}}}
 NO_PATH = dict(SPECS, pay_vendor=dict(SPECS["pay_vendor"], fields={"po_matched": {"source": "caller"},
                                                                    "risk_tier": {"json_path": "tier"}}))
 CLAIM = {"tool": "pay_vendor", "data_class": "financial"}
@@ -67,7 +68,8 @@ class Signing(unittest.TestCase):
 
     def test_without_caller_fields_formats_do_not_change(self):
         fields = {"risk_tier": FIELDS["risk_tier"]}
-        specs = dict(SPECS, pay_vendor=dict(SPECS["pay_vendor"], fields={"risk_tier": {"json_path": "tier"}}))
+        specs = dict(SPECS, pay_vendor=dict(SPECS["pay_vendor"], fields={"risk_tier": {"json_path": "tier"}}),
+                     lookup={k: v for k, v in SPECS["lookup"].items() if k != "fields"})
         key = generate_private_key()
         rules = [RULES[0]]
         self.assertEqual(sign_constitution("p", rules, key, specs, fields=fields)["format"], FORMAT_V2)

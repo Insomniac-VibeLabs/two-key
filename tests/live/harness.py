@@ -357,8 +357,9 @@ def review(draft: dict) -> dict:
             spec["counterparties"] = [dict(p, allow=r["allow"][p["json_path"]]) for p in spec["counterparties"]]
         if r.get("deny_unmapped"):
             spec["deny_unmapped"] = True
-        if r.get("facts"):
-            spec["fields"] = dict(r["facts"])
+        # Every tool decides each field the rules read (0.5.0): pay_vendor maps po_matched, the rest mark it
+        # not_applicable, which the principal reviews here like any other choice.
+        spec["fields"] = {name: (r.get("facts") or {}).get(name, "not_applicable") for name in FIELDS}
         specs[tool] = spec
     return specs
 
