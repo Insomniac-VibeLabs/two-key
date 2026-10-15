@@ -105,7 +105,12 @@ security findings privately, per [SECURITY.md](SECURITY.md).
 ## Fail-closed defaults to preserve
 
 - A missing ballot is not a yes.
-- Both paths run once the call is well-formed and within limits.
+- Both paths run once the call is well-formed and within limits. The one
+  exception (maintainer's decision, 0.5.0): a call that cannot be read under
+  its spec (`derive_failed:`) is not sent to the judges unless
+  `tool_args_on_derive_deny` is set, and Path B is ledgered as
+  `skipped:derive_failed`. Mismatches and rule denies still go to the
+  judges. Do not widen the skip.
 - `authorize_from_agent` does not execute a tool.
 - A decline (`{"decline": ...}`) is not a call: `agent_declined` deny,
   neither path runs, never a token. A decline that also carries a tool,

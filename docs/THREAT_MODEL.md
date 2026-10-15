@@ -114,12 +114,15 @@ the code wins, then this file should be corrected.
   `tool_args`, except after a derive deny (`derive_failed:*`,
   `amount_mismatch`, `counterparty_mismatch`, `irreversible_mismatch`).
   `tool_args_on_derive_deny` defaults false. Set it true to send those
-  bytes. Path B still runs either way. Other denies still attach the
-  arguments. The proposal is withheld unless that judge sets
+  bytes. Without it, a `derive_failed:` call reaches no judge (Path B is
+  ledgered as `skipped:derive_failed`); mismatches and other denies still
+  go to the judges, which attach the arguments. The proposal is withheld unless that judge sets
   `receives_proposal` or the quorum policy is `judge_inputs: record_and_proposal`.
   The default is record-only.
 - Both paths run once the call is well-formed and within limits; a malformed or oversized
-  call is denied before either path (size and digest only). `require_path_a_first` is stored on the policy and
+  call is denied before either path (size and digest only). A call that cannot be read under its
+  spec (`derive_failed:`) skips the judges unless `tool_args_on_derive_deny` is set: Path A has denied
+  it, and the judges would get an empty form. `require_path_a_first` is stored on the policy and
   copied into `to_record`. `TwoKey.authorize` does not read it. There is no
   `short_circuit_path_b` setting on `TwoKey`.
 - Gateway to the tool. The token is checked against the caller's argument
@@ -358,10 +361,13 @@ claims to close.
   `deny_counterparties`, so a blocked party is not hidden behind an allowed
   one. A derived amount that is not finite or above the action sanity cap
   is `amount_unreadable`.
-- A derive deny does not skip Path B. Judges still receive the normalized
-  action record. They do not receive `tool_args` unless
-  `tool_args_on_derive_deny` is true. A deny that is not a derive deny still
-  attaches non-empty arguments. The tool still does not run on a deny.
+- A derive mismatch (`amount_mismatch`, `counterparty_mismatch`,
+  `irreversible_mismatch`) does not skip Path B. Judges still receive the
+  normalized action record, without `tool_args` unless
+  `tool_args_on_derive_deny` is true. A `derive_failed:` call skips the
+  judges unless that flag is true, since they would get a form with nothing
+  derived in it. A deny that is not a derive deny still attaches non-empty
+  arguments. The tool still does not run on a deny.
 - The gateway's verifier has no capability-minting private key. The minting
   key is the capability key outside the ledger directory. The principal
   key remains on the shared ledger object because the ledger head needs it.
@@ -575,7 +581,7 @@ above, not here.
 
 ## What to re-check when the code changes
 
-- `two_key/core.py`: both paths run once the call is well-formed and within limits, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
+- `two_key/core.py`: both paths run once the call is well-formed and within limits, except that a `derive_failed:` call skips the judges unless `tool_args_on_derive_deny` is set (ledgered `skipped:derive_failed`), and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
 - `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies; a `case: exact` ASCII string is compared and passed on as written, and signs only as v3. A description is never compiled, sent to a judge, or used in a reason.
 - `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
 - `two_key/constitution.py`: a caller field signs only as v3; a v1 or v2 envelope that declares one is refused. A constitution without caller fields keeps its v1 or v2 bytes.

@@ -148,7 +148,7 @@ flowchart TD
 
 The final decision allows the action only if Path A allows, the quorum passes, and no other deny condition remains. Capability issuance can still fail, including when the issuer key is unavailable or a required ledger write fails.
 
-A Path A deny does not skip Path B in the current implementation. After a derive deny, judge input omits argument bytes by default, but Path B still evaluates the normalized record. `require_path_a_first` does not change this behavior today.
+A Path A deny does not skip Path B. After a derive deny, judge input omits argument bytes by default. A call that cannot be read under its spec (`derive_failed:`) is the one exception: the judges would get a form with nothing derived in it and no arguments, so they are not asked, and Path B is ledgered as `skipped:derive_failed` (0.5.0). With `tool_args_on_derive_deny: true` they see the arguments and are asked. A mismatch (`amount_mismatch` and the like) and a rule deny still go to the judges. `require_path_a_first` does not change this behavior.
 
 Malformed or oversized requests can be denied before either path runs.
 

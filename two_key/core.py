@@ -429,24 +429,33 @@ class TwoKey:
         judge_args: Mapping | None = arguments
         if _derive_deny(deny_reason) and not self.quorum.tool_args_on_derive_deny:
             judge_args = None
-        try:
-            # Re-read the named agent credential. A placeholder session must not hide it.
-            # Unreadable: deny before any judge sees the call. The value is not in the reason.
-            configured = configured_agent_secrets(self._agent_sources)
-        except IdentityError:
-            return self._deny(origin, "agent_credential_unreadable", agent, path_a_rec, None)
-        quorum = convene(self.judges, self.compiled.judge_text, normalized, proposal,
-                         self.quorum, binding, judge_args, agent_session,
-                         configured_secrets=configured)
-        path_b_rec = {"passed": quorum.passed, "reason": quorum.reason,
-                      "yes": quorum.yes, "no": quorum.no, "abstain": quorum.abstain}
-        allowed = bool(path_a.allowed and quorum.passed and deny_reason is None)
+        if deny_reason and deny_reason.startswith("derive_failed:") and judge_args is None:
+            # The call cannot be read under its spec, so it is denied already, and judges would get a form with
+            # nothing derived in it and no arguments: there is nothing to judge. They are not asked; Path B is
+            # ledgered as skipped. With tool_args_on_derive_deny they see the arguments, and are asked.
+            quorum_passed, quorum_reason = False, "skipped:derive_failed"
+            path_b_rec = {"passed": False, "reason": quorum_reason, "yes": 0, "no": 0, "abstain": 0,
+                          "skipped": True}
+        else:
+            try:
+                # Re-read the named agent credential. A placeholder session must not hide it.
+                # Unreadable: deny before any judge sees the call. The value is not in the reason.
+                configured = configured_agent_secrets(self._agent_sources)
+            except IdentityError:
+                return self._deny(origin, "agent_credential_unreadable", agent, path_a_rec, None)
+            quorum = convene(self.judges, self.compiled.judge_text, normalized, proposal,
+                             self.quorum, binding, judge_args, agent_session,
+                             configured_secrets=configured)
+            quorum_passed, quorum_reason = quorum.passed, quorum.reason
+            path_b_rec = {"passed": quorum.passed, "reason": quorum.reason,
+                          "yes": quorum.yes, "no": quorum.no, "abstain": quorum.abstain}
+        allowed = bool(path_a.allowed and quorum_passed and deny_reason is None)
         if deny_reason:
             reason = deny_reason
         elif allowed:
             reason = "both_paths_allow"
         else:
-            reason = path_a.reason if not path_a.allowed else quorum.reason
+            reason = path_a.reason if not path_a.allowed else quorum_reason
         token = None
         try:
             body_omitted = False

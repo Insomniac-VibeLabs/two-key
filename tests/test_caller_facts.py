@@ -191,7 +191,7 @@ class Authorize(unittest.TestCase):
         d = self.tk.authorize(CLAIM, ARGS, "pay", facts={"po_matched": False})
         self.assertEqual((d.allowed, d.reason), (False, "rule_denied:require-po-match"))
 
-    def test_fact_denies_run_both_paths_and_issue_no_token(self):
+    def test_fact_denies_skip_the_judges_and_issue_no_token(self):
         for args, facts, reason in (
                 (dict(ARGS, po_matched=True), {"po_matched": True}, "derive_failed:caller_field_in_arguments:po_matched"),
                 (ARGS, None, "derive_failed:field_missing:po_matched"),
@@ -202,7 +202,8 @@ class Authorize(unittest.TestCase):
                 before = len(self.judge.records)
                 d = self.tk.authorize(CLAIM, args, "pay", facts=facts)
                 self.assertEqual((d.allowed, d.reason, d.token), (False, reason, None))
-                self.assertEqual(len(self.judge.records), before + 1)       # Path B still ran
+                self.assertEqual(len(self.judge.records), before)           # unreadable: no judge is asked
+                self.assertEqual(d.path_b["reason"], "skipped:derive_failed")
                 self.assertIn("allowed", d.path_a)
 
     def test_a_fact_in_the_claim_is_refused(self):

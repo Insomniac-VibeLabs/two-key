@@ -27,8 +27,9 @@ before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m u
 (no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
-Both paths run once the call is well-formed and within limits (an oversized or
-malformed call is an early deny before either path). The default needs one judge and has no diversity
+Both paths run once the call is well-formed, within limits, and readable (an oversized or
+malformed call is an early deny before either path; a derive_failed call skips the judges unless
+tool_args_on_derive_deny, and path_b is ledgered as skipped:derive_failed). The default needs one judge and has no diversity
 floors; required_yes defaults to min(2, judges). QuorumPolicy.high_assurance
 (profile: high_assurance) needs judges from 2 makers (min_makers; maker: is the operator's
 label for who made a judge's model, not verified, never compared with the agent), 1 local judge,
@@ -76,7 +77,8 @@ The tool receives the canonical party. A payload path is not interpreted.
 Optional shape locks it to a string, a number, or a list of strings and
 does not read the contents. Omit shape and the value's children are copied
 unread. After a derive deny, tool_args are withheld from
-judges unless tool_args_on_derive_deny is set. Path B still runs.
+judges unless tool_args_on_derive_deny is set. A derive_failed call (unreadable under its spec)
+then reaches no judge (0.5.0); amount/counterparty/irreversible mismatches and rule denies still do.
 Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer, enum, or
 string; up to 64), each with a signed default and an optional description. A tool spec maps
 a field to an argument path; a mapped field is required. Every tool must map each field a

@@ -61,6 +61,7 @@
 - [Roadmap: judge connection reuse (#6) and judge history summary (#1) placed — 2026-10-15](#roadmap-judge-connection-reuse-6-and-judge-history-summary-1-placed--2026-10-15)
 - [Every tool decides each field a rule reads (#10) — 2026-10-15](#every-tool-decides-each-field-a-rule-reads-10--2026-10-15)
 - [`case: exact` string fields (live run 6x, X19) — 2026-10-15](#case-exact-string-fields-live-run-6x-x19--2026-10-15)
+- [Judges are not asked about a call that cannot be read (run 6 finding 4) — 2026-10-15](#judges-are-not-asked-about-a-call-that-cannot-be-read-run-6-finding-4--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2358,3 +2359,33 @@ On branch `working`. Maintainer's decision on run 6 finding 2.
 - Tests: `tests/test_case_exact.py`. Docs: HOWTO "Case-sensitive
   identifiers (`case: exact`)" and "Known trade-offs"; THREAT_MODEL;
   llms.txt.
+
+## Judges are not asked about a call that cannot be read (run 6 finding 4) — 2026-10-15
+
+On branch `working`. Maintainer's decision (option B). This narrows the
+"both paths run" rule for one case.
+
+- A call that cannot be read under its tool spec (`derive_failed:`, for
+  example `amount_unreadable`, `field_missing`, `caller_field_in_arguments`,
+  `unmapped_field`) is denied by the derive step, and the judges used to get
+  a placeholder form with nothing derived in it and no arguments. Live run 6
+  showed them answering "empty call" at full cost and latency. Now they are
+  not asked: Path B is ledgered as `{"passed": false, "reason":
+  "skipped:derive_failed", "yes": 0, "no": 0, "abstain": 0, "skipped":
+  true}`, and the decision reason is the derive reason, as before.
+- With `tool_args_on_derive_deny: true` the judges see the arguments, so
+  they are still asked.
+- A mismatch (`amount_mismatch`, `counterparty_mismatch`,
+  `irreversible_mismatch`) has a real form and still goes to the judges, as
+  does every rule deny. `require_path_a_first` is still not read.
+- No allow becomes possible: the call was already denied.
+- Tests: `tests/test_problem_f.py` (`test_a_readable_deny_still_asks_the_judges`,
+  `test_derive_deny_skips_judges_unless_they_may_see_the_arguments`), and the
+  derive-deny tests in `test_custom_fields.py` and `test_caller_facts.py`.
+  Docs: README, HOWTO (custom fields, caller facts, quorum, "Known
+  trade-offs"), JUDGES_AND_QUORUM, THREAT_MODEL, SCOPE, AGENTS.md, llms.txt.
+
+### Upgrading
+
+- A ledger consumer that expects a judge tally on every decision should
+  accept `path_b.skipped: true` with zero counts.

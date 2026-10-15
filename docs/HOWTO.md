@@ -309,8 +309,10 @@ not allow is refused, so a typo cannot become a rule that never fires.
 | wrong JSON type, or a character outside the field's character set | `derive_failed:field_unreadable:<field>` |
 | integer outside `min`..`max`, enum value not declared, string longer than `max_length` | `derive_failed:field_not_allowed:<field>` |
 
-Each is a derive deny: Path B still runs, the arguments are withheld from
-judges unless `tool_args_on_derive_deny` is set, and no token is issued.
+Each is a derive deny, and no token is issued. The call cannot be read, so
+it is not sent to the judges, and Path B is ledgered as
+`skipped:derive_failed`; with `tool_args_on_derive_deny` set, the judges
+see the arguments and are asked.
 
 Write rules as allow-lists where you can. `environment: {not_in: [dev,
 staging]}` still denies when someone adds `prod2` to the field, or when a
@@ -507,7 +509,8 @@ result = gw.invoke(decision.token, "pay_vendor", args,
 | `fact_mismatch` | gateway | At redemption a fact is missing or has another value than the token's |
 | `malformed_action:unknown action fields (n)` | authorize | The claim carries the fact, `fields`, or `fact_fields` |
 
-Every one of these denies with both paths run, and issues no token.
+Every one of these denies and issues no token. The `derive_failed:` ones
+reach no judge unless `tool_args_on_derive_deny` is set.
 
 #### The guard
 
@@ -920,10 +923,13 @@ Without a local judge, the constitution prose, the action record, and any
 attached tool arguments go to the cloud judges' vendors.
 
 `require_path_a_first` stays off unless you set it. `TwoKey.authorize` does
-not read it. Both paths still run. After a derive deny, judges do not
-receive the argument bytes unless the quorum block sets
-`tool_args_on_derive_deny: true`. Other denies still attach non-empty
-arguments. `min_distinct_providers` still defaults to 1, so that count is
+not read it. Both paths still run, with one exception: a call that cannot
+be read under its spec (`derive_failed:`) reaches no judge, because they
+would get a form with nothing derived in it, and Path B is ledgered as
+`skipped:derive_failed`. After a derive deny, judges do not receive the
+argument bytes unless the quorum block sets `tool_args_on_derive_deny:
+true`; with it, a `derive_failed:` call is sent to them too. Other denies
+still attach non-empty arguments. `min_distinct_providers` still defaults to 1, so that count is
 not itself a floor.
 
 ## Local judges
@@ -1971,6 +1977,12 @@ the next rotation refuses until it is dealt with:
 
 Each line is a trade-off that depends on how you configure Two-Key, and
 names the setting or declaration that controls it.
+
+- `tool_args_on_derive_deny` (default false): a call that cannot be read
+  under its spec is denied without asking the judges, so no judge cost or
+  latency is spent on it, but the ledger has no judge opinion about it
+  either. Set it true to send those calls, with their arguments, to the
+  judges; the arguments then reach cloud judges' vendors.
 
 - A credential configured on a judge or an `agents.yaml` agent is read at
   start-up even when its connector never sends it (`auth_header: none`, an

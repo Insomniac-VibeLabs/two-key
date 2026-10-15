@@ -168,7 +168,7 @@ class A2FailClosed(Harness, unittest.TestCase):
         ({"team": "o\u200bps"}, "derive_failed:field_unreadable:team"),
     ]
 
-    def test_each_bad_value_denies_with_path_b_run_and_no_token(self):
+    def test_each_bad_value_denies_without_judges_and_no_token(self):
         for over, reason in self.CASES:
             with self.subTest(over=over):
                 before = len(self.judge.seen)
@@ -177,8 +177,9 @@ class A2FailClosed(Harness, unittest.TestCase):
                 self.assertFalse(d.allowed)
                 self.assertIsNone(d.token)
                 self.assertEqual(d.reason, reason)
-                self.assertEqual(len(self.judge.seen), before + 1)            # Path B still ran
-                self.assertNotIn("tool_args", self.judge.seen[-1][1]["raw"])  # args withheld after a derive deny
+                self.assertEqual(len(self.judge.seen), before)                # unreadable: no judge is asked
+                self.assertEqual(self.entries("path_b")[-1], {"passed": False, "reason": "skipped:derive_failed",
+                                                              "yes": 0, "no": 0, "abstain": 0, "skipped": True})
                 self.assertEqual(self.entries("action_normalized")[-1]["deny_reason"], reason)
 
     def test_huge_integer_is_invalid_call(self):

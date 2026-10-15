@@ -188,8 +188,10 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
    never local, for any judge class. With `required_yes` unset, the approval threshold is `min(2, number_of_judges)`. The default policy permits a one-judge deployment, but the operator must still configure at least one judge; Two-Key does not create or select judges automatically. With one configured judge, one affirmative vote is required. With two or more judges, two affirmative votes are required by default. This is not a general majority rule: for example, a three-judge setup requires two affirmative votes, and a four-judge setup also requires two. Operators who want a different threshold, such as a majority or unanimity, must explicitly configure `required_yes` to the desired number of affirmative votes.
    `require_path_a_first` is not a floor and it is not a skip. After a derive
    deny, judges do not receive the argument bytes unless
-   `tool_args_on_derive_deny` is set. Path B still runs. Other denies still
-   attach non-empty arguments.
+   `tool_args_on_derive_deny` is set. A call that cannot be read under its
+   spec (`derive_failed:`) then reaches no judge: there is nothing to judge,
+   and Path B is ledgered as `skipped:derive_failed`. Other denies still go
+   to the judges, with non-empty arguments attached.
 3. A short-lived single-use token is issued only if both paths allow. The
    token is signed by a capability key that lives outside the ledger
    directory, not by handing that private key to the gateway. It is bound
@@ -201,8 +203,11 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
    key. It does not hold the minting key, and it does not inspect file
    contents, mail, or tool output for DLP or malware.
 
-Both paths answer once the call is well-formed and within limits. A Path A deny does
-not skip Path B, so the ledger has both results. A malformed or oversized
+Both paths answer once the call is well-formed, within limits, and readable
+under its spec. A Path A deny does not skip Path B, so the ledger has both
+results. A call that cannot be read (`derive_failed:`) is denied without
+asking the judges, unless `tool_args_on_derive_deny` lets them see its
+arguments. A malformed or oversized
 call (`malformed_proposal`, `proposal_too_large`, `action_too_large`,
 `malformed_action:`, `args_too_large`, `invalid_call:`) is denied before
 either path runs, and only its size and digest are ledgered.
@@ -271,8 +276,8 @@ declared custom fields, all derived from the argument bytes. Path B judges see t
 normalized action record. Non-empty tool arguments are attached on that
 record as `tool_args`, except after a derive deny. Set
 `tool_args_on_derive_deny: true` on the quorum policy to send those bytes
-anyway. Path B still runs either way. A rule deny that is not a derive deny
-still attaches the arguments. The proposal string is not sent unless that
+anyway; without it, a `derive_failed:` call is not sent to the judges at
+all. A rule deny that is not a derive deny still attaches the arguments. The proposal string is not sent unless that
 judge has `receives_proposal: true`, or the quorum policy is
 `judge_inputs: record_and_proposal`. The code default, and
 `examples/judges.yaml`, is `record_only`.
