@@ -30,6 +30,9 @@ is how to report a vulnerability. It is not the model.
   changed tool schema accepted under `on_schema_change: refuse`, an
   unresolved identity accepted without `allow_unresolved_identity: true`, or
   an argument value in a deny reason
+- An `@domain` allow entry that admits a subdomain, a lookalike domain, an
+  address whose local part is not plain (a space, a line break, a quoted
+  part, a second `@`), or the entry itself as a party (branch `working`)
 - A caller-supplied fact (`source: caller`) taken from the agent's
   arguments or claim, a v1 or v2 constitution accepted with a caller field,
   or a redemption that runs the tool after the fact changed (branch

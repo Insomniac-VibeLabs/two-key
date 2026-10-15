@@ -81,7 +81,10 @@ judges unless tool_args_on_derive_deny is set. A derive_failed call (unreadable 
 then reaches no judge (0.5.0); amount/counterparty/irreversible mismatches and rule denies still do.
 Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer, enum, or
 string; up to 64), each with a signed default and an optional description. A tool spec maps
-a field to an argument path; a mapped field is required. Every tool must map each field a
+a field to an argument path; a mapped field is required. A counterparty allow entry "@example.org"
+(0.5.0, v3) admits any plain email address at exactly that ASCII domain (no subdomains, no lookalike
+letters, no header-carrying local parts; never in deny_counterparties; no wildcards); signing warns when
+the tool also passes free text Path A does not read. Every tool must map each field a
 deny_if_fields rule reads or mark it not_applicable (fields: {name: not_applicable}; it then gets
 the default; signs as v3); a forgotten decision is refused at signing and on load (0.5.0).
 Rules name them with deny_if_fields (eq, neq, gt, gte, lt, lte, in, not_in by type). Values

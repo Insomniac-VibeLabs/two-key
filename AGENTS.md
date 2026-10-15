@@ -134,7 +134,10 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   together they are `financial+medical`, and only `classified` (claimed,
   floored, or omitted) is `classified` (`tests/test_data_class_sets.py`).
   A `data_class_in` rule matches any class the call carries. Do not map display names to
-  counterparty ids or fuzzy-match them.
+  counterparty ids or fuzzy-match them. The one wider form is a signed
+  `@domain` allow entry (v3): a plain address at exactly that ASCII domain,
+  no subdomains, no wildcards, never in `deny_counterparties`
+  (`tests/test_domain_allow.py`). Do not widen it.
 - `agent_vocabulary()` is opt-in and lists syntax, never a value: no
   `allow` list, enum value, integer bound, rule, threshold,
   `deny_counterparties`, description, default, or `irreversible` flag
@@ -159,9 +162,10 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   is refused at signing and on load, never read as the default
   (`tests/test_field_decisions.py`). A description is never compiled, sent to a
   judge, or used in a reason. A constitution with no custom fields must
-  stay byte-for-byte v1 (`tests/test_fields_compat.py`); one without caller
-  fields or `not_applicable` marks must not sign as v3. Either signs only
-  as v3, and a v1 or v2 envelope that carries one is refused.
+  stay byte-for-byte v1 (`tests/test_fields_compat.py`); one without a
+  0.5.0 feature (a caller field, a `case: exact` field, a `not_applicable`
+  mark, an `@domain` allow entry) must not sign as v3. Each signs only as
+  v3, and a v1 or v2 envelope that carries one is refused.
 - Format identifiers are `two-key-...` (0.4.0). Files with the old
   `two-key-concept-...` formats are refused with a clear message, never
   read (`tests/test_legacy_formats.py`). Do not change a format name

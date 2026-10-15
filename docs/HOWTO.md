@@ -139,6 +139,34 @@ receives the canonical party (trimmed, lower case), not the raw spelling.
 field that is neither a control path nor a payload path is dropped. A
 blocked party still denies through `deny_counterparties` when one is present.
 
+**A whole domain (`@domain`, 0.5.0).** An `allow` entry that starts with
+`@` admits every email address at exactly that domain, so a school need
+not list each staff address:
+
+```yaml
+counterparties: [{json_path: to, allow: ["@larkspurvalley.example", "board@district.example"]}]
+```
+
+It is your choice, and signing says what it costs. The domain must equal
+the entry: `x@mail.larkspurvalley.example` (a subdomain),
+`x@larkspurvalley.example.evil.example`, a trailing dot, and a lookalike
+letter from another script do not match. The part before `@` must be a
+plain address (letters, digits, and `.!#$%&'*+/=?^_`{|}~-`), so a space, a
+line break, a quoted part, or a second `@` does not match either; that
+keeps a header such as `Bcc:` out of a mail tool. An entry must be `@` and
+an ASCII host name with at least one dot (write an international domain in
+its `xn--` form); a `*` anywhere in an `allow` entry does not sign, and
+`deny_counterparties` refuses domain entries, so a block list stays exact.
+A constitution with a domain entry signs as `two-key-constitution-v3`.
+
+`two-key sign-constitution` prints a note for each domain entry, and a
+`WARNING` when the same tool also passes text Path A does not read (a
+payload that is not a number), such as a message body: anyone at that
+domain can then receive it, and only the judges check what it says. In
+live run 6x, a recovery code addressed to `helpdesk@` was stopped only
+because that address was missing from an exact list; a domain entry would
+have left it to the judges (`two_key.constitution.domain_allow_notes`).
+
 Missing `data_class` still defaults to `classified` before the floor, and
 a floor never lowers that. Missing `irreversible` follows the tool spec,
 so a reversible tool stays reversible. A present claim that disagrees with
@@ -407,12 +435,13 @@ Before 0.4.0 (in the two-key-concept repository) these were
 with a message to re-sign it. Installs older than custom fields refuse
 v2, so they cannot load it and ignore the fields. A v2 constitution
 refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
-`fields`. A constitution with a caller-supplied field (`source: caller`)
-or a `not_applicable` mark signs as `two-key-constitution-v3` (0.5.0,
-branch `working`); installs before 0.5.0 refuse v3 as an unsupported
+`fields`. A constitution with any 0.5.0 feature signs as
+`two-key-constitution-v3` (branch `working`): a caller-supplied field
+(`source: caller`), a `case: exact` field, a `not_applicable` mark, or an
+`@domain` allow entry. Installs before 0.5.0 refuse v3 as an unsupported
 format. The format label is outside the signed bytes, so the meaning comes
-from the signed bytes only: a v1 or v2 label on a constitution with either
-is refused, never read as an argument field or a mapping. A v2
+from the signed bytes only: a v1 or v2 label on a constitution with any of
+them is refused, never read the 0.4.0 way. A v2
 constitution signed before 0.5.0 still loads if every tool maps every
 field a rule reads; otherwise it is refused, and re-signing with the marks
 it needs makes it v3 (CHANGES "Upgrading from 0.4.0").
@@ -1977,6 +2006,11 @@ the next rotation refuses until it is dealt with:
 
 Each line is a trade-off that depends on how you configure Two-Key, and
 names the setting or declaration that controls it.
+
+- A domain allow entry (`@example.org`) admits every plain address at that
+  domain, including ones created later. Path A then checks the domain, not
+  the person; with a free-text payload, only the judges check the content.
+  Keep exact entries for anything that carries secrets, and for payments.
 
 - `tool_args_on_derive_deny` (default false): a call that cannot be read
   under its spec is denied without asking the judges, so no judge cost or

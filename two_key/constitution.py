@@ -14,6 +14,7 @@ from .action import DATA_CLASSES
 from .canonical import canonical_bytes, canonical_hash
 from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path, has_caller_fields,
                      has_exact_fields, is_caller, rule_fields, validate_fields)
+from .derive import DOMAIN, is_domain_entry
 from .keys import fingerprint, sign, verify
 from .policy_vm import ConstitutionError, validate_rules
 
@@ -97,14 +98,38 @@ def _field_mapping(where: str, defn: Mapping, entry: Any) -> dict:
     return dict(entry)
 
 
-V3_FEATURES = "caller-supplied fields (source: caller), case: exact fields, and not_applicable marks"
+V3_FEATURES = ("caller-supplied fields (source: caller), case: exact fields, not_applicable marks, and @domain "
+               "allow entries")
 
 
 def uses_v3(registry: Mapping, specs: Mapping) -> bool:
     """True when the signed bytes need a 0.5.0 reader: a caller-supplied or ``case: exact`` field, or a
     ``not_applicable`` mark."""
     return has_caller_fields(registry) or has_exact_fields(registry) or any(
-        entry == NOT_APPLICABLE for spec in specs.values() for entry in (spec.get("fields") or {}).values())
+        entry == NOT_APPLICABLE for spec in specs.values() for entry in (spec.get("fields") or {}).values()) or any(
+        is_domain_entry(item) for spec in specs.values() for party in spec.get("counterparties") or []
+        for item in party.get("allow") or [])
+
+
+def domain_allow_notes(specs: Mapping) -> list[tuple[bool, str]]:
+    """What each @domain allow entry admits, for the signer. Takes canonical tool specs.
+
+    ``warn`` is true when the tool also passes text Path A does not read (a payload that is not a number): anyone at
+    that domain can receive it, and only the judges check what it says (live run 6x, X31)."""
+    out: list[tuple[bool, str]] = []
+    for tool in sorted(specs):
+        spec = specs[tool]
+        unread = [p["json_path"] for p in spec.get("payload") or [] if p.get("shape") != "number"]
+        for party in spec.get("counterparties") or []:
+            domains = [item for item in party.get("allow") or [] if is_domain_entry(item)]
+            if not domains:
+                continue
+            text = f"tool {tool!r}: {party['json_path']} allows any address at {', '.join(domains)}"
+            if unread:
+                text += (f"; Path A does not read {', '.join(unread)}, so anyone there can receive what it carries, "
+                         "and only the judges check it")
+            out.append((bool(unread), text))
+    return out
 
 
 def _require_field_decisions(specs: Mapping, rules: list) -> None:
@@ -255,6 +280,13 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
             if not isinstance(allow, list) or not allow or any(not isinstance(item, str) or not item.strip() for item in allow):
                 raise ConstitutionError(f"{where}.allow: expected a non-empty list of strings")
             canonical = sorted({item.strip().casefold() for item in allow})
+            for item in canonical:
+                if "*" in item:
+                    raise ConstitutionError(f"{where}.allow: {item!r}: wildcards are not supported; list each "
+                                            "party, or use @domain for every address at one domain")
+                if is_domain_entry(item) and not DOMAIN.fullmatch(item[1:]):
+                    raise ConstitutionError(f"{where}.allow: {item!r} is not a domain entry: @ and an ASCII "
+                                            "host name such as @example.org (no subdomain patterns)")
             party_out.append({"json_path": path, "allow": canonical})
         # A payload path is copied unread. It must not cover, or sit under, a path Path A reads,
         # compared without regard to case.

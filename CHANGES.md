@@ -63,6 +63,7 @@
 - [`case: exact` string fields (live run 6x, X19) — 2026-10-15](#case-exact-string-fields-live-run-6x-x19--2026-10-15)
 - [Judges are not asked about a call that cannot be read (run 6 finding 4) — 2026-10-15](#judges-are-not-asked-about-a-call-that-cannot-be-read-run-6-finding-4--2026-10-15)
 - [Roadmap: per-judge ballot records before 1.0 — 2026-10-15](#roadmap-per-judge-ballot-records-before-10--2026-10-15)
+- [`@domain` allow entries (run 6 finding 7) — 2026-10-15](#domain-allow-entries-run-6-finding-7--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2398,3 +2399,38 @@ the ledger will record each judge's ballot (id, vote, confidence, error
 class, a rationale digest; never the rationale text) together with the
 judge history summary (#1), before the 1.0 review, after the same security
 review. ROADMAP, README, SCOPE, and THREAT_MODEL say so.
+
+## `@domain` allow entries (run 6 finding 7) — 2026-10-15
+
+On branch `working`. Maintainer's decision: the principal's choice, with a
+warning, as a feature.
+
+- **The entry.** A counterparty `allow` entry `@example.org` admits every
+  email address at exactly that domain. Exact entries stay the default and
+  can sit beside it (`["@larkspurvalley.example", "board@district.example"]`).
+- **Nothing wider.** The domain must equal the entry: no subdomain, no
+  domain that merely starts or ends with it, no trailing dot, and no
+  lookalike letter (the domain must be an ASCII host name). The local part
+  must be plain (RFC 5322 atext and dots, at most 64 characters), so a
+  space, a line break (a `Bcc:` header), a quoted part, or a second `@`
+  does not match. `@example.org` itself is not a party.
+- **Refused at signing:** an entry that is not `@` and an ASCII host name
+  with a dot; a `*` anywhere in an allow entry; and a domain entry in
+  `deny_counterparties`, so a block list stays exact.
+- **Format:** a domain entry signs as `two-key-constitution-v3`; a v1 or v2
+  label on one is refused.
+- **Signing notes** (`two_key.constitution.domain_allow_notes`): one per
+  domain entry, and a `WARNING` when the tool also passes text Path A does
+  not read (a payload that is not a number), because anyone at the domain
+  can then receive it and only the judges check the content (run 6x, X31).
+- The tool still receives the canonical (trimmed, lower-case) address.
+- Tests: `tests/test_domain_allow.py`. Docs: HOWTO (counterparties, "Known
+  trade-offs"), THREAT_MODEL, SECURITY, AGENTS.md, llms.txt.
+
+### Upgrading
+
+- An allow entry that started with `@` used to be an exact party name (a
+  social handle, say). It is now a domain entry: one that is not a host name
+  does not sign, and a v1 or v2 constitution that has one no longer loads
+  (it would need v3). Drop the `@`, or re-sign knowing it now means a
+  domain.

@@ -11,7 +11,10 @@ off: those keys are dropped at the gateway. Their names (never their values)
 are written to the ledger (``dropped_keys``). When a spec sets it, an unnamed
 key is a deny instead. A declared path covers that value and everything
 under it. A counterparty path copies only values on its allow list, and the
-tool receives the canonical value. A payload path is not interpreted.
+tool receives the canonical value. An allow entry ``@example.org`` (a domain
+entry, 0.5.0) admits an email address at exactly that domain: an ASCII
+hostname, no subdomains, and a plain local part (no spaces, line breaks, or a
+second ``@``). A payload path is not interpreted.
 ``shape``, when set, only checks the kind of value: string, number, or a
 list of strings. It does not read the contents. Omit ``shape`` and the
 value, including its children, is copied unread.
@@ -188,8 +191,32 @@ def _payload_shape(entry: Mapping[str, Any], raw: Any) -> None:
     raise DeriveError("payload_shape")
 
 
+# A domain allow entry is "@" and an ASCII hostname: labels of letters, digits, and inner hyphens, at least two.
+DOMAIN = re.compile(r"(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+")
+# The local part a domain entry admits: RFC 5322 atext and dots, nothing that could end a header or a field.
+_LOCAL_PART = re.compile(r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}")
+
+
+def is_domain_entry(item: str) -> bool:
+    return item.startswith("@")
+
+
+def party_allowed(party: str, allow: Any) -> bool:
+    """An exact entry, or a domain entry (``@example.org``) for an email address at exactly that domain.
+
+    ``party`` is canonical (trimmed, case-folded). The domain must be an ASCII hostname equal to the entry, so a
+    subdomain, a lookalike letter from another script, or a trailing dot does not match; the local part must be
+    plain (a quoted part, a space, a line break, or a second ``@`` does not match)."""
+    if party in allow and not is_domain_entry(party):     # "@x.example" itself is not an address
+        return True
+    local, at, domain = party.rpartition("@")
+    if not at or not _LOCAL_PART.fullmatch(local) or not DOMAIN.fullmatch(domain):
+        return False
+    return "@" + domain in allow
+
+
 def disallowed_party(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> bool:
-    """True when a copied party is not on that path's allow list."""
+    """True when a copied party is not on that path's allow list (an exact entry or a matching domain entry)."""
     for entry in spec.get("counterparties") or []:
         if not isinstance(entry, Mapping):
             continue
@@ -197,7 +224,7 @@ def disallowed_party(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> b
         if not found:
             continue
         allow = set(entry.get("allow") or [])
-        if any(party not in allow for party in _parties_at(raw)):
+        if any(not party_allowed(party, allow) for party in _parties_at(raw)):
             return True
     return False
 

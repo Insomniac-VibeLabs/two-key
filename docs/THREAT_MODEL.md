@@ -222,7 +222,10 @@ the code wins, then this file should be corrected.
   names. Every loaded constitution has `tool_specs`. A tool with no spec
   does not redeem. A counterparty path requires `allow`. A party off that
   list does not authorize (`counterparty_not_allowed`), unless a blocked
-  party is also present, in which case the block rule still denies.
+  party is also present, in which case the block rule still denies. A
+  domain entry (`@example.org`, v3) admits a plain address at exactly that
+  ASCII domain, never a subdomain or an address with a non-plain local
+  part; block lists stay exact.
   `deny_unmapped` defaults off. An unnamed key does not reach the tool.
   Setting the flag denies the call instead (`unmapped_field`). Custom
   fields (`fields:`, `deny_if_fields`) are read the same way: from the
@@ -299,6 +302,11 @@ claims to close.
     `invoke` gets `fact_mismatch` (closed). One that passes facts it took
     from the agent defeats the field; the library cannot tell.
   - Judges see the fact values in the record, as they see other fields.
+- Domain allow entries (0.5.0). `@example.org` admits every plain address
+  at that domain, including mailboxes created later and ones an attacker
+  controls inside it. Path A then checks the domain, not the person; when
+  the tool carries free text, only the judges check the content (run 6x,
+  X31). It is the principal's signed choice, and signing warns.
 - Custom Path A fields (0.3.0). A tool marked `not_applicable` for a field
   gets the field's signed default, as a tool with no amount spec has
   `amount_usd` 0. Since 0.5.0 a forgotten mapping is refused at signing and
@@ -583,7 +591,7 @@ above, not here.
 
 - `two_key/core.py`: both paths run once the call is well-formed and within limits, except that a `derive_failed:` call skips the judges unless `tool_args_on_derive_deny` is set (ledgered `skipped:derive_failed`), and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
 - `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies; a `case: exact` ASCII string is compared and passed on as written, and signs only as v3. A description is never compiled, sent to a judge, or used in a reason.
-- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
+- `two_key/derive.py`: JSON paths only. `party_allowed`: an exact entry, or an `@domain` entry for an address whose domain equals it (ASCII host name, no subdomain) and whose local part is plain (atext and dots); `@domain` itself is not a party. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
 - `two_key/constitution.py`: a caller field signs only as v3; a v1 or v2 envelope that declares one is refused. A constitution without caller fields keeps its v1 or v2 bytes.
 - `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
