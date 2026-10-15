@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 from dataclasses import dataclass, asdict, replace
 from typing import Any, Mapping
 
@@ -39,10 +40,15 @@ from .gateway import ToolGateway, mark_two_key_ledger
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, check_judge_set, convene, lone_judge_warning, unmeetable_floor
+from .scan import CLIENT_BUDGET_SECONDS, Outcome, ScanConfigError, Scanner
 
 
 class TwoKeyConfigError(ValueError):
     """Two-Key refuses to start with this configuration."""
+
+
+# The start-up note that no content scanner is configured is said once per process, not once per TwoKey.
+_no_scanner_noted = threading.Event()
 
 
 def resolve_facts(resolver: Any, tool: Any, arguments: Any) -> Mapping[str, Any] | None:
@@ -106,7 +112,8 @@ class Decision:
 class TwoKey:
     def __init__(self, ledger, public_key, constitution: Constitution, judges: list, *,
                  private_key=None, quorum: QuorumPolicy | None = None, ttl_seconds: int = 120,
-                 allow_test_doubles: bool = False, clock=None, monitored_agent: Any = None):
+                 allow_test_doubles: bool = False, clock=None, monitored_agent: Any = None,
+                 scanner: Scanner | None = None):
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
             raise ValueError("test-double judges refused; pass allow_test_doubles=True only for offline tests")
         if not constitution.specs_enforced:
@@ -139,6 +146,7 @@ class TwoKey:
             raise TwoKeyConfigError("Path B needs a hard deadline: quorum timeout_seconds must be a positive "
                                     "number, not None")
         check_judge_set(self.judges, self.quorum)
+        self.scanner = self._check_scanner(scanner)
         lone = lone_judge_warning(self.judges, self.quorum)
         if lone:      # allowed, and recorded in quorum_policy; said once, so the operator sees it (run 6x, X03)
             print(f"two-key: WARNING: {lone}", file=sys.stderr)
@@ -199,6 +207,8 @@ class TwoKey:
             # nothing now, so the pairs list is always empty; both keys stay so the entry keeps its shape.
             "same_model_tenant_optin": self.quorum.allow_same_model_distinct_tenant,
             "same_model_tenant_optin_pairs": list(self.separation.tenant_optin_pairs),
+            # Present only with a content scanner, so a setup without one records exactly what it did before.
+            **({"scanner": self.scanner.to_record()} if self.scanner is not None else {}),
         })
         self.ledger.checkpoint()
 
@@ -219,7 +229,51 @@ class TwoKey:
         if self.issuer is None:
             raise TwoKeyConfigError("no_issuer_key: a TwoKey started without private_key= issues no tokens, "
                                     "so it has no gateway")
-        return ToolGateway(self.ledger, self.issuer.verifier(), self.compiled, tools=tools, **kw)
+        return ToolGateway(self.ledger, self.issuer.verifier(), self.compiled, tools=tools, scanner=self.scanner,
+                           **kw)
+
+    def _check_scanner(self, scanner: Any) -> Scanner | None:
+        """Check the content scanner against the signed constitution, and say what it scans (scan.py)."""
+        if scanner is None:
+            if not _no_scanner_noted.is_set():
+                _no_scanner_noted.set()
+                print("two-key: note: no content scanner (antivirus or DLP) is configured; see docs/SCANNERS.md",
+                      file=sys.stderr)
+            return None
+        if not isinstance(scanner, Scanner):
+            raise TwoKeyConfigError("scanner_invalid: pass a two_key.scan.Scanner")
+        try:
+            notes = scanner.bind(self.compiled)
+        except ScanConfigError as e:
+            raise TwoKeyConfigError(str(e)) from None
+        for note in notes:
+            print(f"two-key: note: {note}", file=sys.stderr)
+        budget = scanner.timeout_seconds + float(self.quorum.timeout_seconds or 0)
+        if budget > CLIENT_BUDGET_SECONDS:
+            print(f"two-key: WARNING: the scan limit ({scanner.timeout_seconds:g} s) plus the judges' deadline "
+                  f"({self.quorum.timeout_seconds:g} s) is over {CLIENT_BUDGET_SECONDS:g} s; MCP clients often give "
+                  "up on a tool call after 60 s", file=sys.stderr)
+        if self.quorum.is_high_assurance and scanner.stance != "strict":
+            print(f"two-key: WARNING: high_assurance with the {scanner.stance} scan stance: an unavailable scanner "
+                  "lets calls through to the two keys; sign the strict rule (deny flagged and unavailable)",
+                  file=sys.stderr)
+        return scanner
+
+    def _scan(self, tool: str, arguments: Any, proposal: Any) -> tuple[Outcome, tuple[str, dict] | None]:
+        """Scan one call (Two-Key starts it; the agent cannot). Also returns the ledger entry for the scanner
+        going down or coming back, said once each on stderr, never once per call."""
+        scanner = self.scanner
+        outcome = scanner.run(tool, scanner.prepare(tool, arguments, proposal))
+        change = scanner.transition(outcome.available)
+        if change == "down":
+            print(f"two-key: WARNING: the content scanner is unavailable ({outcome.error or 'no answer'}); calls "
+                  f"go on under the {scanner.stance} stance until it answers again", file=sys.stderr)
+            return outcome, ("scanner_unavailable", {"scanner": scanner.label, "error": outcome.error,
+                                                     "stance": scanner.stance})
+        if change == "up":
+            print("two-key: the content scanner is answering again", file=sys.stderr)
+            return outcome, ("scanner_recovered", {"scanner": scanner.label})
+        return outcome, None
 
     @staticmethod
     def _has_capability_key(ledger) -> bool:
@@ -379,6 +433,8 @@ class TwoKey:
         form = None
         claimed_data_class = normalized.data_class
         deny_reason = None
+        scanned: Outcome | None = None
+        scanner_change: tuple[str, dict] | None = None
         if spec is not None:
             proposed: Mapping[str, Any] = claim if isinstance(claim, dict) else {}
             blocked = blocked_from_rules(self.compiled.rules)
@@ -387,6 +443,16 @@ class TwoKey:
                     raise DeriveError("arguments_not_object")
                 if facts_error:
                     raise DeriveError(facts_error)
+                if self.scanner is not None and self.scanner.scans(spec):
+                    # Two-Key fills the verdict itself, after the call reads under its spec; nothing the agent
+                    # or the integration supplies stands in for it.
+                    if facts is not None and not isinstance(facts, Mapping):
+                        raise DeriveError("facts_not_object")
+                    if facts is not None and self.scanner.field in facts:
+                        raise DeriveError("scan_fact_supplied")
+                    derive(spec, arguments, self.compiled.fields, {**(facts or {}), self.scanner.field: "unavailable"})
+                    scanned, scanner_change = self._scan(normalized.tool, arguments, proposal)
+                    facts = {**(facts or {}), self.scanner.field: scanned.verdict}
                 derived = derive(spec, arguments, self.compiled.fields, facts)
             except DeriveError as exc:
                 deny_reason = f"derive_failed:{cap_ledger_text(exc.reason)}"
@@ -430,6 +496,18 @@ class TwoKey:
         # After a derive deny, judges do not receive the argument bytes unless
         # the quorum policy opts in. The normalized record still goes to Path B.
         judge_args: Mapping | None = arguments
+        judge_proposal = proposal
+        judge_action = normalized
+        if scanned is not None:
+            # Files appear as their digest and size, never their content. Flagged: no arguments and no proposal
+            # text for the judges, unless the policy opts in, so a detected secret is not sent to a judge vendor.
+            judge_args = scanned.judge_args
+            withheld = scanned.verdict == "flagged" and not self.quorum.tool_args_on_scan_flag
+            if withheld:
+                judge_args, judge_proposal = None, ""
+            judge_action = replace(normalized, scan=scanned.judge_summary(withheld))
+        elif self.scanner is not None and spec is None:
+            judge_args = None      # not a signed tool: not scanned, so its arguments are not sent to the judges
         if _derive_deny(deny_reason) and not self.quorum.tool_args_on_derive_deny:
             judge_args = None
         if deny_reason and deny_reason.startswith("derive_failed:") and judge_args is None:
@@ -446,7 +524,7 @@ class TwoKey:
                 configured = configured_agent_secrets(self._agent_sources)
             except IdentityError:
                 return self._deny(origin, "agent_credential_unreadable", agent, path_a_rec, None)
-            quorum = convene(self.judges, self.compiled.judge_text, normalized, proposal,
+            quorum = convene(self.judges, self.compiled.judge_text, judge_action, judge_proposal,
                              self.quorum, binding, judge_args, agent_session,
                              configured_secrets=configured)
             quorum_passed, quorum_reason = quorum.passed, quorum.reason
@@ -483,6 +561,10 @@ class TwoKey:
                 if normalized.fact_fields:      # which form fields are caller-supplied facts; absent otherwise
                     record["fact_fields"] = list(normalized.fact_fields)
                 _bounded("action_normalized", record)
+            if scanner_change is not None:
+                _bounded(*scanner_change)
+            if scanned is not None:
+                _bounded("scan", scanned.ledger_record(self.scanner.stance))
             _bounded("path_a", path_a_rec)
             _bounded("path_b", path_b_rec)
             # body_omitted is only for an already-decided DENY audit entry. If it would
@@ -499,7 +581,8 @@ class TwoKey:
                         bytecode_hash=self.compiled.bytecode_hash, nl_hash=self.compiled.nl_hash,
                         spec_hash=self.compiled.spec_hash,
                         form=form, claimed_data_class=claimed_data_class if form is not None else None,
-                        ttl_seconds=self.ttl_seconds)
+                        ttl_seconds=self.ttl_seconds,
+                        scan=scanned.token_claim() if scanned is not None else None)
                     token = issued.token
                     _bounded("capability_issued", {"jti": issued.payload["jti"],
                                                    "token_hash": issued.token_hash,

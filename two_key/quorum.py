@@ -107,6 +107,9 @@ class QuorumPolicy:
     # After a derive deny, do not attach tool arguments to the judge record, and do not ask the judges about a
     # derive_failed call at all (it has nothing to judge). Set true to send those bytes and ask them anyway.
     tool_args_on_derive_deny: bool = False
+    # When the content scanner flags a call, the judges get the record without the arguments and the proposal
+    # text, so a detected secret is not sent to a judge vendor (scan.py). Set true (a local judge set) to send them.
+    tool_args_on_scan_flag: bool = False
     # Deprecated, no effect (2026-10-08): a judge is refused when it uses the monitored agent's credential, or is
     # keyless on a keyless agent's address (identity.compare), so there is nothing left for this flag to lift.
     # Still accepted, recorded and part of the policy digest, with a note on stderr, so older configurations load.
@@ -143,6 +146,8 @@ class QuorumPolicy:
             raise QuorumConfigError("require_local_yes must be a boolean")
         if not isinstance(self.tool_args_on_derive_deny, bool):
             raise QuorumConfigError("tool_args_on_derive_deny must be a boolean")
+        if not isinstance(self.tool_args_on_scan_flag, bool):
+            raise QuorumConfigError("tool_args_on_scan_flag must be a boolean")
         if not isinstance(self.allow_same_model_distinct_tenant, bool):
             raise QuorumConfigError("allow_same_model_distinct_tenant must be a boolean")
         if not isinstance(self.allow_same_provider_judge, bool):
@@ -188,7 +193,14 @@ class QuorumPolicy:
                 "require_local_yes": self.require_local_yes,
                 "tool_args_on_derive_deny": self.tool_args_on_derive_deny,
                 "allow_same_provider_judge": self.allow_same_provider_judge,
-                "allow_same_model_distinct_tenant": self.allow_same_model_distinct_tenant}
+                "allow_same_model_distinct_tenant": self.allow_same_model_distinct_tenant,
+                # Present only when set, so a policy without it records and digests as before.
+                **({"tool_args_on_scan_flag": True} if self.tool_args_on_scan_flag else {})}
+
+    @property
+    def is_high_assurance(self) -> bool:
+        """The ``high_assurance`` floors: two makers, a local judge, and a local yes."""
+        return self.min_makers >= 2 and self.min_local_judges >= 1 and self.require_local_yes
 
     @property
     def effective_min_responding(self) -> int | None:

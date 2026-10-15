@@ -111,6 +111,9 @@ class Guard:
             raise GuardConfigError(f"{tool.name!r}: fn must be callable")
         claim = valid_claim(tool.claim)
         needed = set(caller_fields(specs[tool.name]))
+        scanner = getattr(self.two_key, "scanner", None)
+        if scanner is not None and scanner.scans(specs[tool.name]):
+            needed.discard(scanner.field)       # Two-Key fills the scan verdict itself; no hook may supply it
         given = set(tool.facts)
         if needed - given:
             raise GuardConfigError(f"{tool.name!r}: no fact hook for caller-supplied field(s) {sorted(needed - given)}")

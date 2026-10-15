@@ -189,8 +189,10 @@ class CapabilityIssuer(CapabilityVerifier):
     def issue(self, *, tool: str, arguments: dict, ledger_root: str, ledger_size: int,
               bytecode_hash: str, nl_hash: str, ttl_seconds: int = 120,
               spec_hash: str = "", form: dict | None = None,
-              claimed_data_class: str | None = None, args_digest: str | None = None) -> IssuedCapability:
-        """Mint a token. ``args_digest`` is ``args_hash(arguments)`` when the caller already encoded them."""
+              claimed_data_class: str | None = None, args_digest: str | None = None,
+              scan: dict | None = None) -> IssuedCapability:
+        """Mint a token. ``args_digest`` is ``args_hash(arguments)`` when the caller already encoded them.
+        ``scan`` (a scanned tool only) binds the verdict and each file's digest; the gateway checks them."""
         if self.private_key is None:
             raise TokenError("verifier_cannot_mint")
         valid_ttl(ttl_seconds)
@@ -213,6 +215,8 @@ class CapabilityIssuer(CapabilityVerifier):
         if form is not None:
             payload["form"] = form
             payload["claimed_data_class"] = claimed_data_class
+        if scan is not None:      # absent otherwise, so a token for an unscanned tool keeps its 0.5.0 shape
+            payload["scan"] = scan
         body = _b64u(canonical_bytes(payload))
         signature = sign(self.private_key, body.encode("ascii"))
         return IssuedCapability(f"tk1.{body}.{signature}", payload)

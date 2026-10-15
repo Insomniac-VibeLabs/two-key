@@ -217,6 +217,20 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   point is refused; the lock is `LockFileEx`. Do not accept a wider access
   list or fall back to "no lock". Text files Two-Key writes use
   `newline="\n"` and a named encoding (`tests/test_text_io.py`).
+- Content scanning (0.6.0, `two_key/scan.py`): Two-Key alone starts a scan,
+  for every call to a tool whose signed spec maps the scan field, and fills
+  the verdict; nothing the agent writes turns it on or off, and `scan` in
+  `facts=` is refused (`scan_fact_supplied`). Unavailable is never clean: a
+  timeout, an exception, or an invalid result is `unavailable`.
+  Could-not-finish (`limits_exceeded`) is flagged, and so is a declared file
+  Two-Key cannot read. The stance is the signed rule. Content never reaches
+  the ledger or a reason code, and file content never reaches a judge; a
+  flagged call's arguments and proposal reach the judges only with
+  `tool_args_on_scan_flag`. The gateway never scans: it checks the token's
+  verdict and file digests (`file_changed`). Without a scanner, the judge
+  prompts, tokens, and ledger stay byte for byte as before
+  (`tests/test_scan.py`). Do not add a scanning engine; adapters call
+  external products.
 - The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
   (`TwoKey.gateway()`). A gateway in another process or host is not
   supported (#45); do not add a gateway-only ledger role, remote gateway,

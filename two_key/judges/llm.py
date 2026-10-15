@@ -128,6 +128,8 @@ ECHO_INSTRUCTION = (
     '"action_hash" and "constitution_hash" (so the object has exactly five keys).'
 )
 MAX_RATIONALE = 2000
+SCAN_NOTE = ("Written by Two-Key from the operator's content scanner (antivirus or DLP), not by the agent. "
+             "A file in the action record appears as its digest and size, never its content. ")
 
 
 class MalformedBallot(ValueError):
@@ -145,9 +147,12 @@ def untrusted_json(value: Any) -> str:
 
 def build_user_prompt(constitution_text: str, action: Action, proposal: str,
                       binding: dict | None = None) -> str:
-    parts = ["<principal_constitution>\n" + constitution_text + "\n</principal_constitution>\n\n",
-             "<untrusted_action_record>\n" + untrusted_json(action.to_record()) +
-             "\n</untrusted_action_record>\n\n"]
+    parts = ["<principal_constitution>\n" + constitution_text + "\n</principal_constitution>\n\n"]
+    scan = getattr(action, "scan", None)
+    if scan:      # only with a content scanner configured, so other prompts are unchanged byte for byte
+        parts.append("<scan_result>\n" + SCAN_NOTE + untrusted_json(dict(scan)) + "\n</scan_result>\n\n")
+    parts.append("<untrusted_action_record>\n" + untrusted_json(action.to_record()) +
+                 "\n</untrusted_action_record>\n\n")
     if proposal:
         parts.append("<untrusted_proposal>\n" + untrusted_json(proposal) + "\n</untrusted_proposal>\n\n")
     if binding:

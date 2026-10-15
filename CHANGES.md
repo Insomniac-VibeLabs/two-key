@@ -84,6 +84,7 @@
 - [Windows support, part 2: docs; one message (0.6.0 Phase 2) — 2026-10-15](#windows-support-part-2-docs-one-message-060-phase-2--2026-10-15)
 - [Windows CI blocks (0.6.0 Phase 2 done) — 2026-10-15](#windows-ci-blocks-060-phase-2-done--2026-10-15)
 - [Judge connection reuse (#6, 0.6.0 Phase 5) — 2026-10-15](#judge-connection-reuse-6-060-phase-5--2026-10-15)
+- [Content scanning, part 1: the core (0.6.0 Phase 3) — 2026-10-15](#content-scanning-part-1-the-core-060-phase-3--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2892,3 +2893,57 @@ On branch `working`.
   error status are not reused; parallel requests do not share one.
 - HOWTO "Judges" says so.
 
+
+## Content scanning, part 1: the core (0.6.0 Phase 3) — 2026-10-15
+
+On branch `working`. Design note approved by the maintainer on 2026-10-15,
+with their additions: Two-Key alone starts a scan, and a call can carry a
+file. Adapters (ClamAV, ICAP, a command, a Python hook), the `proxy.yaml`
+block, and the docs follow in Phases 4 and 6.
+
+- `two_key/scan.py`: `Inspector.inspect(ScanRequest) -> ScanResult`, and
+  `Scanner`, passed as `TwoKey(..., scanner=...)`. A tool is scanned when
+  its signed spec maps the scan field (`scan` by default), a caller-supplied
+  enum with exactly the values `clean`, `flagged`, `unavailable`; the signed
+  `deny_if_fields` rule on it is the stance (default, strict, or monitor).
+  Without a scanner, nothing changes: the judge prompts, the tokens, and the
+  ledger are as before.
+- Two-Key starts the scan for every call to a scanned tool, from every
+  entry point, after the call reads under its spec and before Path A.
+  `scan` in the arguments is already a deny; with a scanner configured,
+  `scan` in `facts=` is too (`derive_failed:scan_fact_supplied`). A guard
+  needs no hook for it and may not have one.
+- What is scanned: every argument (keys the tool drops included, since the
+  judges see them), the proposal text, and each declared file, decoded from
+  base64 (`base64`, `base64url`) or read from the operator's folder
+  (`path`: absolute, inside the folder, no link below it, a regular file, at
+  most `max_file_bytes`). A declared file that cannot be read is flagged
+  (`unreadable` or `limits_exceeded`).
+- Two-Key sets the verdict when the scan fails: a timeout, an exception, or
+  an invalid result is `unavailable`; a result naming `limits_exceeded` is
+  `flagged`. The scanner going down and coming back are each one ledger
+  entry and one stderr line, never one per call.
+- Judges: a trusted `<scan_result>` section (scanner label, verdict,
+  categories) before the untrusted record; each file appears as its digest
+  and size, never its content. When flagged, the arguments and the proposal
+  are withheld unless the new quorum flag `tool_args_on_scan_flag` is set
+  (recorded in the policy only when set). A call to a tool outside the
+  constitution sends no arguments to the judges when a scanner is
+  configured.
+- Ledger: a `scan` entry per scanned call (verdict, categories, stance,
+  scanner label and version, elapsed time, each part's name, size, and
+  SHA-256); `scanner_unavailable` and `scanner_recovered`; the scanner
+  configuration in `constitution_loaded`. Never content.
+- Token and gateway: a scanned tool's token carries the verdict and each
+  file's digest (`scan`). The gateway does not scan again: it uses that
+  verdict, refuses a `scan` fact (`fact_mismatch`), and reads each file again
+  just before the tool runs (`file_changed`).
+- Start-up: the stance and the unscanned tools; a warning when the scan
+  limit plus the judges' deadline is over 60 s, and for `high_assurance`
+  without the strict stance; a one-time note when no scanner is configured.
+- `tests/test_scan.py` (in-process fakes): every stance against every
+  verdict, timeouts, exceptions, invalid and could-not-finish results, the
+  agent unable to steer the scan, base64 and path files, links and paths
+  outside the folder, what judges and the ledger get, the token and the
+  gateway, the guard, and the warnings.
+- AGENTS.md: the scanner invariants.
