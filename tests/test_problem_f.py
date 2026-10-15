@@ -56,7 +56,9 @@ SPECS = {
 }
 
 
-def _engine(tmp, specs=SPECS, rules=RULES):
+def _engine(tmp, specs=None, rules=None):
+    specs = SPECS if specs is None else specs
+    rules = RULES if rules is None else rules
     key = generate_private_key()
     env = sign_constitution(PROSE, rules, key, specs)
     ledger = Ledger(Path(tmp, "ledger"), key)

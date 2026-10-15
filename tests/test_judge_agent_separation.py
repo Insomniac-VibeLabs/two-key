@@ -34,6 +34,8 @@ RULES = [{"id": "tools", "allow_only_tools": ["search"]}]
 SPECS = {"search": {"irreversible": False, "data_class_floor": "public"}}
 AGENT = {"id": "grok-agent", "model": "grok-4-0709", "provider": "xai", "base_url": "https://api.x.ai/v1",
          "credential_env": "SEP_AGENT_KEY"}
+# Default for the ``agent`` parameters below. ``None`` is a test value (no monitored agent), so the default is a sentinel.
+DEFAULT_AGENT = object()
 
 
 def claude(key="judge-anthropic-key", model="claude-sonnet-4-20250514"):
@@ -44,7 +46,8 @@ def oai(jid, model, base_url, key):
     return OpenAICompatibleJudge(jid, "x", model, base_url, StaticToken(key))
 
 
-def start(tmp, judges, agent=AGENT, quorum=None, allow_test_doubles=True):
+def start(tmp, judges, agent=DEFAULT_AGENT, quorum=None, allow_test_doubles=True):
+    agent = AGENT if agent is DEFAULT_AGENT else agent
     key = generate_private_key()
     env = sign_constitution("Searching is fine.", RULES, key, SPECS)
     return TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()), judges,
@@ -57,18 +60,18 @@ class Env(unittest.TestCase):
         os.environ["SEP_AGENT_KEY"] = "agent-secret-key"
         self.addCleanup(os.environ.pop, "SEP_AGENT_KEY", None)
 
-    def refused(self, judges, pattern, agent=AGENT, **kw):
+    def refused(self, judges, pattern, agent=DEFAULT_AGENT, **kw):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(TwoKeyConfigError, pattern):
                 start(tmp, judges, agent, **kw)
 
-    def started(self, judges, agent=AGENT, **kw):
+    def started(self, judges, agent=DEFAULT_AGENT, **kw):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         with contextlib.redirect_stderr(io.StringIO()):
             return start(tmp.name, judges, agent, **kw)
 
-    def warned(self, judges, check, agent=AGENT, **kw):
+    def warned(self, judges, check, agent=DEFAULT_AGENT, **kw):
         """Starts, prints a warning, and records ``check`` in constitution_loaded."""
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)

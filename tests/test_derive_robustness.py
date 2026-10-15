@@ -21,7 +21,8 @@ CENTS = {"pay": dict(SPECS["pay"], amount={"json_path": "amt", "unit": "cents"})
 PAY = {"tool": "pay", "data_class": "public", "irreversible": False}
 
 
-def engine(tmp, specs=SPECS):
+def engine(tmp, specs=None):
+    specs = SPECS if specs is None else specs
     key = generate_private_key()
     env = sign_constitution("Pay ada small amounts.", RULES, key, specs)
     return TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),

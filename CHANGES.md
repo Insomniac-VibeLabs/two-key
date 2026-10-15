@@ -1843,3 +1843,15 @@ tags `v0.3.1` and earlier stay in `two-key-concept`. ROADMAP phase numbers
 - Key files (PEM) still load. Constitutions, ledgers, head anchors, and
   backups made before 0.4.0 do not: re-sign the constitution, start a new
   ledger with the same keys, and export a new backup.
+
+## Mutable defaults in test helpers (#5) — 2026-10-15
+
+On branch `working`. Package version stays 0.4.0. Tests only.
+
+- DeepSource PYL-W0102: `_engine()` in `tests/test_problem_f.py` and
+  `engine()` in `tests/test_derive_robustness.py` default `specs` and `rules`
+  to `None` and pick the module value inside.
+- `tests/test_judge_agent_separation.py`: `start()`, `refused()`, `started()`,
+  and `warned()` default `agent` to a sentinel, not the `AGENT` dict, because
+  `agent=None` is itself a test case (no monitored agent declared).
+- No helper mutated those values, so no test result changes.
