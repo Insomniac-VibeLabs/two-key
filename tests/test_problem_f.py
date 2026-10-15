@@ -23,7 +23,7 @@ try:
     HAVE_YAML = True
 except ImportError:
     HAVE_YAML = False
-NEEDS_YAML = unittest.skipUnless(HAVE_YAML, "PyYAML is not installed (pip install two-key-concept[yaml])")
+NEEDS_YAML = unittest.skipUnless(HAVE_YAML, "PyYAML is not installed (pip install two-key[yaml])")
 
 
 PROSE = "Never wire money. Cap spend at 200. No medical or classified data."
@@ -56,7 +56,9 @@ SPECS = {
 }
 
 
-def _engine(tmp, specs=SPECS, rules=RULES):
+def _engine(tmp, specs=None, rules=None):
+    specs = SPECS if specs is None else specs
+    rules = RULES if rules is None else rules
     key = generate_private_key()
     env = sign_constitution(PROSE, rules, key, specs)
     ledger = Ledger(Path(tmp, "ledger"), key)
@@ -239,7 +241,7 @@ class ProblemFTests(unittest.TestCase):
         rules = validate_rules(RULES)
         signed = {"prose": PROSE, "hard_rules": rules}
         envelope = {
-            "format": "two-key-concept-constitution-v1",
+            "format": "two-key-constitution-v1",
             "signed": signed,
             "signature": sign(key, canonical_bytes(signed)),
             "fingerprint": fingerprint(key.public_key()),

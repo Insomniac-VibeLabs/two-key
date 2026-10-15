@@ -26,7 +26,7 @@ from two_key.quorum import QuorumPolicy, convene
 from two_key.strict import StrictParseError, load_yaml, loads_json
 from two_key.testing import TEST_AGENT, FixedJudge
 
-from test_concept import PROSE, RULES, SPECS, _engine
+from test_two_key import PROSE, RULES, SPECS, _engine
 
 DRAFT = {"tool": "email_draft", "amount_usd": 0, "data_class": "public", "irreversible": False}
 BIG = 10 ** 4400

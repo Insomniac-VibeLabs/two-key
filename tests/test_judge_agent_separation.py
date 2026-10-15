@@ -34,6 +34,8 @@ RULES = [{"id": "tools", "allow_only_tools": ["search"]}]
 SPECS = {"search": {"irreversible": False, "data_class_floor": "public"}}
 AGENT = {"id": "grok-agent", "model": "grok-4-0709", "provider": "xai", "base_url": "https://api.x.ai/v1",
          "credential_env": "SEP_AGENT_KEY"}
+# Default for the ``agent`` parameters below. ``None`` is a test value (no monitored agent), so the default is a sentinel.
+DEFAULT_AGENT = object()
 
 
 def claude(key="judge-anthropic-key", model="claude-sonnet-4-20250514"):
@@ -44,7 +46,8 @@ def oai(jid, model, base_url, key):
     return OpenAICompatibleJudge(jid, "x", model, base_url, StaticToken(key))
 
 
-def start(tmp, judges, agent=AGENT, quorum=None, allow_test_doubles=True):
+def start(tmp, judges, agent=DEFAULT_AGENT, quorum=None, allow_test_doubles=True):
+    agent = AGENT if agent is DEFAULT_AGENT else agent
     key = generate_private_key()
     env = sign_constitution("Searching is fine.", RULES, key, SPECS)
     return TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()), judges,
@@ -57,18 +60,18 @@ class Env(unittest.TestCase):
         os.environ["SEP_AGENT_KEY"] = "agent-secret-key"
         self.addCleanup(os.environ.pop, "SEP_AGENT_KEY", None)
 
-    def refused(self, judges, pattern, agent=AGENT, **kw):
+    def refused(self, judges, pattern, agent=DEFAULT_AGENT, **kw):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(TwoKeyConfigError, pattern):
                 start(tmp, judges, agent, **kw)
 
-    def started(self, judges, agent=AGENT, **kw):
+    def started(self, judges, agent=DEFAULT_AGENT, **kw):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         with contextlib.redirect_stderr(io.StringIO()):
             return start(tmp.name, judges, agent, **kw)
 
-    def warned(self, judges, check, agent=AGENT, **kw):
+    def warned(self, judges, check, agent=DEFAULT_AGENT, **kw):
         """Starts, prints a warning, and records ``check`` in constitution_loaded."""
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -111,6 +114,18 @@ class Normalization(unittest.TestCase):
         for url, model in (("https://openrouter.ai/api/v1", "mystery-model"), ("https://llm.corp.example/v1", "gpt-4o")):
             self.assertEqual(resolve_upstreams(url, model)[0], frozenset(), (url, model))
         self.assertIn("ollama.com", resolve_upstreams("http://localhost:11434", "gpt-oss:120b-cloud")[0])
+
+    def test_open_weight_gpt_oss_is_not_served_by_the_openai_api(self):
+        """gpt-oss is made by OpenAI but not served by api.openai.com: its upstream is the host plus maker:openai."""
+        cases = {("https://api.groq.com/openai/v1", "openai/gpt-oss-120b"): {"api.groq.com", "maker:openai"},
+                 ("http://localhost:11434", "gpt-oss:20b"): {"localhost:11434", "maker:openai"},
+                 ("http://localhost:11434", "gpt-oss:120b-cloud"): {"localhost:11434", "maker:openai", "ollama.com"},
+                 ("https://openrouter.ai/api/v1", "openai/gpt-oss-120b"): {"maker:openai"},
+                 ("https://openrouter.ai/api/v1", "openai/gpt-4o"): {"api.openai.com"}}
+        for (url, model), want in cases.items():
+            self.assertEqual(set(resolve_upstreams(url, model)[0]), want, (url, model))
+        self.assertEqual(model_maker("gpt-oss:120b-cloud"), "openai")
+        self.assertEqual(model_maker("GPT-OSS-20B"), "openai")
 
     def test_tenants_from_the_url_and_the_declaration(self):
         self.assertEqual(resolve_tenants("https://acme.openai.azure.com/openai/deployments/d"),
@@ -249,6 +264,7 @@ class SameProvider(Env):
         self.assertEqual(rec["same_agent"], "same_held_credential_or_keyless_same_address")
         self.assertEqual(rec["checks"], ["same_credential", "same_address_no_credential"])
         self.assertNotIn("same_credential_other_address", rec["warning_checks"])
+        self.assertEqual(rec["refusals"], [])          # a refusal stops startup before the entry is written
         self.assertEqual(rec["warnings"], [])
         self.warned([oai("same", "gpt-4o-2024-08-06", "https://api.openai.com/v1", "k2")],
                     "same_model_same_address", agent=agent)

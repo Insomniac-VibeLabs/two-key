@@ -21,7 +21,7 @@ from two_key.testing import TEST_AGENT, FixedJudge
 ROOT = Path(__file__).resolve().parent.parent
 
 GOLDEN = {
-    "format": "two-key-concept-constitution-v1",
+    "format": "two-key-constitution-v1",
     "digest": "b14f4ae309ba6aceb1cce794f40144f3d69e78a9dbb39569fb4d16b74cadb114",
     "bytecode_hash": "6ee63736003bf94f4bc5fdb9e65d4406e63f3cbc6127081bddf5fe15ea83bb6c",
     "spec_hash": "5ba4019be1bdcdbd1e7eed9e43c8d5e7b99b813eac85890479b6d64cc2c7b161",

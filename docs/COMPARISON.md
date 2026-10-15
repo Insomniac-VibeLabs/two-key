@@ -1,6 +1,6 @@
 # Comparison
 
-This page says what `two-key-concept` decides, and what it does not. It is
+This page says what `two-key` decides, and what it does not. It is
 not a ranking and it has no scores. The other rows are categories people
 already search for when they want to stop an agent from acting. Confirm the
 current behavior of those projects in their own docs before you rely on them.

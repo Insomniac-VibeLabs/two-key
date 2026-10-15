@@ -1,4 +1,4 @@
-# How to run the concept
+# How to run Two-Key
 
 Whether this package is the right control is [FIT.md](FIT.md). What it is
 not a substitute for is [COMPARISON.md](COMPARISON.md). Boundaries and
@@ -293,10 +293,12 @@ leading or trailing whitespace are refused.
 
 ### Envelope format
 
-A rules file without `fields:` signs exactly as before: format
-`two-key-concept-constitution-v1`, with the same digest, `bytecode_hash`,
-and `spec_hash`. With `fields:`, it signs as
-`two-key-concept-constitution-v2`. Installs older than custom fields refuse
+A rules file without `fields:` signs as format `two-key-constitution-v1`,
+with the same digest, `bytecode_hash`, and `spec_hash` as before custom
+fields existed. With `fields:`, it signs as `two-key-constitution-v2`.
+Before 0.4.0 (in the two-key-concept repository) these were
+`two-key-concept-constitution-v1` and `-v2`; such an envelope is refused
+with a message to re-sign it. Installs older than custom fields refuse
 v2, so they cannot load it and ignore the fields. A v2 constitution
 refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
 `fields`.
@@ -599,7 +601,10 @@ well as a cloud one, and also when its connector never sends it (an
 `auth_header: none`): Two-Key cannot show it differs from the agent's. The result is the `judge_agent_separation`
 field of the `constitution_loaded` ledger entry: every resolved identity
 (fingerprints only), the fingerprint scheme and key id, and
-`identities_digest`. The entry also holds the full quorum policy
+`identities_digest`. Its `checks` and `warning_checks` list the check set
+applied to every agent and judge pair, not which checks fired (that is
+`warnings`), and its `refusals` is always empty, because a refusal stops
+startup before the entry is written. The entry also holds the full quorum policy
 (`quorum_policy`) and its `policy_digest`. Each `decision` entry carries
 `identities_digest` and `policy_digest`, not the full policy. To check
 them, `two_key.audit.check_decision_digests(ledger)` recomputes both from
@@ -1064,7 +1069,7 @@ the tool runs also blocks a retry.
 The gateway runs in the same process as `TwoKey`, on the ledger object
 `TwoKey` uses. Build it with `TwoKey.gateway()`. A gateway in another
 process or on another host is not supported
-([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)),
+([#45](https://github.com/Insomniac-VibeLabs/two-key/issues/45)),
 and this package has no gateway-only ledger role, remote gateway, or
 cross-process protocol.
 
@@ -1213,7 +1218,7 @@ every key a signed head needs:
 | `witness.bundle.json` | `witness.pem` | principal key, ledger key |
 
 The bundle names its key derivation: `pbkdf2-sha256` at 600,000 iterations,
-then AES-256-GCM. Format `two-key-concept-key-backup/1`. 0.3 ships that
+then AES-256-GCM. Format `two-key-key-backup/1` (before 0.4.0, `two-key-concept-key-backup/1`, now refused). 0.3 ships that
 function only. PBKDF2 slows guessing and is not memory-hard. A short
 passphrase, or two bundles that share a passphrase, is warned about. All
 three sharing one passphrase is warned about too. A bundle file over 64 MiB

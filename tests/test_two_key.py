@@ -1,4 +1,4 @@
-"""Concept invariants: both paths, ledger, token, agent hook, no execution."""
+"""Core invariants: both paths, ledger, token, agent hook, no execution."""
 
 import hashlib
 import io
@@ -55,7 +55,7 @@ def _engine(tmp, votes=("yes", "yes"), quorum=None):
     return key, tk
 
 
-class ConceptTests(unittest.TestCase):
+class CoreTests(unittest.TestCase):
     def test_both_paths_required_and_ledger_records_both(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, tk = _engine(tmp, ("yes", "no"))
@@ -209,7 +209,7 @@ class ConceptTests(unittest.TestCase):
             _, tk = _engine(tmp)
             raw = Path(tmp, "ledger", "entries.jsonl").read_text()
             self.assertNotIn("constitution_loaded", raw)
-            self.assertIn("two-key-concept-ledger-enc/1", raw)
+            self.assertIn("two-key-ledger-enc/1", raw)
             self.assertFalse(any(p.name == "witness.pem" for p in Path(tmp, "ledger").iterdir()))
             self.assertTrue(tk.ledger.witness_path.exists())
             self.assertFalse(str(tk.ledger.witness_path).startswith(str(Path(tmp, "ledger")) + "/"))

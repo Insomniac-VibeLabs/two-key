@@ -1,11 +1,12 @@
 # Roadmap
 
-This is the plan for taking `two-key-concept` from 0.2.4 to a
+This is the plan for taking `two-key` from 0.2.4 to a
 1.0 release. It states intent, not a promise. The order may change, and
 version numbers are targets, not dates. 0.3.0 (key backup) is released as
 tag `v0.3.0`, and 0.3.1 (live-test fixes; the status moves from prototype to
 beta) as tag `v0.3.1` on `main`. On 2026-10-14 the maintainer moved 0.6
-(MCP adapter, the reference wrapper, #89) ahead of 0.4 and 0.5; it is next. Nothing listed here after 0.3 exists yet, except the custom field
+(MCP adapter, the reference wrapper, issue #2) ahead of 0.4 and 0.5; it is next. Phase numbers here are labels: package
+version 0.4.0 is the move to the `two-key` repository, not the SIEM export phase. Nothing listed here after 0.3 exists yet, except the custom field
 types that 0.3.0 added ahead of order (see "After 1.0"). 0.11 may ship before the
 phases numbered under it; its number is not an order claim.
 

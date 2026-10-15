@@ -1801,3 +1801,140 @@ On branch `working`. Package version stays 0.3.1. Tests only.
   `SPECS`, and `FIELDS` as default arguments. They now default to `None` and
   pick the module value inside. No helper mutated them, so no test result
   changes.
+
+## Release v0.4.0: new repository, package `two-key`, formats without "concept" — 2026-10-15
+
+Package version 0.4.0. Development moved from
+`Insomniac-VibeLabs/two-key-concept` (to be archived) to
+`Insomniac-VibeLabs/two-key`, with the full history of `main` (259 commits,
+through `dd2f341`, the 0.3.1 merge). To be tagged `v0.4.0` on `main` here;
+tags `v0.3.1` and earlier stay in `two-key-concept`. ROADMAP phase numbers
+(0.4 = SIEM export, ...) stay labels; package 0.4.0 is this move.
+
+- **Package `two-key`.** `two-key-concept` is renamed `two-key` (`pyproject.toml`,
+  `uv.lock` regenerated with uv 0.13.0). The import name stays `two_key`.
+  Install with `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.4.0"`.
+- **Format identifiers drop "concept"** (maintainer decision: the old files
+  were test data): `two-key-constitution-v1`/`-v2`, `two-key-ledger-wrap/1`,
+  `two-key-ledger-enc/1` (also the AES-GCM associated data), the ledger
+  HKDF salt `two-key-ledger`, `two-key-head-anchor/1`,
+  `two-key-witness-rotation/1`, `two-key-key-backup/1`, and
+  `two-key-key-backup-payload/1`. Nothing else in signing, hashing, or
+  encryption changed: the golden test's digest, `bytecode_hash`,
+  `spec_hash`, and `nl_hash` are unchanged (the envelope format is outside
+  the signed bytes).
+- **Old files are refused with a clear message**, never read: a
+  `two-key-concept-*` constitution ("re-sign it"), ledger key wrap or head
+  anchor ("start a new ledger"), or backup bundle ("export a new backup").
+  `tests/test_legacy_formats.py`.
+- **No "concept" left in code or docs** except those refusals and history:
+  docstrings, messages (`not a two-key wrapped data key`), the judge auth
+  message, `agent_meta.concept_agent_record` is now `ledger_agent_record`,
+  and `tests/test_concept.py` is now `tests/test_two_key.py` (`CoreTests`).
+- Repository URLs, badges, and the SonarCloud project key
+  (`Insomniac-VibeLabs_two-key`) point here; issue references point to this
+  repository's issues (#2 is the reference wrapper).
+
+### Upgrading from 0.3.1
+
+- Uninstall `two-key-concept`, install `two-key`. Both provide the `two_key`
+  module, so do not keep both. Code that imports `two_key` does not change,
+  except `two_key.agent_meta.concept_agent_record`, now `ledger_agent_record`.
+- Key files (PEM) still load. Constitutions, ledgers, head anchors, and
+  backups made before 0.4.0 do not: re-sign the constitution, start a new
+  ledger with the same keys, and export a new backup.
+
+## Mutable defaults in test helpers (#5) — 2026-10-15
+
+On branch `working`. Package version stays 0.4.0. Tests only.
+
+- DeepSource PYL-W0102: `_engine()` in `tests/test_problem_f.py` and
+  `engine()` in `tests/test_derive_robustness.py` default `specs` and `rules`
+  to `None` and pick the module value inside.
+- `tests/test_judge_agent_separation.py`: `start()`, `refused()`, `started()`,
+  and `warned()` default `agent` to a sentinel, not the `AGENT` dict, because
+  `agent=None` is itself a test case (no monitored agent declared).
+- No helper mutated those values, so no test result changes.
+
+## Workflow actions pinned to commit SHAs (#4) — 2026-10-15
+
+On branch `working`. Package version stays 0.4.0. CI only.
+
+- `coverage.yml`: `SonarSource/sonarqube-scan-action@v5` is now pinned to
+  `2f77a1ec69fb1d595b06f35ab27e97605bdef703`, the commit the `v5` tag
+  (`v5.3.2`) points to (Semgrep
+  `github-actions-mutable-action-tag`).
+- `semgrep.yml`: `actions/checkout@v4` and
+  `github/codeql-action/upload-sarif@v3` are pinned to the same SHAs the
+  other workflows already use. Every `uses:` line in `.github/workflows/`
+  now names a full commit SHA. The `semgrep/semgrep` container image is
+  still the floating `latest` tag.
+
+## Leftover review nits (#7) — 2026-10-15
+
+On branch `working`. Package version stays 0.4.0. No change to any
+authorization decision, refusal, or warning.
+
+- **"§4" citations removed.** `two_key/quorum.py` and `two_key/judges/base.py`
+  cited "§4 (ii)/(iii)" of a design document outside the repository. The
+  comments now say what the code does (ballot binding, the judge-set floors,
+  the availability floor K).
+- **gpt-oss is recorded with the right upstream.** The OpenAI family regex in
+  `two_key/identity.py` listed `gpt-oss` after `^gpt`, so it never decided
+  anything, and open-weight gpt-oss was recorded with `api.openai.com` as an
+  upstream, which does not serve it. Its maker stays `openai` (maker counts
+  and `min_makers` are unchanged); its upstream is now the host that serves
+  it plus `maker:openai`, the same label a maker without an API gets
+  (`maker:meta`). For example, Groq is `api.groq.com` + `maker:openai`, and a
+  local Ollama `-cloud` model is `localhost:11434` + `maker:openai` +
+  `ollama.com`. Whether an identity is resolved is unchanged. The
+  `upstream` list in a new `constitution_loaded` entry can differ from 0.4.0
+  for gpt-oss judges and agents.
+- **The `checks` list is documented as the check set.**
+  `judge_agent_separation.checks` and `warning_checks` list the checks
+  applied to every agent and judge pair, not which fired (`warnings` says
+  that), and `refusals` is always empty because a refusal stops startup
+  first. The record keeps its shape; `SeparationReport` and HOWTO say so.
+- Tests: `test_open_weight_gpt_oss_is_not_served_by_the_openai_api`, and the
+  record test checks that `refusals` is empty.
+
+## Semgrep workflow permission — 2026-10-15
+
+On branch `working`. Package version stays 0.4.0. CI only.
+
+- `semgrep.yml` grants `actions: read`, as `codeql.yml` does: the SARIF
+  upload reads the workflow run and failed with "Resource not accessible by
+  integration" without it. The upload still needs code scanning (Advanced
+  Security) enabled in the repository settings (#3), as the CodeQL job does.
+
+## `main`'s workflow edits merged; CodeQL restored; Sonar scan v6 — 2026-10-15
+
+On branch `working`. Package version stays 0.4.0. CI only.
+
+- Merged `main` (three web-editor commits: `codeql.yml` deleted and
+  re-created, and `coverage.yml`'s project key set to
+  `Insomniac-VibeLabs_two-key`, which `working` already had).
+- **`codeql.yml` is the CodeQL workflow again.** The re-created file on `main`
+  was a copy of `coverage.yml` (named `coverage`, project key
+  `Insomniac-VibeLabs_two-key-concept`): it ran a second SonarCloud scan that
+  failed on pull requests ("Could not find the pullrequest") and, on a push,
+  uploaded this repository's analysis to the old project. CodeQL did not run
+  at all. A plain merge would have kept that copy, so the file is restored
+  explicitly.
+- **`sonarqube-scan-action` moves to v6, pinned:**
+  `fd88b7d7ccbaefd23d8f36f73b59db7a3d246602` (`v6` = `v6.0.0`). This is what
+  Dependabot's PR #8 proposed, but pinned to a commit SHA instead of the
+  mutable `v6` tag (#4). v6 changes how `args` are quoted; this workflow's
+  arguments have no quotes or spaces, so they parse the same.
+- Still a SonarCloud setting, not code: the CI scan fails while the project's
+  Automatic Analysis is on ("You are running CI analysis while Automatic
+  Analysis is enabled"). Turn Automatic Analysis off (#3).
+
+## README license badge — 2026-10-15
+
+On branch `working`. Docs only.
+
+- The license badge is static (`Apache-2.0`) instead of a shields.io lookup
+  of the repository, which showed "repo not found". The coverage badge
+  follows `main` and turns green when `working` is merged; the release badge
+  shows "no releases" until Release v0.4.0 is published (#3).

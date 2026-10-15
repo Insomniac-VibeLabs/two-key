@@ -50,7 +50,7 @@ Quorum protocol specifics:
   *without counting*. The result then has ``counted=False`` and no yes/no
   tally (yes/no are None).
 - Ballots are bound to H(action record) and H(constitution), plus the two
-  compilation hashes (nl_hash, bytecode_hash; §4 (ii)). The convenor stamps
+  compilation hashes (nl_hash, bytecode_hash). The convenor stamps
   the binding on every ballot. A judge that reports hashes that differ is an
   abstention (``binding_mismatch``). With ``ballot_binding="echo"`` a yes/no
   ballot that the judge itself did not bind is an abstention too. Malformed
@@ -212,7 +212,7 @@ class QuorumResult:
     counted: bool = True
     valid: int = 0           # valid ballots (the availability measure compared with K)
     min_responding: int = 0
-    binding: dict | None = None  # the round's ballot binding (§4 (iii)), shared by every ballot
+    binding: dict | None = None  # the round's ballot binding (BINDING_FIELDS), shared by every ballot
 
     def to_record(self) -> dict:
         """Ledger record. The binding is written once. A ballot's hash fields appear only where they
@@ -280,7 +280,7 @@ def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | Non
 
 
 def check_judge_set(judges: Sequence, policy: QuorumPolicy) -> None:
-    """Judge-set selection check (§4 (iii)). Raises QuorumConfigError."""
+    """Refuse a judge set below the policy's floors (makers, local judges, a local yes). Raises QuorumConfigError."""
     short = heterogeneity_shortfall(judges, policy)
     if short:
         raise QuorumConfigError(f"judge set is not heterogeneous enough: {short}")
@@ -290,7 +290,7 @@ BINDING_FIELDS = ("action_hash", "constitution_hash", "nl_hash", "bytecode_hash"
 
 
 def _bind(b: Ballot, binding: Mapping[str, str] | None, policy: QuorumPolicy) -> Ballot:
-    """Check a judge-reported binding and stamp the expected one (§4 (iii))."""
+    """Check a judge-reported binding and stamp the expected one. A mismatch makes the ballot an abstention."""
     if binding is None:
         return b
     ah, ch, nh, bh = (binding.get(k) for k in BINDING_FIELDS)
@@ -468,7 +468,7 @@ def convene(
         return result(False, "cloud_judge_session_required")
     if any((b.error or "").startswith("cloud_judge_") for b in ballots):
         return result(False, next(b.error for b in ballots if (b.error or "").startswith("cloud_judge_")))
-    # Availability floor K: below it, deny WITHOUT counting (§4 (iii)).
+    # Availability floor K (min_responding): below it, deny WITHOUT counting.
     if len(responding) < k_floor:
         return result(False, f"insufficient_responses:{len(responding)}<{k_floor}", counted=False)
     # Ballots are paired with judges by position (_collect keeps the order), not by the id a ballot reports.

@@ -1,4 +1,4 @@
-"""Ed25519 principal keys. The concept line does not implement hybrid ML-DSA."""
+"""Ed25519 principal keys. Hybrid ML-DSA is not implemented yet (ROADMAP)."""
 
 from __future__ import annotations
 

@@ -16,9 +16,9 @@ from .fields import MAX_FIELDS_PER_TOOL, FieldError, check_path, validate_fields
 from .keys import fingerprint, sign, verify
 from .policy_vm import ConstitutionError, validate_rules
 
-FORMAT_V1 = "two-key-concept-constitution-v1"
+FORMAT_V1 = "two-key-constitution-v1"
 # v2 may carry a custom-field registry (``fields``) and refuses any other unknown signed key.
-FORMAT_V2 = "two-key-concept-constitution-v2"
+FORMAT_V2 = "two-key-constitution-v2"
 ENVELOPE_FORMATS = ("auto", "v2")
 _V2_SIGNED_KEYS = {"prose", "hard_rules", "tool_specs", "fields"}
 
@@ -358,6 +358,10 @@ def load_envelope(path: Path | str) -> dict:
 def verify_signed(envelope: dict, public_key) -> Constitution:
     fmt = envelope.get("format") if isinstance(envelope, dict) else None
     if fmt not in (FORMAT_V1, FORMAT_V2):
+        if isinstance(fmt, str) and fmt.startswith("two-key-concept-constitution"):
+            raise ConstitutionSignatureError(
+                "constitution signed by two-key-concept (before two-key 0.4.0); re-sign it with "
+                "two-key sign-constitution")
         raise ConstitutionSignatureError("unsupported constitution format")
     signed = envelope.get("signed")
     if not isinstance(signed, dict):

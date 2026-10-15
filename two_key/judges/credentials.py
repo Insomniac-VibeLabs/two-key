@@ -16,7 +16,7 @@ What is implemented:
   environment variable, sent as HTTP Basic auth. HTTPS only: a judge or agent
   with this credential and a plain-HTTP ``base_url`` refuses to start.
 
-The OAuth device-code grant is not in this concept line. Bring such a token
+The OAuth device-code grant is not supported. Bring such a token
 in through ``env`` or ``callback``.
 
 Secrets are never hardcoded, logged, or written to the ledger, and

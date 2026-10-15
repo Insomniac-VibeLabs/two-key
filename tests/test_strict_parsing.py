@@ -16,7 +16,7 @@ try:
     HAVE_YAML = True
 except ImportError:
     HAVE_YAML = False
-NEEDS_YAML = unittest.skipUnless(HAVE_YAML, "PyYAML is not installed (pip install two-key-concept[yaml])")
+NEEDS_YAML = unittest.skipUnless(HAVE_YAML, "PyYAML is not installed (pip install two-key[yaml])")
 
 JUDGES = """judges:
   - id: a
@@ -110,7 +110,7 @@ class Callers(unittest.TestCase):
             load_unsigned(prose, rules)
 
     def test_constitution_envelope_duplicate(self):
-        p = self.write("c.json", '{"format": "two-key-concept-constitution-v1", "signed": {}, "signed": {}}')
+        p = self.write("c.json", '{"format": "two-key-constitution-v1", "signed": {}, "signed": {}}')
         with self.assertRaisesRegex(ConstitutionError, "duplicate key 'signed'"):
             load_envelope(p)
 
