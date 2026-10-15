@@ -35,7 +35,9 @@ min_responding 1 (its default then), one judge approves alone while the others a
 at start (lone_judge_warning) and does not refuse. QuorumPolicy.high_assurance
 (profile: high_assurance) needs judges from 2 makers (min_makers; maker: is the operator's
 label for who made a judge's model, not verified, never compared with the agent), 1 local judge,
-and a local yes. The old names vendor/min_vendors are refused (removed in 0.2.3).
+and a local yes. The old names vendor/min_vendors are refused (removed in 0.2.3). Each ballot is one
+stateless request at temperature 0; a judge endpoint that keeps memory across ballots carries agent text from one
+call into the vote on another, which Two-Key cannot see: give each judge a fresh context per ballot.
 TwoKey needs monitored_agent, declared by the operator. A judge may run any
 model from any vendor. A judge is not the monitored agent: TwoKey refuses to
 start (judge_matches_agent:) when a judge holds the agent's credential (the

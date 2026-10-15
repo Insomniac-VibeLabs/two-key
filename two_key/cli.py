@@ -61,6 +61,7 @@ from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, load_unsigned_w
                            sign_constitution)
 from .fields import case_warnings, not_applicable_notes
 from .keys import generate_private_key, load_private_key_file, load_public_key, save_private_key, save_public_key
+from .policy_vm import ConstitutionError
 
 
 def _init_key(args) -> int:
@@ -78,8 +79,12 @@ def _init_key(args) -> int:
 
 def _sign(args) -> int:
     key = load_private_key_file(args.key)
-    prose, rules, specs, fields = load_unsigned_with_fields(args.prose, args.rules)
-    envelope = sign_constitution(prose, rules, key, specs, fields=fields, envelope_format=args.envelope_format)
+    try:
+        prose, rules, specs, fields = load_unsigned_with_fields(args.prose, args.rules)
+        envelope = sign_constitution(prose, rules, key, specs, fields=fields, envelope_format=args.envelope_format)
+    except ConstitutionError as e:      # the principal's own file: say what is wrong, no traceback
+        print(f"two-key: sign-constitution: refused: {e}", file=sys.stderr)
+        return 1
     save_envelope(args.out, envelope)
     signed = envelope["signed"]
     registry = signed.get("fields") or {}
@@ -470,8 +475,9 @@ def main(argv: list[str] | None = None) -> int:
     sign.add_argument("--prose", required=True)
     sign.add_argument("--rules", required=True)
     sign.add_argument("--envelope-format", choices=ENVELOPE_FORMATS, default="auto",
-                      help="auto (default): v1 unless the rules declare custom fields, then v2, or v3 when a "
-                           "field is source: caller; v2 forces v2 (refused with a caller field); v3 forces v3. "
+                      help="auto (default): v1 unless the rules declare custom fields, then v2, or v3 when "
+                           "they use a 0.5.0 feature (a source: caller field, case: exact, a not_applicable mark, "
+                           "an @domain allow entry); v2 forces v2 (refused with any of those); v3 forces v3. "
                            "Installs older than custom fields refuse v2; installs before 0.5.0 refuse v3")
     sign.add_argument("--out", required=True)
     sign.set_defaults(func=_sign)

@@ -58,10 +58,10 @@ class Drafting(unittest.TestCase):
     def test_an_undescribed_payee_or_amount_is_a_warning(self):
         # Behind the proxy the upstream schema is the agent's only format guide (live run 6, C25: display names).
         t = draft_tool(PAY)
-        self.assertEqual([w.split(":")[0] for w in t.warnings], ["amount", "vendor"])
+        self.assertEqual([w.split(" (")[0] for w in t.warnings], ["amount", "vendor"])
         self.assertIn("exact id the allow list needs", t.warnings[1])
         text = render_rules(draft_specs([PAY]), ["srv"])
-        self.assertIn("  # - WARNING: vendor: no description in the upstream schema", text)
+        self.assertIn("  # - WARNING: vendor (a counterparty) has no description in the upstream schema", text)
         self.assertTrue(all(len(line) <= 120 for line in text.splitlines() if "WARNING" in line))
         described = {**PAY, "inputSchema": {"type": "object", "properties": {
             "vendor": {"type": "string", "description": "Vendor id: the bare domain, such as acme.example"},
@@ -72,7 +72,7 @@ class Drafting(unittest.TestCase):
     def test_every_input_path_a_reads_is_checked_not_only_payees(self):
         # Data-agnostic: an id, an environment, or a ticket the principal maps as a custom field is checked too,
         # at --constitution and at proxy start, where the signed spec and the upstream schema meet.
-        from two_key.mcp_proxy.core import select_tools, undescribed_inputs
+        from two_key.mcp_proxy.core import select_tools, undescribed_advice, undescribed_inputs
         upstream = [{"name": "share_folder", "inputSchema": {"type": "object", "properties": {
             "target": {"type": "object", "properties": {
                 "folder_id": {"type": "string"},
@@ -90,6 +90,8 @@ class Drafting(unittest.TestCase):
         self.assertEqual([line.split(" (")[0] for line in got],
                          ["share_folder: target.folder_id", "share_folder: region"])
         self.assertIn("(the field folder) has no description", got[0])
+        # The same words as the draft's warning for the same input (live run 6z: the two were worded apart).
+        self.assertIn(f"vendor (a counterparty) {undescribed_advice('a counterparty')}", draft_tool(PAY).warnings)
         self.assertIn("is not declared in the upstream input schema", got[1])
 
     def test_read_only_hint_and_upstream_names(self):

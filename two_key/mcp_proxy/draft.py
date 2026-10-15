@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from ..action import MAX_TOOL_NAME_CHARS, TOOL_NAME
-from .core import pinned_view, schema_digest
+from .core import pinned_view, schema_digest, undescribed_advice
 
 FACT_LIKE = re.compile(r"(^|_)(matched|verified|approved|confirmed|validated)$")
 AMOUNT_LIKE = re.compile(r"^(amount|amount_usd|amount_cents|price|total|cost|sum|value_usd|usd|cents)$")
@@ -72,15 +72,6 @@ class Draft:
 def _described(schema: Mapping[str, Any]) -> bool:
     text = schema.get("description")
     return isinstance(text, str) and bool(text.strip())
-
-
-_UNDESCRIBED = {
-    "counterparty": ("the agent sees only the name, so it may write a display name instead of the exact id the "
-                     "allow list needs; describe the format upstream, e.g. 'Vendor id: the bare domain, such as "
-                     "vendor.example'"),
-    "amount": ("the agent sees only the name, so it may write words, another currency, or cents; describe the "
-               "unit upstream, e.g. 'Amount in US dollars, a number such as 271.85'"),
-}
 
 
 def _comment(text: str) -> str:
@@ -153,13 +144,12 @@ def draft_tool(view: Mapping[str, Any]) -> ToolDraft | str:
             spec["amount"] = {"json_path": prop, "unit": unit}
             draft.notes.append(f"{prop}: amount-like, mapped as the amount; set unit (usd or cents)")
             if not _described(sub):
-                draft.warnings.append(f"{prop}: no description in the upstream schema; {_UNDESCRIBED['amount']}")
+                draft.warnings.append(f"{prop} (the amount) {undescribed_advice('the amount')}")
         elif PARTY_LIKE.fullmatch(low) and sub.get("type") in ("string", "array", None):
             parties.append({"json_path": prop, "allow": []})
             draft.notes.append(f"{prop}: payee-like, mapped as a counterparty; fill its allow list")
             if not _described(sub):
-                draft.warnings.append(f"{prop}: no description in the upstream schema; "
-                                      f"{_UNDESCRIBED['counterparty']}")
+                draft.warnings.append(f"{prop} (a counterparty) {undescribed_advice('a counterparty')}")
         else:
             payload.append(_payload(prop, sub))
     if parties:

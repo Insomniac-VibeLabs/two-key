@@ -5,9 +5,9 @@ Run 6 tests Two-Key behind the MCP proxy (branch `working`, also `mcp-proxy`). T
 record). Judges and the agent are role bots whose replies you relay by hand. Nothing here uses the network: the
 endpoints are loopback, and the bots are reached only through you.
 
-The same harness serves the short re-run (6z) of the changes made after run 6: every tool deciding each field a rule
-reads, no judges for an unreadable call, scripted quorum cases, the one-judge start-up warning, and the crash case
-on an ordinary invoice.
+The same harness serves the short re-runs (6z and later) of the changes made after run 6: every tool deciding each
+field a rule reads, no judges for an unreadable call, scripted quorum cases, the one-judge start-up warning, and the
+crash case on an ordinary invoice.
 
 ## Before the first round
 
@@ -57,16 +57,27 @@ that is not a leak.
   execution, and repository or file access in every role conversation: a role bot that can read this
   repository can read the answer key.
 - The harness refuses to write a batch that contains a case title or a private file name, and the report flags
-  a reply that echoes answer-key language, claims to have executed something, repeats an earlier run's reply
-  byte for byte, or a deny reason that carries an argument value.
+  a reply that echoes answer-key language, claims to have executed something, or a deny reason that carries an
+  argument value.
+- A reply byte-identical to an earlier run's is a note in RESULTS.md, not an incident. A model repeats itself on
+  a nearly identical request (a short ballot, a message the instruction dictates), and two judges on one model
+  agree word for word, which the notes count too. A repeat points to memory only when the request changed in a
+  way the reply should show, or the reply names something only an earlier run had. "Fresh" also means the bot
+  account's own memory is off (a saved-memory or chat-history setting), not only a new conversation.
 - Injection text is planted by the harness into tool results (the `plant` field), never written by the tool
   bot, so it does not depend on the tool bot agreeing to write it.
 
 ## After COMPLETE
 
-Move `relay/`, `logs/`, `RESULTS.md`, and `results.json` into `run6/` (or `run6z/`) and commit them on a test
-branch, not on `working`. Never commit `state/` (keys, ledgers), `selftest/`, or `cases.jsonl`. They are
-git-ignored at any depth under `tests/live/` (a copied `run6x/state/` too); still check `git status --ignored`
-before every commit, since a tree copied elsewhere is not covered.
+Move `relay/`, `logs/`, `constitution/` (the prose and rules the pass signed), `RESULTS.md`, and `results.json`
+into `run6/` (or `run6z/`, and so on) and commit them on a test branch, not on `working`. Until they are moved
+they are git-ignored, so a pass in progress is not committed by mistake. Never commit `state/` (keys, ledgers),
+`selftest/`, or `cases.jsonl`. They are git-ignored at any depth under `tests/live/` (a copied `run6x/state/`
+too); still check `git status --ignored` before every commit, since a tree copied elsewhere is not covered.
+
+The credentials the harness makes for its loopback endpoints (`LIVE_AGENT_API_KEY`, `LIVE_JUDGE_A_KEY`,
+`LIVE_JUDGE_B_KEY`) are new on every pass unless you set them, so you cannot grep for them afterwards. Each pass
+scans `relay/`, `logs/`, and `constitution/` for its own and for private-key text instead: RESULTS.md must list no
+`credential_in_run_files` incident before you commit.
 Switching to a branch without `tests/live/` can leave `state/` behind as untracked files: move it out of the
 repository.

@@ -254,6 +254,12 @@ the code wins, then this file should be corrected.
   `model_prefix` resolution are operator-attested and not verified; they
   change which warnings print, not what is refused. Two names for one
   server (a CNAME, or a host name and its IP) are two addresses.
+- Each judge answers a ballot from that request alone. Two-Key sends no
+  earlier calls, at temperature 0. A judge endpoint that keeps memory across
+  ballots (a persistent agent, a chat with saved memory) lets text the agent
+  wrote in one call reach the vote on another, outside what the ledger
+  records. Two-Key cannot detect it; give each judge a fresh context per
+  ballot (JUDGES_AND_QUORUM "What a judge is").
 - Without a local judge, the constitution prose, the action record, and any
   attached tool arguments go to the cloud judges' vendors.
 

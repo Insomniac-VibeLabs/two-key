@@ -741,6 +741,13 @@ twice more, with a short backoff, inside the quorum deadline. A response
 that was parsed is never retried. A response over 1,000,000 bytes, a
 redirect, and any other HTTP error abstain.
 
+Each ballot is one stateless request at temperature 0: no earlier calls are
+sent. A persistent judge is fine as a service with a long-lived identity and
+credential, but give it a fresh context for every ballot. An endpoint that
+remembers earlier ballots carries text the agent wrote in one call into the
+vote on another, where the ledger cannot see it (JUDGES_AND_QUORUM "What a
+judge is").
+
 Judges do not enforce the counterparty `allow` lists, the data class, or
 the other hard rules; Path A does. A judge reads the prose and the
 normalized action record and votes on whether the call fits the prose.

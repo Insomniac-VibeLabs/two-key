@@ -132,6 +132,9 @@ def domain_allow_notes(specs: Mapping) -> list[tuple[bool, str]]:
     return out
 
 
+MAX_MISSING_SHOWN = 100
+
+
 def _require_field_decisions(specs: Mapping, rules: list) -> None:
     """Every tool decides each field a deny_if_fields rule reads: it maps the field, or marks it not_applicable.
 
@@ -139,11 +142,15 @@ def _require_field_decisions(specs: Mapping, rules: list) -> None:
     a word. It is refused here, at signing and on load, for argument and caller-supplied fields alike.
     """
     read = rule_fields(rules)
-    missing = [f"tool_specs.{tool}.fields.{name} (rule {rule!r})"
-               for tool in sorted(specs) for name, rule in sorted(read.items())
+    missing = [f"tool_specs.{tool}.fields.{name} ({'rule' if len(ids) == 1 else 'rules'} "
+               f"{', '.join(repr(i) for i in ids)})"
+               for tool in sorted(specs) for name, ids in sorted(read.items())
                if name not in (specs[tool].get("fields") or {})]
     if missing:
-        shown = "; ".join(missing[:8]) + (f"; and {len(missing) - 8} more" if len(missing) > 8 else "")
+        # Every one, so a principal fixes them in one pass (live run 6z: eight of eleven were shown); bounded only
+        # against a pathological file.
+        shown = "; ".join(missing[:MAX_MISSING_SHOWN]) + (
+            f"; and {len(missing) - MAX_MISSING_SHOWN} more" if len(missing) > MAX_MISSING_SHOWN else "")
         raise ConstitutionError(
             "each tool must map every field a deny_if_fields rule reads, or mark it not_applicable "
             f"(name: not_applicable under the tool's fields:): {shown}")

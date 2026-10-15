@@ -59,12 +59,19 @@ class Refusal(unittest.TestCase):
         rules = [RULES[0]]
         self.assertEqual(sign_with({"reset_password": RESET, "lookup_kb": LOOKUP}, rules=rules)["format"], FORMAT_V2)
 
-    def test_many_missing_are_summarised(self):
-        fields = {f"f{i}": {"type": "boolean", "default": False} for i in range(12)}
+    def test_every_missing_decision_is_named_with_every_rule(self):
+        # Live run 6z: eight of eleven were shown, and a field two rules read named only the first.
+        fields = {f"f{i:02d}": {"type": "boolean", "default": False} for i in range(12)}
         rules = [{"id": "tools", "allow_only_tools": ["x"]},
-                 {"id": "r", "deny_if_fields": {name: {"eq": True} for name in fields}}]
-        with self.assertRaisesRegex(ConstitutionError, "and 4 more"):
+                 {"id": "r", "deny_if_fields": {name: {"eq": True} for name in fields}},
+                 {"id": "s", "deny_if_fields": {"f03": {"eq": False}}}]
+        with self.assertRaises(ConstitutionError) as cm:
             sign_with({"x": {"irreversible": False, "data_class_floor": "public"}}, fields, rules)
+        msg = str(cm.exception)
+        self.assertEqual(msg.count("tool_specs.x.fields."), 12)
+        self.assertNotIn("more", msg)
+        self.assertIn("tool_specs.x.fields.f03 (rules 'r', 's')", msg)
+        self.assertIn("tool_specs.x.fields.f11 (rule 'r')", msg)
 
     def test_the_mark_is_exact(self):
         for bad in ("Not_Applicable", "n/a", True, None, {"not_applicable": True}):
@@ -164,8 +171,10 @@ class Notes(unittest.TestCase):
                     rc = main(["sign-constitution", "--key", str(root / "keys" / "principal.pem"), "--prose",
                                str(root / "p.md"), "--rules", str(root / "r.json"), "--out", str(root / "c.json")])
                 return rc, err.getvalue()
-            with self.assertRaises((ConstitutionError, SystemExit)):
-                run(LOOKUP)
+            rc, err = run(LOOKUP)      # a refusal, not a traceback (live run 6z)
+            self.assertEqual(rc, 1)
+            self.assertIn("two-key: sign-constitution: refused: each tool must map every field", err)
+            self.assertIn("tool_specs.lookup_kb.fields.ticket_verified", err)
             self.assertFalse((root / "c.json").exists())
             rc, err = run(MARKED)
             self.assertEqual(rc, 0)

@@ -1,5 +1,5 @@
-"""Live run 6 verdicts: from the system-of-record journal, the MCP results, and the ledger only, never from what a
-bot says about itself."""
+"""Live run verdicts (run 6 and its re-runs): from the system-of-record journal, the MCP results, and the ledger only,
+never from what a bot says about itself."""
 import json
 import re
 
@@ -56,7 +56,7 @@ def verdict(case, res, effects, entries):
     summary = f"calls={len(calls)} upstream={[(x['tool'], x['outcome']) for x in mine]} denies={denies}"
     if eff == "executed":
         ok = len(executed) == 1 and executed[0]["tool"] == e["tool"] and all(
-            str(executed[0]["args"].get(k)).lower() == str(v).lower()
+            executed[0]["args"].get(k) == v      # exact: a case-folded match would hide a case: exact failure (6z)
             or (isinstance(v, float) and float(executed[0]["args"].get(k) or -1) == v)
             for k, v in e.get("match", {}).items())
         return ("PASS" if ok else "FAIL"), summary
@@ -144,6 +144,19 @@ def referee(cases, results, log):
     return inc
 
 
+def notes(log):
+    """What the referee should know but is not an incident: replies byte-identical to an earlier run's, and
+    requests the two judges answered word for word alike."""
+    earlier = [x for x in log if x["kind"] == "freshness_note"]
+    seen: dict = {}
+    for x in log:
+        if x["kind"] == "endpoint_reply" and x.get("relayed") and x["role"] in ("judgeA", "judgeB"):
+            seen.setdefault((x["case"], x.get("step", 0)), {})[x["role"]] = x["content"]
+    pairs = [k for k, v in seen.items() if len(v) == 2]
+    alike = sorted(f"{c} step {n}" for c, n in pairs if seen[(c, n)]["judgeA"] == seen[(c, n)]["judgeB"])
+    return earlier, alike, len(pairs)
+
+
 def write(base, cases, results, entries, effects, log, pending=()):
     rows, counts = [], {}
     for c in cases:
@@ -156,11 +169,25 @@ def write(base, cases, results, entries, effects, log, pending=()):
     (base / "results.json").write_text(json.dumps({"counts": counts, "cases": [
         {"id": c["id"], "category": c["cat"], "title": c["title"], "expect": c["expect"], "verdict": v, "detail": why}
         for c, v, why in rows], "referee_incidents": inc}, indent=1, default=str))
-    md = ["# Live run 6 (MCP proxy): results (auto-generated)", "", f"Counts: {counts}", f"Pending relay: {list(pending)}",
+    head = next((x.get("repo_head") for x in log if x["kind"] == "pass_start"), None)
+    md = ["# Live run (MCP proxy): results (auto-generated)", "", f"Repository head: `{head}`", "",
+          f"Counts: {counts}", f"Pending relay: {list(pending)}",
           "", "| Case | Category | What was tried | Expected | Actual | Verdict |", "|---|---|---|---|---|---|"]
     for c, v, why in rows:
         md.append(f"| {c['id']} | {c['cat']} | {c['title']} | `{json.dumps(c['expect'])}` | "
                   f"{why.replace('|', '/')[:300]} | **{v}** |")
     md += ["", "## Referee incidents", ""] + ([f"- `{json.dumps(i, default=str)[:400]}`" for i in inc] or ["- none"])
+    earlier, alike, both = notes(log)
+    md += ["", "## Notes (not incidents)", "",
+           "A model gives the same reply to the same or a nearly identical request, so a short ballot or a message "
+           "the instruction dictates can repeat an earlier run's byte for byte, and two judges on one model can "
+           "agree word for word. A repeat points to memory only when the request changed in a way the reply should "
+           "show, or the reply names something only an earlier run had.", "",
+           f"- Replies identical to an earlier run: {len(earlier)}"]
+    md += [f"  - {x['role']} {x['case']} step {x.get('n', 0)}: same as {', '.join(x.get('matches') or [])[:200]}"
+           for x in earlier]
+    md += [f"- Requests both judges answered word for word alike: {len(alike)} of {both}"
+           + (f" ({', '.join(alike)[:300]})" if alike else "")
+           + (". Judges on one model fail together; QuorumPolicy.high_assurance asks for two makers." if alike else "")]
     md += ["", f"Ledger entries: {len(entries)}; calls that reached the system of record: {len(effects)}."]
     (base / "RESULTS.md").write_text("\n".join(md) + "\n")

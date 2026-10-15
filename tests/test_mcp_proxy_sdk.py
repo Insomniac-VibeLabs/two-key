@@ -157,6 +157,12 @@ class ThroughTheSdk(unittest.TestCase):
         cfg = proxy_config(self.tmp, self.digest, variant="changed", upstream={"on_schema_change": "warn"})
         self.assertIn("WARNING: upstream_schema_changed", self.start(cfg))
 
+    def test_start_warns_for_each_undescribed_input_path_a_reads(self):
+        # Advice, never a refusal: the fake server describes neither input (live run 6z did not exercise this).
+        err = self.start(proxy_config(self.tmp, self.digest, tools={"pay_vendor": {"claim": "floor"}}))
+        self.assertIn("two-key: WARNING: mcp-proxy: pay_vendor: amount (the amount) has no description", err)
+        self.assertIn("two-key: WARNING: mcp-proxy: pay_vendor: vendor (a counterparty) has no description", err)
+
     def test_a_duplicate_upstream_tool_refuses_to_start(self):
         with self.assertRaisesRegex(ProxyConfigError, "upstream_duplicate_tool"):
             self.start(proxy_config(self.tmp, self.digest, variant="dupe"))

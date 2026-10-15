@@ -406,13 +406,13 @@ def field_mappings(spec: Mapping[str, Any]) -> dict:
     return {name: entry for name, entry in (spec.get("fields") or {}).items() if isinstance(entry, Mapping)}
 
 
-def rule_fields(rules: list) -> dict[str, str]:
-    """Each custom field a ``deny_if_fields`` rule reads, with the id of the first rule that reads it."""
-    out: dict[str, str] = {}
+def rule_fields(rules: list) -> dict[str, list[str]]:
+    """Each custom field a ``deny_if_fields`` rule reads, with the ids of every rule that reads it, in rule order."""
+    out: dict[str, list[str]] = {}
     for rule in rules:
         body = rule.get("deny_if_fields") if isinstance(rule, Mapping) else None
         for name in sorted(body or {}):
-            out.setdefault(name, str(rule.get("id")))
+            out.setdefault(name, []).append(str(rule.get("id")))
     return out
 
 

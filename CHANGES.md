@@ -69,6 +69,7 @@
 - [Live harness: run 6 referee fixes, quorum cases (for re-run 6z) — 2026-10-15](#live-harness-run-6-referee-fixes-quorum-cases-for-re-run-6z--2026-10-15)
 - [Docs: the run 6 follow-ups everywhere they apply — 2026-10-15](#docs-the-run-6-follow-ups-everywhere-they-apply--2026-10-15)
 - [Undescribed inputs: checked for every field Path A reads, at sign-off and start — 2026-10-15](#undescribed-inputs-checked-for-every-field-path-a-reads-at-sign-off-and-start--2026-10-15)
+- [Run 6z follow-ups: clearer refusals, harness fixes, judge memory — 2026-10-15](#run-6z-follow-ups-clearer-refusals-harness-fixes-judge-memory--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2252,6 +2253,10 @@ passed the maintainer's security review before it was written.
   the same rules sign to the same bytes, and `authorize` and `invoke`
   without `facts=` behave as before.
 - A v3 constitution needs this release (0.5.0) or later; 0.4.0 refuses it.
+- Code that reads a signed constitution's `tool_specs.<tool>.fields`
+  itself: an entry may now be the string `not_applicable`, not only a
+  mapping (live run 6z: a referee script crashed on it). Use
+  `two_key.fields.field_mappings(spec)` for the mapped entries only.
 - To turn an argument field into a caller fact: add `source: caller` to its
   `fields:` entry; map it in each tool as `{source: caller}` (or keep its
   `json_path` beside `source: caller` if the tool still needs the value);
@@ -2548,3 +2553,48 @@ the drafter warning should not be about payees and amounts only.
 - Tests: `tests/test_mcp_draft.py` (a nested folder id, an enum, a caller
   fact, a payload path, an undeclared path). Docs: HOWTO (MCP step 1, the
   start-up warnings), THREAT_MODEL, AGENTS.md, llms.txt.
+
+## Run 6z follow-ups: clearer refusals, harness fixes, judge memory — 2026-10-15
+
+On branch `working`. No authorization change. From GrokBot's run 6z report
+(36 cases: 34 PASS, 2 INCONCLUSIVE, 0 FAIL; school recheck 4 of 4).
+
+- `two-key sign-constitution` prints `two-key: sign-constitution: refused:
+  ...` and exits 1 on a constitution error, instead of a traceback.
+- The field-decision refusal names every missing tool and field (it stopped
+  at eight, so the school constitution showed eight of eleven), and every
+  rule that reads the field (`(rules 'a', 'b')`; it named only the first).
+  `two_key.fields.rule_fields` returns every rule id per field.
+- The undescribed-input warning has the same words at draft time, at
+  `--constitution`, and at proxy start (`two_key.mcp_proxy.core.
+  undescribed_advice`); a test covers the start-up warning.
+- `--envelope-format` help names all four 0.5.0 features that sign as v3.
+- Docs: each ballot is one stateless request at temperature 0. A judge that
+  keeps memory across ballots (a persistent agent, a chat with saved memory)
+  lets text the agent wrote in one call reach the vote on another, outside
+  the ledger; give each judge a fresh context per ballot (JUDGES_AND_QUORUM
+  "What a judge is" and the operator checklist, THREAT_MODEL assumptions,
+  HOWTO "Judges", llms.txt). JUDGES_AND_QUORUM's "both paths run" line names
+  the `derive_failed:` exception.
+- Live harness:
+  - A reply byte-identical to an earlier run's is a note in RESULTS.md, not
+    a referee incident: a model repeats itself on a nearly identical request
+    (6z's four matches were short ballots and messages the instruction
+    dictates). The notes also count requests both judges answered word for
+    word alike, which is the same model, not shared memory.
+  - Every pass scans `relay/`, `logs/`, and `constitution/` for the loopback
+    credentials it made and for private-key text (`credential_in_run_files`,
+    file names only). The brief's grep for those variables could not work:
+    the harness makes them new on every pass.
+  - A run's top-level outputs (`relay/`, `logs/`, `constitution/`,
+    `RESULTS.md`, `results.json`) are git-ignored until moved into
+    `run<N>/`; RELAY.md lists `constitution/` among the files to move.
+  - Cases: the caller-fact case plays INCOMPETENT (a LEGIT agent declines the
+    mismatch, so the deny was never reached); the planted unoffered-tool case
+    counts any Two-Key deny of the export, since the agent never sees that
+    tool; the scripted quorum cases pay their own invoice (PVP-5561), not the
+    one an agent case pays. The billing prose describes the PO check in
+    plain words, not by field name (finding 3).
+  - `report.py` matches executed arguments exactly (a case-folded match
+    would hide a `case: exact` failure) and titles RESULTS.md by run-neutral
+    name with the repository head.

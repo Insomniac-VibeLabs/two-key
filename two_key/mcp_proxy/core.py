@@ -139,6 +139,21 @@ def _read_paths(spec: Mapping[str, Any]) -> list[tuple[str, str]]:
     return out
 
 
+_ADVICE = {
+    "the amount": ("the agent may write words, another currency, or cents. Describe the unit in the server, e.g. "
+                   "'Amount in US dollars, a number such as 271.85'"),
+    "a counterparty": ("the agent may write a display name instead of the exact id the allow list needs. Describe "
+                       "the format in the server, e.g. 'Vendor id: the bare domain, such as vendor.example'"),
+}
+_GENERIC_ADVICE = ("the agent sees only its name and type and guesses the format. Describe it in the server: the exact "
+                   "form Two-Key compares, e.g. 'Folder id, exactly as the directory shows it'")
+
+
+def undescribed_advice(what: str) -> str:
+    """The text after "<path> (<what>)": the same at draft time, at ``--constitution``, and at proxy start."""
+    return "has no description in the upstream schema; " + _ADVICE.get(what, _GENERIC_ADVICE)
+
+
 def undescribed_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str, Any]]) -> list[str]:
     """One line per argument Path A reads that the upstream schema shows the agent with no ``description`` and no
     ``enum``. Behind the proxy that schema is the agent's only format guide, whatever the data: a payee, a folder
@@ -156,9 +171,7 @@ def undescribed_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str
             text = node.get("description")
             if (isinstance(text, str) and text.strip()) or (isinstance(node.get("enum"), list) and node["enum"]):
                 continue
-            out.append(f"{tool}: {path} ({what}) has no description in the upstream schema; the agent sees only "
-                       "its name and type and guesses the format. Describe it in the server (the exact form "
-                       "Two-Key compares, such as 'Vendor id: the bare domain, e.g. vendor.example')")
+            out.append(f"{tool}: {path} ({what}) {undescribed_advice(what)}")
     return out
 
 

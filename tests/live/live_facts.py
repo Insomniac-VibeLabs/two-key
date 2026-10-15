@@ -9,6 +9,7 @@ own check. The hook looks the invoice up by id; it never echoes an argument the 
 PO_BOOK = {
     "AMS-30871": ("alpine-medsupply.example", 271.85, True),
     "PVP-5530": ("poudre-power.example", 198.63, True),
+    "PVP-5561": ("poudre-power.example", 204.17, True),        # the scripted quorum cases' own bill
     "AMS-81352": ("alpine-medsupply.example", 388.20, False),
     "CPL-6620": ("clearpath-labs.example", 54.75, True),
     "RMW-4410": ("rockymtn-medwaste.example", 742.18, True),
