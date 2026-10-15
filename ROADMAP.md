@@ -7,8 +7,10 @@ promise: the order may change, and version numbers are targets, not dates.
 
 <!-- toc -->
 - [The path to 1.0](#the-path-to-10)
+- [Where we are (2026-10-15)](#where-we-are-2026-10-15)
 - [Ground rules](#ground-rules)
 - [0.6.0: DLP and AV hooks](#060-dlp-and-av-hooks)
+  - [Plan to 0.6.0 (2026-10-15)](#plan-to-060-2026-10-15)
 - [0.7.0: Ledger export for SIEM](#070-ledger-export-for-siem)
 - [1.0.0: Review and release](#100-review-and-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
@@ -42,7 +44,7 @@ flowchart LR
 | --- | --- | --- |
 | 0.4.0 | This repository and the package name `two-key` (0.3.1 under the new name) | Released, tag `v0.4.0` |
 | 0.5.0 | MCP adapter: `two-key mcp-proxy`, `two-key mcp-draft-specs`, caller-supplied facts, and the guard core | Released, tag `v0.5.0` |
-| 0.6.0 | DLP and antivirus hooks that call external scanners; judge connection reuse (#6) | Next |
+| 0.6.0 | DLP and antivirus hooks that call external scanners; judge connection reuse (#6) | Next: planned 2026-10-15, design review first |
 | 0.7.0 | Ledger export for a SIEM | Planned |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
@@ -58,6 +60,37 @@ CHANGES.md keeps that record. Released versions are under "Shipped" below.
 Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
 in the same release.
+
+## Where we are (2026-10-15)
+
+- **0.5.0 is released**: tag `v0.5.0` on `main` (PR #11). `working` carries on
+  from the same code; the next changes land there.
+- **Checks on `main`**: tests (Python 3.10 to 3.12, 722 tests), build,
+  coverage, bandit, CodeQL, Semgrep, and the SonarCloud quality gate all pass.
+- **Live testing**: run 6, then re-run 6z on its follow-ups: 36 cases, 34 PASS,
+  2 INCONCLUSIVE (case design, since fixed), 0 FAIL; the school constitution
+  recheck passed 4 of 4. The relayed results still need their own test
+  branches (`test/live-run6-...`, `test/live-run6z-...`).
+- **Open scanner findings**, all triaged:
+  - Semgrep, 11 on `main`, none a vulnerability. Eight are
+    `insecure-file-permissions` on directories set to `0o700` (owner only,
+    the strictest useful mode; the rule's suggested `0o644` would make key
+    directories world-readable). Two are `non-literal-import` of the
+    operator's own hooks named in `judges.yaml` and `proxy.yaml` (trusted
+    configuration, THREAT_MODEL "Assumptions"). One is
+    `httpsconnection-detected` on a connection that already verifies
+    certificates and host names (`ssl.create_default_context()`). Step 1 of
+    the 0.6.0 plan suppresses each with its reason, so a new finding stands
+    out.
+  - DeepSource: none open (ten placeholder "secrets" in tests and docs were
+    marked false positives).
+  - SonarCloud: the gate passes; older functions still exceed its cognitive
+    complexity limit (maintainability, not gating).
+- **Issues**: #2 (the reference wrapper) and #10 (field decisions) shipped in
+  0.5.0 and can be closed. #6 is in 0.6.0, #1 before 1.0, and #3 (repository
+  setup after the move) has maintainer settings left to confirm.
+- **Branches**: `main` and `working`. `mcp-proxy` is merged into `main`
+  and can be deleted.
 
 ## Ground rules
 
@@ -98,6 +131,61 @@ in the same release.
   lock-guarded pool keyed by origin, or document fresh connections plainly.
   No security impact; it matters once the MCP proxy puts Two-Key on every
   tool call.
+
+### Plan to 0.6.0 (2026-10-15)
+
+In order. Steps 2 to 4 change what reaches the judges and what the ledger
+records, so they get the maintainer's security review before code, as
+AGENTS.md requires.
+
+1. **Housekeeping** (no behaviour change):
+   - Suppress the 11 Semgrep findings line by line
+     (`# nosemgrep: <rule-id>`), each with its reason, and give the
+     `judges.yaml` callback hook the same `module:function` check the proxy's
+     fact hooks already have.
+   - Move the CodeQL action to v4 before v3's deprecation (December 2026),
+     and take Dependabot's action updates.
+   - Close #2 and #10, finish #3, delete the merged `mcp-proxy` branch, and
+     push the run 6 and 6z results to their test branches.
+2. **Design note for the hook** (for the maintainer's review). It settles:
+   - **How third-party software plugs in.** The maintainer's intent is an
+     optional hook for an outside product. Proposed:
+     - one `Inspector` interface in the core;
+     - three ways to reach a scanner: an in-process Python hook
+       (`module:function`, like a fact hook), ICAP (RFC 3507, the protocol
+       most commercial DLP and antivirus products already speak), and
+       ClamAV's `clamd` socket;
+     - no scanning engine in this package.
+   - **Fail-closed rules:** a timeout, an error, or no result is a deny.
+   - **What is scanned:** the arguments the signed spec names (payload
+     paths and files), before the judges see any argument text.
+   - **How a result reaches Path A:** as a fact such as
+     `carries_secret` or `malware_found`, so a leak is denied by rule, not
+     only by the judges (live run 6).
+   - **What the ledger records:** the scanner's name and version, its
+     verdict, and a digest, never the content.
+   - **Configuration:** where it lives (`proxy.yaml` `tools.<id>.inspect`
+     and a `Guard` argument).
+3. **Build the core**: the interface, the call order (after Path A can
+   read the call, before Path B), the ledger entry, and the Guard and proxy
+   wiring. Tests stay network-free, with fake ICAP and `clamd` servers on
+   loopback.
+4. **Reference adapters**: ClamAV (`clamd`), an ICAP client, and a secret
+   and pattern scanner run as an external command. Tests use the EICAR
+   test string and fake secrets.
+5. **Judge connection reuse (#6)**: a lock-guarded pool keyed by origin,
+   with a test that a second round reuses the connection.
+6. **Docs in the same release**: HOWTO (a scanner section and an example),
+   THREAT_MODEL (the scanner as a new boundary: its trust, timeouts, and
+   what it sees), SCOPE, FIT, COMPARISON (DLP row), README, llms.txt,
+   AGENTS.md, and CHANGES with upgrade notes.
+7. **Live run 7** (the clinic harness plus a scanner):
+   - the diagnosis and card-number cases (C35, C36) should be denied by
+     Path A, not left to the judges;
+   - add a file payload carrying EICAR;
+   - add a scanner that is down or slow, which must deny.
+8. **Release 0.6.0**: version, `uv.lock` (uv 0.13.0), a PR into `main`
+   once every check passes, then the `v0.6.0` tag and release notes.
 
 ## 0.7.0: Ledger export for SIEM
 

@@ -74,6 +74,7 @@
 - [PR #11 review: SonarCloud maintainability findings — 2026-10-15](#pr-11-review-sonarcloud-maintainability-findings--2026-10-15)
 - [PR #11 review: no raw bidirectional characters — 2026-10-15](#pr-11-review-no-raw-bidirectional-characters--2026-10-15)
 - [Semgrep findings printed to the job log — 2026-10-15](#semgrep-findings-printed-to-the-job-log--2026-10-15)
+- [Roadmap: where we are, and the plan to 0.6.0 — 2026-10-15](#roadmap-where-we-are-and-the-plan-to-060--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2690,4 +2691,24 @@ On branch `working`. CI only.
   and the findings now also print to the job log as text, so they can be
   read without code-scanning access (`--sarif --output` printed only a
   count).
+
+## Roadmap: where we are, and the plan to 0.6.0 — 2026-10-15
+
+On branch `working`. Docs only; nothing removed.
+
+- ROADMAP "Where we are (2026-10-15)": 0.5.0 released (tag `v0.5.0`), the
+  checks on `main`, live runs 6 and 6z, the open scanner findings and how
+  each was triaged, open issues, and branches.
+- ROADMAP "Plan to 0.6.0": housekeeping first (suppress the 11 Semgrep
+  findings with their reasons, the CodeQL action to v4, close shipped
+  issues), then a design note for the scanner hook for the maintainer's
+  review (an `Inspector` interface reached in-process, over ICAP, or through
+  `clamd`; fail-closed; the result to Path A as a fact; digests only in the
+  ledger), the core and adapters, judge connection reuse (#6), docs, live
+  run 7, and the release. The 0.6.0 status in ROADMAP and README says so.
+- Semgrep's 11 findings on `main`, triaged: 8 `insecure-file-permissions`
+  on directories set to `0o700` (owner only; the rule's `0o644` would be
+  weaker), 2 `non-literal-import` of operator-configured hooks (trusted
+  configuration), and 1 `httpsconnection-detected` on a connection that
+  verifies certificates and host names. None is a vulnerability.
 
