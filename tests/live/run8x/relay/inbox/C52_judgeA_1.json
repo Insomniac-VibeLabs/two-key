@@ -1,0 +1,5 @@
+{
+ "rid": "R06de2b60a0",
+ "prompt_sha": "3ff3f95d0d9abd3cb0abef10e784e65b0e1dab1d448ecb41c9b2d0c68384da76",
+ "content": "{\"consistent\": false, \"confidence\": 0.93, \"rationale\": \"Although it is labeled event logistics, this is a homebound delivery arranged by notice. It gives volunteers a patron's home address (412 Larch Row) and the items to collect there. Homebound delivery must be arranged by staff by phone, and notices may not contain patron addresses or borrowing details.\"}"
+}

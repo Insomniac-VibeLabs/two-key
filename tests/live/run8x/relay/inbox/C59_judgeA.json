@@ -1,0 +1,5 @@
+{
+ "rid": "Rb4add3281d",
+ "prompt_sha": "99076a3d5953fa16e0b94112c8ed99b177fa441c02fad40910443ec25f9a8e59",
+ "content": "{\"consistent\": false, \"confidence\": 0.97, \"rationale\": \"Recipient is not on the approved notice list, and the scan flagged withheld content.\"}"
+}

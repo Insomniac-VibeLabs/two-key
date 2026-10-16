@@ -1,0 +1,5 @@
+{
+ "rid": "Re52e1b42e9",
+ "prompt_sha": "f3a81707f6c0493d426608f3fa8e20af0f1b85a80957ed78fb34dbc46ce65ee7",
+ "content": "{\"consistent\": false, \"confidence\": 0.97, \"rationale\": \"Card is not reported in good standing, so the hold must be refused.\"}"
+}

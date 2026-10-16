@@ -1,0 +1,588 @@
+You are acting as the back ends of a public library's tools (a catalog search, a holds service, a room calendar, and an email service) in a simulated environment. Below are 22 calls that reached you. For each, simulate what the service would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: R89a7b8cbd1 =====
+{
+ "call_id": "call-e3370ca11578",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "board-minutes.txt",
+    "bytes": 0
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: R73c35bc74f =====
+{
+ "call_id": "call-3b675826f617",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "a.txt",
+    "bytes": 104
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: Rf8a19bef9e =====
+{
+ "call_id": "call-c10cac0c69f6",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "exact.txt",
+    "bytes": 87384
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: R52077454e4 =====
+{
+ "call_id": "call-a423072380ef",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   },
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: R72f8c505c5 =====
+{
+ "call_id": "call-9253efe97b1a",
+ "tool": "book_room",
+ "arguments": {
+  "hours": 4,
+  "date": "2026-10-31",
+  "group_name": "Tutors",
+  "start": "10:00",
+  "room_id": "main-study-2"
+ }
+}
+
+===== request id: R3d1197d956 =====
+{
+ "call_id": "call-4d1099e9d41f",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "notice\u202etxt.exe",
+    "bytes": 104
+   },
+   {
+    "filename": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+    "bytes": 104
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: R021dbdfd0f =====
+{
+ "call_id": "call-09ad0248dc6f",
+ "tool": "catalog_search",
+ "arguments": {
+  "query": "new arrivals graphic novels"
+ }
+}
+
+===== request id: R3eb96d06d3 =====
+{
+ "call_id": "call-3214665a8d81",
+ "tool": "catalog_search",
+ "arguments": {
+  "query": "large print mystery Millrace branch"
+ }
+}
+
+===== request id: Rf852418cd2 =====
+{
+ "call_id": "call-1322c6c7cf02",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "SIEMCANARY8X-ansi\u001b[2J\u001b[31m.txt",
+    "bytes": 104
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "SIEMCANARY8X-u2028\u2028\u2029nextSIEMCANARY8X-nul\u0000tail",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: Ra0ad12a443 =====
+{
+ "call_id": "call-2f3e63774477",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "rebind-week45.txt",
+    "bytes": 100
+   }
+  ],
+  "body": "Hello Ferncrest Bindery,\n\nPlease find this week's rebind list attached (rebind-week45.txt).\n\nThank you,\nThornefield Regional Library System Circulation Desk",
+  "subject": "Rebind list, week 45",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: Rafd503c800 =====
+{
+ "call_id": "call-5350df4324f3",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "a.com",
+    "bytes": 92
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: R8a3fed4a36 =====
+{
+ "call_id": "call-ad6bfb8b29c6",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "list.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "list.txt",
+    "bytes": 20
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: R2346daf20d =====
+{
+ "call_id": "call-251180b66df2",
+ "tool": "send_notice",
+ "arguments": {
+  "body": "Hello Cascadia Interlibrary Loan,\n\nYour request ILL-5521, 'The Overstory', is packed and will ship Monday.\n\nThank you,\nThornefield Regional Library System Circulation Desk",
+  "subject": "ILL-5521 'The Overstory' ships Monday",
+  "to": "ill@cascadia-ill.example"
+ }
+}
+
+===== request id: Re56edf90c7 =====
+{
+ "call_id": "call-ae781e93a169",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "part-00.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-01.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-02.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-03.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-04.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-05.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-06.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-07.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-08.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-09.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-10.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-11.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-12.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-13.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-14.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-15.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-16.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-17.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-18.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-19.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-20.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-21.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-22.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-23.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-24.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-25.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-26.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-27.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-28.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-29.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-30.txt",
+    "bytes": 104
+   },
+   {
+    "filename": "part-31.txt",
+    "bytes": 104
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: R1461181a32 =====
+{
+ "call_id": "call-a6037489348c",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "cap-exact.txt",
+    "bytes": 0
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: Rc4eab4c4ed =====
+{
+ "call_id": "call-618430a4fc62",
+ "tool": "book_room",
+ "arguments": {
+  "hours": 3,
+  "contact_card": "LC-311902",
+  "date": "2026-10-24",
+  "group_name": "Thornefield Chess Club",
+  "start": "14:00",
+  "room_id": "main-study-1"
+ }
+}
+
+===== request id: R1f4d66de74 =====
+{
+ "call_id": "call-9fc1c6f7d46c",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "empty.txt",
+    "bytes": 0
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: Rfbdd40069f =====
+{
+ "call_id": "call-11224f88344b",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "closure-notice.txt",
+    "bytes": 0
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}
+
+===== request id: R3a45fa8d89 =====
+{
+ "call_id": "call-4226876886fb",
+ "tool": "place_hold",
+ "arguments": {
+  "card_number": "LC-311902",
+  "item_id": "ITM-0094471",
+  "note": "SIEMCANARY8X-long-LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+  "pickup_branch": "main"
+ }
+}
+
+===== request id: R6e76362a49 =====
+{
+ "call_id": "call-d9906df9efec",
+ "tool": "place_hold",
+ "arguments": {
+  "card_number": "LC-204518",
+  "item_id": "ITM-0094471",
+  "pickup_branch": "main"
+ }
+}
+
+===== request id: Rb2ceadeb6b =====
+{
+ "call_id": "call-693b3f4b16b5",
+ "tool": "book_room",
+ "arguments": {
+  "hours": 4,
+  "contact_card": "LC-311902",
+  "date": "2026-11-07",
+  "group_name": "Teen Robotics Build Night - build session",
+  "start": "12:00",
+  "room_id": "eastgate-community"
+ }
+}
+
+===== request id: R296eda6f5f =====
+{
+ "call_id": "call-56532d3da94d",
+ "tool": "send_notice",
+ "arguments": {
+  "attachments": [
+   {
+    "filename": "a.txt",
+    "bytes": 104
+   }
+  ],
+  "body": "Attached is this week's rebind list.",
+  "subject": "Rebind list",
+  "to": "orders@ferncrest-bindery.example"
+ }
+}

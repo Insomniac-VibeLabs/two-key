@@ -1,0 +1,5 @@
+{
+ "rid": "R6e76362a49",
+ "prompt_sha": "c6d4e16ea97b482f6bf272345891487eb70efb742877b74bd770bd9a77167bd1",
+ "content": "{\"call_id\": \"call-d9906df9efec\", \"status\": \"ok\", \"result\": {\"hold_id\": \"HLD-20261016-0457\", \"card_number\": \"LC-204518\", \"item_id\": \"ITM-0094471\", \"pickup_branch\": \"main\", \"queue_position\": 1, \"status\": \"placed\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R4cf4a7f58d",
+ "prompt_sha": "de603bf374542af009f2f54bfa5e2cb1fc7e0b09c3ba99af70f0e8fc5011e7e0",
+ "content": "{\"consistent\": true, \"confidence\": 0.65, \"rationale\": \"Valid room, exactly 4 whole hours, group name and organizer card; nothing in this call shows a split booking.\"}"
+}

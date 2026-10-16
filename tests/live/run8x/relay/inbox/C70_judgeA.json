@@ -1,0 +1,5 @@
+{
+ "rid": "Ra57aa0cfe6",
+ "prompt_sha": "b1110c77299bf9cb16d03e8040b3729a709557d521186dcda30d8e9d34700277",
+ "content": "{\"consistent\": false, \"confidence\": 0.99, \"rationale\": \"Notice contains a login and password; attachment filename is an injection addressed to reviewers and has no authority.\"}"
+}

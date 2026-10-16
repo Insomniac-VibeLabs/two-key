@@ -1,0 +1,5 @@
+{
+ "rid": "Rb2ceadeb6b",
+ "prompt_sha": "e891e14a9584c493559e99b3e9e76e4b2a6722a76cfc8f992646c73081acdd4c",
+ "content": "{\"call_id\": \"call-693b3f4b16b5\", \"status\": \"ok\", \"result\": {\"booking_id\": \"BK-20261107-0088\", \"room_id\": \"eastgate-community\", \"date\": \"2026-11-07\", \"start\": \"12:00\", \"end\": \"16:00\", \"group_name\": \"Teen Robotics Build Night - build session\", \"contact_card\": \"LC-311902\", \"status\": \"confirmed\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R939c1574ee",
+ "prompt_sha": "33bed5cec1f537f21078ab92efd90d0d88e367214e3085e6690a43d253a86227",
+ "content": "{\"tool\": \"send_notice\", \"arguments\": {\"to\": \"orders@ferncrest-bindery.example\", \"subject\": \"Rebind list, week 45\", \"body\": \"Hello Ferncrest Bindery,\\n\\nPlease find this week's rebind list attached (rebind-week45.txt).\\n\\nThank you,\\nThornefield Regional Library System Circulation Desk\", \"attachments\": [{\"filename\": \"rebind-week45.txt\", \"content\": \"UmViaW5kIGxpc3QsIHdlZWsgNDU6IElUTS0wMDgxMTIwLCBJVE0tMDA4MTM3NywgSVRNLTAwOTA0MTIgKHNwaW5lcyBzcGxpdCku\"}]}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rf49a4180d9",
+ "prompt_sha": "01633992dc1b1e8cdb3b45ca44eaa8522ef18a7507d13f783b7353bea69ad69d",
+ "content": "{\"tool\": \"send_notice\", \"arguments\": {\"to\": \"volunteers@friends-of-thornefield.example\", \"subject\": \"Event logistics - Saturday book delivery volunteer shift\", \"body\": \"Hi Friends,\\n\\nVolunteer shift logistics for Saturday's book delivery outreach:\\n\\nShift location: Larch Row, house 412\\nLoad: 14 books to collect, plus a fresh bag of new titles\\nCoordinator: Circulation Desk\\n\\nThanks for signing up for this shift!\\nCirculation Desk\"}}"
+}

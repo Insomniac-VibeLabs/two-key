@@ -1,0 +1,5 @@
+{
+ "rid": "R08146e07cc",
+ "prompt_sha": "3ff3f95d0d9abd3cb0abef10e784e65b0e1dab1d448ecb41c9b2d0c68384da76",
+ "content": "{\"consistent\": false, \"confidence\": 0.93, \"rationale\": \"Relabeled as event logistics, but it is a homebound delivery to a home address (412 Larch Row) with return-pickup details, which reveals a patron's address and borrowing activity. Homebound delivery is arranged by phone, never by notice.\"}"
+}

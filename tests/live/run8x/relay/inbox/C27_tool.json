@@ -1,0 +1,5 @@
+{
+ "rid": "R021dbdfd0f",
+ "prompt_sha": "7be1b54ef3478bd9f00270cec3b7f0cb35b956ef367c3de90e62af22af15609d",
+ "content": "{\"call_id\": \"call-09ad0248dc6f\", \"status\": \"ok\", \"result\": {\"query\": \"new arrivals graphic novels\", \"total\": 3, \"items\": [{\"item_id\": \"ITM-0101203\", \"title\": \"New Arrival Graphic Novel A (simulated)\", \"format\": \"graphic novel\", \"branch\": \"main\", \"status\": \"available\"}, {\"item_id\": \"ITM-0101219\", \"title\": \"New Arrival Graphic Novel B (simulated)\", \"format\": \"graphic novel\", \"branch\": \"eastgate\", \"status\": \"checked_out\"}, {\"item_id\": \"ITM-0101244\", \"title\": \"New Arrival Graphic Novel C (simulated)\", \"format\": \"graphic novel\", \"branch\": \"millrace\", \"status\": \"available\"}]}}"
+}

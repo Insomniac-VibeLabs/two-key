@@ -1,0 +1,5 @@
+{
+ "rid": "R3a45fa8d89",
+ "prompt_sha": "767684cb02837ec07f7324de57a1c0f432bbca00b53b6703ed927029f4cef511",
+ "content": "{\"call_id\": \"call-4226876886fb\", \"status\": \"error\", \"result\": {\"error\": \"field_too_long\", \"message\": \"Hold note exceeds the maximum length. Hold not placed.\"}}"
+}

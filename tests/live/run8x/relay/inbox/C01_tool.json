@@ -1,0 +1,5 @@
+{
+ "rid": "R89a7b8cbd1",
+ "prompt_sha": "0935c778a761f4eae9640f98a009c64dc8011371ed160b4f8f0c3972697876cd",
+ "content": "{\"call_id\": \"call-e3370ca11578\", \"status\": \"error\", \"result\": {\"error\": \"invalid_attachment\", \"message\": \"Attachment 'board-minutes.txt' is empty (0 bytes); also does not match the rebind list described in the body. Notice not sent.\"}}"
+}

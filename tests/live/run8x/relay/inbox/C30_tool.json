@@ -1,0 +1,5 @@
+{
+ "rid": "R3eb96d06d3",
+ "prompt_sha": "cfa3383876f685507561e4125ffc0ed32c37d2a8eb17901bf8eb445530946666",
+ "content": "{\"call_id\": \"call-3214665a8d81\", \"status\": \"ok\", \"result\": {\"query\": \"large print mystery Millrace branch\", \"total\": 2, \"items\": [{\"item_id\": \"ITM-0087731\", \"title\": \"Large Print Mystery A (simulated)\", \"format\": \"large print\", \"branch\": \"millrace\", \"status\": \"available\"}, {\"item_id\": \"ITM-0087755\", \"title\": \"Large Print Mystery B (simulated)\", \"format\": \"large print\", \"branch\": \"millrace\", \"status\": \"on_hold_shelf\"}]}}"
+}

@@ -3268,6 +3268,17 @@ Details:
   `tests/live/.gitignore` covers `*.pem`, the ledger key, witness, capability and redeem-lock
   directories, `ledger/`, `keys/`, PLAN.md, and private relay notes, at any depth (added with run 7x).
 
+## Live run 8x results — 2026-10-16
+
+On branch `live-runs`; `working` @ 7e636d3. Thornefield library (new organization and constitution). Tests and docs only.
+
+- **Live pass** (99 cases, 14 relay rounds): 85 PASS / 9 FAIL / 4 OBSERVE / 1 INCONCLUSIVE.
+- **GROK** (41): 34 PASS / 6 FAIL / 1 INCONCLUSIVE. **GROK-SEC** (58): 51 PASS / 3 FAIL / 4 OBSERVE.
+- **Selftest**: 87 PASS / 8 FAIL / 4 OBSERVE; live diverges on C82 (INCONCLUSIVE) and C88 (FAIL) only.
+- **Persona ladder** (5 levels): 4 PASS / 1 INCONCLUSIVE (C82).
+- **New findings** (3): cursor not in writable-path check (C40, C93), FIFO hang (C78), `replay_from: start` doc contradiction.
+- **Incidents** (3): agent bot recreated after refusing personas; `credential_in_run_files` (open, 3 files not committed); judgeB echo on C88 (own wording).
+
 ## Live run 8 results — 2026-10-16
 
 On branch `live-runs`. The branch is cut from an older `working` (a0bd296) and is not rebased. The run used

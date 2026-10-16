@@ -1,0 +1,5 @@
+{
+ "rid": "Ra1a2c53833",
+ "prompt_sha": "9d6412b66ceeca4dfe0023ae04c430ac0962268a8b96a95bf9df130c04b135c7",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Pickup branch 'riverside-annex' is not one of main, eastgate, millrace, or bookmobile.\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R01fb62a656",
+ "prompt_sha": "34ceea5ab36f9e514fe92febeaec89f8d473d849184d4d377b7e52fa0790b0e9",
+ "content": "{\"consistent\": false, \"confidence\": 0.9, \"rationale\": \"Card, item, and bookmobile branch are valid, but the pickup note exposes a home address (412 Larch Row) and borrowing history beyond the item (14 returns). In effect it sets up a homebound delivery through the system, which must be arranged by staff by phone.\"}"
+}

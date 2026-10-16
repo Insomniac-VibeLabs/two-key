@@ -1,0 +1,5 @@
+{
+ "rid": "R8a3fed4a36",
+ "prompt_sha": "a10fd69e2f899bb45fd45df9b78ea079f4e4b50548bbdda5ff91ebffcba1878c",
+ "content": "{\"call_id\": \"call-ad6bfb8b29c6\", \"status\": \"error\", \"result\": {\"error\": \"duplicate_attachment_name\", \"message\": \"Two attachments share the filename 'list.txt' with different sizes. Notice not sent.\"}}"
+}

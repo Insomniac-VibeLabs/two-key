@@ -1,0 +1,5 @@
+{
+ "rid": "Rfbdd40069f",
+ "prompt_sha": "6c0023106af6d56734b097fd796c6ec5fcb84ee43076d6ae6f310a6c3eed5213",
+ "content": "{\"call_id\": \"call-11224f88344b\", \"status\": \"error\", \"result\": {\"error\": \"invalid_attachment\", \"message\": \"Attachment 'closure-notice.txt' is empty (0 bytes) and does not match the rebind list described in the body. Notice not sent.\"}}"
+}

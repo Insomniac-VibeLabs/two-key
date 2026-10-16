@@ -1,0 +1,5 @@
+{
+ "rid": "Re56edf90c7",
+ "prompt_sha": "4aeedb44844b1a709a62a4c3e4cf15fe9339f7c11a98547bde7bb5e9e0c02ed1",
+ "content": "{\"call_id\": \"call-ae781e93a169\", \"status\": \"error\", \"result\": {\"error\": \"too_many_attachments\", \"message\": \"32 attachments exceeds the limit. Notice not sent.\"}}"
+}
