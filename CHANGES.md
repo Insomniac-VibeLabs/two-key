@@ -104,6 +104,7 @@
 - [CI: two tests looked at the machine, one at the drive (0.7.0) — 2026-10-16](#ci-two-tests-looked-at-the-machine-one-at-the-drive-070--2026-10-16)
 - [Live harness: run 8 (four personas, the SIEM copy, the paths 0.6.0 refactored) — 2026-10-16](#live-harness-run-8-four-personas-the-siem-copy-the-paths-060-refactored--2026-10-16)
 - [Docs: an agent on another machine, over SSH — 2026-10-16](#docs-an-agent-on-another-machine-over-ssh--2026-10-16)
+- [Live harness: what a pass does not cover — 2026-10-16](#live-harness-what-a-pass-does-not-cover--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3553,3 +3554,8 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   three signed tools, one allowed call, and the expected denies. The
   `sshd_config` block was checked with `sshd -t` and `sshd -T`; sshd itself
   was not run in the test container.
+## Live harness: what a pass does not cover — 2026-10-16
+
+- `RESULTS.md` and `tests/live/RELAY.md` now say it plainly: every endpoint of a pass is on one machine, on
+  loopback, so a pass says nothing about a monitored agent that connects from another machine. That deployment is
+  the one the operator expects to be the common one, and it needs a live run of its own.

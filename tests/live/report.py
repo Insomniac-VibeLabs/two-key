@@ -293,6 +293,11 @@ def write(base, cases, results, entries, effects, log, pending=(), siem=()):
            "The proxy sent a copy of every ledger entry to the harness's own collector over TLS on loopback "
            "(logs/siem_events.jsonl). Argument values, proposal text, the derived amount, counterparties, and "
            "custom field values are not in the allowlist, so none of them should appear in an event.", ""] + siem_lines
+    md += ["", "## What this pass does not cover", "",
+           "Every endpoint here is on one machine, on loopback: the proxy, the upstream server, the judges, the "
+           "scanner, and the SIEM collector. It says nothing about a monitored agent that connects from another "
+           "machine, which is the deployment the operator expects to be the common one and which needs a live run "
+           "of its own (2026-10-16)."]
     scans = [x for x in log if x["kind"] == "scanner_request"]
     md += ["", f"Ledger entries: {len(entries)}; calls that reached the system of record: {len(effects)}; "
                f"parts the scanner received: {len(scans)} "

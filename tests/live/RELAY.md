@@ -35,6 +35,13 @@ that followed it, and some antivirus products match it there. The logs are writt
 run directory is moved, `python3 tests/live/harness.py --mask-run tests/live/run8` masks the rest and writes
 `MASKED.md` listing what it changed. Run it before committing.
 
+## What a pass does not cover
+
+Every endpoint is on one machine, on loopback: the proxy, the upstream server, the judges, the scanner, and the
+SIEM collector. A monitored agent that connects from another machine is the deployment the operator expects to be
+the common one, and no live run has covered it yet (2026-10-16). `RESULTS.md` says so too, so a reader of the
+results does not take the pass for more than it is.
+
 ## Before the first round
 
 ```bash
