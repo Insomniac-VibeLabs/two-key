@@ -1,6 +1,9 @@
 # Threat model
 
-This is the design model for `two-key` 0.5.0. Tag `v0.5.0` on `main` is the tagged release; `v0.4.0` renamed the package and its formats. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+This is the design model for `two-key` 0.6.0. Tag `v0.6.0` on `main` is the tagged release; `v0.5.0` is the one before, and `v0.4.0` renamed the package and its formats. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+0.6.0 adds Windows support (`two_key/_platform.py`), optional content scanning through the
+operator's antivirus or DLP product (`two_key/scan.py`), a start-up check for paths another
+account could change (`two_key/writable.py`), and judge connection reuse, described below.
 0.5.0 adds the MCP proxy (`two-key mcp-proxy`), the spec drafter
 (`two-key mcp-draft-specs`), caller-supplied facts (`source: caller`, constitution v3), and the
 guard core (`two_key/guard.py`), described below, and the run 6 follow-ups: every tool decides
@@ -135,7 +138,7 @@ the code wins, then this file should be corrected.
   The gateway never scans: with a content scanner configured, it takes the
   verdict from the token and hashes each file sent by path again
   (`file_changed`).
-- Two-Key to the content scanner (0.6.0, on `working`; docs/SCANNERS.md).
+- Two-Key to the content scanner (0.6.0; docs/SCANNERS.md).
   Optional. For each call to a tool the signed constitution marks (it maps
   the `scan` field), Two-Key sends the scanner every argument (keys the
   tool will not receive included), each declared file decoded or read from
@@ -525,7 +528,7 @@ claims to close.
   `FILE_FLAG_OPEN_REPARSE_POINT`, so a symlink or junction as the last part
   of the path is refused, as `O_NOFOLLOW` does on POSIX; a link earlier in
   the path is followed on every platform.
-- **Content scanning** (0.6.0, on `working`) is only as good as the
+- **Content scanning** (0.6.0) is only as good as the
   operator's product and its signatures. Under the default stance a
   scanner that is down lets calls through to the two keys (ledgered once,
   told to the judges); only the strict stance denies them. Monitor blocks
@@ -592,38 +595,31 @@ claims to close.
 - A vulnerability in a judge vendor's API.
 - Using this package as an MCP server, as user login, or as a DLP or
   antivirus product. It is none of those. The MCP proxy (0.5.0) sits in
-  front of the gateway, and the scanner hooks (0.6.0, on `working`) call
+  front of the gateway, and the scanner hooks (0.6.0) call
   the operator's own product; neither makes this package a server or a
   scanner. What a connected product detects or misses is out of scope.
 - Full per-value information-flow tracking, and a content classifier. A
   tool-spec floor is not a taint label. Scanning engines, external or
   permissioned-chain anchoring, and seed phrases are not here and are not
-  planned. Scanner hooks (0.6.0, on `working`), PKI with certificate recovery, and hybrid
-  signatures are in [ROADMAP.md](../ROADMAP.md). Key backup shipped in
-  0.3.0. See [SCOPE.md](SCOPE.md).
+  planned. Scanner hooks that call an external product shipped in 0.6.0. PKI with
+  certificate recovery and hybrid signatures are in [ROADMAP.md](../ROADMAP.md). Key backup
+  shipped in 0.3.0. See [SCOPE.md](SCOPE.md).
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md), in its order: the MCP adapter
-(0.5.0), DLP and antivirus hooks (0.6.0), the SIEM export (0.7.0), then 1.0;
-the rest come after 1.0. None of what follows is in a release yet, and
-nothing here describes current behavior except where an item says it is
-built. Each item is added to the sections above in the release that ships
-it. Key backup and custom Path A fields shipped in 0.3.0 and are described
+These come from [ROADMAP.md](../ROADMAP.md), in its order: the SIEM export
+(0.7.0), then 1.0; the rest come after 1.0. None of what follows is in a
+release yet. Each item is added to the sections above in the release that
+ships it. Key backup and custom Path A fields (0.3.0), the MCP adapter
+(0.5.0), and the DLP and antivirus hooks (0.6.0) shipped and are described
 above, not here.
 
-- MCP adapter (0.5.0). The stdio proxy, the spec drafter, and
-  caller-supplied facts with the guard core (#2 P1, design reviewed by the
-  maintainer) are built and described above; live test run 6 runs before
-  the release. HTTP transports come later. A `tool_specs` draft made from
-  MCP schemas stays a proposal for the principal to review and sign, not
-  trusted input.
-- Inspection hooks for DLP and antivirus (0.6.0). Built on `working` and
-  described above ("Trust boundaries", "Residual risks"); they move out of
-  this list when 0.6.0 is released. The maintainer's decisions replaced the
-  earlier sketch: a scanner error is `unavailable`, which the signed stance
-  decides (strict denies it), and the scan runs before the judges, which
-  get no arguments for a flagged call.
+- Refused-token count (0.7.0, with the SIEM export; design note and
+  maintainer review first). A token that does not verify (forged, expired,
+  or malformed) is refused without a ledger entry, so an unauthenticated
+  caller cannot fill the ledger; today such refusals leave no trace. A
+  rate-limited count kept outside the ledger would show them. It must
+  carry no token text.
 - Ledger export for SIEM (0.7.0). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.

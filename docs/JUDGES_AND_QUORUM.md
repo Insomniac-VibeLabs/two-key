@@ -1,7 +1,7 @@
 
 # Judges and quorum
 
-This document describes judge and quorum behavior in `two-key` 0.5.0 (tag `v0.5.0` on `main`). It is not an independent review or a claim of formal verification. If this document disagrees with the implementation, the code wins; correct the document after verifying the intended behavior.
+This document describes judge and quorum behavior in `two-key` 0.6.0 (tag `v0.6.0` on `main`). It is not an independent review or a claim of formal verification. If this document disagrees with the implementation, the code wins; correct the document after verifying the intended behavior.
 
 See [THREAT_MODEL.md](THREAT_MODEL.md) for the threat register, [SCOPE.md](SCOPE.md) for the project's boundaries, and [FIT.md](FIT.md) for when this package is or is not suitable.
 
@@ -159,7 +159,7 @@ The final decision allows the action only if Path A allows, the quorum passes, a
 
 A Path A deny does not skip Path B. After a derive deny, judge input omits argument bytes by default. A call that cannot be read under its spec (`derive_failed:`) is the one exception: the judges would get a form with nothing derived in it and no arguments, so they are not asked, and Path B is ledgered as `skipped:derive_failed` (0.5.0). With `tool_args_on_derive_deny: true` they see the arguments and are asked. A mismatch (`amount_mismatch` and the like) and a rule deny still go to the judges. `require_path_a_first` does not change this behavior.
 
-With a content scanner configured (0.6.0, on `working`), a scanned call reaches the judges with a trusted `<scan_result>` section (scanner label, verdict, categories) before the untrusted record, and each declared file appears in the record as its digest and size, never its content. When the verdict is flagged, the arguments and the proposal are withheld unless the quorum sets `tool_args_on_scan_flag: true`. The verdict `encrypted` (an encrypted file on a tool the principal signed `encrypted: pass`) comes with a line saying the scanner could not look inside, and the arguments are sent. A scan deny is a Path A deny, so the judges still vote. See [SCANNERS.md](SCANNERS.md).
+With a content scanner configured (0.6.0), a scanned call reaches the judges with a trusted `<scan_result>` section (scanner label, verdict, categories) before the untrusted record, and each declared file appears in the record as its digest and size, never its content. When the verdict is flagged, the arguments and the proposal are withheld unless the quorum sets `tool_args_on_scan_flag: true`. The verdict `encrypted` (an encrypted file on a tool the principal signed `encrypted: pass`) comes with a line saying the scanner could not look inside, and the arguments are sent. A scan deny is a Path A deny, so the judges still vote. See [SCANNERS.md](SCANNERS.md).
 
 Malformed or oversized requests can be denied before either path runs.
 
@@ -170,7 +170,7 @@ A quorum pass means the configured Path B requirements were met for that authori
 - The judges are correct, infallible, or independent.
 - The maker labels are truthful.
 - The proposal or action is safe in every relevant context.
-- The payload has been scanned for malware, data loss, or sensitive information. That holds only for a tool the signed constitution marks for scanning with a content scanner configured (0.6.0, on `working`), and then the judges were told the verdict, not shown the content; see [SCANNERS.md](SCANNERS.md).
+- The payload has been scanned for malware, data loss, or sensitive information. That holds only for a tool the signed constitution marks for scanning with a content scanner configured (0.6.0), and then the judges were told the verdict, not shown the content; see [SCANNERS.md](SCANNERS.md).
 - The deployment has been independently audited or formally verified.
 - The package is a FIPS 140-3 validated cryptographic module.
 

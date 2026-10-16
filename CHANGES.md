@@ -94,6 +94,7 @@
 - [Docs: the proxy wrapper leaves the agent's folder — 2026-10-16](#docs-the-proxy-wrapper-leaves-the-agents-folder--2026-10-16)
 - [Start-up check: paths another account could change (0.6.0) — 2026-10-16](#start-up-check-paths-another-account-could-change-060--2026-10-16)
 - [Run 7 follow-ups: key errors, scanner scope, relay — 2026-10-16](#run-7-follow-ups-key-errors-scanner-scope-relay--2026-10-16)
+- [Release v0.6.0: Windows, content scanning, writable-path check — 2026-10-16](#release-v060-windows-content-scanning-writable-path-check--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3240,3 +3241,74 @@ From GrokBot's live run 7 and 7x report (on `live-runs`).
   and says results go on the `live-runs` branch.
 - Tests: `tests/test_cli_tokens.py` (public key, invalid key, `--key`
   help, one-line refusal).
+
+## Release v0.6.0: Windows, content scanning, writable-path check — 2026-10-16
+
+Package version 0.6.0 (`pyproject.toml`, `two_key.__version__`; `uv.lock`
+regenerated with uv 0.13.0, which changes only the package's own version).
+To be tagged `v0.6.0` on `main` after the merge. Not on PyPI. The entries
+above, from "Semgrep findings printed to the job log" on, are the detail.
+
+- **Windows support** (maintainer-reviewed design): every key read or
+  write, owner-only folder, lock, and no-follow open goes through
+  `two_key/_platform.py`. On Windows a key gets an access list for the
+  current user only, a key that anyone but the user, SYSTEM,
+  Administrators, or OWNER RIGHTS can open is refused, a reparse point is
+  refused, and the lock is `LockFileEx`. Linux and macOS behave as before.
+- **Content scanning** (maintainer-reviewed design, optional): Two-Key
+  calls the operator's antivirus or DLP product for every call to a tool
+  the signed constitution marks, files included (base64, or a path in a
+  declared folder, each with a required `max_bytes`). Two-Key alone starts
+  the scan; the agent cannot ask for, skip, or answer one. The verdict
+  (clean, flagged, unavailable) is a fact a signed rule decides on
+  (default, strict, or monitor), the judges are told, and the ledger records
+  it without content. A timeout or error is never clean. A file Two-Key
+  cannot read or that is over a limit is denied before both keys under
+  every stance. An encrypted file passes only on a tool signed
+  `encrypted: pass`. Adapters, standard library only: ClamAV `clamd`,
+  ICAP, a command, and a Python hook. The gateway never scans; it checks
+  the token's verdict and file digests. docs/SCANNERS.md.
+- **Start-up check for writable paths** (maintainer's decision,
+  2026-10-16): Two-Key names each file or folder it runs or reads that
+  another account could change. `warn` by default, `on_writable_paths:
+  refuse` refuses, and `high_assurance` always refuses. docs/CONNECTING.md
+  covers connecting the agent so it cannot go around Two-Key, and running
+  Two-Key as a service account.
+- **Judge connection reuse** (#6): connections are pooled per origin across
+  quorum rounds.
+- **CI** on Linux, macOS, and Windows: tests (Python 3.10 to 3.12), the
+  demo, the build, bandit, and CodeQL; Semgrep (0 findings, each
+  suppression with its reason) and coverage on Linux. 862 tests.
+- **Live testing**: run 7 (content scanning, 49 cases) and run 7x (a new
+  organization, 52 cases, 33 of them attacks from a security practitioner)
+  passed every case, with no referee incident. Results are on the
+  `live-runs` branch.
+- Smaller changes: a public key given to `--key` is `key_file_public`;
+  CLI key errors are one line; `tool_out_of_role_refusal` in the live
+  harness.
+- Next (0.7.0, maintainer's decision 2026-10-16): with the SIEM export, a
+  rate-limited count of tokens the gateway refuses without a ledger entry,
+  kept outside the ledger; design note first.
+- Docs: README, ROADMAP (0.6.0 under "Shipped"), HOWTO, SCOPE,
+  THREAT_MODEL, FIT, COMPARISON, JUDGES_AND_QUORUM, SCANNERS, SECURITY,
+  CONTRIBUTING, AGENTS.md, and llms.txt name 0.6.0 as the release and
+  `v0.6.0` as the install ref.
+
+### Upgrading from 0.5.0
+
+- Constitutions, ledgers, keys, backups, `judges.yaml`, and `proxy.yaml`
+  from 0.5.0 load unchanged. Nothing needs re-signing.
+- **Check the start-up output first.** Two-Key now prints
+  `two-key: WARNING: writable_path: ...` for each file or folder it runs or
+  reads that another account could change (its Python, its import path, its
+  config and keys, and, behind the proxy, the upstream program and the
+  folder it starts in). Under `high_assurance` (and the `section4` profile)
+  it refuses to start until there are none. Fix the owner or permissions,
+  or run Two-Key as its own service account (docs/CONNECTING.md).
+- Scanning is off until you configure a scanner. Without one, the judge
+  prompts, the tokens, and the ledger are as in 0.5.0.
+- A constitution that signs `encrypted: pass` needs 0.6.0; 0.5.0 refuses it.
+- Scripts that call `two_key.cli.main` and catch `ValueError` for a bad
+  `--key` file now get `SystemExit` with a one-line message.
+- Maintainers: add the macOS and Windows checks to `main`'s branch
+  protection.

@@ -6,7 +6,7 @@ the items in [ROADMAP.md](ROADMAP.md) is also in scope, in the order and with
 the limits given there.
 
 Do not add a scanning, antivirus, or DLP engine here. Hooks that call external
-scanners are built on `working` for 0.6.0 (`two_key/scan.py`,
+scanners shipped in 0.6.0 (`two_key/scan.py`,
 `two_key/scanners.py`, docs/SCANNERS.md): an adapter calls a product, it
 never detects anything itself. PKI and certificate recovery come after 1.0.
 Permissioned-chain anchoring and seed phrases are not planned. Key backup

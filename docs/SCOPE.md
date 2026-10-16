@@ -1,7 +1,7 @@
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.5.0. Tag
-`v0.5.0` on `main` is the tagged release; `v0.4.0` is the one before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
+`two-key` is beta (pre-1.0). Package version 0.6.0. Tag
+`v0.6.0` on `main` is the tagged release; `v0.5.0` and `v0.4.0` are the ones before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
 Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
 is on `main`. `v0.1.6` stays on the previous tree.
 
@@ -67,7 +67,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   (`skipped:derive_failed`); a start-up warning when one judge can approve
   alone; and a drafter warning for a payee or amount with no upstream
   description
-- in 0.6.0, on `working` (not yet released): Windows support
+- since 0.6.0: Windows support
   (`two_key/_platform.py`), judge connection reuse (#6), and optional
   content scanning. A scanner (`two_key/scan.py`; adapters for ClamAV
   `clamd`, ICAP, a command, and Python in `two_key/scanners.py`) calls the
@@ -96,17 +96,18 @@ the SIEM export (0.7.0), then 1.0. Nothing below exists in a release yet.
 When an item ships, this file and [THREAT_MODEL.md](THREAT_MODEL.md) change
 in the same release.
 
-- MCP adapter (0.5.0): the proxy, the drafter, caller-supplied facts,
-  and the framework-neutral guard core are built (above) and go through
-  live test run 6 before the release. HTTP transports come later. The proxy offers no tools of its own.
-- Inspection hooks for DLP and antivirus (0.6.0): built on `working`
-  (above). This package still does not scan or classify content itself.
-- Judge connection reuse (#6, 0.6.0): built on `working`; a lock-guarded
-  pool keyed by origin.
+- MCP adapter (0.5.0): shipped (above). HTTP transports come later. The
+  proxy offers no tools of its own.
+- Inspection hooks for DLP and antivirus (0.6.0): shipped (above). This
+  package still does not scan or classify content itself.
+- Judge connection reuse (#6, 0.6.0): shipped; a lock-guarded pool keyed by
+  origin.
 - Ledger export for SIEM (0.7.0): a command that verifies and decrypts
   the ledger locally and writes events without argument values. A field
   allowlist leaves out the proposal text and the derived amount and
-  counterparty, which the ledger holds today.
+  counterparty, which the ledger holds today. With it, a rate-limited count
+  of tokens the gateway refused without a ledger entry (forged, expired, or
+  malformed), kept outside the ledger (live run 7; design note first).
 - Judge history summary (#1, before 1.0): judges get a summary of recent
   decisions built from the ledger, on by default, after its own security
   review.

@@ -6,9 +6,9 @@ testing and automated scanners, not independently audited. Apache-2.0.
 
 Package: two-key
 Import: two_key
-Package version: 0.5.0 (MCP proxy, caller-supplied facts, constitution v3). Tag v0.5.0 is on main; v0.4.0 (package renamed from two-key-concept) too. Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
+Package version: 0.6.0 (Windows support, content scanning through your antivirus or DLP product, a start-up check for writable paths). Tag v0.6.0 is on main; so are v0.5.0 (MCP proxy, caller-supplied facts, constitution v3) and v0.4.0 (package renamed from two-key-concept). Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-Not on PyPI. Install the tagged release from git ref v0.5.0 (two-key[yaml] for YAML configs, two-key[mcp] for the MCP proxy).
+Not on PyPI. Install the tagged release from git ref v0.6.0 (two-key[yaml] for YAML configs, two-key[mcp] for the MCP proxy).
 uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
@@ -21,7 +21,7 @@ moment as the ledger and does not delete it. Not a seed phrase. "Upgrading from 
 Does: signed constitution, Path A bytecode, Path B judges (xAI/Grok, OpenAI,
 Anthropic, Gemini, Ollama), monitored agents, encrypted ledger, single-use token.
 Does not: a scanning, antivirus, or DLP engine of its own, PKI, chain anchoring, seed phrases.
-On branch working (0.6.0, unreleased): Windows support, and optional content scanning that calls
+From 0.6.0: Windows support, and optional content scanning that calls
 your antivirus or DLP product (clamd, ICAP, a command, or Python; docs/SCANNERS.md). Two-Key
 starts every scan of a tool the constitution marks; the agent cannot ask for, skip, or answer
 one. The signed rule on the scan field (clean, flagged, unavailable) is the stance. Each declared
@@ -68,8 +68,8 @@ allow_same_provider_judge are deprecated no-ops. Local means local_weights true,
 JSON and YAML inputs refuse duplicate keys, YAML merge keys (<<), and integers over 4,300
 digits. Arguments or proposals over
 256 KiB are denied. Ballots are paired with judges by position.
-require_path_a_first is not a skip. Released versions have no scanner (0.6.0 adds an optional
-one). There is no PKI and no external anchor.
+require_path_a_first is not a skip. The scanner (0.6.0) is optional; without one nothing is
+scanned. There is no PKI and no external anchor.
 The ledger head is signed by the principal and a witness key. The witness public key is pinned
 in the ledger (first entry witness_pinned; a ledger from 0.2.2 or earlier pins its head's key on
 first open) and optionally outside it (Ledger(witness_public_key=...), --witness-public-key).

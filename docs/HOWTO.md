@@ -1469,7 +1469,7 @@ make it an error in tests or CI:
 
 ## Scan content with an antivirus or DLP product
 
-New in 0.6.0 (on `working`). An antivirus or DLP product you already run
+New in 0.6.0. An antivirus or DLP product you already run
 can look at each call to the tools you choose before the two keys decide.
 It answers clean, flagged, or unavailable; your signed rule decides what
 that means, the judges are told, and the ledger records it without the
@@ -1634,7 +1634,7 @@ messages and decides nothing.
 ### Install
 
 ```bash
-pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"
+pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.6.0"
 pip install -e ".[mcp]"          # or from a checkout
 ```
 

@@ -43,13 +43,13 @@ is how to report a vulnerability. It is not the model.
 - A start that does not name, or under `high_assurance` or
   `on_writable_paths: refuse` does not refuse, a file or folder Two-Key
   runs or reads that another account could change, where
-  docs/CONNECTING.md says it is checked (0.6.0, branch `working`)
+  docs/CONNECTING.md says it is checked (0.6.0)
 - A judge that is the monitored agent being accepted at start-up: a judge
   holding the agent's credential (the same API token, or the same username
   and password) at any address, whether or not either side sends it, or
   both sides keyless on one address. Other overlaps start with a warning
   by design.
-- With a content scanner configured (0.6.0, branch `working`): a call to a
+- With a content scanner configured (0.6.0): a call to a
   scanned tool that reaches Path A without a scan, a verdict the agent can
   set or avoid (in its arguments, claim, or proposal, or through
   `facts=`), an unavailable or failed scan read as `clean`, a declared file

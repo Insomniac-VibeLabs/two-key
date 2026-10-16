@@ -7,10 +7,8 @@ promise: the order may change, and version numbers are targets, not dates.
 
 <!-- toc -->
 - [The path to 1.0](#the-path-to-10)
-- [Where we are (2026-10-15)](#where-we-are-2026-10-15)
+- [Where we are (2026-10-16)](#where-we-are-2026-10-16)
 - [Ground rules](#ground-rules)
-- [0.6.0: DLP and AV hooks](#060-dlp-and-av-hooks)
-  - [Plan to 0.6.0 (2026-10-15)](#plan-to-060-2026-10-15)
 - [0.7.0: Ledger export for SIEM](#070-ledger-export-for-siem)
 - [1.0.0: Review and release](#100-review-and-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
@@ -22,6 +20,7 @@ promise: the order may change, and version numbers are targets, not dates.
   - [More spec field types](#more-spec-field-types)
 - [Not planned for this repository](#not-planned-for-this-repository)
 - [Shipped](#shipped)
+  - [0.6.0: DLP and AV hooks, Windows](#060-dlp-and-av-hooks-windows)
   - [0.5.0: MCP adapter](#050-mcp-adapter)
   - [0.4.0: This repository and the package `two-key`](#040-this-repository-and-the-package-two-key)
   - [0.3.1: Live-test fixes (beta)](#031-live-test-fixes-beta)
@@ -34,7 +33,7 @@ promise: the order may change, and version numbers are targets, not dates.
 ```mermaid
 flowchart LR
   r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
-  r05 --> r06["0.6.0<br/>DLP and AV hooks"]
+  r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM"]
   r07 --> r10["1.0.0<br/>Review and release"]
   r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
@@ -44,8 +43,8 @@ flowchart LR
 | --- | --- | --- |
 | 0.4.0 | This repository and the package name `two-key` (0.3.1 under the new name) | Released, tag `v0.4.0` |
 | 0.5.0 | MCP adapter: `two-key mcp-proxy`, `two-key mcp-draft-specs`, caller-supplied facts, and the guard core | Released, tag `v0.5.0` |
-| 0.6.0 | DLP and antivirus hooks that call external scanners; judge connection reuse (#6) | Next: planned 2026-10-15, design review first |
-| 0.7.0 | Ledger export for a SIEM | Planned |
+| 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners; a start-up check for writable paths; judge connection reuse (#6) | Released, tag `v0.6.0` |
+| 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger | Next |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
@@ -61,46 +60,26 @@ Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
 in the same release.
 
-## Where we are (2026-10-15)
+## Where we are (2026-10-16)
 
-- **0.5.0 is released**: tag `v0.5.0` on `main` (PR #11). `working` carries on
-  from the same code; the next changes land there.
-- **Checks on `main`**: tests (Python 3.10 to 3.12, 722 tests), build,
-  coverage, bandit, CodeQL, Semgrep, and the SonarCloud quality gate all pass.
-- **Live testing**: run 6, then re-run 6z on its follow-ups: 36 cases, 34 PASS,
-  2 INCONCLUSIVE (case design, since fixed), 0 FAIL; the school constitution
-  recheck passed 4 of 4. The relayed results still need their own test
-  branches (`test/live-run6-...`, `test/live-run6z-...`).
-- **Open scanner findings**, all triaged:
-  - Semgrep, 11 on `main`, none a vulnerability. Eight are
-    `insecure-file-permissions` on directories set to `0o700` (owner only,
-    the strictest useful mode; the rule's suggested `0o644` would make key
-    directories world-readable). Two are `non-literal-import` of the
-    operator's own hooks named in `judges.yaml` and `proxy.yaml` (trusted
-    configuration, THREAT_MODEL "Assumptions"). One is
-    `httpsconnection-detected` on a connection that already verifies
-    certificates and host names (`ssl.create_default_context()`). Step 1 of
-    the 0.6.0 plan suppresses each with its reason, so a new finding stands
-    out.
-  - DeepSource: none open (ten placeholder "secrets" in tests and docs were
-    marked false positives).
-  - SonarCloud: the gate passes; older functions still exceed its cognitive
-    complexity limit (maintainability, not gating).
-- **Issues**: #2 (the reference wrapper) and #10 (field decisions) shipped in
-  0.5.0 and can be closed. #6 is in 0.6.0, #1 before 1.0, and #3 (repository
-  setup after the move) has maintainer settings left to confirm.
-- **Branches**: `main` and `working`. `mcp-proxy` is merged into `main`
-  and can be deleted.
-- **0.6.0 on `working`**: Windows support (Phase 2), judge connection reuse
-  (#6), and content scanning (core, adapters, proxy wiring, and
-  docs/SCANNERS.md) are built, with CI on Linux, macOS, and Windows. Live
-  run 7 and the release remain.
-- **Platforms** (first `portability.yml` run, before 0.6.0's Windows work): Linux is supported and tested.
-  macOS passes 721 of 722 tests and the demo; the one failure was a test
-  assumption, since fixed. Windows does not run: the key-file check refuses
-  every key there (Python reports Windows files as mode 0666), so no ledger
-  opens. It fails closed, but it fails. It also lacks a cross-process lock
-  and owner-only directories.
+- **0.6.0 is released**: tag `v0.6.0` on `main`. It adds Windows support,
+  content scanning through the operator's antivirus or DLP product, a
+  start-up check for paths another account could change, and judge
+  connection reuse (#6). `working` carries on from the same code; the next
+  changes land there.
+- **Checks**: tests, the demo, the build, and bandit run on Linux, macOS,
+  and Windows; coverage, CodeQL, and Semgrep (0 findings, each suppression
+  with its reason) run too, and all pass.
+- **Live testing**: run 7 (content scanning, 49 cases) and run 7x (a new
+  organization and 33 attack cases from a security practitioner, 52 cases)
+  passed every case with no referee incident. Live-run results live on the
+  `live-runs` branch, never on `working` or `main`.
+- **Issues**: #6 shipped in 0.6.0. #2 and #10 shipped in 0.5.0. #1 comes
+  before 1.0, and #3 (repository setup after the move) has maintainer
+  settings left to confirm.
+- **Next**: 0.7.0, the SIEM export, with a rate-limited count of tokens the
+  gateway refuses without a ledger entry (from live run 7; design note and
+  maintainer review first).
 
 ## Ground rules
 
@@ -117,169 +96,6 @@ in the same release.
 - Keep the README's "Known limits" section current: no independent review,
   no external anchor, not FIPS validated, signatures not quantum resistant.
 
-## 0.6.0: DLP and AV hooks
-
-**Status on `working` (2026-10-15):** steps 1 to 6 of the plan below are
-built, apart from the maintainer's own actions in step 1; live run 7 and the
-release remain. The scanner follows the decisions below and the approved
-design note, with the maintainer's additions: Two-Key alone starts a scan
-(the agent never proposes, skips, or answers one), a call can carry a file
-(base64, or a path in a folder the operator declares, each with a required
-`max_bytes`; an oversized or unreadable file is denied before both keys
-under every stance), an encrypted file is flagged unless the principal
-signs that tool `encrypted: pass`, and
-[docs/SCANNERS.md](docs/SCANNERS.md) shows with diagrams how ClamAV, ICAP
-products, a command, or Python code connect. The first bullets below are
-the original sketch; where they differ (a deny on every error,
-allow/deny/abstain, `tools.<id>.inspect`), the decisions and
-docs/SCANNERS.md win.
-
-- One interface: `inspect(args_projection)` returns allow, deny, or abstain,
-  with a reason code. An error, timeout, or missing result is a deny.
-- Two reference adapters that call external tools: ClamAV for file payloads
-  and a secret and pattern scanner for DLP. This package does not ship its
-  own scanning engine.
-- The ledger records the scanner name, version, and a result digest, never
-  the content.
-- Design decision to settle first: run the hook before judges receive
-  `tool_args`, so scanned content is not sent to cloud vendors.
-- Second decision: feed the scanner's result to Path A as well as the
-  ledger, so a content leak is not left to the judges alone (live run 6:
-  a diagnosis, a card number, and a recovery code in free text were stopped
-  only by Path B). In 0.5.0 a scanner can already do this as a
-  caller-supplied fact (HOWTO "Designing a constitution", point 10); the
-  hook interface may build on that.
-- Tests use the EICAR test file and fake secrets.
-- Also in 0.6.0: reuse judge connections (#6). Today each quorum round
-  starts new threads, so the per-thread pool never reuses a connection, and
-  every round opens a new TCP (and TLS) connection per judge. Move to a
-  lock-guarded pool keyed by origin, or document fresh connections plainly.
-  No security impact; it matters once the MCP proxy puts Two-Key on every
-  tool call.
-
-### Plan to 0.6.0 (2026-10-15)
-
-In order. Steps 2 to 4 change what reaches the judges and what the ledger
-records, so they get the maintainer's security review before code, as
-AGENTS.md requires.
-
-1. **Housekeeping** (no behaviour change):
-   - Suppress the 11 Semgrep findings line by line
-     (`# nosemgrep: <rule-id>`), each with its reason, and give the
-     `judges.yaml` callback hook the same `module:function` check the proxy's
-     fact hooks already have.
-   - Move the CodeQL action to v4 before v3's deprecation (December 2026),
-     and take Dependabot's action updates.
-   - Close #2 and #10, finish #3, delete the merged `mcp-proxy` branch, and
-     push the run 6 and 6z results to their test branches.
-   - **Platforms.** Make macOS a required CI job once it passes. For
-     Windows, the maintainer decides between full support in 0.6.0 and
-     "not yet supported" in the docs. Full support means an owner-only check
-     on Windows access lists instead of mode bits, Windows file locking,
-     owner-only directories, and test environments that keep `SYSTEMROOT`.
-     It touches key and ledger handling, so it gets the security review too.
-     Either way, every hook works on Linux, macOS, and Windows, and its tests
-     run on all three.
-2. **Design note for the hook** (for the maintainer's review). It settles:
-   - **How third-party software plugs in.** The maintainer's intent is an
-     optional hook for an outside product. Proposed:
-     - one `Inspector` interface in the core;
-     - three ways to reach a scanner: an in-process Python hook
-       (`module:function`, like a fact hook), ICAP (RFC 3507, the protocol
-       most commercial DLP and antivirus products already speak), and
-       ClamAV's `clamd` socket;
-     - no scanning engine in this package.
-   - **Fail-closed rules:** a timeout, an error, or no result is a deny.
-     Superseded on 2026-10-15 by the maintainer's direction, pending their
-     review of the details: the scanner is optional, and Two-Key runs without
-     one. A configured scanner fails open by default after a time limit
-     (proposed 15 s, configurable), which leaves both keys deciding as
-     today. Fail-closed is the option for an enterprise or high-assurance
-     stance. A result the scanner could not finish (size or time limits)
-     counts as flagged. The stance is a signed rule on the scanner's verdict
-     (`clean`, `flagged`, `unavailable`); monitor mode only records it. An
-     unavailable scan is ledgered, warned about, and told to the judges.
-   - **What is scanned:** the arguments the signed spec names (payload
-     paths and files), before the judges see any argument text.
-   - **How a result reaches Path A:** as a fact such as
-     `carries_secret` or `malware_found`, so a leak is denied by rule, not
-     only by the judges (live run 6).
-   - **What the ledger records:** the scanner's name and version, its
-     verdict, and a digest, never the content.
-   - **Configuration:** where it lives (`proxy.yaml` `tools.<id>.inspect`
-     and a `Guard` argument).
-3. **Build the core**: the interface, the call order (after Path A can
-   read the call, before Path B), the ledger entry, and the Guard and proxy
-   wiring. Tests stay network-free, with fake ICAP and `clamd` servers on
-   loopback.
-4. **Reference adapters**: ClamAV (`clamd`), an ICAP client, and a secret
-   and pattern scanner run as an external command. Tests use the EICAR
-   test string and fake secrets.
-5. **Judge connection reuse (#6)**: a lock-guarded pool keyed by origin,
-   with a test that a second round reuses the connection.
-6. **Docs in the same release**: HOWTO (a scanner section and an example),
-   THREAT_MODEL (the scanner as a new boundary: its trust, timeouts, and
-   what it sees), SCOPE, FIT, COMPARISON (DLP row), README, llms.txt,
-   AGENTS.md, and CHANGES with upgrade notes.
-7. **Live run 7** (the clinic harness plus a scanner):
-   - the diagnosis and card-number cases (C35, C36) should be denied by
-     Path A, not left to the judges;
-   - add a file payload carrying EICAR;
-   - add a scanner that is down or slow, which must deny under the strict
-     stance and be ledgered and told to the judges under the default one.
-8. **Release 0.6.0**: version, `uv.lock` (uv 0.13.0), a PR into `main`
-   once every check passes, then the `v0.6.0` tag and release notes.
-
-#### Decisions for 0.6.0 (maintainer, 2026-10-15)
-
-These settle the open points above. Where they differ from an earlier line
-in this plan, these win; nothing above is removed.
-
-**Scanner (antivirus or DLP) hook**
-
-- **Optional.** Two-Key runs fully without a scanner. A one-time note at
-  start-up encourages one.
-- **Fail-open by default.** A configured scanner gets a time limit (15 s by
-  default, configurable). If it is unreachable, errors, or does not answer
-  in time, the call goes on to the two keys exactly as today. Start-up warns
-  when the scan limit plus the judge deadline exceeds 60 s, since MCP
-  clients often give up on a tool call after 60 s.
-- **Could not finish is flagged.** A result the scanner could not finish
-  (size or time limits, such as ClamAV's `Heuristics.Limits.Exceeded`)
-  counts as flagged, not unavailable.
-- **The stance is signed** in the constitution. The scanner supplies a
-  caller-supplied enum fact with the verdict (`clean`, `flagged`,
-  `unavailable`), and a signed rule decides:
-  - default: deny `flagged`;
-  - strict (enterprise or high assurance, fail-closed): deny `flagged` and
-    `unavailable`;
-  - monitor: no rule; the verdict is only recorded.
-
-  `high_assurance` warns at start-up unless the stance is strict.
-- **Fail-open is visible.** Every unavailable scan is ledgered. One warning
-  when the scanner goes down and one when it recovers, not one per call. The
-  judges are told.
-- **Monitor mode** exists, for tuning before enforcing.
-- **What the judges get:** the scanner's decision for the call (verdict,
-  finding categories, scanner label), never content. Recent scan verdicts
-  also go into the judge history summary (#1, before 1.0), designed then.
-
-**Platforms, CI, and docs**
-
-- Two-Key runs on Linux, macOS, and Windows in 0.6.0. Windows support
-  changes key and ledger handling, so its design note gets the security
-  review before code.
-- Every CI pipeline that runs code (tests, demo, build and install) runs on
-  all three. CodeQL runs on all three as well; Semgrep stays on Linux, where
-  its container image runs.
-- HOWTO explains, with diagrams, how to hook a scanner in.
-- docs/CONNECTING.md shows how to connect the agent so it cannot go around
-  Two-Key, and to run Two-Key as a service account. At start, Two-Key
-  names each file or folder it runs or reads that another account could
-  change (`writable_path`); `on_writable_paths: refuse` makes that a
-  refusal, and `high_assurance` always refuses (maintainer's decision,
-  2026-10-16).
-
 ## 0.7.0: Ledger export for SIEM
 
 - A command that verifies the ledger, decrypts it locally, and writes events
@@ -292,6 +108,13 @@ in this plan, these win; nothing above is removed.
   syslog output. Delivery by file first, then webhook.
 - An offline check that exported events match the ledger head.
 - Tested against Wazuh or Elastic in Docker, with a sample dashboard.
+- A count of refused tokens, kept outside the ledger (live run 7). A token
+  that does not verify (forged, expired, or malformed) is refused without a
+  ledger entry, so an unauthenticated caller cannot fill the ledger, and
+  today it leaves no trace. A rate-limited counter and stderr line, with no
+  token text, would show repeated attempts. It changes the gateway, so it
+  needs a design note and the maintainer's review before code (maintainer's
+  decision, 2026-10-16).
 
 ## 1.0.0: Review and release
 
@@ -488,6 +311,168 @@ neither.
 
 The design records of released phases, kept as written. CHANGES.md is the
 record of what each release did.
+
+### 0.6.0: DLP and AV hooks, Windows
+
+Tag `v0.6.0` on `main`; CHANGES "Release v0.6.0" is the record. Every step of
+the plan below shipped, and live runs 7 and 7x checked it. The scanner follows the decisions below and the approved
+design note, with the maintainer's additions: Two-Key alone starts a scan
+(the agent never proposes, skips, or answers one), a call can carry a file
+(base64, or a path in a folder the operator declares, each with a required
+`max_bytes`; an oversized or unreadable file is denied before both keys
+under every stance), an encrypted file is flagged unless the principal
+signs that tool `encrypted: pass`, and
+[docs/SCANNERS.md](docs/SCANNERS.md) shows with diagrams how ClamAV, ICAP
+products, a command, or Python code connect. The first bullets below are
+the original sketch; where they differ (a deny on every error,
+allow/deny/abstain, `tools.<id>.inspect`), the decisions and
+docs/SCANNERS.md win.
+
+- One interface: `inspect(args_projection)` returns allow, deny, or abstain,
+  with a reason code. An error, timeout, or missing result is a deny.
+- Two reference adapters that call external tools: ClamAV for file payloads
+  and a secret and pattern scanner for DLP. This package does not ship its
+  own scanning engine.
+- The ledger records the scanner name, version, and a result digest, never
+  the content.
+- Design decision to settle first: run the hook before judges receive
+  `tool_args`, so scanned content is not sent to cloud vendors.
+- Second decision: feed the scanner's result to Path A as well as the
+  ledger, so a content leak is not left to the judges alone (live run 6:
+  a diagnosis, a card number, and a recovery code in free text were stopped
+  only by Path B). In 0.5.0 a scanner can already do this as a
+  caller-supplied fact (HOWTO "Designing a constitution", point 10); the
+  hook interface may build on that.
+- Tests use the EICAR test file and fake secrets.
+- Also in 0.6.0: reuse judge connections (#6). Today each quorum round
+  starts new threads, so the per-thread pool never reuses a connection, and
+  every round opens a new TCP (and TLS) connection per judge. Move to a
+  lock-guarded pool keyed by origin, or document fresh connections plainly.
+  No security impact; it matters once the MCP proxy puts Two-Key on every
+  tool call.
+
+#### Plan to 0.6.0 (2026-10-15)
+
+In order. Steps 2 to 4 change what reaches the judges and what the ledger
+records, so they get the maintainer's security review before code, as
+AGENTS.md requires.
+
+1. **Housekeeping** (no behaviour change):
+   - Suppress the 11 Semgrep findings line by line
+     (`# nosemgrep: <rule-id>`), each with its reason, and give the
+     `judges.yaml` callback hook the same `module:function` check the proxy's
+     fact hooks already have.
+   - Move the CodeQL action to v4 before v3's deprecation (December 2026),
+     and take Dependabot's action updates.
+   - Close #2 and #10, finish #3, delete the merged `mcp-proxy` branch, and
+     push the run 6 and 6z results to their test branches.
+   - **Platforms.** Make macOS a required CI job once it passes. For
+     Windows, the maintainer decides between full support in 0.6.0 and
+     "not yet supported" in the docs. Full support means an owner-only check
+     on Windows access lists instead of mode bits, Windows file locking,
+     owner-only directories, and test environments that keep `SYSTEMROOT`.
+     It touches key and ledger handling, so it gets the security review too.
+     Either way, every hook works on Linux, macOS, and Windows, and its tests
+     run on all three.
+2. **Design note for the hook** (for the maintainer's review). It settles:
+   - **How third-party software plugs in.** The maintainer's intent is an
+     optional hook for an outside product. Proposed:
+     - one `Inspector` interface in the core;
+     - three ways to reach a scanner: an in-process Python hook
+       (`module:function`, like a fact hook), ICAP (RFC 3507, the protocol
+       most commercial DLP and antivirus products already speak), and
+       ClamAV's `clamd` socket;
+     - no scanning engine in this package.
+   - **Fail-closed rules:** a timeout, an error, or no result is a deny.
+     Superseded on 2026-10-15 by the maintainer's direction, pending their
+     review of the details: the scanner is optional, and Two-Key runs without
+     one. A configured scanner fails open by default after a time limit
+     (proposed 15 s, configurable), which leaves both keys deciding as
+     today. Fail-closed is the option for an enterprise or high-assurance
+     stance. A result the scanner could not finish (size or time limits)
+     counts as flagged. The stance is a signed rule on the scanner's verdict
+     (`clean`, `flagged`, `unavailable`); monitor mode only records it. An
+     unavailable scan is ledgered, warned about, and told to the judges.
+   - **What is scanned:** the arguments the signed spec names (payload
+     paths and files), before the judges see any argument text.
+   - **How a result reaches Path A:** as a fact such as
+     `carries_secret` or `malware_found`, so a leak is denied by rule, not
+     only by the judges (live run 6).
+   - **What the ledger records:** the scanner's name and version, its
+     verdict, and a digest, never the content.
+   - **Configuration:** where it lives (`proxy.yaml` `tools.<id>.inspect`
+     and a `Guard` argument).
+3. **Build the core**: the interface, the call order (after Path A can
+   read the call, before Path B), the ledger entry, and the Guard and proxy
+   wiring. Tests stay network-free, with fake ICAP and `clamd` servers on
+   loopback.
+4. **Reference adapters**: ClamAV (`clamd`), an ICAP client, and a secret
+   and pattern scanner run as an external command. Tests use the EICAR
+   test string and fake secrets.
+5. **Judge connection reuse (#6)**: a lock-guarded pool keyed by origin,
+   with a test that a second round reuses the connection.
+6. **Docs in the same release**: HOWTO (a scanner section and an example),
+   THREAT_MODEL (the scanner as a new boundary: its trust, timeouts, and
+   what it sees), SCOPE, FIT, COMPARISON (DLP row), README, llms.txt,
+   AGENTS.md, and CHANGES with upgrade notes.
+7. **Live run 7** (the clinic harness plus a scanner):
+   - the diagnosis and card-number cases (C35, C36) should be denied by
+     Path A, not left to the judges;
+   - add a file payload carrying EICAR;
+   - add a scanner that is down or slow, which must deny under the strict
+     stance and be ledgered and told to the judges under the default one.
+8. **Release 0.6.0**: version, `uv.lock` (uv 0.13.0), a PR into `main`
+   once every check passes, then the `v0.6.0` tag and release notes.
+
+##### Decisions for 0.6.0 (maintainer, 2026-10-15)
+
+These settle the open points above. Where they differ from an earlier line
+in this plan, these win; nothing above is removed.
+
+**Scanner (antivirus or DLP) hook**
+
+- **Optional.** Two-Key runs fully without a scanner. A one-time note at
+  start-up encourages one.
+- **Fail-open by default.** A configured scanner gets a time limit (15 s by
+  default, configurable). If it is unreachable, errors, or does not answer
+  in time, the call goes on to the two keys exactly as today. Start-up warns
+  when the scan limit plus the judge deadline exceeds 60 s, since MCP
+  clients often give up on a tool call after 60 s.
+- **Could not finish is flagged.** A result the scanner could not finish
+  (size or time limits, such as ClamAV's `Heuristics.Limits.Exceeded`)
+  counts as flagged, not unavailable.
+- **The stance is signed** in the constitution. The scanner supplies a
+  caller-supplied enum fact with the verdict (`clean`, `flagged`,
+  `unavailable`), and a signed rule decides:
+  - default: deny `flagged`;
+  - strict (enterprise or high assurance, fail-closed): deny `flagged` and
+    `unavailable`;
+  - monitor: no rule; the verdict is only recorded.
+
+  `high_assurance` warns at start-up unless the stance is strict.
+- **Fail-open is visible.** Every unavailable scan is ledgered. One warning
+  when the scanner goes down and one when it recovers, not one per call. The
+  judges are told.
+- **Monitor mode** exists, for tuning before enforcing.
+- **What the judges get:** the scanner's decision for the call (verdict,
+  finding categories, scanner label), never content. Recent scan verdicts
+  also go into the judge history summary (#1, before 1.0), designed then.
+
+**Platforms, CI, and docs**
+
+- Two-Key runs on Linux, macOS, and Windows in 0.6.0. Windows support
+  changes key and ledger handling, so its design note gets the security
+  review before code.
+- Every CI pipeline that runs code (tests, demo, build and install) runs on
+  all three. CodeQL runs on all three as well; Semgrep stays on Linux, where
+  its container image runs.
+- HOWTO explains, with diagrams, how to hook a scanner in.
+- docs/CONNECTING.md shows how to connect the agent so it cannot go around
+  Two-Key, and to run Two-Key as a service account. At start, Two-Key
+  names each file or folder it runs or reads that another account could
+  change (`writable_path`); `on_writable_paths: refuse` makes that a
+  refusal, and `high_assurance` always refuses (maintainer's decision,
+  2026-10-16).
 
 ### 0.5.0: MCP adapter
 

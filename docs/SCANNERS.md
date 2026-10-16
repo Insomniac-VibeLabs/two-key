@@ -2,8 +2,8 @@
 
 This guide is for operators who want an antivirus or data loss prevention
 (DLP) product to look at every tool call before Two-Key's two keys decide,
-and for vendors who build that connection. It describes content scanning on
-the `working` branch (0.6.0, not yet released). Two-Key is beta and not
+and for vendors who build that connection. It describes content scanning in
+0.6.0. Two-Key is beta and not
 independently audited. If this guide disagrees with the code, the code wins.
 
 Two-Key has no scanning engine of its own. It calls a product you already
