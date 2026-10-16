@@ -481,12 +481,17 @@ class Plaintext(Fixture):
         self.assertIn("the SIEM copy goes out in the clear to ['plain']", self.err)
         self.assertTrue(tk.authorize(SEARCH, {"q": "weather"}, "look").allowed)
 
-    def test_high_assurance_refuses_plaintext(self):
+    # high_assurance also refuses to start on a machine where another account can change Python's files
+    # (two_key/writable.py, and /opt is world-writable on a GitHub runner); these two tests are about the
+    # sink, so they do not look at the machine.
+    @mock.patch("two_key.writable.runtime_targets", return_value=[])
+    def test_high_assurance_refuses_plaintext(self, _):
         with self.assertRaisesRegex(TwoKeyConfigError, "siem_plaintext_refused"):
             self.start(judges=HIGH, quorum=QuorumPolicy.high_assurance(required_yes=2, timeout_seconds=10),
                        siem_config=SiemConfig(sinks=(self.plain(),)))
 
-    def test_high_assurance_takes_an_encrypted_sink(self):
+    @mock.patch("two_key.writable.runtime_targets", return_value=[])
+    def test_high_assurance_takes_an_encrypted_sink(self, _):
         tk = self.start(judges=HIGH, quorum=QuorumPolicy.high_assurance(required_yes=2, timeout_seconds=10),
                         siem_config=SiemConfig(sinks=(ListSink(),)))
         self.assertNotIn("in the clear", self.err)

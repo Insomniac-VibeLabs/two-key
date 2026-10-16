@@ -489,7 +489,9 @@ class ProxyBlock(unittest.TestCase):
         checked = {os.path.normcase(os.path.abspath(p)) for p, _rule in startup_paths(config)}
         for name in ("ca.pem", "client.key", "token"):
             self.assertIn(os.path.normcase(str(self.dir / name)), checked)
-        self.assertIn(os.path.normcase(os.path.abspath("/abs/client.pem")), checked)
+        # A rooted path with no drive letter is not absolute on Windows, so the config joins it onto the
+        # proxy.yaml directory's drive; join it the same way here rather than onto the current drive.
+        self.assertIn(os.path.normcase(os.path.abspath(self.dir / "/abs/client.pem")), checked)
 
 
 if __name__ == "__main__":

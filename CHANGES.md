@@ -101,6 +101,7 @@
 - [CI: the CodeQL configuration note — 2026-10-16](#ci-the-codeql-configuration-note--2026-10-16)
 - [SIEM export: live delivery, file export, refused tokens (0.7.0) — 2026-10-16](#siem-export-live-delivery-file-export-refused-tokens-070--2026-10-16)
 - [Docs: the SIEM export everywhere it applies (0.7.0) — 2026-10-16](#docs-the-siem-export-everywhere-it-applies-070--2026-10-16)
+- [CI: two tests looked at the machine, one at the drive (0.7.0) — 2026-10-16](#ci-two-tests-looked-at-the-machine-one-at-the-drive-070--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3483,3 +3484,15 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   and does not store, search, or alert, and the fail-closed lines to preserve.
 - `two_key/__init__.py` no longer says the package has no scanning or DLP hooks;
   it names `two_key.scan` (0.6.0) and `two_key.siem` (0.7.0) instead.
+
+## CI: two tests looked at the machine, one at the drive (0.7.0) — 2026-10-16
+
+- `tests/test_siem.py`: the two `high_assurance` plaintext tests now patch
+  `two_key.writable.runtime_targets`. `high_assurance` always refuses to start
+  where another account could change Python's own files, and `/opt`,
+  `/Library/Frameworks/Python.framework`, and `C:\hostedtoolcache` are writable
+  on the GitHub runners; the two tests are about the sink, not the machine.
+- `tests/test_siem_sinks.py`: a rooted path with no drive letter
+  (`/abs/client.pem`) is not absolute on Windows, so the config joins it onto
+  the `proxy.yaml` directory's drive. The test joins it the same way instead of
+  onto the current drive.
