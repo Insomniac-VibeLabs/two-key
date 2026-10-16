@@ -3143,3 +3143,7 @@ On branch `working`. Docs only; no behavior changes.
   Unix socket (mode 660, a group without the agent) when the agent shares
   the machine. HOWTO (key custody, the guard), README, llms.txt, and
   AGENTS.md point to the new guide; `tests/test_doc_toc.py` covers it.
+- docs/CONNECTING.md diagrams: the three trust zones, Route 1 (the three
+  OS users, the sudo hops, where each secret lives, and the closed paths),
+  Route 2 (what the model is offered and what it never is), and a loopback
+  port takeover. Each was rendered with Mermaid 11.4.1 before commit.
