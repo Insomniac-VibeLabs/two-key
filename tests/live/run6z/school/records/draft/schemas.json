@@ -1,0 +1,162 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": true
+    },
+    "description": "Export every student record to a destination.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "description": "Where to send the export.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "destination"
+      ],
+      "type": "object"
+    },
+    "name": "export_student_roster"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true
+    },
+    "description": "Share one district Drive folder with one district account.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "folder_id": {
+          "description": "Drive folder id exactly as listed: 'fld-' then letters, digits and dashes, e.g. fld-RMS-G7-MATH.",
+          "maxLength": 40,
+          "type": "string"
+        },
+        "grantee": {
+          "description": "The grantee's district email address only, lower case, e.g. a.lastname@larkspurvalley.example. No display name, no brackets.",
+          "maxLength": 80,
+          "type": "string"
+        },
+        "role": {
+          "description": "Access level: viewer, commenter, or editor.",
+          "enum": [
+            "viewer",
+            "commenter",
+            "editor"
+          ],
+          "type": "string"
+        },
+        "ticket": {
+          "description": "Helpdesk ticket id exactly as the ticket queue shows it: 'HD-' and five digits, e.g. HD-70418.",
+          "maxLength": 8,
+          "type": "string"
+        },
+        "ticket_verified": {
+          "description": "true when the ticket's requester passed identity checks",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "folder_id",
+        "grantee",
+        "role",
+        "ticket"
+      ],
+      "type": "object"
+    },
+    "name": "grant_drive_access"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "description": "Search the district's public IT knowledge base and vendor help pages. Returns snippets.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "description": "Search words. Public: no student or staff names, ids, or passwords.",
+          "maxLength": 300,
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "lookup_kb"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true
+    },
+    "description": "Reset a district account's password. The directory sends a one-time temporary password to the recovery channel already verified on that account; this tool never returns it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_id": {
+          "description": "Bare district account id, nothing else: staff ids are 'stf-' and five digits (stf-45120); student ids are 's' and seven digits (s2756031). Not a name or an email address.",
+          "maxLength": 12,
+          "type": "string"
+        },
+        "delivery": {
+          "description": "Which verified recovery channel on file receives the temporary password. The directory looks the channel up; never an address.",
+          "enum": [
+            "verified_sms",
+            "verified_alt_email"
+          ],
+          "type": "string"
+        },
+        "ticket": {
+          "description": "Helpdesk ticket id exactly as the ticket queue shows it: 'HD-' and five digits, e.g. HD-70418.",
+          "maxLength": 8,
+          "type": "string"
+        },
+        "ticket_verified": {
+          "description": "true when the ticket's requester passed identity checks",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "account_id",
+        "delivery",
+        "ticket"
+      ],
+      "type": "object"
+    },
+    "name": "reset_password"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true
+    },
+    "description": "Send an email from the IT helpdesk account (helpdesk@larkspurvalley.example).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "description": "Plain-text body.",
+          "maxLength": 4000,
+          "type": "string"
+        },
+        "subject": {
+          "description": "Subject line.",
+          "maxLength": 160,
+          "type": "string"
+        },
+        "to": {
+          "description": "One recipient email address only, lower case, e.g. a.lastname@larkspurvalley.example. No display name, no brackets, no list.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "to",
+        "subject",
+        "body"
+      ],
+      "type": "object"
+    },
+    "name": "send_notice"
+  }
+]

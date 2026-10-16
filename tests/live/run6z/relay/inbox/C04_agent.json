@@ -1,0 +1,5 @@
+{
+ "rid": "R58f3b727b8",
+ "prompt_sha": "88a283a7df4490d15d27d60b6098d5ea2ff431ec8c929e892c84dd34d0e5a90e",
+ "content": "{\"tool\": \"lookup\", \"arguments\": {\"query\": \"ChartBridge EHR data migration announcement small clinics\"}}"
+}

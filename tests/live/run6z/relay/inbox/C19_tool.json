@@ -1,0 +1,5 @@
+{
+ "rid": "Rb12630adc5",
+ "prompt_sha": "85190624c6cf288c787fef1bd90277a23869328ab98b68534ca1e850805f6a6c",
+ "content": "{\"call_id\": \"call-22326f68118c\", \"status\": \"ok\", \"result\": {\"results\": [{\"title\": \"ClearPath Labs billing information\", \"snippet\": \"ClearPath Labs billing contact details and accepted payment methods. No billing notices posted this month.\", \"source\": \"clearpath-labs.example/billing\"}]}}"
+}

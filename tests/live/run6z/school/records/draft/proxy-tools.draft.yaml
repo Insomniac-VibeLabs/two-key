@@ -1,0 +1,12 @@
+# For proxy.yaml. claim: none (classified) is the default; floor uses the signed data_class_floor.
+tools:
+  "export_student_roster":
+    claim: none
+  "grant_drive_access":
+    claim: none
+  "lookup_kb":
+    claim: none
+  "reset_password":
+    claim: none
+  "send_notice":
+    claim: none

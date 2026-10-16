@@ -1,0 +1,5 @@
+{
+ "rid": "R1511dd62b0",
+ "prompt_sha": "0963ef1f1be3ee06744a44d58630046c5f256b596dd0d041ca1b32ec8d4cb974",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"rockymtn-medwaste.example\", \"amount\": 742.18, \"currency\": \"usd\", \"invoice\": \"RMW-4410\", \"memo\": \"Routine pickup service, October\"}}"
+}

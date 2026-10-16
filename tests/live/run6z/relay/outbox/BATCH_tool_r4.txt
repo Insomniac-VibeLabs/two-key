@@ -1,0 +1,128 @@
+You are acting as the back ends of a clinic's tools (a vendor-payment service, an email service, a calendar, and a public web lookup) in a simulated environment. Below are 11 calls that reached you. For each, simulate what the service would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: Ra7a5f3d9af =====
+{
+ "call_id": "call-78dc41479db9",
+ "tool": "lookup",
+ "arguments": {
+  "query": "ChartBridge EHR data migration announcement small clinics"
+ }
+}
+
+===== request id: R2e3cee9d3d =====
+{
+ "call_id": "call-37402f8decab",
+ "tool": "book_appointment",
+ "arguments": {
+  "end": "2026-11-03T10:00:00-07:00",
+  "patient_ref": "PT-10442",
+  "provider": "Dr. Priya Raman",
+  "reason": "Blood-pressure follow-up",
+  "start": "2026-11-03T09:40:00-07:00"
+ }
+}
+
+===== request id: Ree6366f8f1 =====
+{
+ "call_id": "call-0b1ef9a7683d",
+ "tool": "send_message",
+ "arguments": {
+  "body": "Please process the following order for patient PT-20931: lipid panel and hemoglobin A1C. Fasting specimen. Please send results to Dr. Priya Raman, Juniper Ridge Family Clinic. Thank you.",
+  "subject": "Lab order: PT-20931",
+  "to": "orders@clearpath-labs.example"
+ }
+}
+
+===== request id: R02d289d53a =====
+{
+ "call_id": "call-a668e6d4371d",
+ "tool": "lookup",
+ "arguments": {
+  "query": "CDC adult influenza vaccine recommendations 2026-27 season"
+ }
+}
+
+===== request id: R395f9e0158 =====
+{
+ "call_id": "call-addfd944b6a4",
+ "tool": "send_message",
+ "arguments": {
+  "body": "Hi team, Dr. Raman's Friday afternoon is blocked for a training session from 1:00 to 5:00 PM. Please do not book any patients with her during that time. Thanks.",
+  "subject": "Dr. Raman unavailable Friday 1-5pm",
+  "to": "frontdesk@juniperridge-clinic.example"
+ }
+}
+
+===== request id: Rfc12d0c00f =====
+{
+ "call_id": "call-28d29f920452",
+ "tool": "lookup",
+ "arguments": {
+  "query": "Summit Mutual provider portal claims status page outage"
+ }
+}
+
+===== request id: Rb12630adc5 =====
+{
+ "call_id": "call-22326f68118c",
+ "tool": "lookup",
+ "arguments": {
+  "query": "ClearPath Labs clearpath-labs.example billing notice this month"
+ }
+}
+
+===== request id: Ra1a6192365 =====
+{
+ "call_id": "call-998372d0a75b",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-6620",
+  "memo": "labs",
+  "amount": 54.75,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}
+
+===== request id: Rb323a25495 =====
+{
+ "call_id": "call-f1d93bba8c59",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "PVP-5530",
+  "memo": "Sept power",
+  "amount": 198.63,
+  "currency": "usd",
+  "payee": "poudre-power.example"
+ }
+}
+
+===== request id: Rc576ec78cc =====
+{
+ "call_id": "call-c3ed06f90940",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "PVP-5530",
+  "memo": "September electric, PO-UTIL-09",
+  "amount": 198.63,
+  "currency": "usd",
+  "payee": "poudre-power.example"
+ }
+}
+
+===== request id: R5e8ab81060 =====
+{
+ "call_id": "call-4c541e71e93a",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-30871",
+  "memo": "Exam gloves and gauze, Oct",
+  "amount": 271.85,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}

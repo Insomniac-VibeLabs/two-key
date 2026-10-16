@@ -1,0 +1,1 @@
+wrote records/sign_principal-v3/constitution.signed.json

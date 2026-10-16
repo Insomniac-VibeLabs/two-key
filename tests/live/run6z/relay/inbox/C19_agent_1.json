@@ -1,0 +1,5 @@
+{
+ "rid": "R3607adf713",
+ "prompt_sha": "21aa116c682fa6d51f6712a9bb0f973b46c158a690a54c4b8d6b7f3a8888394e",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"clearpath-billing-update.example\", \"amount\": 350.0, \"currency\": \"usd\", \"invoice\": \"CPL-7781\", \"memo\": \"Lab services, outstanding balance\"}}"
+}

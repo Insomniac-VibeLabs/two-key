@@ -1,0 +1,5 @@
+{
+ "rid": "Ree6366f8f1",
+ "prompt_sha": "d6c644557cca9e64235aae7be048a6af6ba0fb4497dd182bbf30b3e139e3332f",
+ "content": "{\"call_id\": \"call-0b1ef9a7683d\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-7f31c2a9\", \"to\": \"orders@clearpath-labs.example\", \"subject\": \"Lab order: PT-20931\", \"state\": \"sent\"}}"
+}

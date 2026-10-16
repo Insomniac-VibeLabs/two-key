@@ -1,0 +1,28 @@
+$ /workspace/tk-run6z/.venv/bin/python -m two_key init-key records/sign_principal-v3/keys
+rc=0 (stdout suppressed: key paths)
+$ /workspace/tk-run6z/.venv/bin/python -m two_key sign-constitution --key records/sign_principal-v3/keys/principal.pem --prose records/sign_principal-v3/constitution.md --rules records/sign_principal-v3/rules.json --out records/sign_principal-v3/constitution.signed.json
+rc=0
+--- stdout
+wrote records/sign_principal-v3/constitution.signed.json
+--- stderr
+two-key: note: rule 'require-verified-ticket': tool 'lookup_kb' marks ticket_verified not_applicable (default ticket_verified=true), so the rule never denies it
+two-key: note: rule 'require-verified-ticket': tool 'send_notice' marks ticket_verified not_applicable (default ticket_verified=true), so the rule never denies it
+two-key: note: rule 'no-editor-shares': tool 'lookup_kb' marks role not_applicable (default role="viewer"), so the rule never denies it
+two-key: note: rule 'no-editor-shares': tool 'reset_password' marks role not_applicable (default role="viewer"), so the rule never denies it
+two-key: note: rule 'no-editor-shares': tool 'send_notice' marks role not_applicable (default role="viewer"), so the rule never denies it
+two-key: note: rule 'protected-accounts-in-person-only': tool 'grant_drive_access' marks account_id not_applicable (default account_id="none"), so the rule never denies it
+two-key: note: rule 'protected-accounts-in-person-only': tool 'lookup_kb' marks account_id not_applicable (default account_id="none"), so the rule never denies it
+two-key: note: rule 'protected-accounts-in-person-only': tool 'send_notice' marks account_id not_applicable (default account_id="none"), so the rule never denies it
+two-key: note: rule 'sensitive-folders-viewer-only': tool 'lookup_kb' marks folder_id, role not_applicable (default folder_id="none", role="viewer"), so the rule never denies it
+two-key: note: rule 'sensitive-folders-viewer-only': tool 'reset_password' marks folder_id, role not_applicable (default folder_id="none", role="viewer"), so the rule never denies it
+two-key: note: rule 'sensitive-folders-viewer-only': tool 'send_notice' marks folder_id, role not_applicable (default folder_id="none", role="viewer"), so the rule never denies it
+two-key: WARNING: rule 'sensitive-folders-viewer-only': folder_id is case: exact and the rule lists values to deny (eq/in), so a case variant of a listed value does not match. Write it with neq or not_in (values to allow), or be sure the tool treats letter case as significant
+two-key: WARNING: tool 'reset_password': the string field account_id maps 'account_id', which looks like an identifier; the tool receives it lower-cased. If the tool's ids are case-sensitive, declare account_id with case: exact
+--- envelope format: two-key-constitution-v3
+$ PYTHONPATH=/workspace/tk-run6z-school /workspace/tk-run6z/.venv/bin/python -m two_key mcp-draft-specs --constitution records/sign_principal-v3/constitution.signed.json -- /workspace/tk-run6z/.venv/bin/python school_mcp_server.py
+{
+  "schema_digest": "sha256:ff666ef0198aa382640a4c5b3ddfc727fd921ec34086dafcfefcb72da063c302",
+  "signed_tools_not_listed": [],
+  "undescribed_inputs": []
+}
+rc=0

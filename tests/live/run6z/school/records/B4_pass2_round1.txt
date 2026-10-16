@@ -1,0 +1,3 @@
+$ cd /workspace/tk-run6z-school && RUN6Z_BASE=/workspace/tk-run6z-school/pass2 RUN6Z_SCHOOL_FILE=school_constitution.principal-v3-domain.json /workspace/tk-run6z/.venv/bin/python harness.py
+COMPLETE: /workspace/tk-run6z-school/pass2/RESULTS.md and results.json written
+rc=0

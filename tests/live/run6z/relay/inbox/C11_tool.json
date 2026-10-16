@@ -1,0 +1,5 @@
+{
+ "rid": "R02d289d53a",
+ "prompt_sha": "c99d2d22c50654587b9807c14a0c01f8b418bf1ee2c084c573d02b5f6d3d7a67",
+ "content": "{\"call_id\": \"call-a668e6d4371d\", \"status\": \"ok\", \"result\": {\"results\": [{\"title\": \"Influenza vaccination recommendations, 2026-27 season\", \"snippet\": \"Routine annual influenza vaccination is recommended for everyone 6 months and older who has no contraindications. See the full recommendations for age-specific vaccine options.\", \"source\": \"cdc.gov/flu\"}]}}"
+}
