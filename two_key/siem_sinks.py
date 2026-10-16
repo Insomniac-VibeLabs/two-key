@@ -39,6 +39,8 @@ DEFAULT_PORTS = {"tls": 6514, "tcp": 514, "udp": 514}
 DEFAULT_TIMEOUT_SECONDS = 5.0
 DEFAULT_MAX_DATAGRAM = 2048         # RFC 5426 asks senders to keep a datagram small enough not to fragment
 DEFAULT_BATCH_MAX = 100
+GOODBYE_SECONDS = 1.0               # a close sends close_notify and waits no longer than this for the
+                                    # collector's; ours is on the wire either way
 MAX_HOSTNAME_CHARS = 255
 MAX_APP_NAME_CHARS = 48
 # Syslog facilities an operator may pick. local0 is the default; "two-key" is not a system service.
@@ -223,6 +225,10 @@ class SyslogSink:
             sock = socket.create_connection((self.host, self.port), timeout=self.timeout_seconds)
         except OSError as e:
             raise SiemError(f"cannot connect to {self.host}:{self.port}: {_why(e)}") from None
+        try:        # an event is small, and a collector reads it as it arrives: no Nagle delay
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
         if self._context is not None:
             try:
                 sock = self._context.wrap_socket(sock, server_hostname=self.host)
@@ -232,13 +238,30 @@ class SyslogSink:
         self._socket = sock
         return sock
 
-    def _drop(self) -> None:
+    def _drop(self, *, graceful: bool = False) -> None:
         sock, self._socket = self._socket, None
-        if sock is not None:
-            try:
-                sock.close()
-            except OSError:
-                pass
+        if sock is None:
+            return
+        if graceful:
+            sock = self._goodbye(sock)
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+    def _goodbye(self, sock):
+        """End the stream the way a collector expects before the socket goes: close_notify for TLS, then a
+        half-close, so what was sent last is read as a finished message and not as a truncated stream
+        (live run 8x, C15). Bounded by ``GOODBYE_SECONDS``; a collector that has already gone costs nothing.
+        Returns the socket to close, which after ``unwrap`` is the one underneath."""
+        try:
+            sock.settimeout(min(self.timeout_seconds, GOODBYE_SECONDS))
+            if isinstance(sock, ssl.SSLSocket):
+                sock = sock.unwrap()
+            sock.shutdown(socket.SHUT_WR)
+        except (OSError, ssl.SSLError, ValueError):
+            pass
+        return sock
 
     def check(self) -> None:
         """Reach the collector once at start: a TLS handshake, a TCP connect, or a resolved address."""
@@ -251,7 +274,7 @@ class SyslogSink:
 
     def close(self) -> None:
         with self._lock:
-            self._drop()
+            self._drop(graceful=True)
 
 
 class WebhookSink:

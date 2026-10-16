@@ -503,14 +503,17 @@ def startup_paths(config: ProxyConfig) -> list[tuple[Path | str, str]]:
     for policy in config.tools.values():
         paths.extend(_tool_paths(policy))
     paths.extend(_scanner_paths(config.scan or {}))
-    paths.extend(_siem_paths(config.siem or {}, config.path.parent))
+    paths.extend(_siem_paths(config.siem or {}, config.path.parent, config.ledger))
     return paths
 
 
-def _siem_paths(siem: Mapping[str, Any], base: Path) -> list[tuple[Path | str, str]]:
+def _siem_paths(siem: Mapping[str, Any], base: Path, ledger: Path | str) -> list[tuple[Path | str, str]]:
     """The files a SIEM sink reads: a CA bundle, a client certificate and its key, a webhook token, and an
-    HMAC key. Whoever can change one of them can redirect or read the copy."""
-    out: list[tuple[Path | str, str]] = []
+    HMAC key. Whoever can change one of them can redirect or read the copy. The delivery cursor too: whoever
+    can change it can make the copy repeat or skip entries (live run 8x, C40; docs/CONNECTING.md says it is
+    checked)."""
+    from ..siem import default_cursor_path
+    out: list[tuple[Path | str, str]] = [(default_cursor_path(ledger), "file")]
     for sink in siem.get("sinks") or ():
         if not isinstance(sink, Mapping):
             continue

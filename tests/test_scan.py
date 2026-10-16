@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from two_key import core
+from two_key import _platform, core
 from two_key.canonical import canonical_bytes
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey, TwoKeyConfigError
@@ -405,6 +405,22 @@ class PathFiles(Base):
         r = self.gw.invoke(d.token, "print_doc", {"file_path": str(path)})
         self.assertEqual((r.allowed, r.reason), (False, "file_changed"))
         self.assertEqual(self.ran, [])
+
+    @unittest.skipIf(_platform.WINDOWS, "POSIX named pipe")
+    def test_a_named_pipe_is_denied_and_does_not_wait_for_a_writer(self):
+        """Opening a FIFO waits for a writer, which would hang the call for as long as the agent likes
+        (live run 8x, C78). Nothing but a regular file is read."""
+        self.make()
+        pipe = self.folder / "pipe.txt"
+        os.mkfifo(pipe)
+        self.addCleanup(pipe.unlink)
+        done = threading.Event()
+        out = []
+        thread = threading.Thread(target=lambda: (out.append(self.print_call(pipe)), done.set()), daemon=True)
+        thread.start()
+        self.assertTrue(done.wait(10), "the call never came back: the open waited for a writer")
+        self.assert_file_denied(out[0], "file_unreadable", {"file": "file_path", "kind": "path",
+                                                            "why": "not_a_file"}, tool="print_doc")
 
     def test_paths_the_agent_could_steer_are_denied_under_every_stance(self):
         outside = self.dir / "secret.txt"

@@ -148,14 +148,14 @@ What happens at start:
   sink's type, host, port, and transport. Never a secret. So the ledger itself
   records where its copy went.
 
-`replay_from` decides the first start only, and the cursor
+`replay_from` decides where a sink starts, and the cursor
 (`<ledger>.siem/cursor.json`, owner-only, beside the ledger and never inside
-it) decides every start after it:
+it) is what `cursor` reads and every sink keeps up to date:
 
-| `replay_from` | First start sends |
+| `replay_from` | Each start sends |
 | --- | --- |
 | `cursor` (default) | from the cursor; with no cursor file yet, only entries from now on, so turning the copy on does not flood a SIEM with history. Backfill with `siem-export` |
-| `start` | the whole ledger |
+| `start` | the whole ledger, on **every** start, not only the first: it ignores the cursor, so a restart sends the history again (live run 8x). Set it to backfill once, then put it back to `cursor`, or use `siem-export` |
 | `now` | only entries from now on |
 
 An event sent late — a catch-up at start, or after an outage — carries

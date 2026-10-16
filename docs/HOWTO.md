@@ -1397,10 +1397,13 @@ form, the ledger prefix root, the capability key fingerprint pinned in the
 ledger (`capability_key_mismatch`), and that nothing revoked or reloaded
 the constitution after issuance. A token that fails its signature or
 format check is refused without a ledger entry, so an unauthenticated
-caller cannot write to the ledger. Any later refusal of an authenticated
+caller cannot write to the ledger. A later refusal of an authenticated
 token is ledgered as `gateway_denied` with the reason, the jti, the tool
 name (only a short identifier; otherwise its size and digest), and
-`tool_args_size` and `tool_args_digest`, never the argument values. Pass the same
+`tool_args_size` and `tool_args_digest`, never the argument values. Once per
+token: a repeat refusal of the same token, such as replaying one that was
+already redeemed, still refuses but is not ledgered again, so a caller
+holding one spent token cannot make the ledger grow. Pass the same
 argument object you authorized. The hash covers those bytes. The registered
 function is called with declared paths only: unnamed keys are omitted, and
 a counterparty path is the canonical party. The token is

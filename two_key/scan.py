@@ -611,7 +611,10 @@ class Scanner:
         past it: nothing beyond ``limit`` is kept, and a file whose size says it is larger is not read)."""
         norm = _confined_path(value, folder)
         try:
-            fd = _platform.open_nofollow(norm)
+            # Without O_NONBLOCK, opening a named pipe waits for a writer and the call never returns
+            # (live run 8x, C78). It has no effect on a regular file, which is all this reads: _read_regular_file
+            # refuses anything else, after the open.
+            fd = _platform.open_nofollow(norm, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
         except OSError:
             raise _Unreadable("cannot_open") from None
         try:

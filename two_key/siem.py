@@ -68,6 +68,10 @@ BACKOFF_START_SECONDS = 1.0
 BACKOFF_MAX_SECONDS = 60.0
 # One line per sink state change, no more often than this.
 REPORT_SECONDS = 60.0
+# What a close waits for: one more pass over every sink that is not already in backoff, so the last events
+# go out instead of dying with the thread. A sink that declares no timeout counts as the sink default.
+CLOSE_MAX_SECONDS = 15.0
+CLOSE_SINK_SECONDS = 5.0
 
 
 class SiemError(RuntimeError):
@@ -849,8 +853,17 @@ class Delivery:
         self.notify(-1)
         return self._idle.wait(timeout)
 
+    def _close_wait(self) -> float:
+        """How long ``close`` waits for the sender's last pass: what one try at every sink can take, with a
+        ceiling. A sink already in backoff is skipped by that pass, so a collector known to be down costs
+        nothing here."""
+        each = sum(float(getattr(state.sink, "timeout_seconds", CLOSE_SINK_SECONDS) or CLOSE_SINK_SECONDS)
+                   for state in self.states)
+        return min(CLOSE_MAX_SECONDS, self.config.flush_seconds + each)
+
     def close(self) -> None:
-        """Stop the sender. Whatever is left goes out on the next start, from the cursor."""
+        """Stop the sender, giving its last pass time to finish. Whatever is still left goes out on the next
+        start, from the cursor."""
         if self._closed:
             return
         self._closed = True
@@ -858,7 +871,7 @@ class Delivery:
         self.notify(-1)
         thread, self._thread = self._thread, None
         if thread is not None:
-            thread.join(self.config.flush_seconds)
+            thread.join(self._close_wait())
         for state in self.states:
             try:
                 state.sink.close()
@@ -868,8 +881,12 @@ class Delivery:
 
 
 def default_cursor_path(ledger: Any) -> Path:
-    """``<ledger>.siem/cursor.json``, beside the ledger directory and never inside it."""
-    path = Path(getattr(ledger, "path", "."))
+    """``<ledger>.siem/cursor.json``, beside the ledger directory and never inside it.
+
+    Takes a ``Ledger`` or the ledger path itself, so the start-up writable-path check can name the cursor
+    before anything is opened (two_key/mcp_proxy/core.py).
+    """
+    path = Path(getattr(ledger, "path", None) or ledger or ".")
     return path.parent / f"{path.name}.siem" / "cursor.json"
 
 

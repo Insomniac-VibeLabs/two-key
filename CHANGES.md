@@ -108,6 +108,7 @@
 - [The proxy refuses an agent that is, or can change, Two-Key (0.7.0) — 2026-10-16](#the-proxy-refuses-an-agent-that-is-or-can-change-two-key-070--2026-10-16)
 - [Live harness: the start-up account check — 2026-10-16](#live-harness-the-start-up-account-check--2026-10-16)
 - [The `on_agent_access` tests on macOS and Windows — 2026-10-16](#the-on_agent_access-tests-on-macos-and-windows--2026-10-16)
+- [Live run 8x findings: the SIEM copy, a named pipe, signing — 2026-10-16](#live-run-8x-findings-the-siem-copy-a-named-pipe-signing--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3634,3 +3635,42 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   The writable-path check names the real path, and on macOS `/var` is a link
   to `/private/var`, so two tests looked for a path the check never names.
   They now resolve the temporary directory first.
+
+## Live run 8x findings: the SIEM copy, a named pipe, signing — 2026-10-16
+
+- The SIEM copy no longer loses its tail when the process ends (run 8x, C15).
+  A syslog sink's `close` now sends TLS `close_notify` and half-closes before
+  the socket goes, so a collector reads the last message as a finished one
+  instead of a truncated stream, and a stream socket is opened with
+  `TCP_NODELAY`, since an event is small and a collector reads it as it
+  arrives. The sender's `close` waits for one pass over every sink (what one
+  try at each can take, at most 15 s) instead of `flush_seconds`, so a
+  collector that takes a moment keeps the last events. A sink already in
+  backoff is skipped by that pass, so a collector known to be down costs
+  nothing at shutdown.
+- A named pipe in a folder a tool takes files from no longer hangs the call
+  (run 8x, C78). Opening it waited for a writer, which the agent could keep
+  away for as long as it liked. The read opens with `O_NONBLOCK`, which does
+  nothing to a regular file, and the open is followed by the same check as
+  before: anything but a regular file is `file_unreadable`.
+- The SIEM delivery cursor joins the start-up writable-path check (run 8x,
+  C40), which is what `docs/CONNECTING.md` already said: whoever can change
+  it can make the copy repeat or skip entries.
+- `two-key sign-constitution` refuses to write over an existing `--out`
+  file; `--force` replaces one (run 8x, finding 3). Signing is deliberate,
+  and so is replacing what every later check verifies against.
+- Docs: `docs/SIEM.md` says plainly that `replay_from: start` sends the whole
+  ledger on **every** start, not only the first (it ignores the cursor);
+  `docs/SCANNERS.md` says what a tool that marks `scan: not_applicable`
+  shows a judge (the field's signed `default`, `clean` in the examples, which
+  a judge cannot tell from a scanned-clean call; the ledger can, since only a
+  scanned call has a `scan` entry); `docs/HOWTO.md` says a gateway refusal is
+  ledgered once per token, so replaying one spent token cannot grow the
+  ledger.
+- The Elastic example's dashboard used Two-Key's own field names while its
+  `siem.yaml` sends ECS, so its panels were empty (run 8x, finding 4). Its
+  columns and queries now use the ECS names the pipeline indexes
+  (`event.action`, `event.reason`, `event.sequence`, `two_key.*`), and the
+  alert panel looks for `gateway_denied`, which is the ledger kind, not
+  `gateway_deny`. Not verified against a live Kibana from the build
+  container, which cannot reach the Elastic registry.

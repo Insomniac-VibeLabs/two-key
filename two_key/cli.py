@@ -99,6 +99,12 @@ def _principal_key(args):
 
 def _sign(args) -> int:
     key = _principal_key(args)
+    if not args.force and Path(args.out).exists():
+        # Signing is deliberate, and the file it writes is what every later check verifies against
+        # (live run 8x, finding 3). Replacing one is deliberate too.
+        print(f"two-key: sign-constitution: refused: {args.out} exists; move it aside, or pass --force to "
+              "replace it", file=sys.stderr)
+        return 1
     try:
         prose, rules, specs, fields = load_unsigned_with_fields(args.prose, args.rules)
         envelope = sign_constitution(prose, rules, key, specs, fields=fields, envelope_format=args.envelope_format)
@@ -575,6 +581,9 @@ def main(argv: list[str] | None = None) -> int:
                            "an @domain allow entry); v2 forces v2 (refused with any of those); v3 forces v3. "
                            "Installs older than custom fields refuse v2; installs before 0.5.0 refuse v3")
     sign.add_argument("--out", required=True)
+    sign.add_argument("--force", action="store_true",
+                      help="replace an existing --out file; without it, signing refuses rather than write "
+                           "over a signed constitution")
     sign.set_defaults(func=_sign)
     auth = sub.add_parser("authorize", help="run Path A and Path B; do not execute the tool")
     auth.add_argument("--key", required=True, help=_KEY_HELP)

@@ -15,6 +15,7 @@ import socketserver
 import ssl
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -34,6 +35,7 @@ class Collector:
 
     def __init__(self, kind="tcp", certificates=None, require_client=False):
         self.data = bytearray()
+        self.end = None             # how the last stream ended: "clean" (EOF) or the error that ended it
         self.lock = threading.Lock()
         self.kind = kind
         if kind == "udp":
@@ -75,15 +77,19 @@ class Collector:
         except (socket.timeout, TimeoutError):
             return
         if self.context is not None:
-            conn = self.context.wrap_socket(conn, server_side=True)
+            # suppress_ragged_eofs=False so a stream that ends without close_notify is told apart from
+            # one that ends with it: the difference the sink's close is about.
+            conn = self.context.wrap_socket(conn, server_side=True, suppress_ragged_eofs=False)
         with conn:
             conn.settimeout(2)
             while True:
                 try:
                     chunk = conn.recv(65536)
-                except (socket.timeout, TimeoutError, OSError):
+                except (socket.timeout, TimeoutError, OSError) as e:
+                    self.end = type(e).__name__
                     return
                 if not chunk:
+                    self.end = "clean"
                     return
                 self._keep(chunk)
 
@@ -198,6 +204,21 @@ class SyslogTls(unittest.TestCase):
         collector = Collector("tls", certificates=self.certificates, **kw)
         self.addCleanup(collector.close)
         return collector
+
+    def test_a_close_sends_every_message_and_ends_the_stream_cleanly(self):
+        """The collector read the last message as a finished one, not as a truncated stream (run 8x, C15)."""
+        collector = self.collector()
+        sink = SyslogSink("127.0.0.1", transport="tls", port=collector.port,
+                          ca_file=self.certificates.ca_file)
+        self.addCleanup(sink.close)
+        sink.send([MESSAGE] * 17)
+        sink.close()
+        self.assertEqual(collector.text(17).count('"kind":"decision"'), 17)
+        for _ in range(100):
+            if collector.end is not None:
+                break
+            time.sleep(0.05)
+        self.assertEqual(collector.end, "clean")
 
     def test_tls_delivers_to_a_collector_with_a_trusted_certificate(self):
         collector = self.collector()
@@ -492,6 +513,14 @@ class ProxyBlock(unittest.TestCase):
         # A rooted path with no drive letter is not absolute on Windows, so the config joins it onto the
         # proxy.yaml directory's drive; join it the same way here rather than onto the current drive.
         self.assertIn(os.path.normcase(os.path.abspath(self.dir / "/abs/client.pem")), checked)
+
+    def test_the_delivery_cursor_joins_the_writable_path_check(self):
+        """Whoever can change the cursor can make the copy repeat or skip entries, and docs/CONNECTING.md
+        says the proxy names it (live run 8x, C40)."""
+        from two_key.mcp_proxy.core import startup_paths
+        config = self.config(siem={"sinks": [{"type": "syslog", "host": "s.test"}]})
+        checked = {os.path.normcase(os.path.abspath(p)) for p, _rule in startup_paths(config)}
+        self.assertIn(os.path.normcase(str(self.dir / "ledger.siem" / "cursor.json")), checked)
 
 
 if __name__ == "__main__":

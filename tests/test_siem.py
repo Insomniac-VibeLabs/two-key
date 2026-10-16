@@ -600,6 +600,17 @@ class RefusedThroughTheGateway(Fixture):
         self.assertNotIn(SECRET, sink.text)
         self.assertNotIn("tk1.e30.AAAA", sink.text)
 
+    def test_close_waits_for_the_sender_s_last_pass(self):
+        """A collector that takes a moment must not lose the tail: close waits for one pass over every sink,
+        not for ``flush_seconds`` (live run 8x, C15)."""
+        sink = ListSink(delay=1.0)
+        tk = self.start(siem_config=SiemConfig(sinks=(sink,), flush_seconds=0.1,
+                                               refused_token_interval_seconds=1000))
+        self.exercise(tk)
+        tk.close()
+        seqs = sink.seqs()      # from the first entry this sink took through the last the ledger holds
+        self.assertEqual(seqs, list(range(seqs[0], tk.ledger.size())))
+
     def test_close_reports_the_last_counts(self):
         sink = ListSink()
         tk = self.start(siem_config=SiemConfig(sinks=(sink,), refused_token_interval_seconds=1000))
