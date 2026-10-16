@@ -1432,11 +1432,10 @@ cross-process protocol.
 
 Why:
 
-- A `Ledger` opened in another process is its own in-memory copy. It does
-  not see tokens issued after it opened, so it refuses them
-  (`ledger_size_invalid`, then `ledger_failed: ledger file changed by
-  another writer` when it tries to record the refusal). Reopening before
-  every redemption is not a supported mode either.
+- A `Ledger` opened in another process is its own in-memory copy. It
+  reads another writer's entries only when it next writes, so it refuses a
+  token issued since (`ledger_size_invalid`) before it reads them.
+  Reopening before every redemption is not a supported mode either.
 - Opening a `Ledger` loads the ledger key and the witness key, and writing
   needs the principal private key. A second process holding them is a
   second copy of those keys, not a smaller one.
@@ -1822,6 +1821,7 @@ refused. Relative paths are relative to the file.
 | `agent_session_env` | no | The variable holding the agent's session, read once at start; unset or empty refuses to start |
 | `agent_id`, `hosting` | no | Ledger metadata, at most 256 characters; not trust |
 | `allow_unresolved_identity` | no | `true` starts despite an `unresolved_identity` warning (default `false`) |
+| `on_agent_access` | no | `refuse` (default) does not start when the account that started the proxy (the agent host's, or the SSH login account's) is Two-Key's own (`agent_same_account`), is root (`agent_account_root`), cannot be told (`agent_account_unknown`, which includes Windows for now), or can change a file or folder the proxy runs or reads (`agent_can_write`); `warn` names it and starts, for a test on one machine under one account. `high_assurance` refuses either way and does not accept `warn` ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you), 0.7.0) |
 | `on_writable_paths` | no | `warn` (default) names each file or folder the proxy runs or reads that another account could change, and starts; `refuse` does not start. `high_assurance` refuses either way and does not accept `warn` ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you), 0.6.0) |
 | `upstream.command` | yes | Program and arguments, as a list; no shell |
 | `upstream.env` | no | Variables for the child: a literal, or `{env: NAME}` read from the proxy's environment (unset refuses to start) |
@@ -1890,6 +1890,7 @@ on stderr and exits 1.
 | `upstream_env_missing: upstream.env.X ...` | The variable `{env: NAME}` reads is unset or empty | Set it in the proxy's environment |
 | `agent_session_env: ...` | The agent session variable is unset or empty | Set it, or remove the key |
 | `TwoKeyConfigError: ...`, `JudgeConfigError: ...`, `LedgerError: ...` | Two-Key itself refused, as `two-key authorize` would | See the sections on judges, the monitored agent, and the ledger |
+| `AgentAccessError: agent_same_account: ...`, `agent_account_root`, `agent_account_unknown`, `agent_can_write: <path>: ...` | The account that started the proxy is Two-Key's own, root, unknown, or can change that path; `on_agent_access` is `refuse` (the default) or `high_assurance` is set | Start the proxy from the agent's own account through the `run-proxy` sudo rule (or SSH) and take its write access away ([CONNECTING](CONNECTING.md#route-1-an-mcp-client-through-two-key-mcp-proxy)). For a test under one account only: `on_agent_access: warn` |
 | `TwoKeyConfigError: writable_path: <path>: ...` | Another account could change a file or folder Two-Key runs or reads, and `on_writable_paths: refuse` or `high_assurance` is set | Make it owned by Two-Key's account (or root) and not writable by group or others ([CONNECTING](CONNECTING.md#run-two-key-as-a-service-account)) |
 | `unresolved_identity: ...` | Two-Key cannot tell who serves a judge or the agent (a local proxy serving an alias, an unrecognized host), so it cannot rule out a judge that is the agent | Declare `upstream:` for that side in `judges.yaml`, or set `allow_unresolved_identity: true` to accept the risk |
 | `tools: [...] are not tools in the signed constitution` | A `tools:` entry names an unsigned tool | Remove it, or sign the tool |
@@ -1977,13 +1978,13 @@ Run the proxy as its own OS user, and the upstream server as a third one.
   the network. An agent on another machine starts it over SSH, which
   carries stdio
   ([CONNECTING](CONNECTING.md#an-agent-on-another-machine-route-1-over-ssh)).
-- **One running proxy per ledger.** Each proxy holds its own copy of the
-  ledger's state. When a second proxy on the same ledger writes, every
-  later call through the first is denied with `ledger_failed:ledger file
-  changed by another writer; reopen the ledger` until it restarts. It
-  fails closed, but it stops working. Give each agent session that can run
-  at the same time its own `proxy.yaml` and ledger, or let only one run at
-  a time.
+- **Proxies can share a ledger.** Each proxy appends under the ledger's
+  cross-process lock, and before it writes it reads and verifies what
+  another proxy appended since (each entry, the chain, the signed head,
+  the witness pin). A file that got shorter, or ends in a partial line, is
+  still refused with `ledger file changed by another writer; reopen the
+  ledger`. Each running proxy is its own process with its own copy of the
+  keys; one ledger per agent is still easier to audit.
 - **The pin covers what the agent is shown,** not what the server does: a
   server can change its behavior without changing a schema. Pin the
   version.
@@ -2342,6 +2343,14 @@ names the setting or declaration that controls it.
   reads the SIEM test a guess of a low-entropy argument, which is the trade
   for being able to tie two calls together
   ([SIEM](SIEM.md#trade-offs)).
+
+- `on_agent_access`: `refuse` (the default) does not start when the
+  account that started the proxy is Two-Key's own, root, unknown, or can
+  change what the proxy runs or reads. `warn` starts anyway: for a test on
+  one machine under one account, where the agent can read every key and
+  rewrite the constitution's settings, so nothing it does is held by two
+  keys. On Windows the parent's account cannot be told yet, so the proxy
+  needs `warn` there until it can.
 
 - `on_writable_paths`: `warn` (the default) starts when another account
   could change a file or folder Two-Key runs or reads, and names it on

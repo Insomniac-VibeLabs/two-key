@@ -44,7 +44,7 @@ flowchart LR
 | 0.4.0 | This repository and the package name `two-key` (0.3.1 under the new name) | Released, tag `v0.4.0` |
 | 0.5.0 | MCP adapter: `two-key mcp-proxy`, `two-key mcp-draft-specs`, caller-supplied facts, and the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners; a start-up check for writable paths; judge connection reuse (#6) | Released, tag `v0.6.0` |
-| 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger | Built on `working`, not released |
+| 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Built on `working`, not released |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
@@ -87,6 +87,19 @@ in the same release.
   release remain.
 - **Next**: live run 8 (the SIEM export against a real collector, and the
   code the PR #12 review refactored), then the 0.7.0 release.
+- **Not yet tested enough: agents on another machine.** The maintainer
+  expects an agent connecting from another machine to be the normal case,
+  and the same machine an edge case for testing (2026-10-16). Today the
+  proxy speaks stdio only, and the route for a remote agent is SSH with a
+  forced command (docs/CONNECTING.md). It has been checked only in one
+  container: real accounts, the sudo rule, the forced command's chain, and
+  `sshd -t`; no sshd ran, and no agent connected across a network. Live
+  run 8 is entirely same-machine and loopback, so it proves nothing about
+  a remote agent. Before 1.0: a live run with the agent on another machine
+  over SSH (connect, reconnect, a dropped connection, two agents at once,
+  and the escape attempts `restrict` should stop: a shell, `sftp`, port
+  forwarding, environment variables), the same on macOS and Windows hosts,
+  and a decision on a network transport.
 
 ## Ground rules
 
@@ -142,6 +155,15 @@ Built on `working`, not released. The design note is
 - Remaining: live run 8, then the release. Run 8 covers the SIEM export
   against a real collector (syslog to a listener the maintainer runs, and
   the Elastic example), as well as the 0.6.0 code below.
+- Done: the proxy refuses to start when the account that started it (the
+  agent host's) is Two-Key's own, is root, cannot be told, or can change a
+  file or folder the proxy runs or reads (`on_agent_access`, default
+  `refuse`; `high_assurance` always refuses; maintainer's decision,
+  2026-10-16). Processes that share a ledger read each other's entries
+  under the lock instead of denying every call after the other writes.
+- Remaining after run 8: a live run with the agent on another machine
+  (see "Where we are"). Run 8 runs every proxy beside the simulated agent,
+  so its cases for `on_agent_access` come in the next test batch.
 - Run 8 also covers the code 0.6.0 changed after live run 7 (PR #12
   review): the ICAP verdicts and response reader, file arguments and
   confined path reads, the scanner's start-up checks, the Windows

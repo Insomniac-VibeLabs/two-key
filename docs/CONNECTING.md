@@ -201,7 +201,8 @@ flowchart LR
 6. **Start and read the output.** The proxy prints the tools it serves,
    the scanner stance, and any warning on stderr, and writes
    `mcp_proxy_started` to the ledger. A refusal at start (schema changed,
-   judge holds the agent's credential, unresolved identity) means do not
+   judge holds the agent's credential, unresolved identity, the agent's
+   account is Two-Key's own or can change its files) means do not
    override it until you know why.
 
 ## An agent on another machine (Route 1 over SSH)
@@ -284,12 +285,10 @@ flowchart LR
    Two-Key machine. It needs no route to the tool's API, the system of
    record, the judges, the scanner, or the SIEM collector; Two-Key
    reaches those from its own machine.
-5. **One proxy per ledger at a time.** Each SSH session starts its own
-   proxy. When a second proxy on the same ledger writes, every later call
-   through the first is denied (`ledger_failed:ledger file changed by
-   another writer`) until it restarts. Give each agent that connects at
-   the same time its own login account, wrapper, `proxy.yaml`, and
-   ledger. This holds for Route 1 on one machine too.
+5. **One login account per agent.** Each SSH session starts its own
+   proxy. Proxies can share a ledger (each reads what the others wrote
+   before it writes), but a login account per agent keeps one agent from
+   using another's key, and lets the ledger's `agent_id` tell them apart.
 6. **Record where the agent runs.** `agent_id` and `hosting` in
    `proxy.yaml` go into the ledger as metadata (not trust), for example
    `hosting: agent-machine over ssh`.
@@ -306,11 +305,20 @@ What changes when the agent is on another machine:
   same. A loopback judge or scanner on the Two-Key machine is out of the
   agent's reach ([Services on the same machine](#services-on-the-same-machine)
   still applies to the other accounts there, `tk-agent` included).
-- **The start-up writable check.** It looks only at files on the Two-Key
-  machine. The agent's own account does not exist there, so the check
-  guards against `tk-agent` and every other local account, not against
-  the agent machine. It cannot see `sshd_config`, the `authorized_keys`
+- **The start-up checks.** They look only at the Two-Key machine. The
+  account that started the proxy is the SSH login account (`tk-agent`),
+  read from the parent process (the `sudo` it went through), and the
+  proxy refuses to start if that account is `two-key`, is root, or can
+  change a file or folder the proxy runs or reads (`on_agent_access`).
+  The writable-path check names every other local account that could.
+  Neither can see the agent machine, `sshd_config`, the `authorized_keys`
   file, or the sudoers rule; check those yourself (the checklist below).
+
+> **Not yet tested enough.** This route has been checked in one container
+> only: real accounts, the sudo rule, the forced command's chain, and
+> `sshd -t`. No sshd ran, and no agent connected across a network. Live
+> run 8 is same-machine and loopback. A live run with the agent on another
+> machine is planned before 1.0 (ROADMAP, "Where we are").
 
 ## Route 2: your own agent loop, through the Guard or the library
 
@@ -361,7 +369,7 @@ what an agent would try, and what stops it.
 
 | Connection or hook | Connect it so | An agent might try | Stopped by |
 | --- | --- | --- | --- |
-| Agent host to Two-Key | Route 1: the client starts the proxy wrapper through the exact sudoers rule. Route 2: the framework is offered guarded functions only | Starting the real server, or the proxy with its own config | Removing the real server from the client; sudoers allowing only the wrapper with no arguments; `env_reset`; the wrapper's `cd` to a folder the agent cannot write |
+| Agent host to Two-Key | Route 1: the client starts the proxy wrapper through the exact sudoers rule, from the agent's own account. Route 2: the framework is offered guarded functions only | Starting the real server, or the proxy with its own config; running the agent as Two-Key's account, or with write access to its files | Removing the real server from the client; sudoers allowing only the wrapper with no arguments; `env_reset`; the wrapper's `cd` to a folder the agent cannot write; the proxy refusing to start when its parent's account is Two-Key's own, root, unknown, or can change its files (`on_agent_access`) |
 | Agent machine to the proxy over SSH | A login account that is not `two-key`, a root-owned `authorized_keys` entry with `restrict,command=` and a matching `ForceCommand`, and only SSH open from the agent machine | Running a shell or `sftp` instead of the proxy, forwarding a port to a judge or the tool's API, sending environment variables, or editing its own `authorized_keys` | The forced command and `restrict`, `sudo`'s `env_reset`, root owning the key file, and the firewall; Two-Key cannot see any of these ([An agent on another machine](#an-agent-on-another-machine-route-1-over-ssh)) |
 | Two-Key to the tool (upstream server, or the registered function) | The gateway is the only caller. The upstream runs as its own user with only its credential (`upstream.command` with `sudo -u mcp-billing` or a container) | Calling the tool's API directly; reading the proxy's keys through the upstream | The agent has no tool credential and no network route; the upstream's user cannot read the `two-key` user's files or `/proc` |
 | Tool credentials (`BILLING_TOKEN`, API keys) | In a file only `two-key` reads (`proxy.env`, mode 0600), passed to the upstream through `upstream.env` | Reading it from the environment, a file, a log, or the prompt | Separate users; never in the prompt, the instruction, or an argument |
@@ -436,6 +444,19 @@ At start and on every call, without any setup from you:
   named, or refused under `high_assurance`; the destinations are ledgered
   as `siem_configured`; and only allowlisted fields leave, never an
   argument value or the proposal text ([SIEM](SIEM.md#what-leaves-and-what-never-does)).
+- The account that started the proxy (0.7.0). The proxy reads the real
+  user of its parent process: the agent's host, or the `sudo` it went
+  through, whose real user is still the caller. It refuses to start when
+  that account is Two-Key's own (`agent_same_account`), is root
+  (`agent_account_root`), cannot be told (`agent_account_unknown`), or can
+  change a file or folder in the writable-path check below
+  (`agent_can_write`: it owns it, everyone can write it, or it is in a
+  group that can). `on_agent_access: warn` starts anyway, for a test under
+  one account; `high_assurance` always refuses. On Windows the parent's
+  account cannot be told yet, so the proxy refuses there unless
+  `on_agent_access: warn`. The refusal comes before the ledger is opened.
+  The library (Route 2) has no such check: there the agent is a model your
+  code calls, not a process.
 - Files and folders another account could change (0.6.0). At start,
   `TwoKey` looks at Python itself, each folder on the import path and the
   `.pth` files in it, each module already loaded (Two-Key, its libraries,
@@ -475,8 +496,8 @@ checklist below.
     with no arguments; the real server is not in the client's list.
 [ ] Route 1: the wrapper sets umask 077, changes to a folder the agent cannot write
     before it starts the proxy (or upstream.cwd names one), and runs the two-key command.
-[ ] Route 1: one running proxy per ledger; each agent that connects at the same time
-    has its own wrapper, proxy.yaml, and ledger.
+[ ] Route 1: the proxy starts with no agent_same_account, agent_account_root, or
+    agent_can_write line, and on_agent_access is not set to warn.
 [ ] Agent on another machine: it signs in as its own account (not two-key) with a
     root-owned authorized_keys entry (restrict, command=) and a matching ForceCommand,
     and its machine can reach only SSH on the Two-Key machine.

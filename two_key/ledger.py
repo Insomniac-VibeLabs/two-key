@@ -380,7 +380,7 @@ class Ledger:
                     self.fd = _platform.open_lock_file(ledger.lock_path())
                     _platform.lock(self.fd)
                     if check_stale and ledger._entries_size is not None and ledger._entries_file_size() != ledger._entries_size:
-                        raise LedgerError("ledger file changed by another writer; reopen the ledger")
+                        ledger._catch_up_unlocked()
                     return self
                 except BaseException:
                     self._release()
@@ -553,6 +553,47 @@ class Ledger:
                 self._check_witness(self._witness, str(self.witness_path))
             self._sync_witness_public()
             self._sync_anchor_forward()
+
+    def _catch_up_unlocked(self) -> None:
+        """Read the entries another process appended since this one last read or wrote the file. Caller holds
+        both locks.
+
+        Two processes may share a ledger (two proxies, say): each appends under the cross-process lock, and
+        the other then finds the file longer than it left it. The new lines are verified as ``_load`` verifies
+        them (each decrypts, continues the chain from this process's last entry, and carries a valid witness
+        pin or rotation), then the signed head must match the longer chain and the anchor must not be ahead of
+        it. They are not passed to the observers: the process that wrote them reports them. A file that got
+        shorter, or ends in a partial line, is not something another writer does under the lock, so it is
+        refused as before and the ledger must be reopened.
+        """
+        size, known = self._entries_file_size(), self._entries_size
+        stale = "ledger file changed by another writer; reopen the ledger"
+        if known is None or size < known:
+            raise LedgerError(stale)
+        fd = _platform.open_nofollow(self.entries_path, os.O_RDONLY | _platform.O_BINARY)
+        with os.fdopen(fd, "rb") as fh:
+            fh.seek(known)
+            data = fh.read(size - known)
+        if len(data) != size - known or not data.endswith(b"\n"):
+            raise LedgerError(stale)
+        prev = self.entries[-1].entry_hash if self.entries else "0" * 64
+        for line in data.decode("utf-8").splitlines():
+            if not line.strip():
+                continue
+            raw = json.loads(_open(self._data_key, line))
+            entry = Entry(raw["seq"], raw["prev"], raw["kind"], raw["body"], raw["entry_hash"])
+            expect = self._hash(entry.seq, entry.prev, entry.kind, entry.body)
+            if entry.entry_hash != expect or entry.prev != prev or entry.seq != len(self.entries):
+                raise LedgerError("ledger chain failed verification")
+            self._track(entry, verify=True)
+            self.entries.append(entry)
+            self._merkle_add(bytes.fromhex(entry.entry_hash))
+            prev = entry.entry_hash
+        self._entries_size = size
+        self._verify_head()
+        self._witness = self._load_witness()        # the other process may have rotated it
+        self._check_witness(self._witness, str(self.witness_path))
+        self._reject_if_behind_anchor()
 
     def _sync_witness_public(self) -> bool:
         """Keep ``witness.pub.pem`` in step with ``witness.pem`` once that key matches the pins. It is derived and

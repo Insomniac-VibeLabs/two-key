@@ -131,7 +131,10 @@ Run the proxy and the upstream server as separate OS users, so neither the
 agent nor the server can reach the proxy's keys (HOWTO "Key custody").
 The proxy speaks stdio only and does not listen on the network; an agent
 on another machine starts it over SSH with a forced command
-([CONNECTING](docs/CONNECTING.md#an-agent-on-another-machine-route-1-over-ssh)).
+([CONNECTING](docs/CONNECTING.md#an-agent-on-another-machine-route-1-over-ssh)),
+a route that still needs live testing. On `working` (0.7.0), the proxy
+refuses to start when the account that started it is Two-Key's own, is
+root, or can change Two-Key's files (`on_agent_access`).
 
 ## Documentation
 

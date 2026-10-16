@@ -216,8 +216,9 @@ class CommandLine(unittest.TestCase):
             """))
 
     def config(self, **over):
+        # The test runner starts the proxy as its own account; tests/test_agent_access.py covers that refusal.
         data = {"constitution": "constitution.json", "keys": {"principal": "keys/principal.pem"},
-                "ledger": "ledger", "judges": "judges.yaml",
+                "ledger": "ledger", "judges": "judges.yaml", "on_agent_access": "warn",
                 "upstream": {"command": [sys.executable, str(FAKE)], "schema_digest": DIGEST}, **over}
         (self.dir / "proxy.json").write_text(json.dumps(data))
         return self.dir / "proxy.json"
@@ -242,6 +243,21 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(done.returncode, 1, done.stderr)
         self.assertEqual(done.stdout, "")
         self.assertIn("mcp-proxy refused to start: upstream_schema_changed", done.stderr)
+
+    def test_the_test_runners_own_account_refuses_to_start_by_default(self):
+        # The runner starts the proxy as its own account: the case on_agent_access exists for.
+        self.judges("http://localhost:4000/v1", "house-model")
+        path = self.config(allow_unresolved_identity=True)
+        data = json.loads(path.read_text())
+        del data["on_agent_access"]
+        path.write_text(json.dumps(data))
+        done = self.run_proxy(path)
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertEqual(done.stdout, "")
+        code = "agent_account_unknown" if os.name == "nt" else "agent_same_account"
+        self.assertIn(f"mcp-proxy refused to start: AgentAccessError: {code}: ", done.stderr)
+        self.assertIn("on_agent_access: refuse (the default) refuses to start (docs/CONNECTING.md)", done.stderr)
+        self.assertFalse((self.dir / "ledger").exists())        # refused before the ledger is opened
 
     def test_a_config_error(self):
         done = self.run_proxy(self.config(upstream={"command": "python server.py", "schema_digest": DIGEST}))

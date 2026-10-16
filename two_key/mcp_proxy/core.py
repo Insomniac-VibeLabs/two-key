@@ -434,6 +434,7 @@ class ProxyCore:
 
 def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
     """``TwoKey`` from the files the config names, the same way ``two-key authorize`` loads them."""
+    from .. import agent_access
     from ..constitution import ConstitutionError, ConstitutionSignatureError, load_envelope
     from ..core import TwoKey, TwoKeyConfigError
     from ..identity import IdentityError, load_monitored_agent_file
@@ -451,6 +452,10 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
                                                         if policy.files})
         key = load_private_key_file(config.principal_key)
         judges, policy = load_config_file(config.judges, judge_transport)
+        high = bool(getattr(policy, "is_high_assurance", False))
+        agent_access.check(startup_paths(config), agent_access.resolve_mode(config.on_agent_access, high),
+                           why="high_assurance" if high else
+                           f"on_agent_access: {config.on_agent_access or 'refuse (the default)'}")
         agent = load_monitored_agent_file(config.judges)
         witness = load_public_key(config.witness_public_key) if config.witness_public_key else None
         siem = siem_from_config(config.siem, config.path.parent) if config.siem is not None else None

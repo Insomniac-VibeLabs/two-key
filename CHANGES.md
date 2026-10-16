@@ -105,6 +105,7 @@
 - [Live harness: run 8 (four personas, the SIEM copy, the paths 0.6.0 refactored) — 2026-10-16](#live-harness-run-8-four-personas-the-siem-copy-the-paths-060-refactored--2026-10-16)
 - [Docs: an agent on another machine, over SSH — 2026-10-16](#docs-an-agent-on-another-machine-over-ssh--2026-10-16)
 - [Live harness: what a pass does not cover — 2026-10-16](#live-harness-what-a-pass-does-not-cover--2026-10-16)
+- [The proxy refuses an agent that is, or can change, Two-Key (0.7.0) — 2026-10-16](#the-proxy-refuses-an-agent-that-is-or-can-change-two-key-070--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3554,8 +3555,57 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   three signed tools, one allowed call, and the expected denies. The
   `sshd_config` block was checked with `sshd -t` and `sshd -T`; sshd itself
   was not run in the test container.
+<<<<<<< HEAD
 ## Live harness: what a pass does not cover — 2026-10-16
 
 - `RESULTS.md` and `tests/live/RELAY.md` now say it plainly: every endpoint of a pass is on one machine, on
   loopback, so a pass says nothing about a monitored agent that connects from another machine. That deployment is
   the one the operator expects to be the common one, and it needs a live run of its own.
+=======
+
+## The proxy refuses an agent that is, or can change, Two-Key (0.7.0) — 2026-10-16
+
+- New `two_key/agent_access.py` and `on_agent_access` in `proxy.yaml`
+  (maintainer's decision, 2026-10-16: refuse by default). Before it opens the
+  ledger, the proxy reads the real user of its parent process (the agent's
+  host, or the `sudo` or SSH session it went through; `/proc` on Linux,
+  `/bin/ps` elsewhere, through `_platform.parent_account`) and refuses to
+  start when that account is Two-Key's own (`agent_same_account`), is root
+  (`agent_account_root`), cannot be told (`agent_account_unknown`), or can
+  change a file or folder of the writable-path check (`agent_can_write`: it
+  owns it, everyone can write it, or it is in a group that can; an account
+  whose groups cannot be listed counts as in every group). `warn` names the
+  problem and starts, for a test under one account; `high_assurance` refuses
+  and does not accept `warn`. The refusal reads `two-key: mcp-proxy refused
+  to start: AgentAccessError: <code>: ...; on_agent_access: refuse (the
+  default) refuses to start (docs/CONNECTING.md)`. The library (Route 2) has
+  no such check.
+- Windows cannot tell the parent's account yet, so a proxy on Windows needs
+  `on_agent_access: warn` until it can. Upgrading from 0.6.0: a proxy started
+  under Two-Key's own account, as root, or on Windows now refuses to start.
+- Two processes on one ledger: a `Ledger` that finds the file longer than it
+  left it now reads the new entries under the cross-process lock and verifies
+  them as an open does (each decrypts and continues the chain, the witness pin
+  or rotation, the signed head, the anchor), instead of refusing every later
+  write with `ledger file changed by another writer`. It does not pass them to
+  its SIEM observer, since their writer sends them. A file that got shorter,
+  or ends in a partial line, is still refused. This is a ledger change,
+  approved by the maintainer on 2026-10-16.
+- A split gateway (a `Ledger` no `TwoKey` in the process opened) still
+  refuses a token issued since it last read the file, now as
+  `ledger_size_invalid` alone.
+- Docs: `docs/CONNECTING.md` (what Two-Key checks, the SSH section, the
+  connection table, the checklist, and a note that remote agents are not yet
+  tested enough), `docs/HOWTO.md` (the `proxy.yaml` table, troubleshooting,
+  the trade-off, the limits, the deployment boundary), `docs/THREAT_MODEL.md`,
+  `ROADMAP.md` (the remote-agent testing gap, which live run 8 does not
+  close), `README.md`, `SECURITY.md`, `AGENTS.md`, and `llms.txt`.
+- Tests: `tests/test_agent_access.py`, `tests/test_ledger_shared.py`, a
+  command-line case in `tests/test_mcp_proxy_sdk.py` (the test runner's own
+  account is refused), and the old stale-ledger test now expects the catch-up.
+  Checked by hand in a container with real accounts: the same account, root,
+  and a group the agent's account is in are refused; a separate account
+  through the sudo rule starts and serves; two proxies on one ledger serve
+  calls in turn and `two-key audit` passes.
+
+>>>>>>> 9ed8247 (Proxy: refuse an agent that is, or can change, Two-Key; shared ledgers catch up)

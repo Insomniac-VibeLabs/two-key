@@ -230,6 +230,21 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   named, not passed. There is no setting that turns it off, and on POSIX a
   group write bit counts for every group but 0; do not add either. It runs
   before anything is written to the ledger (`tests/test_writable_paths.py`).
+- Agent account (0.7.0, `two_key/agent_access.py`): the MCP proxy reads the
+  real user of its parent process (`_platform.parent_account`, never an
+  environment variable) before it opens the ledger, and refuses to start
+  when that account is Two-Key's own (`agent_same_account`), root
+  (`agent_account_root`), unknown (`agent_account_unknown`, Windows
+  included for now), or can change a path of the writable-path check
+  (`agent_can_write`). `on_agent_access: refuse` is the default (maintainer's
+  decision, 2026-10-16); `warn` starts; `high_assurance` refuses and does
+  not accept `warn`. Unknown is never a different account; an account whose
+  groups cannot be listed is in every group (`tests/test_agent_access.py`).
+- Shared ledger (0.7.0): a `Ledger` that finds the file longer than it
+  left it reads and verifies the new entries under the cross-process lock
+  (chain, head, witness pin, anchor) and does not pass them to its
+  observers; a shorter file or a partial line is still refused
+  (`tests/test_ledger_shared.py`).
 - Content scanning (0.6.0, `two_key/scan.py`): Two-Key alone starts a scan,
   for every call to a tool whose signed spec maps the scan field, and fills
   the verdict; nothing the agent writes turns it on or off, and `scan` in

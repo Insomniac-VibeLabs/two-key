@@ -181,8 +181,12 @@ mcp_proxy_started is ledgered at start. A deny is an MCP tool error "two-key
 denied this call: <reason>" (reason code only). One call at a time; tools listed once at start; no
 resources, prompts, sampling, elicitation, or roots. The proxy serves the agent's host over stdio only (no
 network listener); an agent on another machine starts it over SSH with a forced command (docs/CONNECTING.md).
-One running proxy per ledger: a second proxy writing to the same ledger makes the first deny every
-later call (ledger_failed) until it restarts. two-key mcp-draft-specs --out DIR -- COMMAND
+The proxy refuses to start (on_agent_access: refuse, the default; warn starts; high_assurance always
+refuses) when the real account of its parent process is Two-Key's own (agent_same_account), root
+(agent_account_root), unknown (agent_account_unknown, which includes Windows for now), or can change a
+path it runs or reads (agent_can_write). Processes sharing a ledger read and verify each other's entries
+under the lock before writing; a shorter file or a partial line is still refused. Remote agents are
+little tested (ROADMAP). two-key mcp-draft-specs --out DIR -- COMMAND
 drafts tool_specs (signing refuses until each floor, amount unit, and allow list is decided;
 *_matched/*_verified/*_approved/... left out as caller-fact candidates) and prints the digest;
 it warns when a payee or amount it maps has no description in the upstream schema (the agent's only

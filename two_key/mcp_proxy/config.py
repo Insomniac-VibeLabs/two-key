@@ -40,7 +40,7 @@ UPSTREAM_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
 _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "head_anchor", "ttl_seconds",
              "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools", "scan",
-             "on_writable_paths", "siem"}
+             "on_writable_paths", "on_agent_access", "siem"}
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
 _KEY_KEYS = {"principal"}
 _UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds"}
@@ -116,6 +116,10 @@ class ProxyConfig:
     # warn (None: the default) or refuse when another account can change a path the proxy runs or reads
     # (two_key/writable.py); high_assurance refuses either way.
     on_writable_paths: str | None = None
+    # refuse (None: the default) or warn when the account that started the proxy (the agent host's) is
+    # Two-Key's own, is root, cannot be told, or can change a path the proxy runs or reads
+    # (two_key/agent_access.py); high_assurance refuses either way.
+    on_agent_access: str | None = None
     # The SIEM export block (two_key.siem_sinks), checked for shape; the sinks are built when the proxy
     # starts. None: no copy leaves the ledger.
     siem: Mapping[str, Any] | None = None
@@ -316,6 +320,12 @@ def _ttl(value: Any) -> int:
     return value
 
 
+def _agent_access_mode(value: Any) -> str:
+    if value not in ("warn", "refuse"):
+        raise ProxyConfigError("on_agent_access: expected warn or refuse")
+    return value
+
+
 def _writable_mode(value: Any) -> str:
     if value not in ("warn", "refuse"):
         raise ProxyConfigError("on_writable_paths: expected warn or refuse")
@@ -382,6 +392,7 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
         allow_unresolved_identity=(_bool(top["allow_unresolved_identity"], "allow_unresolved_identity")
                                    if "allow_unresolved_identity" in top else False),
         on_writable_paths=_writable_mode(top["on_writable_paths"]) if "on_writable_paths" in top else None,
+        on_agent_access=_agent_access_mode(top["on_agent_access"]) if "on_agent_access" in top else None,
         **meta,
     )
 

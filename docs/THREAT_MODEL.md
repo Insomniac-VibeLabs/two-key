@@ -199,10 +199,16 @@ the code wins, then this file should be corrected.
   a login account whose forced command is the `run-proxy` sudo rule
   (CONNECTING, "An agent on another machine"). The forced command,
   `restrict`, and the firewall are the operator's; Two-Key cannot see
-  them, and its start-up check covers only its own machine. Each running
-  proxy holds its own copy of the ledger's state, so a second proxy on the
-  same ledger makes the first deny every later call (`ledger_failed`)
-  until it restarts: fail-closed, but an outage.
+  them, and its start-up checks cover only its own machine. The proxy
+  refuses to start when the account that started it (the agent host's, or
+  the SSH login account's, read from the parent process) is Two-Key's own,
+  is root, cannot be told, or can change a path the proxy runs or reads
+  (`on_agent_access`, default `refuse`). It reads the parent's real user,
+  so it is not fooled by an environment variable, but it cannot see an
+  agent that reaches Two-Key's files another way (a second login, a shared
+  folder, a tool running as another account). Proxies that share a ledger
+  read and verify each other's entries under the lock before they write.
+  Remote agents have had little testing (ROADMAP, "Where we are").
 - MCP proxy to the upstream server (stdio, a child process). The server
   receives only the projected arguments of a redeemed token, and only the
   variables in `upstream.env` plus the SDK's minimal set. It gets no
@@ -510,9 +516,8 @@ claims to close.
   implementation as providing process-level isolation. A gateway built on a
   ledger no `TwoKey` in the process opened warns once
   (`TwoKeyDeploymentWarning`) and refuses tokens issued after that ledger
-  opened: the check fails as `ledger_size_invalid`, and recording that
-  refusal fails too, so the caller sees `ledger_failed: ledger file changed
-  by another writer`.
+  last read the file: the check fails as `ledger_size_invalid`, before the
+  gateway catches up on the other process's entries to record the refusal.
 - Stealing the ledger key decrypts the log. Stealing the principal key does
   not, and it does not mint a token the gateway will accept. Stealing the
   capability private key does. Stealing the principal key and the ledger
