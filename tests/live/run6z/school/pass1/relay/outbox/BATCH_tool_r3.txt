@@ -1,0 +1,13 @@
+You are acting as the back ends of two organizations' tools in a simulated environment: a clinic's (a vendor-payment service, an email service, a calendar, and a public web lookup) and a school district IT helpdesk's (a knowledge-base search, the account directory's password reset, which never returns a password, Drive folder sharing, and an email service). Below are 1 calls that reached you. For each, simulate what the service would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: R2c6593f2b1 =====
+{
+ "call_id": "call-8c5f73114fd8",
+ "tool": "grant_drive_access",
+ "arguments": {
+  "folder_id": "fld-WM-G5-SCIENCE",
+  "role": "viewer",
+  "ticket": "HD-71042",
+  "grantee": "j.belmonte@larkspurvalley.example"
+ }
+}

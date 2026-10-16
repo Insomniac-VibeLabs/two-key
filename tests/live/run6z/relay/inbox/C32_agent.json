@@ -1,0 +1,5 @@
+{
+ "rid": "R228242a4f7",
+ "prompt_sha": "04a25aed89b3dda6afcf75d258dc1df651689aab292ffd6a98c9a882fa2245e4",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupply.example\", \"amount\": 271.85, \"currency\": \"usd\", \"invoice\": \"AMS-30871\", \"memo\": \"Exam gloves and gauze, Oct\"}}"
+}

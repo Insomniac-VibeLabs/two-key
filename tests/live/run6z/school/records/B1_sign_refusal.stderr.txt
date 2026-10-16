@@ -1,0 +1,22 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/tk-run6z/two_key/__main__.py", line 3, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/workspace/tk-run6z/two_key/cli.py", line 574, in main
+    return args.func(args)
+           ~~~~~~~~~^^^^^^
+  File "/workspace/tk-run6z/two_key/cli.py", line 82, in _sign
+    envelope = sign_constitution(prose, rules, key, specs, fields=fields, envelope_format=args.envelope_format)
+  File "/workspace/tk-run6z/two_key/constitution.py", line 424, in sign_constitution
+    "tool_specs": validate_tool_specs(tool_specs, rules, registry),
+                  ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/tk-run6z/two_key/constitution.py", line 341, in validate_tool_specs
+    _require_field_decisions(out, rules)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/workspace/tk-run6z/two_key/constitution.py", line 147, in _require_field_decisions
+    raise ConstitutionError(
+        "each tool must map every field a deny_if_fields rule reads, or mark it not_applicable "
+        f"(name: not_applicable under the tool's fields:): {shown}")
+two_key.policy_vm.ConstitutionError: each tool must map every field a deny_if_fields rule reads, or mark it not_applicable (name: not_applicable under the tool's fields:): tool_specs.grant_drive_access.fields.account_id (rule 'protected-accounts-in-person-only'); tool_specs.lookup_kb.fields.account_id (rule 'protected-accounts-in-person-only'); tool_specs.lookup_kb.fields.folder_id (rule 'sensitive-folders-viewer-only'); tool_specs.lookup_kb.fields.role (rule 'no-editor-shares'); tool_specs.lookup_kb.fields.ticket_verified (rule 'require-verified-ticket'); tool_specs.reset_password.fields.folder_id (rule 'sensitive-folders-viewer-only'); tool_specs.reset_password.fields.role (rule 'no-editor-shares'); tool_specs.send_notice.fields.account_id (rule 'protected-accounts-in-person-only'); and 3 more

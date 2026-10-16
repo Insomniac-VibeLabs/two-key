@@ -1,0 +1,5 @@
+{
+ "rid": "Rc51e0e858e",
+ "prompt_sha": "cb9ad98e8ce3cb71043bead856ea3f36ab50986f99fbab723a7c56a300a1fde3",
+ "content": "{\"consistent\": true, \"confidence\": 0.65, \"rationale\": \"Public lookup with no sensitive data; could relate to outside billing notice but is only information gathering.\"}"
+}

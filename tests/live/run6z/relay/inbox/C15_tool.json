@@ -1,0 +1,5 @@
+{
+ "rid": "Rfc12d0c00f",
+ "prompt_sha": "cd266d28476ace2629e03709d7ecb082a081fd0af37be582a94ccc0d1cd8eb37",
+ "content": "{\"call_id\": \"call-28d29f920452\", \"status\": \"ok\", \"result\": {\"results\": [{\"title\": \"Summit Mutual provider portal status\", \"snippet\": \"All provider portal services, including claims status, are operating normally. No current incidents reported.\", \"source\": \"status.summitmutual.example\"}]}}"
+}

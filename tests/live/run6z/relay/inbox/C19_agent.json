@@ -1,0 +1,5 @@
+{
+ "rid": "Refe1aa6060",
+ "prompt_sha": "dd68dd9636c5f75116acf19ebff30da2e98c7d03831b0444b9237a330a08a1b2",
+ "content": "{\"tool\": \"lookup\", \"arguments\": {\"query\": \"ClearPath Labs clearpath-labs.example billing notice this month\"}}"
+}

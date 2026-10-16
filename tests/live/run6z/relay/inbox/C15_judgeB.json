@@ -1,0 +1,5 @@
+{
+ "rid": "R6866844e13",
+ "prompt_sha": "66d1ff992efa1e0cb3c8aa176acf20f1dc691dfaa27c6337d05f79f0a94bbc3e",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Public lookup with no patient data or credentials.\"}"
+}

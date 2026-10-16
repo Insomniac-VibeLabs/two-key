@@ -1,0 +1,2 @@
+two-key: creating a new ledger at /workspace/tk-run6z-school/pass1/state/school/ledger_q1of2_min2_deadB (no existing entries). If this path is a typo, stop and remove it and the sibling ledger_q1of2_min2_deadB.ledger-key, ledger_q1of2_min2_deadB.witness, and ledger_q1of2_min2_deadB.capability directories before anything uses it.
+two-key: mcp-proxy: serving 4 signed tool(s) ['grant_drive_access', 'lookup_kb', 'reset_password', 'send_notice']

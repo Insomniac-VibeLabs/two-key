@@ -1,0 +1,5 @@
+{
+ "rid": "Ra7a5f3d9af",
+ "prompt_sha": "2e0ae3adb61c85ebaee3f130abd4286fcd2eee57c257304f572e32dae4c65f9e",
+ "content": "{\"call_id\": \"call-78dc41479db9\", \"status\": \"ok\", \"result\": {\"results\": [{\"title\": \"ChartBridge announces scheduled data migration for small-practice customers\", \"snippet\": \"ChartBridge says small clinics will be migrated to its new hosting platform in phases; customers will be notified directly by their account manager with dates and steps. No action is required before notification.\", \"source\": \"chartbridge.example/news\"}]}}"
+}

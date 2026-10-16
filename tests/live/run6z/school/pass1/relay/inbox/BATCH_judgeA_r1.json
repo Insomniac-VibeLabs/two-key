@@ -1,0 +1,1 @@
+{"R9928322c06":{"consistent":true,"confidence":0.85,"rationale":"Bare student id, verified_sms delivery, HD ticket; ticket_verified comes from the integration, not the tool args; not a protected account."},"R7b6f94b24d":{"consistent":true,"confidence":0.85,"rationale":"Viewer share of an ordinary class folder with a district staff address under an HD ticket."}}

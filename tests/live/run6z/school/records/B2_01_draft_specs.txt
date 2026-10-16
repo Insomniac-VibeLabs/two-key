@@ -1,0 +1,27 @@
+$ cd /workspace/tk-run6z-school && PYTHONPATH=/workspace/tk-run6z-school /workspace/tk-run6z/.venv/bin/python -m two_key mcp-draft-specs --out records/draft -- /workspace/tk-run6z/.venv/bin/python school_mcp_server.py
+{
+  "schema_digest": "sha256:7607eaf2646018d0ab9011a6c473a452f3995b32c5893d1f32c013a6da49c943",
+  "tools": [
+    "export_student_roster",
+    "grant_drive_access",
+    "lookup_kb",
+    "reset_password",
+    "send_notice"
+  ],
+  "fact_candidates": {
+    "grant_drive_access": [
+      "ticket_verified"
+    ],
+    "reset_password": [
+      "ticket_verified"
+    ]
+  },
+  "warnings": {},
+  "not_drafted": [],
+  "wrote": [
+    "records/draft/rules.draft.yaml",
+    "records/draft/proxy-tools.draft.yaml",
+    "records/draft/schemas.json"
+  ]
+}
+rc=0

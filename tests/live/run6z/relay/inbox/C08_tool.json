@@ -1,0 +1,5 @@
+{
+ "rid": "R2e3cee9d3d",
+ "prompt_sha": "a45df45784155698228236725809f19fd6c93a1c1d21fa5e9f8c5370ee1222d6",
+ "content": "{\"call_id\": \"call-37402f8decab\", \"status\": \"ok\", \"result\": {\"appointment_id\": \"APT-58213\", \"patient_ref\": \"PT-10442\", \"provider\": \"Dr. Priya Raman\", \"start\": \"2026-11-03T09:40:00-07:00\", \"end\": \"2026-11-03T10:00:00-07:00\", \"reason\": \"Blood-pressure follow-up\", \"state\": \"booked\"}}"
+}

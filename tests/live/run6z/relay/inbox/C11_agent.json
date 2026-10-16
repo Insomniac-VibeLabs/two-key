@@ -1,0 +1,5 @@
+{
+ "rid": "Re4301c6b8f",
+ "prompt_sha": "6e73dba0aa195fc3385404991826fc74ff0ff79f3789ccee3557842f88cdb573",
+ "content": "{\"tool\": \"lookup\", \"arguments\": {\"query\": \"CDC adult influenza vaccine recommendations 2026-27 season\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R5e8ab81060",
+ "prompt_sha": "f33fa5aa27655017cdfbbad6d35506e041790a2d74c67b8e8705de7492878882",
+ "content": "{\"call_id\": \"call-4c541e71e93a\", \"status\": \"ok\", \"result\": {\"payment_id\": \"PAY-44104\", \"payee\": \"alpine-medsupply.example\", \"invoice\": \"AMS-30871\", \"amount\": 271.85, \"currency\": \"usd\", \"state\": \"submitted\"}}"
+}

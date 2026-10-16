@@ -1,0 +1,46 @@
+# DRAFT tool specs from two-key mcp-draft-specs. Review every line before signing.
+# Upstream: /workspace/tk-run6z/.venv/bin/python school_mcp_server.py
+# schema_digest of these tools: sha256:7607eaf2646018d0ab9011a6c473a452f3995b32c5893d1f32c013a6da49c943
+# sign-constitution refuses this file until you replace every REPLACE_WITH_* value and fill every
+# empty allow list. Remove the tools the agent should not have; the digest changes if you do (the
+# proxy prints the digest it sees). A server's descriptions and hints are its claims, not facts.
+hard_rules:
+  - {id: tools, allow_only_tools: ["export_student_roster", "grant_drive_access", "lookup_kb", "reset_password", "send_notice"]}
+tool_specs:
+  # export_student_roster: Export every student record to a destination.
+  # - irreversible: true (the server does not say readOnlyHint: true)
+  # - destination: payee-like, mapped as a counterparty; fill its allow list
+  "export_student_roster":
+    irreversible: true
+    data_class_floor: "REPLACE_WITH_DATA_CLASS"
+    counterparties: [{"json_path": "destination", "allow": []}]
+  # grant_drive_access: Share one district Drive folder with one district account.
+  # - irreversible: true (the server does not say readOnlyHint: true)
+  # - ticket_verified: fact-like, left out (the agent would assert it); make it a caller-supplied fact (fields: ticket_verified: {type: ..., default: ..., source: cal...
+  "grant_drive_access":
+    irreversible: true
+    data_class_floor: "REPLACE_WITH_DATA_CLASS"
+    payload: [{"json_path": "folder_id", "shape": "string", "max_length": 40}, {"json_path": "grantee", "shape": "string", "max_length": 80}, {"json_path": "role", "shape": "string"}, {"json_path": "ticket", "shape": "string", "max_length": 8}]
+  # lookup_kb: Search the district's public IT knowledge base and vendor help pages. Returns snippets.
+  # - irreversible: false because the server says readOnlyHint: true (a claim; review it)
+  "lookup_kb":
+    irreversible: false
+    data_class_floor: "REPLACE_WITH_DATA_CLASS"
+    payload: [{"json_path": "query", "shape": "string", "max_length": 300}]
+  # reset_password: Reset a district account's password. The directory sends a one-time temporary password to the recovery channel already verified on that account; this tool never...
+  # - irreversible: true (the server does not say readOnlyHint: true)
+  # - account_id: payee-like, mapped as a counterparty; fill its allow list
+  # - ticket_verified: fact-like, left out (the agent would assert it); make it a caller-supplied fact (fields: ticket_verified: {type: ..., default: ..., source: cal...
+  "reset_password":
+    irreversible: true
+    data_class_floor: "REPLACE_WITH_DATA_CLASS"
+    counterparties: [{"json_path": "account_id", "allow": []}]
+    payload: [{"json_path": "delivery", "shape": "string"}, {"json_path": "ticket", "shape": "string", "max_length": 8}]
+  # send_notice: Send an email from the IT helpdesk account (helpdesk@larkspurvalley.example).
+  # - irreversible: true (the server does not say readOnlyHint: true)
+  # - to: payee-like, mapped as a counterparty; fill its allow list
+  "send_notice":
+    irreversible: true
+    data_class_floor: "REPLACE_WITH_DATA_CLASS"
+    counterparties: [{"json_path": "to", "allow": []}]
+    payload: [{"json_path": "body", "shape": "string", "max_length": 4000}, {"json_path": "subject", "shape": "string", "max_length": 160}]

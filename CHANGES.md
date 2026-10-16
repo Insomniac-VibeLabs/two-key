@@ -94,6 +94,7 @@
 - [Live run 7 results — 2026-10-15](#live-run-7-results--2026-10-15)
 - [Live run 7x results — 2026-10-15](#live-run-7x-results--2026-10-15)
 - [Live run 6 results (MCP proxy: run 6, 6x, 6y) — 2026-10-15](#live-run-6-results-mcp-proxy-run-6-6x-6y--2026-10-15)
+- [Live run 6z results — 2026-10-15](#live-run-6z-results--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3234,3 +3235,33 @@ run 6 branch was not pushed). Tests and docs only; no change to the library.
   - judges are convened after a Path A deny;
   - per-judge ballots in the ledger;
   - a test-judge fixture for quorum splits.
+
+## Live run 6z results — 2026-10-15
+
+Tested on `mcp-proxy` @ ff1b9f0 (unreleased 0.5.0 work). Committed on `live-runs`
+(Stephan's ruling: one branch for all live runs; the separate run 6z branch was not pushed).
+Tests and docs only; no library change.
+
+- **Part A** (clinic behind the MCP proxy, 36 cases): 34 PASS / 2 INCONCLUSIVE / 0 FAIL.
+- **Part B** (run 6x school constitution, re-signed with the new code): 4 of 4 PASS
+  after the expected step 1 refusal.
+
+Details:
+
+- `tests/live/run6z/REPORT.md` is the report on both parts:
+  - the INCONCLUSIVE cases and the referee incidents;
+  - library changes 1-5, each confirmed with the case that shows it;
+  - the Part B steps, with the exact signing messages;
+  - Claude's answers to the open questions.
+- `tests/live/run6z/` holds Part A's `relay/`, `logs/`, `RESULTS.md`, `results.json`, and the signed
+  prose and rules it ran (`constitution/`).
+- `tests/live/run6z/school/` holds the Part B records:
+  - every command, with its verbatim output;
+  - the principal's edit;
+  - the referee harness diff;
+  - the `pass1/` and `pass2/` results.
+- Case design (C24 persona, the C23/C29 shared invoice) is fixed at 012cadc
+  on `mcp-proxy`/`working`.
+- Never committed: keys, ledgers, `state/`, `selftest/`, `cases.jsonl`, and the `--table` output.
+  `tests/live/.gitignore` covers `*.pem`, the ledger key, witness, capability and redeem-lock
+  directories, `ledger/`, `keys/`, PLAN.md, and private relay notes, at any depth (added with run 7x).

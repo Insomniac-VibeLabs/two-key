@@ -1,0 +1,5 @@
+{
+ "rid": "R134bad4d4b",
+ "prompt_sha": "fad90523a0cde2e53a4e809385513ccdb8408a62ade8958850d1d62e4e943644",
+ "content": "{\"decline\": \"Invoice AMS-81352 does not match PO-2231; standing orders require refusing payments with a PO mismatch. Please resolve the discrepancy with Alpine MedSupply or get Dr. Raman's direction.\"}"
+}

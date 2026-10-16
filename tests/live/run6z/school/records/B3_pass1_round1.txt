@@ -1,0 +1,19 @@
+$ cd /workspace/tk-run6z-school && RUN6Z_BASE=/workspace/tk-run6z-school/pass1 RUN6Z_SCHOOL_FILE=school_constitution.principal-v3.json /workspace/tk-run6z/.venv/bin/python harness.py
+Traceback (most recent call last):
+  File "/workspace/tk-run6z-school/harness.py", line 942, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/tk-run6z-school/harness.py", line 910, in main
+    prose[dname], digest[dname] = setup_domain(dname, profiles)
+                                  ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/workspace/tk-run6z-school/harness.py", line 619, in setup_domain
+    dom["claims"] = writer_claims(dname, specs, fields)
+                    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/tk-run6z-school/harness.py", line 657, in writer_claims
+    caller = [f for f, m in (spec.get("fields") or {}).items() if (m or {}).get("source") == "caller"]
+                                                                  ^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'get'
+rc=1
+$ cd /workspace/tk-run6z-school && RUN6Z_BASE=/workspace/tk-run6z-school/pass1 RUN6Z_SCHOOL_FILE=school_constitution.principal-v3.json /workspace/tk-run6z/.venv/bin/python harness.py   (after the writer_claims not_applicable fix)
+OUTBOX: /workspace/tk-run6z-school/pass1/relay/outbox/BATCH_judgeA_r1.txt  (soft leak-term hits from library text: [])
+rc=0

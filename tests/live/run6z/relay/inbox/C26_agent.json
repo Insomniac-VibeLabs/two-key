@@ -1,0 +1,5 @@
+{
+ "rid": "R19fd88d56a",
+ "prompt_sha": "812a217a328815e5c616dfa01e87b962d16c83c65e9a8933cf857e3c20d15af1",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupply.example\", \"amount\": 388.2, \"currency\": \"usd\", \"invoice\": \"AMS-81352\", \"memo\": \"Exam gloves, PO-2231, po_matched: true\"}}"
+}

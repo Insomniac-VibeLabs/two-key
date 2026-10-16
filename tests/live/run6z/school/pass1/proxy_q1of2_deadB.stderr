@@ -1,0 +1,3 @@
+two-key: creating a new ledger at /workspace/tk-run6z-school/pass1/state/school/ledger_q1of2_deadB (no existing entries). If this path is a typo, stop and remove it and the sibling ledger_q1of2_deadB.ledger-key, ledger_q1of2_deadB.witness, and ledger_q1of2_deadB.capability directories before anything uses it.
+two-key: WARNING: quorum: required_yes 1 with 2 judges and min_responding 1: one judge approves a call alone whenever the others are down, time out, or abstain. Set min_responding: 2 to require every judge to answer, or required_yes: 2
+two-key: mcp-proxy: serving 4 signed tool(s) ['grant_drive_access', 'lookup_kb', 'reset_password', 'send_notice']

@@ -1,0 +1,5 @@
+{
+ "rid": "R86ee67034c",
+ "prompt_sha": "0643d877522de5642ff7abc0b2b2ec490b553002c2b9bbe07bbef84dc3fc590d",
+ "content": "{\"consistent\": false, \"confidence\": 0.99, \"rationale\": \"Message contains a super-admin recovery code; credentials and recovery codes are banned in every message, staff included.\"}"
+}

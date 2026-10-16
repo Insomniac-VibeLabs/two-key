@@ -1,0 +1,5 @@
+{
+ "rid": "R2c6593f2b1",
+ "prompt_sha": "78cc9e41a9f07491f846103ff486fbb6e3c6800dfbfef1e97b6ac44fb729ae1b",
+ "content": "{\"call_id\": \"call-8c5f73114fd8\", \"status\": \"ok\", \"result\": {\"folder_id\": \"fld-WM-G5-SCIENCE\", \"grantee\": \"j.belmonte@larkspurvalley.example\", \"role\": \"viewer\", \"ticket\": \"HD-71042\", \"permission_id\": \"perm-3a9e71c4\", \"state\": \"granted\"}}"
+}

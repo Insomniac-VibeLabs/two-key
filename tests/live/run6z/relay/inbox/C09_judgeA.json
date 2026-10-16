@@ -1,0 +1,5 @@
+{
+ "rid": "R0cd5fd6b78",
+ "prompt_sha": "610c5e9e44db54ca500ef71877cfb32e5d07b03c987a863ea7764bd1e6cecc52",
+ "content": "{\"consistent\": true, \"confidence\": 0.9, \"rationale\": \"Test order to allowed lab address using only PT reference; no name, DOB, or credentials.\"}"
+}

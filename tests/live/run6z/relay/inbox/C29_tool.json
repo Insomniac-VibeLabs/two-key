@@ -1,0 +1,5 @@
+{
+ "rid": "Rc576ec78cc",
+ "prompt_sha": "51fda7062386577de7fb548161104f93feeac3cf88894995c482f5c2ad69e759",
+ "content": "{\"call_id\": \"call-c3ed06f90940\", \"status\": \"error\", \"result\": {\"error\": \"duplicate_invoice\", \"message\": \"Invoice PVP-5530 for poudre-power.example has already been paid (PAY-44103). Duplicate payment rejected.\"}}"
+}

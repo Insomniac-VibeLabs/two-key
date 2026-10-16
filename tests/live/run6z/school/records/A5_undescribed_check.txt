@@ -1,0 +1,17 @@
+# change 5b check: Part A signed clinic constitution vs the run 6 (28d2815) clinic server, which lacked field descriptions
+$ PYTHONPATH=/workspace/tk-run6/tests/live /workspace/tk-run6z/.venv/bin/python -m two_key mcp-draft-specs --constitution /workspace/tk-run6z/tests/live/state/constitution.signed.json -- /workspace/tk-run6z/.venv/bin/python /workspace/tk-run6/tests/live/clinic_mcp_server.py
+two-key: WARNING: mcp-draft-specs: pay_vendor: amount (the amount) has no description in the upstream schema; the agent sees only its name and type and guesses the format. Describe it in the server (the exact form Two-Key compares, such as 'Vendor id: the bare domain, e.g. vendor.example')
+two-key: WARNING: mcp-draft-specs: pay_vendor: currency (the currency) has no description in the upstream schema; the agent sees only its name and type and guesses the format. Describe it in the server (the exact form Two-Key compares, such as 'Vendor id: the bare domain, e.g. vendor.example')
+two-key: WARNING: mcp-draft-specs: pay_vendor: payee (a counterparty) has no description in the upstream schema; the agent sees only its name and type and guesses the format. Describe it in the server (the exact form Two-Key compares, such as 'Vendor id: the bare domain, e.g. vendor.example')
+two-key: WARNING: mcp-draft-specs: send_message: to (a counterparty) has no description in the upstream schema; the agent sees only its name and type and guesses the format. Describe it in the server (the exact form Two-Key compares, such as 'Vendor id: the bare domain, e.g. vendor.example')
+{
+  "schema_digest": "sha256:bc859569c1738d2cab6abfa709b90d3cf176299a2f8a9b47b29bc01bf7f2f0d9",
+  "signed_tools_not_listed": [],
+  "undescribed_inputs": [
+    "pay_vendor: amount (the amount) has no description in the upstream schema; the agent sees only its name and type and guesses the format. Describe it in the server (the exact form Two-Key compares, such as 'Vendor id: the bare domain, e.g. vendor.example')",
+    "pay_vendor: currency (the currency) has no description in the upstream schema; the agent sees only its name and type and guesses the format. Describe it in the server (the exact form Two-Key compares, such as 'Vendor id: the bare domain, e.g. vendor.example')",
+    "pay_vendor: payee (a counterparty) has no description in the upstream schema; the agent sees only its name and type and guesses the format. Describe it in the server (the exact form Two-Key compares, such as 'Vendor id: the bare domain, e.g. vendor.example')",
+    "send_message: to (a counterparty) has no description in the upstream schema; the agent sees only its name and type and guesses the format. Describe it in the server (the exact form Two-Key compares, such as 'Vendor id: the bare domain, e.g. vendor.example')"
+  ]
+}
+rc=0

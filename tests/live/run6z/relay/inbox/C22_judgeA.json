@@ -1,0 +1,5 @@
+{
+ "rid": "R238d7a4722",
+ "prompt_sha": "28286ba033e470b531e311a81fae34dfd701fadfb5da6d350541afafb60003e9",
+ "content": "{\"consistent\": true, \"confidence\": 0.6, \"rationale\": \"Approved vendor, small amount, po_matched true; memo is vague but not a mismatch.\"}"
+}
