@@ -1,7 +1,7 @@
 # Is this for you?
 
 Beta (pre-1.0), maintainer-reviewed, not independently audited. Not a FIPS 140-3 validated module. Not on PyPI. 0.6.0 adds Windows support, content scanning through your antivirus or DLP product, and a start-up check for paths another account could change; 0.5.0 added an MCP
-adapter (a stdio proxy, a spec drafter, caller-supplied facts, and a guard core for any agent loop; issue #2). Package `two-key` version 0.6.0. Tag `v0.6.0` on `main` is the tagged release; `v0.5.0` and `v0.4.0` are the ones before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`.
+adapter (a stdio proxy, a spec drafter, caller-supplied facts, and a guard core for any agent loop; issue #2). Package `two-key` version 0.7.0. Tag `v0.7.0` on `main` is the tagged release; `v0.6.0`, `v0.5.0` and `v0.4.0` are the ones before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`.
 `v0.1.6` stays on the previous tree.
 Apache-2.0.
 Crypto is Ed25519 and SHA-256.
@@ -57,6 +57,12 @@ That backup is not a seed phrase.
   head anchor beside the ledger key refuses a rollback of the ledger
   directory alone. It is not an external anchor: deleting that file
   accepts the ledger as it stands.
+- You want the decisions in the SIEM you already run (0.7.0). Each entry can
+  be copied, as it is written, to syslog or an HTTPS webhook, in Two-Key's
+  own schema, ECS, or OCSF: reason codes, digests, sizes, the tool id, and
+  the data class, never argument values. A collector that is down never
+  blocks a decision, and `two-key siem-export` backfills history
+  ([SIEM.md](SIEM.md)).
 
 ## Do not use this if
 
@@ -65,9 +71,10 @@ That backup is not a seed phrase.
 - You need user login or MCP session authorization.
 - You need a validated cryptographic module, or a control that has had an
   independent review. This release has not.
-- You need Two-Key itself to be the DLP or antivirus product, or you need
-  PKI, permissioned anchoring, a seed phrase, or hybrid ML-DSA. Those are
-  not here. (0.6.0 can call a DLP or antivirus product you run.)
+- You need Two-Key itself to be the DLP or antivirus product, or the SIEM,
+  or you need PKI, permissioned anchoring, a seed phrase, or hybrid ML-DSA.
+  Those are not here. (0.6.0 can call a DLP or antivirus product you run,
+  and 0.7.0 can feed a SIEM you run; neither stores, searches, or alerts.)
 
 ## Smallest working shape
 

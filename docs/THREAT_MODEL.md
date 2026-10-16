@@ -1,6 +1,11 @@
 # Threat model
 
-This is the design model for `two-key` 0.6.0. Tag `v0.6.0` on `main` is the tagged release; `v0.5.0` is the one before, and `v0.4.0` renamed the package and its formats. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+This is the design model for `two-key` 0.7.0. Tag `v0.7.0` on `main` is the tagged release; `v0.6.0` and `v0.5.0` are the ones before, and `v0.4.0` renamed the package and its formats. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+0.7.0 adds the SIEM export (`two_key/siem.py`,
+`two_key/siem_sinks.py`, `two_key/siem_export.py`): an optional live copy of each ledger
+entry to a syslog or webhook collector, the `two-key siem-export` and `two-key siem-verify`
+commands, and a rate-limited count of tokens the gateway refuses without a ledger entry,
+all described below.
 0.6.0 adds Windows support (`two_key/_platform.py`), optional content scanning through the
 operator's antivirus or DLP product (`two_key/scan.py`), a start-up check for paths another
 account could change (`two_key/writable.py`), and judge connection reuse, described below.
@@ -78,6 +83,21 @@ the code wins, then this file should be corrected.
 - Fact hooks and the system of record they read. A `source: caller` field
   is whatever the hook returns; whoever can change the hook or the record
   decides that fact.
+- The SIEM configuration and the files it names (0.7.0): the webhook's
+  authorization header file, the HMAC key file, and a syslog sink's client
+  certificate, client key, and CA file. Whoever can read the header or HMAC
+  file holds the collector's credential; whoever can change the CA file or
+  the configuration can point the copy at another collector. They live
+  outside the ledger directory, are read owner-only, and are named to the
+  start-up writable-path check.
+- The SIEM cursor (`<ledger>.siem/cursor.json`, or `cursor_path=`), outside
+  the ledger directory. It is not secret and it is not part of the hash
+  chain. Whoever can change or delete it decides which entries are copied
+  again or not at all; a repeated or missing copy is still caught by
+  `two-key siem-verify` against the ledger.
+- An exported event file (`two-key siem-export --out`). It is decrypted
+  ledger metadata, written as a new owner-only file. It holds no argument
+  value, no proposal text, and no key.
 - The ledger head and the hash chain.
 
 ## Actors
@@ -93,6 +113,9 @@ the code wins, then this file should be corrected.
   text.
 - Anyone who can read or write the ledger directory, the ledger key, or the
   witness key.
+- The log collector or SIEM, and whoever can read it (0.7.0). It receives
+  ledger metadata. It is trusted to store it, never to decide anything: no
+  answer from it changes an authorization.
 
 ## Trust boundaries
 
@@ -171,7 +194,21 @@ the code wins, then this file should be corrected.
   paths are removed from the `inputSchema` the host sees; their values
   come from the `tools.<id>.facts` hooks, which run in the proxy. A name
   the proxy does not show is refused and ledgered (`tool_not_offered`). A
-  refusal returns a reason code, never a value.
+  refusal returns a reason code, never a value. The proxy does not listen
+  on the network: an agent host on another machine starts it over SSH, as
+  a login account whose forced command is the `run-proxy` sudo rule
+  (CONNECTING, "An agent on another machine"). The forced command,
+  `restrict`, and the firewall are the operator's; Two-Key cannot see
+  them, and its start-up checks cover only its own machine. The proxy
+  refuses to start when the account that started it (the agent host's, or
+  the SSH login account's, read from the parent process) is Two-Key's own,
+  is root, cannot be told, or can change a path the proxy runs or reads
+  (`on_agent_access`, default `refuse`). It reads the parent's real user,
+  so it is not fooled by an environment variable, but it cannot see an
+  agent that reaches Two-Key's files another way (a second login, a shared
+  folder, a tool running as another account). Proxies that share a ledger
+  read and verify each other's entries under the lock before they write.
+  Remote agents have had little testing (ROADMAP, "Where we are").
 - MCP proxy to the upstream server (stdio, a child process). The server
   receives only the projected arguments of a redeemed token, and only the
   variables in `upstream.env` plus the SDK's minimal set. It gets no
@@ -179,6 +216,30 @@ the code wins, then this file should be corrected.
   and instructions are not forwarded. Its tool list is read once, at start,
   and checked against `upstream.schema_digest`: a mismatch refuses to start
   unless `on_schema_change: warn`.
+- Ledger to the SIEM (0.7.0; [SIEM.md](SIEM.md)). Optional. Each entry is
+  copied after it is written and fsynced, by sequence number only: the
+  projection, the formatting, and the send happen on a sender thread,
+  never under the ledger lock and never on the authorization path. An
+  explicit per-kind field allowlist decides what leaves: reason codes,
+  digests, sizes, the tool id, the data class, the quorum counts, the
+  scanner verdict, and the entry's own hash. Argument values, proposal and
+  decline text, the derived amount, counterparties, and custom field
+  values, scanner threat names and matched text, and every credential are
+  excluded, and a ledger field nobody has decided about does not leave
+  (`tests/test_siem.py` fails while one is undecided). The collector is a
+  new audience for that metadata. It cannot answer back: a sink that is
+  down, slow, or hostile delays copies and nothing else. TLS verifies the
+  certificate and the host name, with no setting that turns either off, and
+  `high_assurance` refuses a plaintext sink (`siem_plaintext_refused`).
+  `two-key siem-export` is the same projection written to a file, and
+  `two-key siem-verify` re-derives every exported event from the ledger.
+- Gateway to the refused-token count (0.7.0). A token that does not verify
+  is refused with no ledger entry, as before, so an unauthenticated caller
+  still cannot make the ledger grow. The gateway counts the refusal by
+  class (bad signature, expired, malformed, other) in memory and reports
+  the counts at most once an interval, on stderr and, when a SIEM is
+  configured, as an event marked `ledgered: false` with `seq: -1`. No token
+  text, digest, or id is kept, and nothing is written to the ledger.
 - Process to the ledger. Appends and checkpoints take a POSIX `flock` on
   `<ledger>.lock` next to the ledger directory. If the file changed since
   this process loaded it, the write is refused. Redemption also takes a
@@ -237,6 +298,11 @@ the code wins, then this file should be corrected.
   (`witness_public_key=`, `--witness-public-key`), a head forged with the
   principal key and the ledger key but without the witness private key,
   even on a chain rewritten from its first entry.
+- An edited, short, or padded copy of the ledger in a SIEM (0.7.0).
+  `two-key siem-verify` verifies the ledger, re-derives each exported
+  event from it, and names every field that differs, every sequence number
+  that is missing or repeated, and every event that is not in this ledger.
+  It does not need the SIEM to be trusted.
 
 ## Assumptions
 
@@ -292,6 +358,11 @@ the code wins, then this file should be corrected.
   ballot (JUDGES_AND_QUORUM "What a judge is").
 - Without a local judge, the constitution prose, the action record, and any
   attached tool arguments go to the cloud judges' vendors.
+- With a SIEM configured (0.7.0), the collector and everyone who can read
+  it are an audience for ledger metadata, and the operator's own network
+  carries it. Two-Key assumes the collector stores what it is sent; it
+  never asks the collector anything, so a wrong or hostile answer cannot
+  change a decision.
 
 ## Residual risks
 
@@ -445,9 +516,8 @@ claims to close.
   implementation as providing process-level isolation. A gateway built on a
   ledger no `TwoKey` in the process opened warns once
   (`TwoKeyDeploymentWarning`) and refuses tokens issued after that ledger
-  opened: the check fails as `ledger_size_invalid`, and recording that
-  refusal fails too, so the caller sees `ledger_failed: ledger file changed
-  by another writer`.
+  last read the file: the check fails as `ledger_size_invalid`, before the
+  gateway catches up on the other process's entries to record the refusal.
 - Stealing the ledger key decrypts the log. Stealing the principal key does
   not, and it does not mint a token the gateway will accept. Stealing the
   capability private key does. Stealing the principal key and the ledger
@@ -556,6 +626,31 @@ claims to close.
   products and was never flagged on any tool. With ClamAV's
   `HeuristicScanPrecedence yes`, malware in a readable part of an
   encrypted archive can be reported as `Heuristics.Encrypted` only.
+- **SIEM export** (0.7.0). The copy is not a second ledger:
+  - Whoever can read the collector reads ledger metadata: which tool, which
+    data class, which reason code, which digests and sizes, and when. That
+    is less than the ledger holds (no argument values, no proposal text, no
+    derived amount or counterparty), and more than the ledger shows anyone
+    without its keys.
+  - The copy leaves encryption at rest. An exported file and a sink's
+    payload are plain metadata; the ledger stays encrypted.
+  - A plaintext sink (`udp`, `tcp`) sends that metadata unauthenticated and
+    unencrypted over the network, and anyone who can reach the port can
+    forge events into the collector. It is refused under `high_assurance`
+    and warns at start everywhere else. `tls` is the default.
+  - `udp` loses events silently and has no delivery acknowledgement. An
+    event over `max_datagram` is replaced by a minimal one (kind, seq, hash),
+    marked `truncated`.
+  - A collector that is down never blocks a decision, so the copy can be
+    minutes or hours behind, and an operator watching only the SIEM is
+    watching a stale view. Delivery resumes from the cursor and marks late
+    events `replay`. A deleted cursor file re-sends or skips; a full queue
+    drops the oldest and says so on stderr.
+  - The refused-token counts are in memory. A restart loses the current
+    window, and the counts are a volume signal only: no source address, no
+    token, nothing to correlate a single attempt with.
+  - The collector's own storage, access control, retention, and alerting
+    are the operator's, not Two-Key's.
 - There is no TEE. OAuth device-code judge auth is rejected. A username and
   password is accepted only as HTTP Basic over HTTPS (`type: basic`). Use
   `env`, `keyring`, `callback`, or `basic`.
@@ -593,6 +688,10 @@ claims to close.
 - Prompt injection that Path A denies because the structured record tripped
   a rule.
 - A vulnerability in a judge vendor's API.
+- Being a log management product, a SIEM, or an alerting system. The 0.7.0
+  export hands ledger metadata to the operator's collector; what that
+  collector stores, who can read it, how long it keeps it, and what it
+  alerts on are the operator's.
 - Using this package as an MCP server, as user login, or as a DLP or
   antivirus product. It is none of those. The MCP proxy (0.5.0) sits in
   front of the gateway, and the scanner hooks (0.6.0) call
@@ -607,26 +706,13 @@ claims to close.
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md), in its order: the SIEM export
-(0.7.0), then 1.0; the rest come after 1.0. None of what follows is in a
-release yet. Each item is added to the sections above in the release that
-ships it. Key backup and custom Path A fields (0.3.0), the MCP adapter
-(0.5.0), and the DLP and antivirus hooks (0.6.0) shipped and are described
-above, not here.
+These come from [ROADMAP.md](../ROADMAP.md), in its order: 1.0, then the
+rest after 1.0. None of what follows is in a release yet. Each item is
+added to the sections above in the release that ships it. Key backup and
+custom Path A fields (0.3.0), the MCP adapter (0.5.0), the DLP and
+antivirus hooks (0.6.0), and the SIEM export with the refused-token count
+(0.7.0) shipped and are described above, not here.
 
-- Refused-token count (0.7.0, with the SIEM export; design note and
-  maintainer review first). A token that does not verify (forged, expired,
-  or malformed) is refused without a ledger entry, so an unauthenticated
-  caller cannot fill the ledger; today such refusals leave no trace. A
-  rate-limited count kept outside the ledger would show them. It must
-  carry no token text.
-- Ledger export for SIEM (0.7.0). New boundary: ledger to exporter to
-  SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
-  is meant to carry digests, sizes, and reason codes, not argument values.
-  It is meant to use a field allowlist that leaves out the proposal text and
-  the derived amount, counterparty, and custom field values, which the
-  ledger holds today.
-  Whoever can read the SIEM becomes a new audience for ledger metadata.
 - Judge history summary (#1, before 1.0). Judges are meant to receive a
   summary of recent decisions that `TwoKey` builds from its own ledger, on
   by default. New flows: the ledger is read during authorization, and cloud
@@ -690,7 +776,11 @@ above, not here.
 - `two_key/derive.py`: JSON paths only. `party_allowed`: an exact entry, or an `@domain` entry for an address whose domain equals it (ASCII host name, no subdomain) and whose local part is plain (atext and dots); `@domain` itself is not a party. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
 - `two_key/constitution.py`: a caller field, a `case: exact` field, a `not_applicable` mark, or an `@domain` allow entry signs only as v3; a v1 or v2 envelope with one is refused. A constitution without them keeps its v1 or v2 bytes. Every tool maps each field a `deny_if_fields` rule reads or marks it `not_applicable`, at signing and on load. An allow entry with `*`, or a domain entry that is not an ASCII host name, does not sign; `deny_counterparties` refuses domain entries.
 - `two_key/quorum.py`: `lone_judge_warning` warns, never refuses, when one judge can approve alone (required_yes 1, min_responding 1, two or more judges). An abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
-- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
+- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner. A token that does not verify is still not ledgered; it only increments a class counter (`refused_tokens`), which keeps no token text.
+- `two_key/siem.py`: every ledger kind has a `KindSpec`, and every body key of every kind is `sent`, `hashed`, `excluded`, or extracted; a key nobody decided fails the tests. The excluded set keeps argument values, proposal and decline text, derived amounts, counterparties, custom field values, scanner threat names, and credentials out, and canary values in the tests prove it. The ledger observer only enqueues a sequence number; projecting, formatting, and sending happen on the sender thread, a full queue drops rather than blocks, and nothing a sink returns reaches the caller. An unledgered event (the refused-token count) carries `ledgered: false` and `seq: -1`.
+- `two_key/siem_sinks.py`: TLS sets `minimum_version` to TLS 1.2, verifies the certificate, and checks the host name, with no option to disable either; a webhook never follows a redirect and reads its authorization header and HMAC key from owner-only files; a plaintext sink warns at start and is refused under `high_assurance`.
+- `two_key/siem_export.py`: the export verifies the ledger first, writes a new owner-only file and refuses to overwrite, marks every event a `replay`, and ends with a signed summary. `verify` re-derives each event from the ledger and reports changed fields, gaps, repeats, and events from another ledger.
+- `two_key/ledger.py` observers: `observe()` callbacks run after the entry is written and fsynced, inside the append path; one that raises prints a line and does not stop the append or reach the caller.
 - `two_key/guard.py`: a fixed claim and proposal per tool, never the agent's. Facts are looked up before `authorize` and again before `invoke`, under one lock. A hook that raises or returns None leaves its fact out (deny). Every caller field of a guarded tool has a hook, and no other field does.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.

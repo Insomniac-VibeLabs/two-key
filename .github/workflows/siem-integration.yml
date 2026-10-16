@@ -1,0 +1,119 @@
+# The 0.7.0 SIEM copy against a real collector: Elasticsearch and Kibana in Docker, with the example
+# receiver in front of them (examples/siem/elastic/). Manual and weekly, never a required check: it
+# pulls two large images and depends on a registry, which a pull request must not.
+#
+# The unit suite stays network-free and covers the sinks on loopback (tests/test_siem_sinks.py).
+# This job is here for what only a real product shows: the ingest pipeline, the dashboard import, and
+# a collector reading the messages Two-Key actually sends.
+name: siem-integration
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 4 * * 1"
+permissions:
+  contents: read
+jobs:
+  elastic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: examples/siem/elastic
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install Two-Key
+        working-directory: .
+        run: pip install -e ".[yaml]"
+      - name: Certificates
+        run: sh make-certs.sh
+      - name: Start Elasticsearch and Kibana
+        run: |
+          docker compose up -d
+          for _ in $(seq 60); do
+            curl -fsS http://127.0.0.1:9200/_cluster/health >/dev/null && break
+            sleep 5
+          done
+          curl -fsS http://127.0.0.1:9200/_cluster/health
+      - name: Ingest pipeline
+        run: |
+          curl -fsS -X PUT http://127.0.0.1:9200/_ingest/pipeline/two-key-siem \
+            -H 'Content-Type: application/json' --data-binary @ingest-pipeline.json
+      - name: Both sinks at once
+        run: |
+          cat > siem-ci.yaml <<'CONFIG'
+          siem:
+            schema: ecs
+            format: json
+            replay_from: start
+            sinks:
+              - type: syslog
+                host: 127.0.0.1
+                transport: tls
+                port: 6514
+                ca_file: tls/ca.pem
+              - type: webhook
+                url: https://127.0.0.1:8443/ingest
+                ca_file: tls/ca.pem
+                auth_value_file: tls/token
+                hmac_key_file: tls/hmac
+          CONFIG
+          cat siem-ci.yaml
+      - name: Receive the copy while the demo runs
+        run: |
+          python3 receiver.py --cert tls/server.pem --key tls/server.key \
+            --webhook-port 8443 --auth-value-file tls/token --hmac-key-file tls/hmac \
+            --expect 30 --seconds 120 > receiver.out 2> receiver.err &
+          receiver=$!
+          sleep 3
+          python3 -m two_key demo --siem siem-ci.yaml
+          wait "$receiver"
+      - name: Every event arrived, and nothing of the call did
+        run: |
+          curl -fsS -X POST http://127.0.0.1:9200/two-key-siem/_refresh
+          curl -fsS 'http://127.0.0.1:9200/two-key-siem/_search?size=200' > hits.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          hits = json.loads(Path("hits.json").read_text(encoding="utf-8"))["hits"]["hits"]
+          kinds = {hit["_source"].get("event", {}).get("action") for hit in hits}
+          assert len(hits) >= 15, f"only {len(hits)} events were indexed"
+          for wanted in ("decision", "siem_configured", "gateway_token_refused"):
+              assert wanted in kinds, f"{wanted} is missing from {sorted(k for k in kinds if k)}"
+          text = json.dumps(hits)
+          for secret in ("ada@example", "please wire the funds", "draft a note"):
+              assert secret not in text, f"{secret!r} left the box"
+          stamps = [hit["_source"].get("@timestamp") for hit in hits]
+          assert all(stamps), "the ingest pipeline left an event without @timestamp"
+          print(f"{len(hits)} events indexed; kinds: {sorted(k for k in kinds if k)}")
+          PY
+      - name: Import the Kibana dashboard
+        run: |
+          for _ in $(seq 60); do
+            curl -fsS http://127.0.0.1:5601/api/status >/dev/null && break
+            sleep 5
+          done
+          curl -fsS -X POST 'http://127.0.0.1:5601/api/saved_objects/_import?overwrite=true' \
+            -H 'kbn-xsrf: true' -F file=@dashboard.ndjson > import.json
+          cat import.json
+          python3 - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          answer = json.loads(Path("import.json").read_text(encoding="utf-8"))
+          if not answer.get("success"):
+              sys.exit("the dashboard import failed: " + json.dumps(answer.get("errors")))
+          print(f"imported {answer.get('successCount')} saved objects")
+          PY
+      - name: What the receiver and the stack said
+        if: always()
+        run: |
+          tail -n 20 receiver.err || true
+          docker compose logs --tail 30 || true
+      - name: Stop
+        if: always()
+        run: docker compose down -v

@@ -3,7 +3,9 @@
 Each test class is one invariant from the plan. Negative and bypass attempts are the point.
 """
 
+import contextlib
 import copy
+import io
 import json
 import tempfile
 import unittest
@@ -594,11 +596,19 @@ class A9EnvelopeFormat(unittest.TestCase):
                                           (plain, ["--envelope-format", "v2"], FORMAT_V2)):
                 with self.subTest(rules=rules_file.name, flag=flag):
                     with mock.patch("sys.stdout"):
+                        # --force: signing over an existing file is deliberate (live run 8x, finding 3)
                         self.assertEqual(main(["sign-constitution", "--key", str(keyfile), "--prose", str(prose),
-                                               "--rules", str(rules_file), "--out", str(out)] + flag), 0)
+                                               "--rules", str(rules_file), "--out", str(out), "--force"] + flag), 0)
                     env = json.loads(out.read_text())
                     self.assertEqual(env["format"], fmt)
                     verify_signed(env, self.key.public_key())
+            before = out.read_text()
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(main(["sign-constitution", "--key", str(keyfile), "--prose", str(prose),
+                                       "--rules", str(rules), "--out", str(out)]), 1)
+            self.assertIn("exists; move it aside, or pass --force", err.getvalue())
+            self.assertEqual(out.read_text(), before)
 
 
 class A10Limits(unittest.TestCase):

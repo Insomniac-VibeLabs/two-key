@@ -38,12 +38,17 @@ is how to report a vulnerability. It is not the model.
   part, a second `@`), or the entry itself as a party
 - A caller-supplied fact (`source: caller`) taken from the agent's
   arguments or claim, a v1 or v2 constitution accepted with a caller field,
-  or a redemption that runs the tool after the fact changed (branch
-  `mcp-proxy`)
+  or a redemption that runs the tool after the fact changed (0.5.0)
 - A start that does not name, or under `high_assurance` or
   `on_writable_paths: refuse` does not refuse, a file or folder Two-Key
   runs or reads that another account could change, where
   docs/CONNECTING.md says it is checked (0.6.0)
+- A proxy that starts, by default or under `high_assurance`, when the real
+  account of the process that started it is Two-Key's own, is root, cannot
+  be told, or can change a file or folder the proxy runs or reads
+  (`on_agent_access`, 0.7.0)
+- A ledger shared by two processes accepting another writer's entries
+  without verifying them, or writing after a file that got shorter
 - A judge that is the monitored agent being accepted at start-up: a judge
   holding the agent's credential (the same API token, or the same username
   and password) at any address, whether or not either side sends it, or
@@ -61,12 +66,27 @@ is how to report a vulnerability. It is not the model.
   or content (an argument value, a file, a matched string) in the ledger, a
   reason code, or a judge's prompt where docs/SCANNERS.md says it is
   withheld
+- With a SIEM configured (0.7.0): a field that leaves the box although
+  docs/SIEM.md says it does not (an argument value, proposal or decline
+  text, the derived amount, a counterparty, a custom field value, a scanner
+  threat name, a credential, or any token text), a ledger entry whose body
+  carries a key the allowlist has not decided, a sink that delays or blocks
+  an authorization or changes a decision, a TLS sink that does not verify
+  the certificate or the host name, a plaintext sink accepted under
+  `high_assurance`, a webhook that follows a redirect or sends its
+  credential to a redirected host, a refused token that reaches the ledger
+  or whose text or digest is kept, or a `two-key siem-verify` that passes a
+  file whose events do not match the ledger
 
 ## Out of scope for this repository
 
 - A malware or DLP scanning engine. Two-Key has none; from 0.6.0 it can
   call your antivirus or DLP product (docs/SCANNERS.md). What that product
   detects, or misses, is a matter for its vendor.
+- A SIEM, log management, or alerting product. Two-Key has none; from 0.7.0
+  it can send each ledger entry to the collector you run
+  (docs/SIEM.md). What that collector stores, who may read it, how long it
+  keeps it, and what it alerts on are yours to decide.
 - FIPS validation. Algorithms are Ed25519 and SHA-256 from `cryptography`.
 - An agent that reaches an MCP server directly, around the proxy, and an
   upstream server run as the proxy's OS user. Both are deployment

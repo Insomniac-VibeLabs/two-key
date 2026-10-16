@@ -331,7 +331,9 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(captured["action"]["data_class"], "public")
             self.assertIs(captured["action"]["irreversible"], False)
 
-    def test_stale_ledger_refuses_to_append(self):
+    def test_a_ledger_another_writer_appended_to_catches_up(self):
+        # Two processes on one ledger (two proxies): the one that did not write reads the new entries under
+        # the lock and appends after them (tests/test_ledger_shared.py has the refusals).
         with tempfile.TemporaryDirectory() as tmp:
             key = generate_private_key()
             path = Path(tmp, "ledger")
@@ -341,13 +343,11 @@ class CoreTests(unittest.TestCase):
             second = Ledger(path, key)
             first.append("note", {"n": 2})
             first.checkpoint()
-            with self.assertRaises(LedgerError) as raised:
-                second.append("note", {"n": 3})
-            self.assertIn("another writer", str(raised.exception))
+            second.append("note", {"n": 3})
+            second.checkpoint()
+            self.assertEqual(second.size(), 4)              # witness_pinned and three notes
             reopened = Ledger(path, key)
-            self.assertEqual(reopened.size(), 3)            # witness_pinned and two notes
-            reopened.append("note", {"n": 3})
-            self.assertEqual(reopened.size(), 4)
+            self.assertEqual([e.body.get("n") for e in reopened.entries], [None, 1, 2, 3])
             self.assertFalse((path / ".redeem-abc.lock").exists())
             self.assertTrue(first.lock_path().is_file())
             self.assertFalse(str(first.lock_path()).startswith(str(path) + os.sep))

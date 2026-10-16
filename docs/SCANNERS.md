@@ -775,7 +775,12 @@ permissions), and that `timeout_seconds` covers every part of a call.
   in each of two emails) is scanned one call at a time.
 - A tool that marks `scan: not_applicable` is not scanned at all. Its
   arguments, free text included, reach the judges as written. Two-Key
-  lists these tools at start.
+  lists these tools at start. The field still has a value, though: the
+  signed `default`, which is `clean` in these examples, so a judge sees
+  `scan: clean` and cannot tell a call that was not scanned from one that
+  scanned clean (live run 8x, C57). The ledger can: only a scanned call has
+  a `scan` entry. The enum takes no other value, so do not read the
+  judges' `scan: clean` as proof that a scanner ran.
 - Path A does not read content. It rules on the verdict. A file's size is
   held by `max_bytes`; a rule on its type needs a fact hook.
 - It does not scan the tool's result, only the call.

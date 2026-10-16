@@ -25,7 +25,9 @@ at a time; waiters re-check and skip if already marked. Waiters use a timed
 fall back to 30s): on timeout they still deny fail-closed without marking and
 without fail-open, so a stuck ``append_bounded`` cannot hang waiters forever. The in-memory set is LRU-capped (``_MAX_DENIED_JTIS``, clamped to at least 1).
 Further denies for a remembered jti still refuse but do not append. A token that does
-not verify writes nothing.
+not verify writes nothing; from 0.7.0 a ``refused_tokens`` counter
+(``two_key.siem.RefusedTokens``) counts those refusals by class and reports the counts
+now and then, with no token text, no digest, and still no ledger entry.
 """
 
 from __future__ import annotations
@@ -134,7 +136,7 @@ def _as_verifier(issuer) -> CapabilityVerifier:
 class ToolGateway:
     def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None,
                  max_denied_jtis: int | None = None,
-                 deny_inflight_wait_seconds: float | None = None, scanner=None):
+                 deny_inflight_wait_seconds: float | None = None, scanner=None, refused_tokens=None):
         self.ledger = ledger
         _warn_unbound_ledger(ledger)
         self.issuer = _as_verifier(issuer)
@@ -147,6 +149,9 @@ class ToolGateway:
         # TwoKey's content scanner, for its configuration only (which tools are scanned, which arguments are
         # files): the gateway never calls it. None when no scanner is configured.
         self.scanner = scanner
+        # 0.7.0: counts tokens that do not verify, which are refused without a ledger entry so an
+        # unauthenticated caller cannot fill the ledger (two_key.siem.RefusedTokens). None: not counted.
+        self.refused_tokens = refused_tokens
         # One in-process lock per jti being redeemed. #42: _lock_refs counts the threads that hold or
         # wait on each lock, under _locks_guard; the entry is removed when the count reaches zero, so the
         # map holds only jtis in flight. No LRU cap: evicting a held lock would split one jti in two.
@@ -178,7 +183,9 @@ class ToolGateway:
         or a missing fact, is ``fact_mismatch``. A fact with a ``json_path`` reaches the tool there.
 
         A token that does not verify (bad signature, expired, malformed) is refused without a
-        ledger entry, so an unauthenticated caller cannot write to the ledger. Any later refusal of
+        ledger entry, so an unauthenticated caller cannot write to the ledger; with
+        ``refused_tokens=`` such refusals are counted by class and reported now and then (0.7.0),
+        never with the token, its digest, or its jti. Any later refusal of
         an authenticated token is ledgered as ``gateway_denied`` with the reason, the jti, the tool
         name (only if it is a short identifier), and the size and digest of the arguments, never
         their values.
@@ -186,6 +193,10 @@ class ToolGateway:
         try:
             payload = self.issuer.verify(token)
         except TokenError as e:
+            # No ledger entry: an unauthenticated caller cannot write to the ledger. 0.7.0 counts the
+            # refusal by class instead, so repeated attempts are not invisible.
+            if self.refused_tokens is not None:
+                self.refused_tokens.note(e)
             return GatewayResult(False, str(e))
         result, encoded = self._invoke_verified(payload, tool, arguments, facts)
         if result.allowed or result.reason.startswith(("ledger_failed:", "tool_error:")):
@@ -377,6 +388,10 @@ class ToolGateway:
             except Exception as e:
                 return GatewayResult(False, _ledger_failed(e), output)
         return GatewayResult(True, "redeemed", output)
+
+    def refused_token_counts(self) -> dict:
+        """Tokens refused without a ledger entry since the last report, by class. Empty without a counter."""
+        return {} if self.refused_tokens is None else self.refused_tokens.counts()
 
     def _pinned_at(self, size: int) -> str | None:
         """The capability key fingerprint in the last ``constitution_loaded`` entry before ``size``."""

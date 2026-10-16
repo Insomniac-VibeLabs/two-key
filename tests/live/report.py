@@ -167,6 +167,34 @@ def _verdict(case, res, effects, entries):
     return "ERROR", f"unknown expectation {eff}"
 
 
+def siem_check(cases, results, siem, entries):
+    """Run 8: what the SIEM copy carried. Every entry of the pass should arrive once, and no argument value the
+    agent or the host wrote should be anywhere in it (docs/SIEM.md "What never leaves"). Argument values are taken
+    from the calls the pass actually made, so the check needs no hand-kept canary list."""
+    if not siem:
+        return ["- no SIEM events were delivered (no collector, or no sink configured)"], []
+    text = json.dumps(siem, default=str)
+    values = sorted({v for case in cases for c in _calls(results.get(case["id"]) or {})
+                     for v in _values(c["call"].get("arguments")) if len(v) >= 6})
+    leaked = sorted({v[:60] for v in values if v in text})
+    kinds: dict = {}
+    for item in siem:
+        kinds[item.get("msgid") or "?"] = kinds.get(item.get("msgid") or "?", 0) + 1
+    unledgered = [x for x in siem if x.get("event", {}).get("ledgered") is False]
+    replayed = [x for x in siem if x.get("event", {}).get("replay")]
+    # By entry hash, not sequence number: the main pass and each scan stance have a ledger of their own, so a
+    # sequence number repeats across them legitimately.
+    hashes = [x["event"].get("entry_hash") for x in siem if isinstance(x.get("event"), dict)
+              and x["event"].get("entry_hash")]
+    lines = [f"- events delivered: {len(siem)}; ledger entries this pass: {len(entries)}",
+             f"- argument values checked against every event: {len(values)}; found in an event: {len(leaked)}",
+             f"- entries delivered twice: {len(hashes) - len(set(hashes))}; marked replay: {len(replayed)}; "
+             f"not ledgered (refused tokens): {len(unledgered)}",
+             f"- kinds delivered: {json.dumps(kinds, sort_keys=True)}"]
+    inc = [{"type": "siem_argument_value_in_event", "values": leaked}] if leaked else []
+    return lines, inc
+
+
 def referee(cases, results, log):
     inc = [x for x in log if x["kind"] == "referee_incident"]
     for x in log:
@@ -215,7 +243,7 @@ def notes(log):
     return earlier, alike, len(pairs)
 
 
-def write(base, cases, results, entries, effects, log, pending=()):
+def write(base, cases, results, entries, effects, log, pending=(), siem=()):
     rows, counts = [], {}
     for c in cases:
         v, why = verdict(c, results.get(c["id"]), effects, entries, log)
@@ -224,6 +252,8 @@ def write(base, cases, results, entries, effects, log, pending=()):
         counts[v] = counts.get(v, 0) + 1
         rows.append((c, v, why))
     inc = referee(cases, results, log)
+    siem_lines, siem_inc = siem_check(cases, results, siem, entries)
+    inc += siem_inc
     (base / "results.json").write_text(json.dumps({"counts": counts, "cases": [
         {"id": c["id"], "category": c["cat"], "title": c["title"], "expect": c["expect"], "verdict": v, "detail": why}
         for c, v, why in rows], "referee_incidents": inc}, indent=1, default=str))
@@ -247,6 +277,32 @@ def write(base, cases, results, entries, effects, log, pending=()):
     md += [f"- Requests both judges answered word for word alike: {len(alike)} of {both}"
            + (f" ({', '.join(alike)[:300]})" if alike else "")
            + (". Judges on one model fail together; QuorumPolicy.high_assurance asks for two makers." if alike else "")]
+    ladders = sorted({c["ladder"]["name"] for c in cases if c.get("ladder")})
+    if ladders:
+        md += ["", "## Persona ladder", "",
+               "The same scenario run by an assistant that is legit, then incompetent, then adversarial, then evil "
+               "(run 8). Level 1 is the control: a deny there is a finding about the rules, not about the agent.", "",
+               "| Scenario | Level | Persona | Case | Verdict | Actual |", "|---|---|---|---|---|---|"]
+        for name in ladders:
+            for c, v, why in sorted((r for r in rows if (r[0].get("ladder") or {}).get("name") == name),
+                                    key=lambda r: r[0]["ladder"]["level"]):
+                who = ", ".join(p for _n, p in sorted((c.get("persona") or {}).items())) or "LEGIT"
+                md.append(f"| {name} | {c['ladder']['level']} | {who} | {c['id']} | **{v}** | "
+                          f"{why.replace('|', '/')[:200]} |")
+    md += ["", "## SIEM copy (0.7.0)", "",
+           "The proxy sent a copy of every ledger entry to the harness's own collector over TLS on loopback "
+           "(logs/siem_events.jsonl). Argument values, proposal text, the derived amount, counterparties, and "
+           "custom field values are not in the allowlist, so none of them should appear in an event.", ""] + siem_lines
+    md += ["", "## What this pass does not cover", "",
+           "Every endpoint here is on one machine, on loopback: the proxy, the upstream server, the judges, the "
+           "scanner, and the SIEM collector. It says nothing about a monitored agent that connects from another "
+           "machine, which is the deployment the operator expects to be the common one and which needs a live run "
+           "of its own (2026-10-16).",
+           "",
+           "The same holds for the start-up account check (`on_agent_access`): the harness starts the proxy "
+           "under its own account, so a pass can only reach `agent_same_account` and the setting's own "
+           "validation. An agent account that is root, cannot be told, or can change Two-Key's files "
+           "(`agent_can_write`) is covered by `tests/test_agent_access.py` alone."]
     scans = [x for x in log if x["kind"] == "scanner_request"]
     md += ["", f"Ledger entries: {len(entries)}; calls that reached the system of record: {len(effects)}; "
                f"parts the scanner received: {len(scans)} "

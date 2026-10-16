@@ -20,24 +20,26 @@ any LLM reader is in [llms.txt](llms.txt). Do not replace one with the other.
 ## Scope
 
 Core only: signed constitution, Path A bytecode, Path B judge hooks,
-monitored-agent hooks, encrypted ledger, single-use capability token, and a
-verify-only gateway. Beta (pre-1.0), maintainer-reviewed, not independently
+monitored-agent hooks, encrypted ledger, single-use capability token, a
+verify-only gateway, and the SIEM export. Beta (pre-1.0), maintainer-reviewed, not independently
 audited. Apache-2.0.
 
-Do **not** add a scanning or antivirus engine, chain anchoring, or seed
-phrases here. The items in [ROADMAP.md](ROADMAP.md) are in scope: key backup
-(shipped in 0.3.0), an MCP adapter (0.5.0), DLP and antivirus hooks that call
-external scanners (0.6.0), ledger export for a SIEM (0.7.0), and, after 1.0,
-PKI with certificate recovery, hybrid ML-DSA signatures, a FIPS approved
-mode, and a local GUI. Build them in the order and with the limits stated
+Do **not** add a scanning or antivirus engine, a SIEM or log storage, chain
+anchoring, or seed phrases here. The items in [ROADMAP.md](ROADMAP.md) are in
+scope: key backup (shipped in 0.3.0), an MCP adapter (0.5.0), DLP and
+antivirus hooks that call external scanners (0.6.0), ledger export for a SIEM
+(0.7.0), and, after 1.0, PKI with
+certificate recovery, hybrid ML-DSA signatures, a FIPS approved mode, and a
+local GUI. Build them in the order and with the limits stated
 there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.6.0 (package name `two-key`) is tag `v0.6.0` on `main`; 0.5.0 is
+- Package 0.7.0 (package name `two-key`) is tag `v0.7.0` on `main`; 0.6.0 is
+  tag `v0.6.0`, 0.5.0 is
   tag `v0.5.0`, and 0.4.0 (tag `v0.4.0`) was the first release from this repository. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`.
   Tag `v0.2.4` stays on `fc836bb`.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
   where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
@@ -48,7 +50,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key`, import name `two_key`,
-version `0.6.0`, tag `v0.6.0` on `main`. Not on PyPI.
+version `0.7.0`, tag `v0.7.0` on `main`. Not on PyPI.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
@@ -75,7 +77,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0) |
 
 Git install:  
-`pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.6.0"`
+`pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"`
 
 ## Tests and docs
 
@@ -84,8 +86,8 @@ Git install:
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `CHANGES.md`, `SECURITY.md`, `CONTRIBUTING.md`,
-  `AGENTS.md`, and `llms.txt` as needed.
+  `docs/SCOPE.md`, `docs/SIEM.md`, `CHANGES.md`, `SECURITY.md`,
+  `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
 - When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
   in the same release.
 - Keep [docs/HOWTO.md](docs/HOWTO.md) "Known trade-offs by configuration"
@@ -229,6 +231,21 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   named, not passed. There is no setting that turns it off, and on POSIX a
   group write bit counts for every group but 0; do not add either. It runs
   before anything is written to the ledger (`tests/test_writable_paths.py`).
+- Agent account (0.7.0, `two_key/agent_access.py`): the MCP proxy reads the
+  real user of its parent process (`_platform.parent_account`, never an
+  environment variable) before it opens the ledger, and refuses to start
+  when that account is Two-Key's own (`agent_same_account`), root
+  (`agent_account_root`), unknown (`agent_account_unknown`, Windows
+  included for now), or can change a path of the writable-path check
+  (`agent_can_write`). `on_agent_access: refuse` is the default (maintainer's
+  decision, 2026-10-16); `warn` starts; `high_assurance` refuses and does
+  not accept `warn`. Unknown is never a different account; an account whose
+  groups cannot be listed is in every group (`tests/test_agent_access.py`).
+- Shared ledger (0.7.0): a `Ledger` that finds the file longer than it
+  left it reads and verifies the new entries under the cross-process lock
+  (chain, head, witness pin, anchor) and does not pass them to its
+  observers; a shorter file or a partial line is still refused
+  (`tests/test_ledger_shared.py`).
 - Content scanning (0.6.0, `two_key/scan.py`): Two-Key alone starts a scan,
   for every call to a tool whose signed spec maps the scan field, and fills
   the verdict; nothing the agent writes turns it on or off, and `scan` in
@@ -269,5 +286,31 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   or cross-process protocol without the operator. Do not describe
   verify-only as key isolation: the process holds the minting, principal,
   witness, and ledger keys, and the registered tools run there.
+
+- SIEM export (0.7.0, `two_key/siem.py`, `two_key/siem_sinks.py`,
+  `two_key/siem_export.py`): optional, and with no `siem=` nothing is sent
+  and nothing changes. What may leave the box is an explicit per-kind
+  allowlist (`KINDS`): every body key of every ledger kind is `sent`,
+  `hashed`, `excluded`, or extracted, and a key nobody decided fails
+  `tests/test_siem.py`. Argument values, proposal and decline text, the
+  derived amount, counterparties, custom field values, scanner threat names
+  and matched text, and credentials stay excluded, with canary values in the
+  tests; add a new ledger field to the allowlist on purpose or not at all.
+  The ledger observer only enqueues a sequence number: projecting,
+  formatting, and sending happen on the sender thread, so a collector that
+  is down, slow, or hostile never blocks, delays, or changes an
+  authorization, and a full queue drops rather than waits. TLS sets
+  TLS 1.2 as the minimum and always verifies the certificate and the host
+  name; do not add a setting that turns either off. A plaintext sink (`udp`,
+  `tcp`) is refused under `high_assurance` (`siem_plaintext_refused`) and
+  warns at start otherwise. A webhook never follows a redirect and reads its
+  authorization header and HMAC key from owner-only files through
+  `_platform`. A token the gateway refuses is still not ledgered: it only
+  increments an in-memory class counter, reported at most once an interval
+  with no token text, digest, or id (`ledgered: false`, `seq: -1`).
+  `two-key siem-export` verifies the ledger first, writes a new owner-only
+  file and refuses to overwrite, and `two-key siem-verify` re-derives every
+  event from the ledger (`tests/test_siem_export.py`). Keep the unit tests
+  network-free: loopback only, with `tests/tls.py` for certificates.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

@@ -123,6 +123,15 @@ class Callers(unittest.TestCase):
         with self.assertRaisesRegex(MalformedBallot, "non-standard JSON constant NaN"):
             parse_ballot_strict('{"consistent": true, "confidence": NaN, "rationale": "ok"}')
 
+    def test_a_ballot_parses_to_the_same_shape_with_and_without_the_echo(self):
+        """Four values either way: the echoed hashes are None when they were not asked for."""
+        plain = '{"consistent": true, "confidence": 0.5, "rationale": "ok"}'
+        self.assertEqual(parse_ballot_strict(plain), (True, 0.5, "ok", None))
+        echoed = ('{"consistent": false, "confidence": 0, "rationale": "no", '
+                  '"action_hash": "a", "constitution_hash": "c"}')
+        self.assertEqual(parse_ballot_strict(echoed, echo=True),
+                         (False, 0.0, "no", {"action_hash": "a", "constitution_hash": "c"}))
+
     def test_cli_args_duplicate(self):
         from two_key.cli import main
         with self.assertRaisesRegex(SystemExit, "--args: duplicate key 'to'"):

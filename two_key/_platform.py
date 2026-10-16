@@ -501,6 +501,61 @@ def _posix_group(gid: int) -> str:
         return f"gid {gid}"
 
 
+def parent_account() -> tuple[int | None, str]:
+    """The real account of the process that started this one, as ``(uid, label)``, or ``(None, why)``.
+
+    For the MCP proxy that process is the agent's host, or the ``sudo`` (or ``sshd`` session) it went
+    through, whose real user is still the caller. Linux reads ``/proc/<ppid>/status``; other POSIX systems
+    ask ``/bin/ps``. Windows is not supported yet, so it is ``(None, why)``, which the caller treats as
+    unknown, never as a different account.
+    """
+    if WINDOWS:  # pragma: no cover
+        return None, "telling the parent process's account is not supported on Windows yet"
+    ppid = os.getppid()
+    if ppid <= 1:
+        return None, f"the process that started Two-Key has exited (parent pid {ppid})"
+    status = f"/proc/{ppid}/status"
+    if os.path.isdir("/proc/self"):
+        try:
+            with open(status, encoding="ascii", errors="replace") as fh:
+                for line in fh:
+                    if line.startswith("Uid:"):
+                        uid = int(line.split()[1])
+                        return uid, _posix_account(uid)
+        except (OSError, ValueError, IndexError) as e:
+            return None, f"cannot read {status} ({getattr(e, 'strerror', None) or type(e).__name__})"
+        return None, f"no Uid line in {status}"
+    import subprocess  # nosec B404 - a fixed program and arguments, no shell  # pragma: no cover
+    try:  # pragma: no cover
+        done = subprocess.run(["/bin/ps", "-o", "ruid=", "-p", str(ppid)],  # nosec B603 - fixed argv, no shell
+                              capture_output=True, text=True, timeout=10, check=False)
+        uid = int(done.stdout.strip())
+    except (OSError, ValueError, subprocess.SubprocessError) as e:  # pragma: no cover
+        return None, f"/bin/ps could not tell the parent's account ({type(e).__name__})"
+    return uid, _posix_account(uid)  # pragma: no cover
+
+
+def account_can_write(path, uid: int) -> str | None:
+    """How the POSIX account ``uid`` could change ``path`` (it owns it, everyone can write it, or a group it is
+    in can), or None. Follows links. An account whose groups cannot be listed is taken to be in every group,
+    so a group write bit counts. Root can change anything; the caller handles that."""
+    st = os.stat(path)
+    if st.st_uid == uid:
+        return "it owns it"
+    if st.st_mode & stat.S_IWOTH:
+        return "everyone can write it"
+    if st.st_mode & stat.S_IWGRP:
+        try:
+            import pwd
+            entry = pwd.getpwuid(uid)
+            groups = set(os.getgrouplist(entry.pw_name, entry.pw_gid))
+        except (ImportError, KeyError, OSError, AttributeError):
+            return f"its groups cannot be listed, and group {_posix_group(st.st_gid)} can write it"
+        if st.st_gid in groups:
+            return f"it is in group {_posix_group(st.st_gid)}, which can write it"
+    return None
+
+
 def write_problem(path, rule: str = "file") -> str | None:
     """Why an account other than this process's user could change ``path``, or None. Follows links.
 

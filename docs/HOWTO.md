@@ -45,6 +45,7 @@ Commands are from the repository root.
   - [What each refusal or warning means](#what-each-refusal-or-warning-means)
   - [Key custody](#key-custody)
   - [Limits](#limits)
+- [Send the ledger to a SIEM](#send-the-ledger-to-a-siem)
 - [If the ledger will not open after a crash](#if-the-ledger-will-not-open-after-a-crash)
 - [Back up the keys](#back-up-the-keys)
 - [Pin the witness key](#pin-the-witness-key)
@@ -1396,10 +1397,13 @@ form, the ledger prefix root, the capability key fingerprint pinned in the
 ledger (`capability_key_mismatch`), and that nothing revoked or reloaded
 the constitution after issuance. A token that fails its signature or
 format check is refused without a ledger entry, so an unauthenticated
-caller cannot write to the ledger. Any later refusal of an authenticated
+caller cannot write to the ledger. A later refusal of an authenticated
 token is ledgered as `gateway_denied` with the reason, the jti, the tool
 name (only a short identifier; otherwise its size and digest), and
-`tool_args_size` and `tool_args_digest`, never the argument values. Pass the same
+`tool_args_size` and `tool_args_digest`, never the argument values. Once per
+token: a repeat refusal of the same token, such as replaying one that was
+already redeemed, still refuses but is not ledgered again, so a caller
+holding one spent token cannot make the ledger grow. Pass the same
 argument object you authorized. The hash covers those bytes. The registered
 function is called with declared paths only: unnamed keys are omitted, and
 a counterparty path is the canonical party. The token is
@@ -1431,11 +1435,10 @@ cross-process protocol.
 
 Why:
 
-- A `Ledger` opened in another process is its own in-memory copy. It does
-  not see tokens issued after it opened, so it refuses them
-  (`ledger_size_invalid`, then `ledger_failed: ledger file changed by
-  another writer` when it tries to record the refusal). Reopening before
-  every redemption is not a supported mode either.
+- A `Ledger` opened in another process is its own in-memory copy. It
+  reads another writer's entries only when it next writes, so it refuses a
+  token issued since (`ledger_size_invalid`) before it reads them.
+  Reopening before every redemption is not a supported mode either.
 - Opening a `Ledger` loads the ledger key and the witness key, and writing
   needs the principal private key. A second process holding them is a
   second copy of those keys, not a smaller one.
@@ -1634,7 +1637,7 @@ messages and decides nothing.
 ### Install
 
 ```bash
-pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.6.0"
+pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
 pip install -e ".[mcp]"          # or from a checkout
 ```
 
@@ -1780,10 +1783,19 @@ and `run-proxy` is:
 
 ```bash
 #!/bin/sh
+umask 077                                      # the ledger is created owner-only (below)
 cd /opt/two-key || exit 1                      # not the agent's folder (below)
 set -a; . /etc/two-key/proxy.env; set +a       # mode 0600, owner two-key
 exec /opt/two-key/.venv/bin/two-key mcp-proxy --config /etc/two-key/proxy.yaml
 ```
+
+The `umask` matters on the first start, when the proxy creates the ledger:
+the ledger folder and its files take their mode from it. On Ubuntu 24.04,
+`sudo -u two-key` gives the proxy a umask of 002 (sudo's PAM session sets
+it for an account whose group has its own name), so without the line the
+ledger folder is group-writable, and the proxy's own start-up check names
+it (`writable_path: /var/lib/two-key/ledger: writable by group two-key`)
+or, with `on_writable_paths: refuse`, does not start.
 
 sudo keeps the caller's working directory, and the upstream server
 inherits the proxy's unless `upstream.cwd` is set. Left in the agent's
@@ -1812,6 +1824,7 @@ refused. Relative paths are relative to the file.
 | `agent_session_env` | no | The variable holding the agent's session, read once at start; unset or empty refuses to start |
 | `agent_id`, `hosting` | no | Ledger metadata, at most 256 characters; not trust |
 | `allow_unresolved_identity` | no | `true` starts despite an `unresolved_identity` warning (default `false`) |
+| `on_agent_access` | no | `refuse` (default) does not start when the account that started the proxy (the agent host's, or the SSH login account's) is Two-Key's own (`agent_same_account`), is root (`agent_account_root`), cannot be told (`agent_account_unknown`, which includes Windows for now), or can change a file or folder the proxy runs or reads (`agent_can_write`); `warn` names it and starts, for a test on one machine under one account. `high_assurance` refuses either way and does not accept `warn` ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you), 0.7.0) |
 | `on_writable_paths` | no | `warn` (default) names each file or folder the proxy runs or reads that another account could change, and starts; `refuse` does not start. `high_assurance` refuses either way and does not accept `warn` ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you), 0.6.0) |
 | `upstream.command` | yes | Program and arguments, as a list; no shell |
 | `upstream.env` | no | Variables for the child: a literal, or `{env: NAME}` read from the proxy's environment (unset refuses to start) |
@@ -1825,6 +1838,7 @@ refused. Relative paths are relative to the file.
 | `tools.<id>.facts` | for caller-supplied fields | `{field: {hook: "module:function"}}`, one per `source: caller` field the tool maps. Trusted operator code, imported at start |
 | `tools.<id>.files` | no | Arguments that hold a file, for the content scanner: `[{path: "attachments[].content", kind: base64, max_bytes: 65536}]`, `kind: base64url`, or `{path: file_path, kind: path, folder: /srv/outbox, max_bytes: 20971520}`. `max_bytes` is required (base64 at most 196608, path at most 100 MiB). Needs `scan` (0.6.0) |
 | `scan` | no | The content scanner (antivirus or DLP): `type: clamd`, `icap`, `command`, or `python`, with `timeout_seconds` (default 15). The size limit is `max_bytes` on each declared file. See [docs/SCANNERS.md](SCANNERS.md) (0.6.0) |
+| `siem` | no | Send a copy of each ledger entry to a SIEM: `sinks:` (`type: syslog` with `transport: tls` (default), `tcp`, or `udp`, or `type: webhook` with an `https://` URL), with `schema` (`native`, `ecs`, `ocsf`), `format` (`json`, `cef`), and `replay_from`. No argument values. See [docs/SIEM.md](SIEM.md) (0.7.0) |
 
 The claim is the only thing the proxy says about a call, and the agent
 writes none of it. Amount, counterparty, and irreversible are never
@@ -1879,6 +1893,7 @@ on stderr and exits 1.
 | `upstream_env_missing: upstream.env.X ...` | The variable `{env: NAME}` reads is unset or empty | Set it in the proxy's environment |
 | `agent_session_env: ...` | The agent session variable is unset or empty | Set it, or remove the key |
 | `TwoKeyConfigError: ...`, `JudgeConfigError: ...`, `LedgerError: ...` | Two-Key itself refused, as `two-key authorize` would | See the sections on judges, the monitored agent, and the ledger |
+| `AgentAccessError: agent_same_account: ...`, `agent_account_root`, `agent_account_unknown`, `agent_can_write: <path>: ...` | The account that started the proxy is Two-Key's own, root, unknown, or can change that path; `on_agent_access` is `refuse` (the default) or `high_assurance` is set | Start the proxy from the agent's own account through the `run-proxy` sudo rule (or SSH) and take its write access away ([CONNECTING](CONNECTING.md#route-1-an-mcp-client-through-two-key-mcp-proxy)). For a test under one account only: `on_agent_access: warn` |
 | `TwoKeyConfigError: writable_path: <path>: ...` | Another account could change a file or folder Two-Key runs or reads, and `on_writable_paths: refuse` or `high_assurance` is set | Make it owned by Two-Key's account (or root) and not writable by group or others ([CONNECTING](CONNECTING.md#run-two-key-as-a-service-account)) |
 | `unresolved_identity: ...` | Two-Key cannot tell who serves a judge or the agent (a local proxy serving an alias, an unrecognized host), so it cannot rule out a judge that is the agent | Declare `upstream:` for that side in `judges.yaml`, or set `allow_unresolved_identity: true` to accept the risk |
 | `tools: [...] are not tools in the signed constitution` | A `tools:` entry names an unsigned tool | Remove it, or sign the tool |
@@ -1962,12 +1977,60 @@ Run the proxy as its own OS user, and the upstream server as a third one.
   runs twice per allowed call). The tool should still check the fact.
 - **One upstream, over stdio.** HTTP transports come later. One call runs at
   a time, so a slow judge round delays the next call.
+- **The agent host connects over stdio only.** The proxy does not listen on
+  the network. An agent on another machine starts it over SSH, which
+  carries stdio
+  ([CONNECTING](CONNECTING.md#an-agent-on-another-machine-route-1-over-ssh)).
+- **Proxies can share a ledger.** Each proxy appends under the ledger's
+  cross-process lock, and before it writes it reads and verifies what
+  another proxy appended since (each entry, the chain, the signed head,
+  the witness pin). A file that got shorter, or ends in a partial line, is
+  still refused with `ledger file changed by another writer; reopen the
+  ledger`. Each running proxy is its own process with its own copy of the
+  keys; one ledger per agent is still easier to audit.
 - **The pin covers what the agent is shown,** not what the server does: a
   server can change its behavior without changing a schema. Pin the
   version.
 - **Results are not read.** An upstream result can carry injected text back
   to the agent. Two-Key judges each later call on its own terms; it does not
   scan the result.
+
+## Send the ledger to a SIEM
+
+Two-Key can put a copy of every ledger entry where your organization already
+watches, as each entry is written, and it can write the same events to a file
+on demand. [docs/SIEM.md](SIEM.md) is the reference; this is the short version.
+
+```yaml
+# proxy.yaml
+siem:
+  sinks:
+    - type: syslog
+      host: siem.example.net      # transport: tls and port 6514 unless you say otherwise
+      ca_file: /etc/two-key/siem-ca.pem
+```
+
+From Python, pass `siem=SiemConfig(sinks=(SyslogSink("siem.example.net"),))`
+to `TwoKey`, and call `two_key.close()` at shutdown so the sender gets a last
+pass.
+
+- Syslog over TLS (RFC 5425, port 6514) is the default; `tcp` (514) and `udp`
+  (514) are plaintext, which warns at start and is refused under
+  `high_assurance`. A webhook is an HTTPS POST of a batch, one event per line.
+- Events carry the entry's `seq` and `entry_hash`, digests, sizes, and reason
+  codes. They never carry argument values, the proposal text, the derived
+  amount or counterparty, a custom field value, a judge's rationale, a decline
+  reason, or file content, and no setting adds them.
+- Nothing waits on a SIEM. A sender thread does the network; a collector that
+  is down only puts the copy behind, and the catch-up is marked `replay`.
+- `two-key siem-export --key principal.pem --ledger ./ledger --out events.jsonl`
+  verifies the ledger, decrypts it locally, and writes the same events as a
+  file; `two-key siem-verify --events events.jsonl --require-complete` checks a
+  copy (exported, or pulled back out of the SIEM) against the ledger and
+  reports anything missing, repeated, or changed.
+- A token that does not verify is still refused with no ledger entry; 0.7.0
+  counts those refusals by class and reports the count at most once a minute,
+  on stderr and as a `gateway_token_refused` event.
 
 ## If the ledger will not open after a crash
 
@@ -2274,6 +2337,23 @@ names the setting or declaration that controls it.
   outside its folder, for example) is denied under every stance. The
   stance is the signed
   `scan` rule (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)).
+
+- The SIEM copy (`siem:`). A collector that is down never blocks a call, so
+  your SIEM is behind until it answers; alert on a gap in `seq`, not on
+  silence. Plaintext (`udp`, `tcp`, `http://`) lets anyone on the path read
+  the tool names, outcomes, and reason codes, or forge them; it warns at
+  start and is refused under `high_assurance`. Argument digests let whoever
+  reads the SIEM test a guess of a low-entropy argument, which is the trade
+  for being able to tie two calls together
+  ([SIEM](SIEM.md#trade-offs)).
+
+- `on_agent_access`: `refuse` (the default) does not start when the
+  account that started the proxy is Two-Key's own, root, unknown, or can
+  change what the proxy runs or reads. `warn` starts anyway: for a test on
+  one machine under one account, where the agent can read every key and
+  rewrite the constitution's settings, so nothing it does is held by two
+  keys. On Windows the parent's account cannot be told yet, so the proxy
+  needs `warn` there until it can.
 
 - `on_writable_paths`: `warn` (the default) starts when another account
   could change a file or folder Two-Key runs or reads, and names it on

@@ -14,6 +14,10 @@ PO_BOOK = {
     "CPL-6620": ("clearpath-labs.example", 54.75, True),
     "RMW-4410": ("rockymtn-medwaste.example", 742.18, True),
     "AMS-30915": ("alpine-medsupply.example", 86.40, True),    # matched; the back end fails on it (harness)
+    # Run 8's persona ladder: the same vendor's week of invoices, one matched, one over the cap, one mismatched.
+    "AMS-31002": ("alpine-medsupply.example", 312.40, True),
+    "AMS-31003": ("alpine-medsupply.example", 517.90, True),
+    "AMS-31004": ("alpine-medsupply.example", 264.00, False),
 }
 
 
