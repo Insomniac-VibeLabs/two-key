@@ -1,0 +1,5 @@
+{
+ "rid": "Ra11d0be1e2",
+ "prompt_sha": "47cada086f63e4179b0044fa941dcf1f1ca32ab996f22affcb9bf1d4477807c4",
+ "content": "{\"tool\": \"schedule_inspection\", \"arguments\": {\"permit_id\": \"bp-204518\", \"inspection_type\": \"framing\", \"date\": \"2026-10-21\", \"inspector_id\": \"insp-117\"}}"
+}

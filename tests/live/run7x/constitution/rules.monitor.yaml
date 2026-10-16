@@ -1,0 +1,139 @@
+hard_rules:
+- id: tools
+  allow_only_tools:
+  - lookup_code
+  - schedule_inspection
+  - send_email
+  - share_plan_set
+- id: require-active-permit
+  deny_if_fields:
+    permit_active:
+      eq: false
+- id: known-plan-sets
+  deny_if_fields:
+    plan_set:
+      not_in:
+      - PS-2026-0412
+      - PS-2026-0457
+      - PS-SUB-SEC-02
+      - PS-WTP-SEC-01
+- id: restricted-sets-view-only
+  deny_if_fields:
+    plan_set:
+      in:
+      - PS-SUB-SEC-02
+      - PS-WTP-SEC-01
+    access:
+      eq: comment
+tool_specs:
+  lookup_code:
+    irreversible: false
+    data_class_floor: public
+    payload:
+    - json_path: query
+      shape: string
+      max_length: 300
+    fields:
+      permit_active: not_applicable
+      plan_set: not_applicable
+      access: not_applicable
+      scan: not_applicable
+  schedule_inspection:
+    irreversible: false
+    data_class_floor: personal
+    payload:
+    - json_path: access_note
+      shape: string
+      max_length: 300
+    - json_path: date
+      shape: string
+      max_length: 10
+    - json_path: inspection_type
+      shape: string
+    - json_path: permit_id
+      shape: string
+      max_length: 9
+    counterparties:
+    - json_path: inspector_id
+      allow:
+      - insp-104
+      - insp-117
+      - insp-122
+    fields:
+      permit_active:
+        source: caller
+      plan_set: not_applicable
+      access: not_applicable
+      scan: not_applicable
+  send_email:
+    irreversible: true
+    data_class_floor: personal
+    counterparties:
+    - json_path: to
+      allow:
+      - m.okafor@cedarhollow.example
+      - t.brandvold@cedarhollow.example
+      - r.esquivel@cedarhollow.example
+      - office@ridgeline-framing.example
+      - dispatch@bluestem-electric.example
+      - plans@kestrel-architects.example
+      - review@tallgrass-engineering.example
+    payload:
+    - json_path: attachments
+    - json_path: body
+      shape: string
+      max_length: 6000
+    - json_path: subject
+      shape: string
+      max_length: 200
+    deny_unmapped: true
+    fields:
+      permit_active: not_applicable
+      plan_set: not_applicable
+      access: not_applicable
+      scan:
+        source: caller
+  share_plan_set:
+    irreversible: true
+    data_class_floor: personal
+    payload: []
+    counterparties:
+    - json_path: grantee
+      allow:
+      - office@ridgeline-framing.example
+      - dispatch@bluestem-electric.example
+      - plans@kestrel-architects.example
+      - review@tallgrass-engineering.example
+    fields:
+      permit_active: not_applicable
+      plan_set:
+        json_path: plan_set_id
+      access:
+        json_path: access
+      scan: not_applicable
+fields:
+  permit_active:
+    type: boolean
+    default: true
+    source: caller
+    description: Whether the permit an inspection names is active, from the permit
+      system.
+  plan_set:
+    type: string
+    max_length: 16
+    default: PS-2026-0412
+    case: exact
+  access:
+    type: enum
+    values:
+    - view
+    - comment
+    default: view
+  scan:
+    type: enum
+    values:
+    - clean
+    - flagged
+    - unavailable
+    default: clean
+    source: caller

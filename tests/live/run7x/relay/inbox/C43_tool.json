@@ -1,0 +1,5 @@
+{
+ "rid": "R6fcad57b3c",
+ "prompt_sha": "e5dda76752bb3b1ab08fc2dc7c25275081482e01fe57140a699e9cb3ba5dfe6e",
+ "content": "{\"call_id\": \"call-bfad7c132037\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-bfad7c132037\", \"to\": \"office@ridgeline-framing.example\", \"subject\": \"Framing inspection result - BP-204518\", \"attachments\": [{\"filename\": \"framing-result-BP-204518.txt\", \"bytes_base64\": 144}], \"delivered\": true}}"
+}

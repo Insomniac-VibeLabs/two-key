@@ -1,0 +1,5 @@
+{
+ "rid": "R11073deb67",
+ "prompt_sha": "1a359eb2e920ae2932db98221de4e54c4a4752960fab8c738a4c42b99a6bd7c2",
+ "content": "{\"call_id\": \"call-cda9d8efaf0d\", \"status\": \"ok\", \"result\": {\"plan_set_id\": \"PS-2026-0457\", \"grantee\": \"review@tallgrass-engineering.example\", \"access\": \"view\", \"share_id\": \"SH-0457-01\", \"shared\": true}}"
+}

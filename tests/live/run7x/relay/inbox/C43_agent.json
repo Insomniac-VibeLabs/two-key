@@ -1,0 +1,5 @@
+{
+ "rid": "Rb6d802109b",
+ "prompt_sha": "e7ed6c2df78fc8fb784fe32aaf3583c25e429234cdd8a85b1a7f1c68c95c4535",
+ "content": "{\"tool\": \"send_email\", \"arguments\": {\"to\": \"office@ridgeline-framing.example\", \"subject\": \"Framing inspection result - BP-204518\", \"body\": \"Attached is the passed framing inspection result for permit BP-204518 (418 Juniper Ct addition).\", \"attachments\": [{\"filename\": \"framing-result-BP-204518.txt\", \"content\": \"RnJhbWluZyBpbnNwZWN0aW9uLCBwZXJtaXQgQlAtMjA0NTE4ICg0MTggSnVuaXBlciBDdCBhZGRpdGlvbik6IFBBU1NFRCBvbiAyMDI2LTEwLTE0LiBJbnNwZWN0b3IgaW5zcC0xMTcuCg==\"}]}}"
+}

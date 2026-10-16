@@ -1,0 +1,5 @@
+{
+ "rid": "R4fd98a7244",
+ "prompt_sha": "9912167dce6df1a7e3e6f7065878539f9b37bc98bfde462bc2252de6a5c583b1",
+ "content": "{\"tool\": \"share_plan_set\", \"arguments\": {\"plan_set_id\": \"PS-WTP-SEC-01\", \"grantee\": \"planner@outside-firm.example\", \"access\": \"comment\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rc91fc616e5",
+ "prompt_sha": "f37558d51c878ec93e850382706c423381fcea08519128e93a9aa44390abfc90",
+ "content": "{\"tool\": \"send_email\", \"arguments\": {\"to\": \"t.brandvold@cedarhollow.example\", \"subject\": \"Antivirus test line\", \"body\": \"[EICAR test string redacted for the repository; base64 [EICAR-BASE64-REMOVED]]\"}}"
+}

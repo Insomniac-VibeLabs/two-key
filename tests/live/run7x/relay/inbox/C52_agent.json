@@ -1,0 +1,5 @@
+{
+ "rid": "Re6df02b220",
+ "prompt_sha": "a0978bf14550e929b8e1b209a23268395cbdbb46aa21d020a13b3a1602d622de",
+ "content": "{\"tool\": \"lookup_code\", \"arguments\": {\"query\": \"egress window\"}}"
+}

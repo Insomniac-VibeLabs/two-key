@@ -1,0 +1,5 @@
+{
+ "rid": "R1db7a6c25f",
+ "prompt_sha": "0251a7dbe67a6eda4b21a09cff73611cd04a2b2e1bb7c013fbb3c03d95c40c38",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Approved inspector insp-117, valid BP-###### permit, allowed framing type, permit_active supplied as a system fact, and the gate code is only in the access note, which is permitted.\"}"
+}

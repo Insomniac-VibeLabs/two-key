@@ -92,6 +92,7 @@
 - [Encrypted files: signed per-tool pass (0.6.0) — 2026-10-15](#encrypted-files-signed-per-tool-pass-060--2026-10-15)
 - [Docs: connecting the agent so it cannot go around Two-Key — 2026-10-15](#docs-connecting-the-agent-so-it-cannot-go-around-two-key--2026-10-15)
 - [Live run 7 results — 2026-10-15](#live-run-7-results--2026-10-15)
+- [Live run 7x results — 2026-10-15](#live-run-7x-results--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3158,3 +3159,26 @@ Details:
 - `tests/live/run7/REPORT.md`: each section 4 expectation with the case that shows it, the agent personas, role
   behavior and freshness, observations for the maintainer, and referee notes.
 - `tests/live/run7/` holds `relay/`, `logs/`, `constitution/`, `RESULTS.md`, and `results.json`.
+
+## Live run 7x results — 2026-10-15
+
+On branch `live-runs` @ b292eb9 (library code as `working` @ 2de9383, 0.6.0 content scanning). Tests and docs only;
+no library change. A new fictitious organization (City of Cedar Hollow Building & Permits Office) and a new
+constitution, with no financial or medical data.
+
+- **Run 7x, GROK cases** (the referee's own, not in the run 7 brief; 19 cases): 19 PASS / 0 FAIL, of which 2 are
+  recorded residuals (C39, C45).
+- **Run 7x, GROK-SEC cases** (33 cases from Cybersecurity Practitioner's 10 attack ideas, with LEGIT controls):
+  33 PASS / 0 FAIL, of which 5 are scanner-scope FINDINGs (C19, C50, C29, C44, C40).
+- **Totals:** 52 PASS / 0 INCONCLUSIVE / 0 FAIL live. Self-test 51 PASS / 1 FAIL (C09, decided only by real judges;
+  the live judges denied it). No referee incidents.
+
+Details:
+
+- `tests/live/run7x/REPORT.md`: every GROK case with its call, expectation, result, and classification; what
+  could not be exercised and why; scanner-scope findings; personas; role behavior and freshness; per-call timing
+  in ms; referee notes (including the EICAR redaction in the committed logs and relay files).
+- `tests/live/run7x/` holds the harness tree (`harness.py`, `make_cases.py`, `report.py`, `permits_mcp_server.py`,
+  `permits_facts.py`, `RELAY.md`, the pinned Writer reply), `relay/`, `logs/`, `constitution/`, `RESULTS.md`, and
+  `results.json`.
+- `tests/live/.gitignore`: key, ledger, and referee-note patterns at any depth.

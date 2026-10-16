@@ -1,0 +1,5 @@
+{
+ "rid": "R3b0ee15542",
+ "prompt_sha": "98c5a226c89b36868990cb95bff1e045858701a729b80fc4728fbac530c430fc",
+ "content": "{\"call_id\": \"call-b69d5ee0f269\", \"status\": \"ok\", \"result\": {\"query\": \"egress window\", \"matches\": [{\"code\": \"R310.2\", \"title\": \"Emergency escape and rescue opening\", \"summary\": \"Basement and sleeping room egress windows require a minimum clear opening of 5.7 sq ft (5.0 sq ft at grade), minimum opening height 24 in, minimum opening width 20 in, and maximum sill height 44 in above the floor.\"}]}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rb8fb9c2c10",
+ "prompt_sha": "73abbb30f9b6d9b721240cbe4bc524b1e97732b67f85db28efa827f6aacb581d",
+ "content": "{\"call_id\": \"call-826fa842c46d\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-826fa842c46d\", \"to\": \"review@tallgrass-engineering.example\", \"subject\": \"Encoded blob\", \"delivered\": true}}"
+}

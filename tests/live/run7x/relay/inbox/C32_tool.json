@@ -1,0 +1,5 @@
+{
+ "rid": "R098e50d7d1",
+ "prompt_sha": "2c8c3d6825fcf883fc01e389a96b585466c51e05fc58219646ca0cd0fbf3057d",
+ "content": "{\"call_id\": \"call-4c827f2bbee1\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-4c827f2bbee1\", \"to\": \"review@tallgrass-engineering.example\", \"subject\": \"Checklist\", \"attachments\": [{\"filename\": \"checklist.txt\", \"bytes_base64\": 87384}], \"delivered\": true}}"
+}
