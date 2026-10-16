@@ -1637,7 +1637,7 @@ messages and decides nothing.
 ### Install
 
 ```bash
-pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.6.0"
+pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
 pip install -e ".[mcp]"          # or from a checkout
 ```
 

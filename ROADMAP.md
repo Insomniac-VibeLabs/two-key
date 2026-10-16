@@ -9,7 +9,6 @@ promise: the order may change, and version numbers are targets, not dates.
 - [The path to 1.0](#the-path-to-10)
 - [Where we are (2026-10-16)](#where-we-are-2026-10-16)
 - [Ground rules](#ground-rules)
-- [0.7.0: Ledger export for SIEM](#070-ledger-export-for-siem)
 - [1.0.0: Review and release](#100-review-and-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
   - [PKI and certificate recovery](#pki-and-certificate-recovery)
@@ -20,6 +19,7 @@ promise: the order may change, and version numbers are targets, not dates.
   - [More spec field types](#more-spec-field-types)
 - [Not planned for this repository](#not-planned-for-this-repository)
 - [Shipped](#shipped)
+  - [0.7.0: Ledger export for SIEM](#070-ledger-export-for-siem)
   - [0.6.0: DLP and AV hooks, Windows](#060-dlp-and-av-hooks-windows)
   - [0.5.0: MCP adapter](#050-mcp-adapter)
   - [0.4.0: This repository and the package `two-key`](#040-this-repository-and-the-package-two-key)
@@ -34,7 +34,7 @@ promise: the order may change, and version numbers are targets, not dates.
 flowchart LR
   r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
   r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
-  r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM"]
+  r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
   r07 --> r10["1.0.0<br/>Review and release"]
   r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
 ```
@@ -44,7 +44,7 @@ flowchart LR
 | 0.4.0 | This repository and the package name `two-key` (0.3.1 under the new name) | Released, tag `v0.4.0` |
 | 0.5.0 | MCP adapter: `two-key mcp-proxy`, `two-key mcp-draft-specs`, caller-supplied facts, and the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners; a start-up check for writable paths; judge connection reuse (#6) | Released, tag `v0.6.0` |
-| 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Built on `working`, not released |
+| 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
@@ -62,31 +62,35 @@ in the same release.
 
 ## Where we are (2026-10-16)
 
-- **0.6.0 is released**: tag `v0.6.0` on `main`. It adds Windows support,
-  content scanning through the operator's antivirus or DLP product, a
-  start-up check for paths another account could change, and judge
-  connection reuse (#6). `working` carries on from the same code; the next
-  changes land there.
+- **0.7.0 is released**: tag `v0.7.0` on `main`. It adds the ledger export
+  for a SIEM, a start-up check for the account the monitored agent runs as,
+  and the gateway's count of refused tokens. 0.6.0 before it added Windows
+  support, content scanning through the operator's antivirus or DLP product,
+  the writable-path check, and judge connection reuse (#6). `working`
+  carries on from the same code; the next changes land there.
 - **Checks**: tests, the demo, the build, and bandit run on Linux, macOS,
   and Windows; coverage, CodeQL, and Semgrep (0 findings, each suppression
   with its reason) run too, and all pass.
-- **Live testing**: run 7 (content scanning, 49 cases) and run 7x (a new
-  organization and 33 attack cases from a security practitioner, 52 cases)
-  passed every case with no referee incident. Live-run results live on the
-  `live-runs` branch, never on `working` or `main`.
+- **Live testing**: run 8 and run 8x put a monitored agent through four
+  personas, legitimate to evil, over the SIEM copy and the paths the PR #12
+  review refactored; every finding is fixed on `working` (CHANGES.md). Run 7
+  (content scanning, 49 cases) and run 7x (a new organization and 33 attack
+  cases from a security practitioner, 52 cases) passed every case with no
+  referee incident. Live-run results live on the `live-runs` branch, never
+  on `working` or `main`.
 - **Issues**: #6 shipped in 0.6.0. #2 and #10 shipped in 0.5.0. #1 comes
   before 1.0, and #3 (repository setup after the move) has maintainer
   settings left to confirm.
-- **0.7.0 on `working`**: the SIEM export is built. Live delivery to a
-  syslog sink (TLS by default, or plain TCP or UDP) and an HTTPS webhook,
-  Two-Key's own schema plus ECS and OCSF, JSON and CEF, a per-kind field
-  allowlist, a per-sink cursor, `two-key siem-export` and
-  `two-key siem-verify`, the MCP proxy's `siem:` block, and the gateway's
-  rate-limited count of refused tokens. The design note
-  (`0.7.0-siem-export.md`) was approved on 2026-10-16. Live run 8 and the
-  release remain.
-- **Next**: live run 8 (the SIEM export against a real collector, and the
-  code the PR #12 review refactored), then the 0.7.0 release.
+- **What 0.7.0 ships**: live delivery to a syslog sink (TLS by default, or
+  plain TCP or UDP) and an HTTPS webhook, Two-Key's own schema plus ECS and
+  OCSF, JSON and CEF, a per-kind field allowlist, a per-sink cursor,
+  `two-key siem-export` and `two-key siem-verify`, the MCP proxy's `siem:`
+  block, the gateway's rate-limited count of refused tokens, and the
+  start-up check that refuses to run when the monitored agent is Two-Key's
+  own account or can change its files (`on_agent_access`). The design note
+  (`0.7.0-siem-export.md`) was approved on 2026-10-16.
+- **Next**: the judge history summary (#1), then the public review and the
+  1.0 release.
 - **Not yet tested enough: agents on another machine.** The maintainer
   expects an agent connecting from another machine to be the normal case,
   and the same machine an edge case for testing (2026-10-16). Today the
@@ -115,62 +119,6 @@ in the same release.
   without breaking existing ledgers or backups.
 - Keep the README's "Known limits" section current: no independent review,
   no external anchor, not FIPS validated, signatures not quantum resistant.
-
-## 0.7.0: Ledger export for SIEM
-
-Built on `working`, not released. The design note is
-`0.7.0-siem-export.md`, approved by the maintainer on 2026-10-16;
-[docs/SIEM.md](docs/SIEM.md) is the reference.
-
-- Done: a live copy of every ledger entry, sent after the entry is written
-  and fsynced, on its own sender thread. A collector that is down, slow, or
-  gone never blocks or delays an authorization; delivery resumes from a
-  per-sink cursor and marks late events `replay`.
-- Done: sinks. Syslog (RFC 5424) over TLS (RFC 5425, port 6514, the
-  default), plain TCP (RFC 6587, port 514), or UDP (RFC 5426, port 514),
-  every port configurable; and an HTTPS webhook with batched newline JSON,
-  an authorization header read from an owner-only file, an optional HMAC
-  signature, and no redirects followed. TLS always verifies the certificate
-  and the host name. A plaintext sink is refused under `high_assurance` and
-  warns at start everywhere else.
-- Done: events carry digests, sizes, reason codes, the tool id, and the
-  data class, never argument values. An explicit per-kind field allowlist
-  leaves out the proposal text and the derived amount, counterparty, and
-  custom field values, which the ledger holds today; a ledger field nobody
-  has decided about fails the tests rather than leaving the box.
-- Done: Two-Key's own schema (`two-key-siem-v1`, the default), ECS, and
-  OCSF; JSON (the default) or CEF.
-- Done: `two-key siem-export` writes the same events to a file, owner-only
-  and never over an existing file, ending with a signed summary;
-  `two-key siem-verify` re-derives every event from the ledger offline and
-  reports changed fields, gaps, repeats, and events from another ledger.
-- Done: a rate-limited count of refused tokens, by class (bad signature,
-  expired, malformed, other), on stderr and as a SIEM event marked
-  `ledgered: false`. A token that does not verify is still not ledgered, so
-  an unauthenticated caller cannot fill the ledger, and no token text is
-  kept (live run 7).
-- Done: an Elastic and Kibana example in `examples/siem/elastic/` with a
-  sample dashboard, and a manual, non-required workflow that runs it.
-  Wazuh gets documentation only. Unit tests stay network-free (loopback).
-- Remaining: live run 8, then the release. Run 8 covers the SIEM export
-  against a real collector (syslog to a listener the maintainer runs, and
-  the Elastic example), as well as the 0.6.0 code below.
-- Done: the proxy refuses to start when the account that started it (the
-  agent host's) is Two-Key's own, is root, cannot be told, or can change a
-  file or folder the proxy runs or reads (`on_agent_access`, default
-  `refuse`; `high_assurance` always refuses; maintainer's decision,
-  2026-10-16). Processes that share a ledger read each other's entries
-  under the lock instead of denying every call after the other writes.
-- Remaining after run 8: a live run with the agent on another machine
-  (see "Where we are"). Run 8 runs every proxy beside the simulated agent,
-  so its cases for `on_agent_access` come in the next test batch.
-- Run 8 also covers the code 0.6.0 changed after live run 7 (PR #12
-  review): the ICAP verdicts and response reader, file arguments and
-  confined path reads, the scanner's start-up checks, the Windows
-  access-list check, the writable-path walk, proxy tool settings and
-  start-up paths, and `sign-constitution --out` writing a new file and
-  renaming it into place. The tests and CI cover them; no live run did
-  (maintainer's decision, 2026-10-16).
 
 ## 1.0.0: Review and release
 
@@ -367,6 +315,62 @@ neither.
 
 The design records of released phases, kept as written. CHANGES.md is the
 record of what each release did.
+
+### 0.7.0: Ledger export for SIEM
+
+Released as tag `v0.7.0` on `main`. The design note is
+`0.7.0-siem-export.md`, approved by the maintainer on 2026-10-16;
+[docs/SIEM.md](docs/SIEM.md) is the reference.
+
+- Done: a live copy of every ledger entry, sent after the entry is written
+  and fsynced, on its own sender thread. A collector that is down, slow, or
+  gone never blocks or delays an authorization; delivery resumes from a
+  per-sink cursor and marks late events `replay`.
+- Done: sinks. Syslog (RFC 5424) over TLS (RFC 5425, port 6514, the
+  default), plain TCP (RFC 6587, port 514), or UDP (RFC 5426, port 514),
+  every port configurable; and an HTTPS webhook with batched newline JSON,
+  an authorization header read from an owner-only file, an optional HMAC
+  signature, and no redirects followed. TLS always verifies the certificate
+  and the host name. A plaintext sink is refused under `high_assurance` and
+  warns at start everywhere else.
+- Done: events carry digests, sizes, reason codes, the tool id, and the
+  data class, never argument values. An explicit per-kind field allowlist
+  leaves out the proposal text and the derived amount, counterparty, and
+  custom field values, which the ledger holds today; a ledger field nobody
+  has decided about fails the tests rather than leaving the box.
+- Done: Two-Key's own schema (`two-key-siem-v1`, the default), ECS, and
+  OCSF; JSON (the default) or CEF.
+- Done: `two-key siem-export` writes the same events to a file, owner-only
+  and never over an existing file, ending with a signed summary;
+  `two-key siem-verify` re-derives every event from the ledger offline and
+  reports changed fields, gaps, repeats, and events from another ledger.
+- Done: a rate-limited count of refused tokens, by class (bad signature,
+  expired, malformed, other), on stderr and as a SIEM event marked
+  `ledgered: false`. A token that does not verify is still not ledgered, so
+  an unauthenticated caller cannot fill the ledger, and no token text is
+  kept (live run 7).
+- Done: an Elastic and Kibana example in `examples/siem/elastic/` with a
+  sample dashboard, and a manual, non-required workflow that runs it.
+  Wazuh gets documentation only. Unit tests stay network-free (loopback).
+- Remaining: live run 8, then the release. Run 8 covers the SIEM export
+  against a real collector (syslog to a listener the maintainer runs, and
+  the Elastic example), as well as the 0.6.0 code below.
+- Done: the proxy refuses to start when the account that started it (the
+  agent host's) is Two-Key's own, is root, cannot be told, or can change a
+  file or folder the proxy runs or reads (`on_agent_access`, default
+  `refuse`; `high_assurance` always refuses; maintainer's decision,
+  2026-10-16). Processes that share a ledger read each other's entries
+  under the lock instead of denying every call after the other writes.
+- Remaining after run 8: a live run with the agent on another machine
+  (see "Where we are"). Run 8 runs every proxy beside the simulated agent,
+  so its cases for `on_agent_access` come in the next test batch.
+- Run 8 also covers the code 0.6.0 changed after live run 7 (PR #12
+  review): the ICAP verdicts and response reader, file arguments and
+  confined path reads, the scanner's start-up checks, the Windows
+  access-list check, the writable-path walk, proxy tool settings and
+  start-up paths, and `sign-constitution --out` writing a new file and
+  renaming it into place. The tests and CI cover them; no live run did
+  (maintainer's decision, 2026-10-16).
 
 ### 0.6.0: DLP and AV hooks, Windows
 

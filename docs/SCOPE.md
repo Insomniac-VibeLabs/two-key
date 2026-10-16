@@ -1,7 +1,7 @@
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.6.0. Tag
-`v0.6.0` on `main` is the tagged release; `v0.5.0` and `v0.4.0` are the ones before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
+`two-key` is beta (pre-1.0). Package version 0.7.0. Tag
+`v0.7.0` on `main` is the tagged release; `v0.6.0`, `v0.5.0` and `v0.4.0` are the ones before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
 Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
 is on `main`. `v0.1.6` stays on the previous tree.
 
@@ -77,7 +77,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   enum fact that a signed rule decides on, told to the judges and recorded
   without content. An encrypted file passes only on a tool signed
   `encrypted: pass` (docs/SCANNERS.md)
-- in 0.7.0, on `working` (not yet released): the SIEM export
+- in 0.7.0: the SIEM export
   (`two_key/siem.py`, `two_key/siem_sinks.py`, `two_key/siem_export.py`).
   Optional: with no `siem=` setting nothing changes. Each ledger entry is
   copied, after it is written, to a syslog sink (TLS by default, or plain
@@ -117,7 +117,7 @@ in the same release.
   package still does not scan or classify content itself.
 - Judge connection reuse (#6, 0.6.0): shipped; a lock-guarded pool keyed by
   origin.
-- Ledger export for SIEM (0.7.0): built on `working` (above). Live
+- Ledger export for SIEM (0.7.0): shipped (above). Live
   delivery and a file export, both on a field allowlist that leaves out the
   proposal text and the derived amount, counterparty, and custom field
   values, which the ledger holds today. With it, a rate-limited count of

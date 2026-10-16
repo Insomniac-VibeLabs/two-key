@@ -28,17 +28,18 @@ Do **not** add a scanning or antivirus engine, a SIEM or log storage, chain
 anchoring, or seed phrases here. The items in [ROADMAP.md](ROADMAP.md) are in
 scope: key backup (shipped in 0.3.0), an MCP adapter (0.5.0), DLP and
 antivirus hooks that call external scanners (0.6.0), ledger export for a SIEM
-(built on `working` for 0.7.0, not released), and, after 1.0, PKI with
+(0.7.0), and, after 1.0, PKI with
 certificate recovery, hybrid ML-DSA signatures, a FIPS approved mode, and a
 local GUI. Build them in the order and with the limits stated
 there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.6.0 (package name `two-key`) is tag `v0.6.0` on `main`; 0.5.0 is
+- Package 0.7.0 (package name `two-key`) is tag `v0.7.0` on `main`; 0.6.0 is
+  tag `v0.6.0`, 0.5.0 is
   tag `v0.5.0`, and 0.4.0 (tag `v0.4.0`) was the first release from this repository. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`.
   Tag `v0.2.4` stays on `fc836bb`.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
   where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
@@ -49,7 +50,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key`, import name `two_key`,
-version `0.6.0`, tag `v0.6.0` on `main`. Not on PyPI.
+version `0.7.0`, tag `v0.7.0` on `main`. Not on PyPI.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
@@ -76,7 +77,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0) |
 
 Git install:  
-`pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.6.0"`
+`pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"`
 
 ## Tests and docs
 

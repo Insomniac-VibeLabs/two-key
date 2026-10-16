@@ -111,6 +111,7 @@
 - [Live run 8x findings: the SIEM copy, a named pipe, signing — 2026-10-16](#live-run-8x-findings-the-siem-copy-a-named-pipe-signing--2026-10-16)
 - [`siem-verify` checks the whole event, and a cursor that cannot be read says so — 2026-10-16](#siem-verify-checks-the-whole-event-and-a-cursor-that-cannot-be-read-says-so--2026-10-16)
 - [SonarCloud findings on the 0.7.0 code — 2026-10-16](#sonarcloud-findings-on-the-070-code--2026-10-16)
+- [Release v0.7.0: the SIEM export, the agent-account check — 2026-10-16](#release-v070-the-siem-export-the-agent-account-check--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3720,3 +3721,79 @@ reliability rating. Both findings behind it are now gone.
   answers it, nothing on the network reaches that code path, and an operator
   who starts the process can read those files anyway, so the line carries a
   `NOSONAR` and the reason. A check there would prove nothing.
+
+## Release v0.7.0: the SIEM export, the agent-account check — 2026-10-16
+
+Package version 0.7.0 (`pyproject.toml`, `two_key.__version__`; `uv.lock`
+carries the package's own version and nothing else changed). To be tagged
+`v0.7.0` on `main` after the merge. Not on PyPI. The entries above, from
+"SIEM export: live delivery, file export, refused tokens" on, are the
+detail.
+
+- **Ledger export to a SIEM** (maintainer-reviewed design, optional): every
+  ledger entry can be copied to the collector the operator runs, as it is
+  written. Syslog over TLS (RFC 5425, port 6514, the default), plain TCP, or
+  UDP, and an HTTPS webhook with a batched body, a token read from a file,
+  and an optional HMAC. Two-Key's own schema, ECS, and OCSF; JSON and CEF.
+  A per-kind field allowlist decides what leaves the box: reason codes,
+  digests, sizes, the tool name, and the data class, never argument values,
+  proposal text, custom field values, or token text. A collector that is
+  down or slow never blocks or delays an authorization: the sender is its
+  own thread, delivery resumes from a per-sink cursor, and a late event is
+  marked `replay`. TLS always verifies the certificate and the host name,
+  with no setting that turns it off; plaintext warns at start and is refused
+  under `high_assurance`. docs/SIEM.md.
+- **`two-key siem-export` and `two-key siem-verify`**: the same events
+  written to a file, with a summary line, and a check of a copy against the
+  ledger, event by event, including the envelope and the summary.
+- **The proxy refuses an agent that is, or can change, Two-Key**
+  (maintainer's decision, 2026-10-16): at start the proxy reads the real
+  account of the process that started it. If that is Two-Key's own account,
+  is root, cannot be told, or can write a file or folder Two-Key runs or
+  reads, it refuses to start before the ledger is opened.
+  `on_agent_access: warn` keeps the old behaviour; `high_assurance` refuses
+  and rejects `warn` outright. Windows cannot read the parent's account yet
+  and needs `warn`. docs/CONNECTING.md.
+- **A count of the tokens the gateway refuses**, by type and outside the
+  ledger: a caller without a valid token cannot make the ledger grow, and
+  the count still reaches the operator and the SIEM, at most once a minute.
+- **Two proxies on one ledger** no longer break each other: each verifies
+  the other's entries under the lock and catches up.
+- **An agent on another machine**: the supported route, stdio over SSH with
+  a forced command, is written up and tested in docs/CONNECTING.md. It needs
+  a live run of its own before 1.0; the ROADMAP and that page say so.
+- **CI** on Linux, macOS, and Windows: tests (Python 3.10 to 3.12), the
+  demo, the build, bandit, and CodeQL; Semgrep and coverage on Linux. 1018
+  tests. SonarCloud's findings on this code are fixed, with one suppression
+  (an example collector's own command line) carrying its reason.
+- **Live testing**: runs 8 and 8x put a monitored agent through four
+  personas, legitimate, incompetent, adversarial, and evil, over the SIEM
+  copy and the paths the PR #12 review refactored. Every finding is fixed;
+  the entries above are the record. Results are on the `live-runs` branch.
+- Docs: README, ROADMAP (0.7.0 under "Shipped"), HOWTO, SCOPE,
+  THREAT_MODEL, FIT, COMPARISON, JUDGES_AND_QUORUM, SIEM, CONNECTING,
+  SCANNERS, SECURITY, AGENTS.md, and llms.txt name 0.7.0 as the release and
+  `v0.7.0` as the install ref.
+
+### Upgrading from 0.6.0
+
+- Constitutions, ledgers, keys, backups, `judges.yaml`, and `proxy.yaml`
+  from 0.6.0 load unchanged. Nothing needs re-signing.
+- **Nothing is sent until you configure a SIEM.** Without a `siem` setting
+  (or `SiemConfig`), the ledger, the tokens, and the judge prompts are as in
+  0.6.0.
+- **Check the proxy's start-up output.** `two-key mcp-proxy` now refuses to
+  start when the monitored agent runs as Two-Key's own account, as root, as
+  an account it cannot read, or as one that can change a file Two-Key runs
+  or reads. Give the agent its own account (docs/CONNECTING.md), or set
+  `on_agent_access: warn` in `proxy.yaml` for a machine where that is the
+  deployment, as Windows is until the check is ported there.
+  `high_assurance` refuses either way and rejects `warn`.
+- Under `high_assurance`, a plaintext syslog sink (`udp` or `tcp`) refuses
+  to start. Use `transport: tls`.
+- A first start sends from now and backfills nothing; `two-key siem-export`
+  writes the history. `replay_from: start` sends the whole ledger on every
+  start, not only the first.
+- Maintainers: add the macOS and Windows checks to `main`'s branch
+  protection, and delete the stale `.github/workflows/codeql.yml:analyze`
+  code-scanning configuration.
