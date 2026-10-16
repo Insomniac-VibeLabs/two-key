@@ -267,7 +267,9 @@ class IcapInspector:
         if not self.tls:
             return sock
         try:     # TLS is verified: ssl.create_default_context() checks the certificate and the host name.
-            return ssl.create_default_context().wrap_socket(sock, server_hostname=self.host)
+            context = ssl.create_default_context()
+            context.minimum_version = ssl.TLSVersion.TLSv1_2     # never TLS 1.0 or 1.1, whatever OpenSSL allows
+            return context.wrap_socket(sock, server_hostname=self.host)
         except Exception:
             sock.close()
             raise

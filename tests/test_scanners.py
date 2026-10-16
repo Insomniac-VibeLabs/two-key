@@ -9,6 +9,7 @@ import io
 import os
 import socket
 import socketserver
+import ssl
 import struct
 import sys
 import tempfile
@@ -16,6 +17,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey
@@ -282,6 +284,22 @@ class Icap(unittest.TestCase):
             IcapInspector(self.url, method="options")
         self.assertEqual(IcapInspector("icaps://dlp.example/scan").port, 11344)
         self.assertEqual(IcapInspector("icap://dlp.example").service, "/")
+
+    def test_icaps_needs_tls_1_2(self):
+        icap = IcapInspector("icaps://dlp.example/scan")
+        seen = []
+
+        class Context:
+            minimum_version = None
+
+            def wrap_socket(self, sock, server_hostname):
+                seen.append((self.minimum_version, server_hostname))
+                return sock
+
+        with mock.patch("two_key.scanners.socket.create_connection", return_value=object()), \
+                mock.patch("two_key.scanners.ssl.create_default_context", return_value=Context()):
+            icap._connect(1.0)
+        self.assertEqual(seen, [(ssl.TLSVersion.TLSv1_2, "dlp.example")])
 
     def test_no_server_is_unavailable(self):
         with socket.socket() as s:

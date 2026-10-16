@@ -578,8 +578,9 @@ detail, or the body.
       size problem with a block, not with `204`.
 - [ ] Sends a `Server` header and an `ISTag` that identify the product and
       its signature version.
-- [ ] Is reachable over `icaps://` with a certificate the host trusts, if
-      it is not on the same host or a private network.
+- [ ] Is reachable over `icaps://` (TLS 1.2 or later; Two-Key refuses
+      older versions) with a certificate the host trusts, if it is not on
+      the same host or a private network.
 
 ## Command-line scanners
 

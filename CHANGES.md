@@ -95,6 +95,7 @@
 - [Start-up check: paths another account could change (0.6.0) — 2026-10-16](#start-up-check-paths-another-account-could-change-060--2026-10-16)
 - [Run 7 follow-ups: key errors, scanner scope, relay — 2026-10-16](#run-7-follow-ups-key-errors-scanner-scope-relay--2026-10-16)
 - [Release v0.6.0: Windows, content scanning, writable-path check — 2026-10-16](#release-v060-windows-content-scanning-writable-path-check--2026-10-16)
+- [PR #12 review: TLS 1.2 for icaps, suppressed Semgrep findings — 2026-10-16](#pr-12-review-tls-12-for-icaps-suppressed-semgrep-findings--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3312,3 +3313,18 @@ above, from "Semgrep findings printed to the job log" on, are the detail.
   `--key` file now get `SystemExit` with a one-line message.
 - Maintainers: add the macOS and Windows checks to `main`'s branch
   protection.
+
+## PR #12 review: TLS 1.2 for icaps, suppressed Semgrep findings — 2026-10-16
+
+- CodeQL (`py/insecure-protocol`, high) on the release PR: the ICAP
+  adapter's `icaps://` connection used `ssl.create_default_context()`,
+  which can allow TLS 1.0 and 1.1 where the system's OpenSSL does. It now
+  sets `minimum_version` to TLS 1.2. The certificate and host name checks
+  are unchanged. Test: `tests/test_scanners.py` (`test_icaps_needs_tls_1_2`).
+  docs/SCANNERS.md vendor checklist says so.
+- Semgrep on the release PR showed the findings already suppressed in the
+  code (each `# nosemgrep: <rule-id>` with its reason) as new alerts:
+  Semgrep writes them to the SARIF marked as suppressed, and code scanning
+  does not read that mark. `semgrep.yml` now drops suppressed results
+  before the upload and prints how many. The job log was already at 0
+  findings.
