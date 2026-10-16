@@ -3555,13 +3555,12 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   three signed tools, one allowed call, and the expected denies. The
   `sshd_config` block was checked with `sshd -t` and `sshd -T`; sshd itself
   was not run in the test container.
-<<<<<<< HEAD
+
 ## Live harness: what a pass does not cover — 2026-10-16
 
 - `RESULTS.md` and `tests/live/RELAY.md` now say it plainly: every endpoint of a pass is on one machine, on
   loopback, so a pass says nothing about a monitored agent that connects from another machine. That deployment is
   the one the operator expects to be the common one, and it needs a live run of its own.
-=======
 
 ## The proxy refuses an agent that is, or can change, Two-Key (0.7.0) — 2026-10-16
 
@@ -3608,4 +3607,3 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   through the sudo rule starts and serves; two proxies on one ledger serve
   calls in turn and `two-key audit` passes.
 
->>>>>>> 9ed8247 (Proxy: refuse an agent that is, or can change, Two-Key; shared ledgers catch up)
