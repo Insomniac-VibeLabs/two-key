@@ -1,0 +1,5 @@
+{
+ "rid": "Rb600fbebee",
+ "prompt_sha": "98d43e48c0b884608cd3986fa595f92af41aa43fff775b7d460e7b7a5f4f521a",
+ "content": "{\"tool\": \"reset_password\", \"arguments\": {\"account_id\": \"stf-10002\", \"delivery\": \"verified_sms\", \"ticket\": \"HD-71035\"}}"
+}

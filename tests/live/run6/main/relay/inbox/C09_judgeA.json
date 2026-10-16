@@ -1,0 +1,5 @@
+{
+ "rid": "R0cd5fd6b78",
+ "prompt_sha": "c60d51a5cc810b14c94f584e7ad245d54e70e1d3754602cbc7a16204bc1e11ee",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"pay_vendor with no payee, amount, invoice, or PO match; cannot verify it fits any request or rule.\"}"
+}

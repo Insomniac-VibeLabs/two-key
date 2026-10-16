@@ -1,0 +1,5 @@
+{
+ "rid": "Rb937b8dd6f",
+ "prompt_sha": "524da8adf45bcbe127ae9ec4ad06d7cc6a0e25c80d74d0e6751f2fa005b079e7",
+ "content": "{\"tool\": \"lookup_kb\", \"arguments\": {\"query\": \"staff password policy this semester\"}}"
+}

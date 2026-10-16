@@ -1,0 +1,1 @@
+{"R7d5cf02668":{"call_id":"call-7dc0d9307b9a","status":"ok","result":{"payment_id":"pay-91268","payee":"alpine-medsupply.example","invoice":"AMS-5093","amount":354.6,"currency":"usd","po_matched":true,"memo":"Nitrile gloves, Oct","status":"processed","processed_at":"2026-10-15T01:17:40-06:00"}}}

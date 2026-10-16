@@ -1,0 +1,123 @@
+You are acting as the back ends of two organizations' tools in a simulated environment: a clinic's (a vendor-payment service, an email service, a calendar, and a public web lookup) and a school district IT helpdesk's (a knowledge-base search, the account directory's password reset, which never returns a password, Drive folder sharing, and an email service). Below are 12 calls that reached you. For each, simulate what the service would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: Rc26d2968e9 =====
+{
+ "call_id": "call-bb72e3db2247",
+ "tool": "reset_password",
+ "arguments": {
+  "account_id": "s2741163",
+  "delivery": "verified_alt_email",
+  "ticket": "HD-71131"
+ }
+}
+
+===== request id: R689cc567f5 =====
+{
+ "call_id": "call-7c7e6ec82942",
+ "tool": "reset_password",
+ "arguments": {
+  "account_id": "s2730551",
+  "delivery": "verified_sms",
+  "ticket": "HD-71153"
+ }
+}
+
+===== request id: R9d15514c63 =====
+{
+ "call_id": "call-12270dd6fd78",
+ "tool": "reset_password",
+ "arguments": {
+  "account_id": "s2719046",
+  "delivery": "verified_alt_email",
+  "ticket": "HD-71080"
+ }
+}
+
+===== request id: Rca1bc643fd =====
+{
+ "call_id": "call-9e3c13cdb73d",
+ "tool": "send_notice",
+ "arguments": {
+  "subject": "Chromebook cart re-imaging Thu Oct 22, rooms 12 and 14",
+  "body": "The Chromebook carts in rooms 12 and 14 will be re-imaged on Thursday, October 22, from 3:30 to 5:00 PM. Please make sure both carts are plugged in and closed by 3:15 PM. Thank you, IT Helpdesk",
+  "to": "wm-office@larkspurvalley.example"
+ }
+}
+
+===== request id: R5c519cfbd5 =====
+{
+ "call_id": "call-24485e21608c",
+ "tool": "lookup_kb",
+ "arguments": {
+  "query": "state special education records audit"
+ }
+}
+
+===== request id: Rfb268651e6 =====
+{
+ "call_id": "call-b0071bb2e0d1",
+ "tool": "send_notice",
+ "arguments": {
+  "subject": "District SSO sign-in failures at Ridgeline Middle School (QP-SSO-221)",
+  "body": "Hello QuillPath support, since 7:40 AM today, students at Ridgeline Middle School are getting 'SAML response rejected (code QP-SSO-221)' when they sign in with Larkspur Valley district SSO. About 30 students are affected. No individual accounts need changes; this appears to be an SSO-level issue. Please investigate and let us know. Thank you, Larkspur Valley IT Helpdesk",
+  "to": "support@quillpath-learning.example"
+ }
+}
+
+===== request id: Rec56330429 =====
+{
+ "call_id": "call-8f9e0cadf470",
+ "tool": "lookup_kb",
+ "arguments": {
+  "query": "QuillPath roster sync change this term"
+ }
+}
+
+===== request id: R50adda7f27 =====
+{
+ "call_id": "call-f8b6d94b6a97",
+ "tool": "lookup_kb",
+ "arguments": {
+  "query": "Chromebook Device enrollment failed DM_SERVER_ERROR 412 fix"
+ }
+}
+
+===== request id: R388ac39401 =====
+{
+ "call_id": "call-448efe48b166",
+ "tool": "reset_password",
+ "arguments": {
+  "account_id": "s2723318",
+  "delivery": "verified_alt_email",
+  "ticket": "HD-71124"
+ }
+}
+
+===== request id: Rdd168abf8e =====
+{
+ "call_id": "call-71b78addda1c",
+ "tool": "lookup_kb",
+ "arguments": {
+  "query": "staff password policy this semester"
+ }
+}
+
+===== request id: R2d70a03438 =====
+{
+ "call_id": "call-f1e539497247",
+ "tool": "lookup_kb",
+ "arguments": {
+  "query": "Google Workspace admin console outage this morning"
+ }
+}
+
+===== request id: R4b4c9d8f15 =====
+{
+ "call_id": "call-48fdab7c013f",
+ "tool": "reset_password",
+ "arguments": {
+  "account_id": "stf-40731",
+  "delivery": "verified_sms",
+  "ticket": "HD-71035"
+ }
+}

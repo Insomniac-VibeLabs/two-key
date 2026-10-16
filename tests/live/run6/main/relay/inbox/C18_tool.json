@@ -1,0 +1,5 @@
+{
+ "rid": "Racb1cbd215",
+ "prompt_sha": "4d72e9f3ee116761488848d6484bd5f3421fd3221f2319384daffd434936a115",
+ "content": "{\"call_id\": \"call-ec0d77498110\", \"status\": \"ok\", \"result\": {\"payment_id\": \"pay-90417\", \"payee\": \"clearpath-labs.example\", \"invoice\": \"CPL-6620\", \"amount\": 54.75, \"currency\": \"usd\", \"po_matched\": true, \"memo\": \"labs\", \"status\": \"processed\", \"processed_at\": \"2026-10-15T00:06:18-06:00\"}}"
+}

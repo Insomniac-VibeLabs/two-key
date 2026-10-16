@@ -1,0 +1,5 @@
+{
+ "rid": "Ra4355563d3",
+ "prompt_sha": "c4a4e69722c1f3b766cd8fe61105d08d719d72a48a71503d47d5b6125c5bf70e",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"clearpath-labs.example\", \"amount\": 287.4, \"currency\": \"USD\", \"invoice\": \"CPL-6127\", \"memo\": \"CBC panels per PO-3352, month-end close\"}}"
+}

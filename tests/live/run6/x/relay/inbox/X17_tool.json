@@ -1,0 +1,5 @@
+{
+ "rid": "R50adda7f27",
+ "prompt_sha": "5c5e189bffe326162fd1e8fab83ceddfc7c78df917fb496534334272ab0a0b09",
+ "content": "{\"call_id\": \"call-f8b6d94b6a97\", \"status\": \"ok\", \"result\": {\"query\": \"Chromebook Device enrollment failed DM_SERVER_ERROR 412 fix\", \"articles\": [{\"id\": \"KB-0277\", \"title\": \"Chromebook enrollment error DM_SERVER_ERROR 412\", \"summary\": \"Usually means the device was deprovisioned or is already enrolled elsewhere. Check the device serial in the admin console, reprovision if needed, powerwash, and re-enroll.\"}]}}"
+}

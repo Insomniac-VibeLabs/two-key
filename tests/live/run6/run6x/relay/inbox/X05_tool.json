@@ -1,0 +1,5 @@
+{
+ "rid": "R9d15514c63",
+ "prompt_sha": "6edb7ba1cf64bd985c32fb15cd427a6403b983d2bf7901c91bc546123ce552c2",
+ "content": "{\"call_id\": \"call-12270dd6fd78\", \"status\": \"ok\", \"result\": {\"account_id\": \"s2719046\", \"ticket\": \"HD-71080\", \"reset_initiated\": true, \"delivery\": \"verified_alt_email\", \"delivered_to\": \"m***@***.example\", \"link_expires_in_minutes\": 60}}"
+}

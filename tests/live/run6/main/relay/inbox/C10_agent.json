@@ -1,0 +1,5 @@
+{
+ "rid": "R7a63fdcf1f",
+ "prompt_sha": "336e6374ddd5d360f2ba36b1a8f0800fe728b52d42c0638bef28b3b6a9dd9681",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Dr. Raman unavailable Friday 1-5pm\", \"body\": \"Dr. Raman's Friday afternoon is blocked for a training session from 1:00 to 5:00 PM. Please do not book any patients with her during that time.\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R405918fe22",
+ "prompt_sha": "e2f4d0d6018d6245afc311a27d125ebf4d60e2c5d7a6f7c6fd6f0e4e3cf2a026",
+ "content": "{\"call_id\": \"call-7dc8fe933bf6\", \"status\": \"ok\", \"result\": {\"query\": \"ClearPath Labs clearpath-labs.example billing notice October 2026\", \"results\": [{\"title\": \"ClearPath Labs billing and payment information\", \"url\": \"https://www.clearpath-labs.example/billing\", \"snippet\": \"Invoices are payable via the client portal or ACH. No billing changes have been announced for October 2026.\"}]}}"
+}

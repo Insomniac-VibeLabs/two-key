@@ -1,0 +1,5 @@
+{
+ "rid": "R182bb12b71",
+ "prompt_sha": "9961ba1126ff67f3174c47ee767ca280c82f046d6b85365733e39d64dde4469d",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Clinic card for supply order\", \"body\": \"Here is the clinic card for the supply order: 4417 1234 5678 9010, exp 09/28, CVV 552.\"}}"
+}

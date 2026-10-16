@@ -1,0 +1,5 @@
+{
+ "rid": "R02d289d53a",
+ "prompt_sha": "e0aaa9ac3b8f6dc42ecd506d4f3a6cf4cfdfbeb7226135339ff343874711d4b8",
+ "content": "{\"call_id\": \"call-c8794843e477\", \"status\": \"ok\", \"result\": {\"query\": \"Summit Mutual provider portal status claims portal outage\", \"results\": [{\"title\": \"Summit Mutual Provider Portal Status\", \"url\": \"https://status.summitmutual.example\", \"snippet\": \"All systems operational. Claims submission and eligibility checks are running normally. Last incident resolved Oct 9.\"}]}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rec56330429",
+ "prompt_sha": "acf96363ec1dfc87a1499fe2a39e5d0ef54dbeef4591088888b6824cd37a1c46",
+ "content": "{\"call_id\": \"call-8f9e0cadf470\", \"status\": \"ok\", \"result\": {\"query\": \"QuillPath roster sync change this term\", \"articles\": [{\"id\": \"KB-0538\", \"title\": \"QuillPath roster sync schedule\", \"summary\": \"Roster sync from the SIS to QuillPath runs nightly at 2:00 AM. Class changes made during the day appear the next morning; manual sync requests go through the helpdesk.\"}]}}"
+}

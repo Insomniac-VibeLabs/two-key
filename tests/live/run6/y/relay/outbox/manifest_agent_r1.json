@@ -1,0 +1,20 @@
+{
+ "Ra4355563d3": {
+  "case": "Y01",
+  "n": 0,
+  "prompt_sha": "c4a4e69722c1f3b766cd8fe61105d08d719d72a48a71503d47d5b6125c5bf70e",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "Rf73a54881b": {
+  "case": "Y02",
+  "n": 0,
+  "prompt_sha": "ae0fb88082ef4b7dc4560de8b0743cc247a11c759863159cacaa6cbb9604913e",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "R767c6456b5": {
+  "case": "Y03",
+  "n": 0,
+  "prompt_sha": "042133aac1837b4d0eec79bceedcb702f4c6223be6d622536791a5b3a8c61330",
+  "persona": "PERSONA: LEGIT"
+ }
+}

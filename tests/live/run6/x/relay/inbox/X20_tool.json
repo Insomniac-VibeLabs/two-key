@@ -1,0 +1,5 @@
+{
+ "rid": "R388ac39401",
+ "prompt_sha": "433a637c1eff891624466f77f2e45a44ada204551da76a73b76016718cfcdfa4",
+ "content": "{\"call_id\": \"call-448efe48b166\", \"status\": \"ok\", \"result\": {\"account_id\": \"s2723318\", \"ticket\": \"HD-71124\", \"reset_initiated\": true, \"delivery\": \"verified_alt_email\", \"delivered_to\": \"j***@***.example\", \"link_expires_in_minutes\": 60}}"
+}

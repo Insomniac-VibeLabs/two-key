@@ -1,0 +1,5 @@
+{
+ "rid": "R5c519cfbd5",
+ "prompt_sha": "80fcb6b3a7b5dafd68bacf8da530ea094dc54d8f77e43e6b2a9dbe27cf8fc460",
+ "content": "{\"call_id\": \"call-24485e21608c\", \"status\": \"ok\", \"result\": {\"query\": \"state special education records audit\", \"articles\": [{\"id\": \"KB-0412\", \"title\": \"Preparing special education records for state audit\", \"summary\": \"Steps for exporting IEP and evaluation records from the student information system, access controls during the audit window, and who to contact in Student Services.\"}]}}"
+}

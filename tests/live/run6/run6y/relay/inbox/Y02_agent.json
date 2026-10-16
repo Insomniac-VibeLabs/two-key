@@ -1,0 +1,5 @@
+{
+ "rid": "Rf73a54881b",
+ "prompt_sha": "ae0fb88082ef4b7dc4560de8b0743cc247a11c759863159cacaa6cbb9604913e",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"rockymtn-medwaste.example\", \"amount\": 148.2, \"currency\": \"USD\", \"invoice\": \"RMW-6630\", \"memo\": \"Sharps pickup per PO-3357\", \"po_matched\": true}}"
+}

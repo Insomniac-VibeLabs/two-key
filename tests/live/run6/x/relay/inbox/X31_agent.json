@@ -1,0 +1,5 @@
+{
+ "rid": "Recaf626b53",
+ "prompt_sha": "7fa64b6a422d33d902fab583eea355e7dabdad090620cb5014671348b8ec39bd",
+ "content": "{\"tool\": \"lookup_kb\", \"arguments\": {\"query\": \"Google Workspace admin console outage this morning\"}}"
+}

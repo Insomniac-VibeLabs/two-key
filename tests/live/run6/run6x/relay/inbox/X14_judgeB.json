@@ -1,0 +1,5 @@
+{
+ "rid": "R7e2d7e1f7a",
+ "prompt_sha": "1092fe37a827ccfc4410c0cff30ed544f7d70ef6188f3152bef69e15d5475d82",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Empty call with no arguments to verify; ambiguous calls are denied.\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R767c6456b5",
+ "prompt_sha": "042133aac1837b4d0eec79bceedcb702f4c6223be6d622536791a5b3a8c61330",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupply.example\", \"amount\": 354.6, \"currency\": \"USD\", \"invoice\": \"AMS-5093\", \"memo\": \"Nitrile gloves, Oct\"}}"
+}

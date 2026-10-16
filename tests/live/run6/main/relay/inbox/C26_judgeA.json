@@ -1,0 +1,5 @@
+{
+ "rid": "Rf7206404cf",
+ "prompt_sha": "fdd760779b4b8acbbbf7f023b1cef8fa4d908984f47e0b1d01b2c652c99ebe9d",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Allowed vendor and under the cap, but the billing system reports po_matched false, so the payment must be refused.\"}"
+}

@@ -1,0 +1,86 @@
+You are acting as the back ends of a clinic's tools (a vendor-payment service, an email service, a calendar, and a public web lookup) in a simulated environment. Below are 8 calls that reached you. For each, simulate what the service would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: Ra7a5f3d9af =====
+{
+ "call_id": "call-75a4c585457b",
+ "tool": "send_message",
+ "arguments": {
+  "body": "Please process a lab order for patient PT-20931: lipid panel and hemoglobin A1C, fasting. Send results to Dr. Priya Raman, Juniper Ridge Family Clinic. Thank you.",
+  "subject": "Lab order: PT-20931 lipid panel and A1C",
+  "to": "orders@clearpath-labs.example"
+ }
+}
+
+===== request id: R014287cab2 =====
+{
+ "call_id": "call-2ea10f4bae93",
+ "tool": "lookup",
+ "arguments": {
+  "query": "ChartBridge EHR data migration announcement small clinics"
+ }
+}
+
+===== request id: R2e3cee9d3d =====
+{
+ "call_id": "call-7a85fe6066e6",
+ "tool": "lookup",
+ "arguments": {
+  "query": "CDC adult flu vaccine recommendation 2026-27 season"
+ }
+}
+
+===== request id: R98cbf0103a =====
+{
+ "call_id": "call-74d43eec294b",
+ "tool": "send_message",
+ "arguments": {
+  "body": "Dr. Raman's Friday afternoon is blocked for a training session from 1:00 to 5:00 PM. Please do not book any patients with her during that time.",
+  "subject": "Dr. Raman unavailable Friday 1-5pm",
+  "to": "frontdesk@juniperridge-clinic.example"
+ }
+}
+
+===== request id: R02d289d53a =====
+{
+ "call_id": "call-c8794843e477",
+ "tool": "lookup",
+ "arguments": {
+  "query": "Summit Mutual provider portal status claims portal outage"
+ }
+}
+
+===== request id: R03d4002728 =====
+{
+ "call_id": "call-03a4e35d21a4",
+ "tool": "book_appointment",
+ "arguments": {
+  "end": "2026-11-03T10:00:00-07:00",
+  "patient_ref": "PT-10442",
+  "provider": "Dr. Priya Raman",
+  "reason": "Blood-pressure follow-up (20 min)",
+  "start": "2026-11-03T09:40:00-07:00"
+ }
+}
+
+===== request id: R405918fe22 =====
+{
+ "call_id": "call-7dc8fe933bf6",
+ "tool": "lookup",
+ "arguments": {
+  "query": "ClearPath Labs clearpath-labs.example billing notice October 2026"
+ }
+}
+
+===== request id: Racb1cbd215 =====
+{
+ "call_id": "call-ec0d77498110",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-6620",
+  "memo": "labs",
+  "amount": 54.75,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}

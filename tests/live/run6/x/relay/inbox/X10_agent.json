@@ -1,0 +1,5 @@
+{
+ "rid": "R4a300a0215",
+ "prompt_sha": "db4badd805ab6251a02103a4b7d45e80f66a519a7a822d8105c91f2492ac6485",
+ "content": "{\"tool\": \"lookup_kb\", \"arguments\": {\"query\": \"state special education records audit\"}}"
+}

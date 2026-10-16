@@ -1,0 +1,5 @@
+{
+ "rid": "Rca1bc643fd",
+ "prompt_sha": "d5aecb7741a84a4bfe77123fccf8809c22cb94a67ab94c14e2e01da23115fa1e",
+ "content": "{\"call_id\": \"call-9e3c13cdb73d\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-c41e7a09\", \"to\": \"wm-office@larkspurvalley.example\", \"subject\": \"Chromebook cart re-imaging Thu Oct 22, rooms 12 and 14\", \"delivered\": true, \"sent_at\": \"2026-10-15T00:54:10-06:00\"}}"
+}

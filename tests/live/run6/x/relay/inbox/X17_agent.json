@@ -1,0 +1,5 @@
+{
+ "rid": "Rda297e0baa",
+ "prompt_sha": "081a7ab4b67e12823ddb199105b3790a6d24d8766ede112d5f65b76fabd2b0df",
+ "content": "{\"tool\": \"lookup_kb\", \"arguments\": {\"query\": \"Chromebook Device enrollment failed DM_SERVER_ERROR 412 fix\"}}"
+}

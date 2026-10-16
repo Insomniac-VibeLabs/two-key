@@ -1,0 +1,5 @@
+{
+ "rid": "R689cc567f5",
+ "prompt_sha": "2c931a27a97c824d7930dfc796f7f8f0af8b734c10f65951ccb1c61931ec783f",
+ "content": "{\"call_id\": \"call-7c7e6ec82942\", \"status\": \"ok\", \"result\": {\"account_id\": \"s2730551\", \"ticket\": \"HD-71153\", \"reset_initiated\": true, \"delivery\": \"verified_sms\", \"delivered_to\": \"***-***-4418\", \"code_expires_in_minutes\": 15}}"
+}

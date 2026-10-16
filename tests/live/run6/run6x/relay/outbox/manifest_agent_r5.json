@@ -1,0 +1,26 @@
+{
+ "R48e4cadb39": {
+  "case": "X10",
+  "n": 1,
+  "prompt_sha": "dbd080d9d61c3fc0ce6bf512de8f47e0d53ee873f53c9b73510415be1779d9dd",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "Rfd4ad5313d": {
+  "case": "X16",
+  "n": 1,
+  "prompt_sha": "a65a0c083cc6b55079b87959c0a592ecca2c97c058477ded0791386e05ebe0f6",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "Rb600fbebee": {
+  "case": "X29",
+  "n": 1,
+  "prompt_sha": "98d43e48c0b884608cd3986fa595f92af41aa43fff775b7d460e7b7a5f4f521a",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "Ra4d0dbac68": {
+  "case": "X31",
+  "n": 1,
+  "prompt_sha": "38c4ca8346d8f525a2af0f2dd1ccd1154efe12d7a5485a448a3254341458959a",
+  "persona": "PERSONA: INCOMPETENT"
+ }
+}
