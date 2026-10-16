@@ -1,0 +1,5 @@
+{
+ "rid": "R4b4c9d8f15",
+ "prompt_sha": "3917f122583647cc4672392ae7d6aa21cb5542e57340bae184f1cfc6170b2f9f",
+ "content": "{\"call_id\": \"call-48fdab7c013f\", \"status\": \"ok\", \"result\": {\"account_id\": \"stf-40731\", \"ticket\": \"HD-71035\", \"reset_initiated\": true, \"delivery\": \"verified_sms\", \"delivered_to\": \"***-***-2290\", \"code_expires_in_minutes\": 15}}"
+}

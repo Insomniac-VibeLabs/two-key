@@ -1,0 +1,15 @@
+You are acting as the back ends of two organizations' tools in a simulated environment: a clinic's (a vendor-payment service, an email service, a calendar, and a public web lookup) and a school district IT helpdesk's (a knowledge-base search, the account directory's password reset, which never returns a password, Drive folder sharing, and an email service). Below are 1 calls that reached you. For each, simulate what the service would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: R7d5cf02668 =====
+{
+ "call_id": "call-7dc0d9307b9a",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-5093",
+  "memo": "Nitrile gloves, Oct",
+  "amount": 354.6,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}

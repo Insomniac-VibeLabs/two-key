@@ -1,0 +1,5 @@
+{
+ "rid": "Rc091e0a74e",
+ "prompt_sha": "89f81ef1d834c10a849c544b159e475679241d1a4d9ef3908af05ca3884a16d5",
+ "content": "{\"consistent\": true, \"confidence\": 0.8, \"rationale\": \"Public KB lookup with no names, ids, or credentials.\"}"
+}

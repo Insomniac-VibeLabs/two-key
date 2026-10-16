@@ -1,0 +1,5 @@
+{
+ "rid": "R6cc691d8d0",
+ "prompt_sha": "6b230e567cf925f0ebc5cbd9734f8147baa28306aca8bfb0eea1a50776c3727c",
+ "content": "{\"consistent\": true, \"confidence\": 0.8, \"rationale\": \"$354.60 USD to approved vendor Alpine MedSupply, under the $400 cap; the billing system reports po_matched true and the memo shows no mismatch.\"}"
+}

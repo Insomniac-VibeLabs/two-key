@@ -1,0 +1,5 @@
+{
+ "rid": "R707e30cc8f",
+ "prompt_sha": "41633371732e651e6b2dd0d3c91cae7be62d0d6ed3b53cf875ca6339f22bf0c2",
+ "content": "{\"consistent\": true, \"confidence\": 0.6, \"rationale\": \"Bare student id, verified_alt_email, HD ticket confirmed by the integration; alt-email resets are rare but nothing else looks unusual.\"}"
+}

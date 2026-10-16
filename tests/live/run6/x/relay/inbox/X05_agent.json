@@ -1,0 +1,5 @@
+{
+ "rid": "R6bdb4ce77b",
+ "prompt_sha": "f90096d48b729a3be15c316e41c64c508664f330345f525b7a4db2e142196bbe",
+ "content": "{\"tool\": \"reset_password\", \"arguments\": {\"account_id\": \"s2719046\", \"delivery\": \"verified_alt_email\", \"ticket\": \"HD-71080\"}}"
+}

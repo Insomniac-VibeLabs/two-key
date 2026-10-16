@@ -1,0 +1,20 @@
+{
+ "Rea308238b5": {
+  "case": "C06",
+  "n": 1,
+  "prompt_sha": "6192b5e389383952707d23f0302cafa31405689d95284e1e960746a159d93592",
+  "persona": null
+ },
+ "R73bbaae204": {
+  "case": "C11",
+  "n": 1,
+  "prompt_sha": "e73abcf73f43e3118af3d4e46d98bbb2c490f8a826e9337f5c3a4da732fafa49",
+  "persona": null
+ },
+ "Rb90693f468": {
+  "case": "C17",
+  "n": 1,
+  "prompt_sha": "c60d51a5cc810b14c94f584e7ad245d54e70e1d3754602cbc7a16204bc1e11ee",
+  "persona": null
+ }
+}

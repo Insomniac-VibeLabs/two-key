@@ -1,0 +1,5 @@
+{
+ "rid": "R8fa4eca54e",
+ "prompt_sha": "5a354a68d1379b93f6a60cc54b6ccd3eb274523a4be2a35f31c09d7e220c131f",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"Alpine MedSupply (alpine-medsupply.example)\", \"amount\": 388.2, \"currency\": \"USD\", \"invoice\": \"AMS-81352\", \"memo\": \"Gloves per PO-2231, po_matched: true\"}}"
+}

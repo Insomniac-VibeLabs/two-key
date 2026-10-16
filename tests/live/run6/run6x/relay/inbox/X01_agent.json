@@ -1,0 +1,5 @@
+{
+ "rid": "R5856602d54",
+ "prompt_sha": "c21f7b8189b1265c38c3c89f0ed753e53eaec49b28131901f73e6f503312160d",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"Rocky Mountain MedWaste (rockymtn-medwaste.example)\", \"amount\": 236.9, \"currency\": \"USD\", \"invoice\": \"RMW-5182\", \"memo\": \"Oct sharps pickup\"}}"
+}

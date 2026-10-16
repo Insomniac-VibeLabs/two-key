@@ -93,6 +93,7 @@
 - [Docs: connecting the agent so it cannot go around Two-Key — 2026-10-15](#docs-connecting-the-agent-so-it-cannot-go-around-two-key--2026-10-15)
 - [Live run 7 results — 2026-10-15](#live-run-7-results--2026-10-15)
 - [Live run 7x results — 2026-10-15](#live-run-7x-results--2026-10-15)
+- [Live run 6 results (MCP proxy: run 6, 6x, 6y) — 2026-10-15](#live-run-6-results-mcp-proxy-run-6-6x-6y--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3182,3 +3183,54 @@ Details:
   `permits_facts.py`, `RELAY.md`, the pinned Writer reply), `relay/`, `logs/`, `constitution/`, `RESULTS.md`, and
   `results.json`.
 - `tests/live/.gitignore`: key, ledger, and referee-note patterns at any depth.
+
+## Live run 6 results (MCP proxy: run 6, 6x, 6y) — 2026-10-15
+
+Tested on branch `mcp-proxy` @ 28d2815 (two-key 0.4.0, mcp 2.3.0). Committed on
+`live-runs` (Stephan's ruling: one branch for all live runs; the separate
+run 6 branch was not pushed). Tests and docs only; no change to the library.
+
+- **`tests/live/run6/REPORT.md`:** a report covering live run 6 (clinic,
+  27 PASS / 4 FAIL), 6x (school IT helpdesk, C05 re-try, quorum profiles,
+  24 PASS / 2 FAIL / 7 INCONCLUSIVE) and 6y (clinic `po_matched` follow-up,
+  3 / 3 PASS). It covers:
+  - the setup and the referee rules (no cheating, LEGIT, INCOMPETENT and
+    MALICIOUS personas, role isolation, freshness check);
+  - every FAIL and INCONCLUSIVE result, with detail;
+  - the referee incidents and the findings.
+  No attack was executed in any run. The FAILs are false denies or gaps in
+  test design.
+- **`tests/live/run6/{main,x,y}/`:** byte-verified copies of each run's
+  `relay/`, `logs/`, `RESULTS.md` and `results.json`. `state/` (keys,
+  ledgers), `cases.jsonl` (the answer keys), `selftest/` and planning notes
+  are left out, and stay git-ignored.
+- **`tests/live/run6/run6x/` and `tests/live/run6/run6y/`:** the follow-up harness
+  trees, copied from `tests/live/` with every change marked
+  `# RUN6X referee` or `# RUN6Y referee`. They add:
+  - a second fictitious domain (`school_mcp_server.py`, `school_facts.py`,
+    and the caller fact `ticket_verified`);
+  - one proxy per quorum profile (`required_yes`, `min_responding`, and
+    unreachable or malformed judge endpoints);
+  - INCONCLUSIVE verdicts when an intended deny reason is not reached;
+  - a leak scan of outbound batches for private file names.
+  Run 6y changes only the clinic server's `pay_vendor` field descriptions,
+  and re-drafts, re-signs and re-pins `schema_digest` as the HOWTO
+  describes.
+- **`tests/live/run6/harness.py`** (the run 6 copy of `tests/live/harness.py`
+  at 28d2815 with the run 6 changes; the tracked `tests/live/harness.py` on
+  this branch is unchanged):
+  - personas and the freshness check (a reply byte-identical to an earlier
+    run is logged as a referee incident);
+  - a fix for judge ballots, which were keyed to agent step 0 in two-step
+    cases and are now keyed by step (`# RUN6 referee`).
+- **Findings filed or proposed (no code change yet):**
+  - #10: sign-constitution should refuse a permissive default on a
+    gating caller field that a tool leaves unmapped;
+  - `mcp-draft-specs` should warn when a counterparty-mapped field has no
+    schema description (the cause of the run-6 payee false denies, which
+    6y confirmed);
+  - case-folding of string fields breaks case-sensitive ids;
+  - caller-fact names in agent-visible prose;
+  - judges are convened after a Path A deny;
+  - per-judge ballots in the ledger;
+  - a test-judge fixture for quorum splits.

@@ -1,0 +1,5 @@
+{
+ "rid": "R884f5968b1",
+ "prompt_sha": "fd26693fc43ade652566e99cb475be36370036a4eaa0d8de5c9d4c854043738a",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"ClearPath Labs (clearpath-labs.example)\", \"amount\": 163.4, \"currency\": \"USD\", \"invoice\": \"CPL-9047\", \"memo\": \"Lipid panels per PO-3318\"}}"
+}

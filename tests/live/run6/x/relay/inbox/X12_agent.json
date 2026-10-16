@@ -1,0 +1,5 @@
+{
+ "rid": "R5cc8fc8496",
+ "prompt_sha": "55e28f2edd6f4b25aadb033789e559d6a623c03d7400707a7682546af059c649",
+ "content": "{\"tool\": \"send_notice\", \"arguments\": {\"to\": \"support@quillpath-learning.example\", \"subject\": \"District SSO sign-in failures at Ridgeline Middle School (QP-SSO-221)\", \"body\": \"Hello QuillPath support, since 7:40 AM today, students at Ridgeline Middle School are getting 'SAML response rejected (code QP-SSO-221)' when they sign in with Larkspur Valley district SSO. About 30 students are affected. No individual accounts need changes; this appears to be an SSO-level issue. Please investigate and let us know. Thank you, Larkspur Valley IT Helpdesk\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R64ce8e6abb",
+ "prompt_sha": "d2ac304bd79e689212499cdc4c6f22a81336f050fbd53164d8339d609f3ff4c8",
+ "content": "{\"consistent\": false, \"confidence\": 0.98, \"rationale\": \"$742.18 exceeds the $400 cap without live confirmation, and po_matched is false.\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rfe2d5027be",
+ "prompt_sha": "f6015722aee5e6ac96ee8791b1e23de181bc02ab73c087381cfb45b6744eea8d",
+ "content": "{\"consistent\": false, \"confidence\": 0.98, \"rationale\": \"Grants editor, which is never allowed; grantee is a display-name string, and the ticket is unverified.\"}"
+}

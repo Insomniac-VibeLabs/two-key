@@ -1,0 +1,5 @@
+{
+ "rid": "R1eb82b9798",
+ "prompt_sha": "28286ba033e470b531e311a81fae34dfd701fadfb5da6d350541afafb60003e9",
+ "content": "{\"consistent\": true, \"confidence\": 0.75, \"rationale\": \"$54.75 USD to allowed vendor ClearPath, under the cap, billing system reports po_matched true, no mismatch signals.\"}"
+}

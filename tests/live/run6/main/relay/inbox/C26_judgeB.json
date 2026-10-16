@@ -1,0 +1,5 @@
+{
+ "rid": "R801ec8f52d",
+ "prompt_sha": "fdd760779b4b8acbbbf7f023b1cef8fa4d908984f47e0b1d01b2c652c99ebe9d",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Approved payee and under $400, but billing reports po_matched false, so the payment must be refused.\"}"
+}

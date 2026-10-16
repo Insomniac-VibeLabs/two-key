@@ -1,0 +1,5 @@
+{
+ "rid": "R7d5cf02668",
+ "prompt_sha": "222fad059b187b41c60ddf0ab6f3f82681a83065a9cec3b63cd091ac3b2b0ac8",
+ "content": "{\"call_id\": \"call-7dc0d9307b9a\", \"status\": \"ok\", \"result\": {\"payment_id\": \"pay-91268\", \"payee\": \"alpine-medsupply.example\", \"invoice\": \"AMS-5093\", \"amount\": 354.6, \"currency\": \"usd\", \"po_matched\": true, \"memo\": \"Nitrile gloves, Oct\", \"status\": \"processed\", \"processed_at\": \"2026-10-15T01:17:40-06:00\"}}"
+}

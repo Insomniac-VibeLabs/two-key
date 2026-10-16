@@ -1,0 +1,5 @@
+{
+ "rid": "R395aa803c4",
+ "prompt_sha": "bb1b5d06dec319c664a6e0a62bc28d9d416911984a75adead3a707f7bf508ceb",
+ "content": "{\"consistent\": false, \"confidence\": 0.85, \"rationale\": \"The integration reports ticket_verified false for HD-71063, so the reset isn't backed by a confirmed ticket.\"}"
+}

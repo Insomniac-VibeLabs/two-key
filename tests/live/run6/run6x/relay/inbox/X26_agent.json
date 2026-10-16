@@ -1,0 +1,5 @@
+{
+ "rid": "R254acd6d6b",
+ "prompt_sha": "974229114d6e8136f6496c72d458ac0643f90fcf428615fa0730404f92e03a53",
+ "content": "{\"tool\": \"grant_drive_access\", \"arguments\": {\"folder_id\": \"fld-LVHS-TRACK-2026\", \"grantee\": \"Tobias Lindgren <t.lindgren@larkspurvalley.example>\", \"role\": \"editor\", \"ticket\": \"HD-71071\"}}"
+}

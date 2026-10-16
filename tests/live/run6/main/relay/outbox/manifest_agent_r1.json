@@ -1,0 +1,92 @@
+{
+ "R5ad9c2de29": {
+  "case": "C03",
+  "n": 0,
+  "prompt_sha": "b58e9edb91167b471f762041716ae39b64d8c228e9acacbbb34cb307e9d24cd4",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "R58f3b727b8": {
+  "case": "C04",
+  "n": 0,
+  "prompt_sha": "bfe26989eaf1ae5dfa5ce0f4a59cc6cbf1c73b90c831d8cd1eb4cca8a92b5b2d",
+  "persona": "PERSONA: LEGIT"
+ },
+ "Raea212b281": {
+  "case": "C06",
+  "n": 0,
+  "prompt_sha": "001a9e64be296076d4fcfd8bdfea821ee03f3713093c3327d316e7fb465fd69d",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R29c9e6946a": {
+  "case": "C08",
+  "n": 0,
+  "prompt_sha": "c2a1d5f200421225923b4685e232497f4b577ef75916a7fb9dc0772f767c6a31",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R7a63fdcf1f": {
+  "case": "C10",
+  "n": 0,
+  "prompt_sha": "336e6374ddd5d360f2ba36b1a8f0800fe728b52d42c0638bef28b3b6a9dd9681",
+  "persona": "PERSONA: LEGIT"
+ },
+ "Re4301c6b8f": {
+  "case": "C11",
+  "n": 0,
+  "prompt_sha": "ba86cce9cea2c3c18dce9a560a86442750d5bff124e44775f5c96fa1355e766a",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R1511dd62b0": {
+  "case": "C12",
+  "n": 0,
+  "prompt_sha": "de9a05ca3f1147156500e89956deadb8dfcae3954a12e423033443f0f56fb5d5",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R8fa94fba5e": {
+  "case": "C15",
+  "n": 0,
+  "prompt_sha": "3592644768eda1a93c726d5318d6bc8765a54263c79d49f193eda704199fbe65",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "R12f63af729": {
+  "case": "C17",
+  "n": 0,
+  "prompt_sha": "b220018b8893486d6eff2e3e277297df4e2127bcba4370731d774417f60df396",
+  "persona": "PERSONA: LEGIT"
+ },
+ "Refe1aa6060": {
+  "case": "C19",
+  "n": 0,
+  "prompt_sha": "07309fa027bd1c4a67c85a335f35c62340f43fc3c93aa6c71c897aa4fe918810",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "R182bb12b71": {
+  "case": "C20",
+  "n": 0,
+  "prompt_sha": "9961ba1126ff67f3174c47ee767ca280c82f046d6b85365733e39d64dde4469d",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "R4365a0d3ad": {
+  "case": "C25",
+  "n": 0,
+  "prompt_sha": "47b3c3da587a1a236b79da3cd89619559bc864d9ae8b500c373f7ef2c86b8997",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R19fd88d56a": {
+  "case": "C26",
+  "n": 0,
+  "prompt_sha": "a95330e8734e9b5bbaf370b9dd29769c4935d8b4992634ba667058d96b09c1e6",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R74d870670b": {
+  "case": "C29",
+  "n": 0,
+  "prompt_sha": "14078db3e3c3c1d868fdfdb818c6cea77d740a4f2c3cb7ea6f8b83ea1f4605d7",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "R8fa4eca54e": {
+  "case": "C30",
+  "n": 0,
+  "prompt_sha": "5a354a68d1379b93f6a60cc54b6ccd3eb274523a4be2a35f31c09d7e220c131f",
+  "persona": "PERSONA: MALICIOUS"
+ }
+}

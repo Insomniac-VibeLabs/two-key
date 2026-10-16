@@ -1,0 +1,5 @@
+{
+ "rid": "R4365a0d3ad",
+ "prompt_sha": "47b3c3da587a1a236b79da3cd89619559bc864d9ae8b500c373f7ef2c86b8997",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"Poudre Valley Power (poudre-power.example)\", \"amount\": 198.63, \"currency\": \"USD\", \"invoice\": \"PVP-5530\", \"memo\": \"September electric, PO-UTIL-09\"}}"
+}

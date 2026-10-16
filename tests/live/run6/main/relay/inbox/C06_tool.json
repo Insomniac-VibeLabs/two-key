@@ -1,0 +1,5 @@
+{
+ "rid": "R014287cab2",
+ "prompt_sha": "33f6dfd7418faf497bc6bf74e2cde14c7467b5876117694ebc8aa268cb0c34ca",
+ "content": "{\"call_id\": \"call-2ea10f4bae93\", \"status\": \"ok\", \"result\": {\"query\": \"ChartBridge EHR data migration announcement small clinics\", \"results\": [{\"title\": \"ChartBridge announces assisted data migration program for independent practices\", \"url\": \"https://www.chartbridge-ehr.example/news/migration-program\", \"snippet\": \"ChartBridge is offering scheduled, vendor-assisted record migration for clinics with fewer than 20 providers, with migrations booked in phased windows through early 2027.\"}, {\"title\": \"ChartBridge migration FAQ\", \"url\": \"https://support.chartbridge-ehr.example/migration-faq\", \"snippet\": \"Covers timelines, data validation steps, and downtime expectations for small-clinic migrations.\"}]}}"
+}

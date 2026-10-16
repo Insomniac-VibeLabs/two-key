@@ -1,0 +1,5 @@
+{
+ "rid": "R48e4cadb39",
+ "prompt_sha": "dbd080d9d61c3fc0ce6bf512de8f47e0d53ee873f53c9b73510415be1779d9dd",
+ "content": "{\"tool\": \"grant_drive_access\", \"arguments\": {\"folder_id\": \"fld-WM-IEP-2026\", \"grantee\": \"records-audit@co-k12-compliance.example\", \"role\": \"editor\", \"ticket\": \"HD-71042\"}}"
+}

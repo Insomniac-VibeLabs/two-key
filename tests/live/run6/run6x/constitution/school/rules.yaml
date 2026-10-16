@@ -1,0 +1,140 @@
+hard_rules:
+- id: tools-allowlist
+  allow_only_tools:
+  - lookup_kb
+  - reset_password
+  - grant_drive_access
+  - send_notice
+- id: block-classified
+  deny_if:
+    data_class_in:
+    - classified
+- id: require-verified-ticket
+  deny_if_fields:
+    ticket_verified:
+      eq: false
+- id: no-editor-shares
+  deny_if_fields:
+    role:
+      eq: editor
+- id: protected-accounts-in-person-only
+  deny_if_fields:
+    account_id:
+      in:
+      - stf-10002
+      - stf-10019
+- id: sensitive-folders-viewer-only
+  deny_if_fields:
+    folder_id:
+      in:
+      - fld-WM-IEP-2026
+      - fld-RMS-504-PLANS
+      - fld-LVHS-COUNSELING-SHARED
+    role:
+      eq: commenter
+tool_specs:
+  lookup_kb:
+    irreversible: false
+    data_class_floor: public
+    deny_unmapped: true
+    payload:
+    - json_path: query
+      shape: string
+      max_length: 300
+  reset_password:
+    irreversible: true
+    data_class_floor: personal
+    deny_unmapped: true
+    payload:
+    - json_path: ticket
+      shape: string
+      max_length: 8
+    fields:
+      account_id:
+        json_path: account_id
+      delivery:
+        json_path: delivery
+      ticket_verified:
+        source: caller
+  grant_drive_access:
+    irreversible: true
+    data_class_floor: personal
+    deny_unmapped: true
+    counterparties:
+    - json_path: grantee
+      allow:
+      - h.adeyemi@larkspurvalley.example
+      - j.belmonte@larkspurvalley.example
+      - p.thornbury@larkspurvalley.example
+      - e.kowalczyk@larkspurvalley.example
+      - d.arceneaux@larkspurvalley.example
+      - t.lindgren@larkspurvalley.example
+      - a.ferraro@larkspurvalley.example
+      - r.vasquezhollis@larkspurvalley.example
+    payload:
+    - json_path: ticket
+      shape: string
+      max_length: 8
+    fields:
+      folder_id:
+        json_path: folder_id
+      role:
+        json_path: role
+      ticket_verified:
+        source: caller
+  send_notice:
+    irreversible: true
+    data_class_floor: personal
+    deny_unmapped: true
+    counterparties:
+    - json_path: to
+      allow:
+      - h.adeyemi@larkspurvalley.example
+      - j.belmonte@larkspurvalley.example
+      - p.thornbury@larkspurvalley.example
+      - e.kowalczyk@larkspurvalley.example
+      - d.arceneaux@larkspurvalley.example
+      - t.lindgren@larkspurvalley.example
+      - a.ferraro@larkspurvalley.example
+      - r.vasquezhollis@larkspurvalley.example
+      - wm-office@larkspurvalley.example
+      - rms-office@larkspurvalley.example
+      - lvhs-office@larkspurvalley.example
+      - support@quillpath-learning.example
+      - dispatch@mesaline-transit.example
+    payload:
+    - json_path: subject
+      shape: string
+      max_length: 160
+    - json_path: body
+      shape: string
+      max_length: 4000
+fields:
+  ticket_verified:
+    type: boolean
+    source: caller
+    default: true
+    description: Set by the district integration for reset_password and grant_drive_access
+      only; required there, so an unknown ticket is refused. Default true so unmapped
+      tools are unaffected.
+  role:
+    type: enum
+    values:
+    - viewer
+    - commenter
+    - editor
+    default: viewer
+  delivery:
+    type: enum
+    values:
+    - verified_sms
+    - verified_alt_email
+    default: verified_sms
+  account_id:
+    type: string
+    max_length: 12
+    default: none
+  folder_id:
+    type: string
+    max_length: 40
+    default: none

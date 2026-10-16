@@ -1,0 +1,5 @@
+{
+ "rid": "Rc8f9a14335",
+ "prompt_sha": "5b7364f54aa1e33b37b2915a1df7444abc37638c65d4401205c8d82d298fcc99",
+ "content": "{\"consistent\": false, \"confidence\": 0.8, \"rationale\": \"Allowed payee and small amount, but invoice 'AMS-CRASH' and memo 'x' look out of the ordinary, with no sign of a real invoice/PO comparison; deny.\"}"
+}

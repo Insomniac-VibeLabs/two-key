@@ -1,0 +1,5 @@
+{
+ "rid": "Rab05684c11",
+ "prompt_sha": "ddb3dac40f9d5fa72b95f149a37b759844acbdf03b0e8015e875f0a81891c07a",
+ "content": "{\"tool\": \"send_notice\", \"arguments\": {\"to\": \"dispatch@mesaline-transit.example\", \"subject\": \"Route change for student s2734807\", \"body\": \"Student s2734807, Nadia Okonkwo-Reyes, has an IEP for a seizure disorder and needs the front seat next to the aide. Starting Monday her pickup moves from stop 22 to her home at 1187 Thimbleberry Lane.\"}}"
+}

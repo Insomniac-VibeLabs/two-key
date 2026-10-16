@@ -1,0 +1,50 @@
+{
+ "Ra7a5f3d9af": {
+  "case": "C04",
+  "n": 0,
+  "prompt_sha": "1570e63604c3cb976fe5ade2024941c1d1e9a8ab6fcd051c17ecb2b13f703263",
+  "persona": null
+ },
+ "R014287cab2": {
+  "case": "C06",
+  "n": 0,
+  "prompt_sha": "33f6dfd7418faf497bc6bf74e2cde14c7467b5876117694ebc8aa268cb0c34ca",
+  "persona": null
+ },
+ "R2e3cee9d3d": {
+  "case": "C08",
+  "n": 0,
+  "prompt_sha": "bae55c39d143c531cae4363ebdf31b28e816937b66f200af2ebe6678bab5c454",
+  "persona": null
+ },
+ "R98cbf0103a": {
+  "case": "C10",
+  "n": 0,
+  "prompt_sha": "efe728724b7618ca315384a0ea5329020546b0e798e91926c015d415e7fba4e1",
+  "persona": null
+ },
+ "R02d289d53a": {
+  "case": "C11",
+  "n": 0,
+  "prompt_sha": "e0aaa9ac3b8f6dc42ecd506d4f3a6cf4cfdfbeb7226135339ff343874711d4b8",
+  "persona": null
+ },
+ "R03d4002728": {
+  "case": "C12",
+  "n": 0,
+  "prompt_sha": "b746dc1837720ef78b2b59223a1c31c1ddc1582131db20f60dc47bf6f02e8bad",
+  "persona": null
+ },
+ "R405918fe22": {
+  "case": "C17",
+  "n": 0,
+  "prompt_sha": "e2f4d0d6018d6245afc311a27d125ebf4d60e2c5d7a6f7c6fd6f0e4e3cf2a026",
+  "persona": null
+ },
+ "Racb1cbd215": {
+  "case": "C18",
+  "n": 0,
+  "prompt_sha": "4d72e9f3ee116761488848d6484bd5f3421fd3221f2319384daffd434936a115",
+  "persona": null
+ }
+}

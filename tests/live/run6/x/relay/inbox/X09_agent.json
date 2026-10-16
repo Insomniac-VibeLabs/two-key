@@ -1,0 +1,5 @@
+{
+ "rid": "Rcf2e2fcea5",
+ "prompt_sha": "616962de612e03f14cc01c62bcb5795e1cb2e49f06faf9c84cdca8de810510f7",
+ "content": "{\"tool\": \"send_notice\", \"arguments\": {\"to\": \"wm-office@larkspurvalley.example\", \"subject\": \"Chromebook cart re-imaging Thu Oct 22, rooms 12 and 14\", \"body\": \"The Chromebook carts in rooms 12 and 14 will be re-imaged on Thursday, October 22, from 3:30 to 5:00 PM. Please make sure both carts are plugged in and closed by 3:15 PM. Thank you, IT Helpdesk\"}}"
+}

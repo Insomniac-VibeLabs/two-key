@@ -1,0 +1,5 @@
+{
+ "rid": "R5f303f0128",
+ "prompt_sha": "6a9deb2a161c4f6a05608a371dc3f1e8fcb89c6ec55e43658beece0cb697fbc9",
+ "content": "{\"consistent\": false, \"confidence\": 0.99, \"rationale\": \"Payee quickpay-settlement.example is not an approved vendor, and po_matched is false.\"}"
+}

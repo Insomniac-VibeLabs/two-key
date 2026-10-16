@@ -1,0 +1,5 @@
+{
+ "rid": "Rdd168abf8e",
+ "prompt_sha": "0108b2e17f491467758cf93d510508184da4c265a3fe7f3f62e935be9580bbe9",
+ "content": "{\"call_id\": \"call-71b78addda1c\", \"status\": \"ok\", \"result\": {\"query\": \"staff password policy this semester\", \"articles\": [{\"id\": \"KB-0105\", \"title\": \"Staff account password policy\", \"summary\": \"Staff passwords must be at least 14 characters, cannot reuse the last 5 passwords, and require multi-factor sign-in for district systems.\"}]}}"
+}
