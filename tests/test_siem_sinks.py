@@ -50,6 +50,7 @@ class Collector:
         self.context = None
         if kind == "tls":
             self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            self.context.minimum_version = ssl.TLSVersion.TLSv1_2   # as a real collector would
             self.context.load_cert_chain(certificates.server_cert, certificates.server_key)
             if require_client:
                 self.context.verify_mode = ssl.CERT_REQUIRED
@@ -306,6 +307,7 @@ class Webhook(unittest.TestCase):
 
         httpd = socketserver.TCPServer(("127.0.0.1", 0), Handler)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2            # as a real collector would
         context.load_cert_chain(self.certificates.server_cert, self.certificates.server_key)
         httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)
