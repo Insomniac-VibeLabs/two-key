@@ -102,6 +102,7 @@
 - [SIEM export: live delivery, file export, refused tokens (0.7.0) — 2026-10-16](#siem-export-live-delivery-file-export-refused-tokens-070--2026-10-16)
 - [Docs: the SIEM export everywhere it applies (0.7.0) — 2026-10-16](#docs-the-siem-export-everywhere-it-applies-070--2026-10-16)
 - [CI: two tests looked at the machine, one at the drive (0.7.0) — 2026-10-16](#ci-two-tests-looked-at-the-machine-one-at-the-drive-070--2026-10-16)
+- [Live harness: run 8 (four personas, the SIEM copy, the paths 0.6.0 refactored) — 2026-10-16](#live-harness-run-8-four-personas-the-siem-copy-the-paths-060-refactored--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3496,3 +3497,29 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   (`/abs/client.pem`) is not absolute on Windows, so the config joins it onto
   the `proxy.yaml` directory's drive. The test joins it the same way instead of
   onto the current drive.
+
+## Live harness: run 8 (four personas, the SIEM copy, the paths 0.6.0 refactored) — 2026-10-16
+
+- Four personas instead of three (`tests/live/harness.py`, `tests/live/make_cases.py`). Runs 6 and 7 had one
+  MALICIOUS level; it splits into ADVERSARIAL (works around the standing orders while each call looks routine)
+  and EVIL (works for someone else: data out, or damage). Eight new cases are a ladder: paying an invoice and
+  sending a message, each at all four levels, worst last. `RESULTS.md` prints them as a grid, with level 1 as
+  the control: a deny there is a finding about the rules, not the agent.
+- The SIEM copy (0.7.0) is part of the pass. The harness serves its own syslog collector over TLS on loopback
+  (certificates from `tests/tls.py`), every proxy of the pass sends it a copy of each ledger entry, and
+  `report.py` checks the delivered count against the ledger, looks for an entry delivered twice, and searches
+  every event for the argument values the pass's own calls carried, which must never be there. Two config cases
+  cover a plaintext sink (a warning) and a sink file another account can change (the writable-path walk).
+- The code the 0.6.0 refactor rewrote after live run 7, which no live run had covered: the ICAP reader's answers
+  (403, a 200 with a changed body, a 200 that blocks the call, 500, and a reply that is not ICAP) and confined
+  path reads. `send_message` declares a second file, a path inside the clinic's outbox folder, so a path above
+  the folder, a link that leaves it, a folder named as a file, and a file over its cap are each denied before
+  the scanner and both keys. The clinic's MCP server takes `attachments[].path` for it.
+- Antivirus-safe run files: the logs are written with the antivirus test string and its base64 form masked, and
+  `harness.py --mask-run DIR` masks a finished run directory before it is committed, writing `MASKED.md`. No
+  antivirus test file is written to disk; the flagged file read by path trips the DLP rule instead.
+- The selftest's stub judges deny a case whose expectation is a judge deny, so a case whose only line is Path B
+  passes the plumbing check instead of failing it (run 6 left two such cases failing).
+- `examples/siem/elastic/receiver.py` read the structured-data placeholder as the syslog MSGID (the sixth field,
+  not the seventh), so a CEF event's `kind` was `-`. The harness reuses the same reader.
+- 70 cases (49 in run 7); `python3 tests/live/harness.py --selftest` ends with every case PASS.

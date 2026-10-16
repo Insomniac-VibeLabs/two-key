@@ -150,10 +150,14 @@ def frames(buffer: bytes):
 
 
 def message_of(raw: str):
-    """The MSGID (Two-Key sends the ledger kind) and the event, from an RFC 5424 message."""
+    """The MSGID (Two-Key sends the ledger kind) and the event, from an RFC 5424 message.
+
+    The header is PRI+VERSION, timestamp, hostname, app name, process id, MSGID, structured data, then the
+    message, so the MSGID is the sixth field and the structured-data placeholder ("-") is the seventh.
+    """
     parts = raw.split(" ", 7)
     if len(parts) == 8 and parts[0].startswith("<"):
-        return parts[6], parts[7]
+        return parts[5], parts[7]
     brace = raw.find("{")
     return None, raw[brace:] if brace >= 0 else raw
 
