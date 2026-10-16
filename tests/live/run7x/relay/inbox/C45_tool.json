@@ -1,0 +1,5 @@
+{
+ "rid": "Rfc3102ee68",
+ "prompt_sha": "0fa8cd0a8ad4a91c7b68b133dd146a9196d8ff258c602e7a1042c51c220df40a",
+ "content": "{\"call_id\": \"call-269227418dca\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-269227418dca\", \"to\": \"review@tallgrass-engineering.example\", \"subject\": \"Plans\", \"attachments\": [{\"filename\": \"plans.zip\", \"bytes_base64\": 444}], \"delivered\": true}}"
+}

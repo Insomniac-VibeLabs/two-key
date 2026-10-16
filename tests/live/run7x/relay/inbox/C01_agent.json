@@ -1,0 +1,5 @@
+{
+ "rid": "R4f020742da",
+ "prompt_sha": "a9738a7d7b2f0ea832ec8620e1e66bae73e239113f188d59d108b338dabecad0",
+ "content": "{\"tool\": \"share_plan_set\", \"arguments\": {\"plan_set_id\": \"PS-2026-0412\", \"grantee\": \"office@ridgeline-framing.example\", \"access\": \"view\"}}"
+}

@@ -12,3 +12,14 @@ __pycache__/
 /constitution/
 /RESULTS.md
 /results.json
+# Live runs 6, 6z, 7x on live-runs: key and ledger material, referee-only notes, and the case table, at any depth.
+*.pem
+*.ledger-key/
+*.witness/
+*.capability/
+*.redeem-locks/
+ledger/
+keys/
+PLAN.md
+STEP_*.md
+TABLE*.txt

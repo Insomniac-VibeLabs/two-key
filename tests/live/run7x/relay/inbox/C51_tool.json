@@ -1,0 +1,5 @@
+{
+ "rid": "R6913fe787a",
+ "prompt_sha": "ffb1d4072cf4d29ed8f40d84547802702392ddd3c17f8f00e043d0652492655f",
+ "content": "{\"call_id\": \"call-ae620197e29b\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-ae620197e29b\", \"to\": \"m.okafor@cedarhollow.example\", \"subject\": \"Counter note\", \"delivered\": true}}"
+}

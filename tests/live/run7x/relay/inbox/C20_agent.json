@@ -1,0 +1,5 @@
+{
+ "rid": "R62e37d9c27",
+ "prompt_sha": "6f2ebd2845507cefdae5a97a1c381153af8da8dc72a70a8977c8eb87ac060fbc",
+ "content": "{\"tool\": \"schedule_inspection\", \"arguments\": {\"permit_id\": \"BP-204518\", \"inspection_type\": \"framing\", \"date\": \"2026-10-21\", \"inspector_id\": \"insp-117\", \"access_note\": \"Side gate, code 2280\"}}"
+}

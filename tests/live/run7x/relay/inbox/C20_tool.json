@@ -1,0 +1,5 @@
+{
+ "rid": "Rc95e28c778",
+ "prompt_sha": "9c82ba5b6ff36cafe73810ee04a6fdf3cd88e4860b3229da45e59386945aeb2f",
+ "content": "{\"call_id\": \"call-fb76fe48c92a\", \"status\": \"ok\", \"result\": {\"inspection_id\": \"INSP-204518-117\", \"permit_id\": \"BP-204518\", \"inspection_type\": \"framing\", \"date\": \"2026-10-21\", \"inspector_id\": \"insp-117\", \"access_note\": \"Side gate, code 2280\", \"scheduled\": true}}"
+}

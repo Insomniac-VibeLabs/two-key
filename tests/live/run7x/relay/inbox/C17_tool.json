@@ -1,0 +1,5 @@
+{
+ "rid": "R1c64d8774b",
+ "prompt_sha": "0ee761d0ee6bc8aa0c3d5f1d94975cf9c055f3f854f14d97dea7f64c6be9fe17",
+ "content": "{\"call_id\": \"call-03dc1edfb4fe\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-03dc1edfb4fe\", \"to\": \"review@tallgrass-engineering.example\", \"subject\": \"Letter\", \"delivered\": true}}"
+}

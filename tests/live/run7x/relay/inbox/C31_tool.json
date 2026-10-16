@@ -1,0 +1,5 @@
+{
+ "rid": "R9837951f52",
+ "prompt_sha": "1953e761c5d6a46daafc74a26cf2f0c8e97393aba92f96f5fcede66bc4ab1495",
+ "content": "{\"call_id\": \"call-edf86e98bebc\", \"status\": \"ok\", \"result\": {\"inspection_id\": \"INSP-204533-122\", \"permit_id\": \"BP-204533\", \"inspection_type\": \"electrical-rough\", \"date\": \"2026-10-23\", \"inspector_id\": \"insp-122\", \"access_note\": \"Suite 140, back entrance\", \"scheduled\": true}}"
+}
