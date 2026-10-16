@@ -216,6 +216,41 @@ class ClamdInspector:
 
 # --- ICAP -----------------------------------------------------------------------------------------------
 
+def _icap_head(head: bytes) -> tuple[int, dict[str, str]]:
+    """The status code and the headers (names case-folded) of an ICAP response head."""
+    lines = head.decode("latin-1").split("\r\n")
+    status = lines[0].split(" ", 2)
+    if len(status) < 2 or not status[0].startswith("ICAP/") or not status[1].isdigit():
+        raise _Unanswered("not an ICAP response")
+    headers: dict[str, str] = {}
+    for line in lines[1:]:
+        name, sep, value = line.partition(":")
+        if sep:
+            headers[name.strip().casefold()] = value.strip()
+    return int(status[1]), headers
+
+
+def _header_verdict(headers: dict[str, str]) -> ScanResult | None:
+    """What a 200's infection and violation headers say, or None when it has neither."""
+    violation = any(h in headers for h in _VIOLATION_HEADERS)
+    infected = [headers[h] for h in _INFECTION_HEADERS if h in headers]
+    if infected and not all(_encrypted_threat(h) for h in infected):
+        return ScanResult.flagged("malware")
+    if infected:
+        return ScanResult.flagged(ENCRYPTED, "policy") if violation else ScanResult.flagged(ENCRYPTED)
+    if violation:
+        return ScanResult.flagged("policy")
+    return None
+
+
+def _all_encapsulated(rest: bytes, offsets: dict[str, int], body: str | None) -> bool:
+    """Whether ``rest`` holds everything a 200 encapsulates: its whole chunked body, or the bytes before
+    ``null-body``."""
+    if body is None:
+        return len(rest) >= offsets.get("null-body", 0)
+    return rest.endswith(b"\r\n\r\n") and _dechunk(rest[offsets[body]:]) is not None
+
+
 class IcapInspector:
     """An ICAP service (RFC 3507), as most commercial antivirus and DLP products offer: ``REQMOD`` by default,
     ``RESPMOD`` if the product scans responses. One request per part; ``Allow: 204``; no preview."""
@@ -278,52 +313,47 @@ class IcapInspector:
         """(result, server label, ISTag) from an ICAP response. ``sent`` is the part's bytes: a 200 whose body
         differs from them (the product changed or removed content) is flagged."""
         head, _, rest = response.partition(b"\r\n\r\n")
-        lines = head.decode("latin-1").split("\r\n")
-        status = lines[0].split(" ", 2)
-        if len(status) < 2 or not status[0].startswith("ICAP/") or not status[1].isdigit():
-            raise _Unanswered("not an ICAP response")
-        code = int(status[1])
-        headers: dict[str, str] = {}
-        for line in lines[1:]:
-            name, sep, value = line.partition(":")
-            if sep:
-                headers[name.strip().casefold()] = value.strip()
+        code, headers = _icap_head(head)
         server, istag = headers.get("server", ""), headers.get("istag", "").strip('"')
+        return self._result(code, headers, rest, sent), server, istag
+
+    def _result(self, code: int, headers: dict[str, str], rest: bytes, sent: bytes | None) -> ScanResult:
         if code == 204:
-            return ScanResult.clean(), server, istag
+            return ScanResult.clean()
         if code == 403:
-            return ScanResult.flagged("policy"), server, istag
+            return ScanResult.flagged("policy")
         if code != 200:
-            return ScanResult.unavailable(), server, istag
-        infected = [headers[h] for h in _INFECTION_HEADERS if h in headers]
-        if infected:
-            if not all(_encrypted_threat(h) for h in infected):
-                return ScanResult.flagged("malware"), server, istag
-            if any(h in headers for h in _VIOLATION_HEADERS):
-                return ScanResult.flagged(ENCRYPTED, "policy"), server, istag
-            return ScanResult.flagged(ENCRYPTED), server, istag
-        if any(h in headers for h in _VIOLATION_HEADERS):
-            return ScanResult.flagged("policy"), server, istag
+            return ScanResult.unavailable()
+        found = _header_verdict(headers)
+        if found is not None:
+            return found
         offsets = _offsets(headers.get("encapsulated", "null-body=0"))
-        if "res-hdr" in offsets:
-            if self.method == "reqmod":     # a response instead of the request: the product blocked it
-                return ScanResult.flagged("policy"), server, istag
-            http_status = rest[offsets["res-hdr"]:].split(b"\r\n", 1)[0].split(b" ")
-            if len(http_status) >= 2 and http_status[1].isdigit() and int(http_status[1]) >= 400:
-                return ScanResult.flagged("policy"), server, istag
-        if sent is not None:
-            body_key = "req-body" if self.method == "reqmod" else "res-body"
-            if body_key in offsets:
-                body = _dechunk(rest[offsets[body_key]:])
-                if body is None:
-                    raise _Unanswered("body cut short")
-            elif "null-body" in offsets:
-                body = b""
-            else:
-                raise _Unanswered("no body in a 200")
-            if body != sent:                # a modified 200: the product redacted or replaced something
-                return ScanResult.flagged("policy"), server, istag
-        return ScanResult.clean(), server, istag
+        if self._blocked(rest, offsets):
+            return ScanResult.flagged("policy")
+        if sent is not None and self._returned_body(rest, offsets) != sent:
+            return ScanResult.flagged("policy")     # a modified 200: the product redacted or replaced something
+        return ScanResult.clean()
+
+    def _blocked(self, rest: bytes, offsets: dict[str, int]) -> bool:
+        """Whether a 200 encapsulates a blocking HTTP response: any response to a REQMOD, or a 4xx or 5xx."""
+        if "res-hdr" not in offsets:
+            return False
+        if self.method == "reqmod":     # a response instead of the request: the product blocked it
+            return True
+        http_status = rest[offsets["res-hdr"]:].split(b"\r\n", 1)[0].split(b" ")
+        return len(http_status) >= 2 and http_status[1].isdigit() and int(http_status[1]) >= 400
+
+    def _returned_body(self, rest: bytes, offsets: dict[str, int]) -> bytes:
+        """The body a 200 sends back, dechunked, to compare with the part's bytes."""
+        body_key = "req-body" if self.method == "reqmod" else "res-body"
+        if body_key in offsets:
+            body = _dechunk(rest[offsets[body_key]:])
+            if body is None:
+                raise _Unanswered("body cut short")
+            return body
+        if "null-body" in offsets:
+            return b""
+        raise _Unanswered("no body in a 200")
 
     @staticmethod
     def _read_response(sock: socket.socket, sent: int) -> bytes:
@@ -341,12 +371,7 @@ class IcapInspector:
         offsets = _offsets(encapsulated.decode("latin-1"))
         body = next((k for k in ("req-body", "res-body") if k in offsets), None)
         limit = sent + MAX_REPLY_BYTES
-        while True:
-            if body is None:
-                if len(rest) >= offsets.get("null-body", 0):
-                    break
-            elif rest.endswith(b"\r\n\r\n") and _dechunk(rest[offsets[body]:]) is not None:
-                break
+        while not _all_encapsulated(rest, offsets, body):
             chunk = sock.recv(65536)
             if not chunk:
                 raise _Unanswered("reply cut short")

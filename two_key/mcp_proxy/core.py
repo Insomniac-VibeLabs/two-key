@@ -198,37 +198,43 @@ def file_like_inputs(schema: Any) -> list[tuple[str, str]]:
     The kind is ``path`` for a path-like name, ``base64url`` or ``base64`` from ``contentEncoding``, else
     ``base64``. A hint for the drafter and the start-up warning only."""
     out: list[tuple[str, str]] = []
-
-    def guess(name: str, node: Mapping[str, Any]) -> str:
-        if node.get("contentEncoding") == "base64url":
-            return "base64url"
-        if node.get("contentEncoding") == "base64" or node.get("format") in ("byte", "binary"):
-            return "base64"
-        return "path" if "path" in name.casefold() else "base64"
-
-    def walk(node: Any, prefix: str, depth: int, container: bool) -> None:
-        props = node.get("properties") if isinstance(node, Mapping) else None
-        if not isinstance(props, Mapping) or depth > MAX_SCHEMA_DEPTH:
-            return
-        for name, sub in sorted(props.items()):
-            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) or \
-                    not isinstance(sub, Mapping):
-                continue
-            path = f"{prefix}.{name}" if prefix else name
-            items = sub.get("items")
-            if sub.get("type") == "array" and isinstance(items, Mapping):
-                inner = container or bool(FILE_LIKE_NAME.search(name.casefold()))
-                if items.get("type") == "object" or "properties" in items:
-                    walk(items, f"{path}[]", depth + 1, inner)
-                elif _file_like(name, items, container):
-                    out.append((f"{path}[]", guess(name, items)))
-            elif sub.get("type") == "object" or "properties" in sub:
-                walk(sub, path, depth + 1, container or bool(FILE_LIKE_NAME.search(name.casefold())))
-            elif _file_like(name, sub, container):
-                out.append((path, guess(name, sub)))
-
-    walk(schema, "", 0, False)
+    _walk_file_inputs(schema, "", 0, False, out)
     return out
+
+
+def _file_kind_guess(name: str, node: Mapping[str, Any]) -> str:
+    if node.get("contentEncoding") == "base64url":
+        return "base64url"
+    if node.get("contentEncoding") == "base64" or node.get("format") in ("byte", "binary"):
+        return "base64"
+    return "path" if "path" in name.casefold() else "base64"
+
+
+def _walk_file_inputs(node: Any, prefix: str, depth: int, container: bool, out: list[tuple[str, str]]) -> None:
+    props = node.get("properties") if isinstance(node, Mapping) else None
+    if not isinstance(props, Mapping) or depth > MAX_SCHEMA_DEPTH:
+        return
+    for name, sub in sorted(props.items()):
+        if isinstance(name, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) and isinstance(sub, Mapping):
+            _file_input(name, sub, prefix, depth, container, out)
+
+
+def _file_input(name: str, sub: Mapping[str, Any], prefix: str, depth: int, container: bool,
+                out: list[tuple[str, str]]) -> None:
+    """One property: walk into an object or a list of objects; otherwise note it if it looks like a file. A
+    file-like name makes its objects a file container."""
+    path = f"{prefix}.{name}" if prefix else name
+    inner = container or bool(FILE_LIKE_NAME.search(name.casefold()))
+    items = sub.get("items")
+    if sub.get("type") == "array" and isinstance(items, Mapping):
+        if items.get("type") == "object" or "properties" in items:
+            _walk_file_inputs(items, f"{path}[]", depth + 1, inner, out)
+        elif _file_like(name, items, container):
+            out.append((f"{path}[]", _file_kind_guess(name, items)))
+    elif sub.get("type") == "object" or "properties" in sub:
+        _walk_file_inputs(sub, path, depth + 1, inner, out)
+    elif _file_like(name, sub, container):
+        out.append((path, _file_kind_guess(name, sub)))
 
 
 def undeclared_file_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str, Any]], scanner: Any) -> list[str]:
@@ -487,20 +493,32 @@ def startup_paths(config: ProxyConfig) -> list[tuple[Path | str, str]]:
     if program:
         paths.append((program, "file"))
     for policy in config.tools.values():
-        for spec in policy.facts.values():
-            origin = _module_origin(spec.split(":", 1)[0])
-            if origin:
-                paths.append((origin, "file"))
-        for arg in policy.files:
-            if arg.kind == "path" and arg.folder:
-                paths.append((arg.folder, "folder"))
-    scan = config.scan or {}
+        paths.extend(_tool_paths(policy))
+    paths.extend(_scanner_paths(config.scan or {}))
+    return paths
+
+
+def _tool_paths(policy: ToolPolicy) -> list[tuple[Path | str, str]]:
+    """A tool's fact hook modules, and the folders of the files it takes by path."""
+    paths: list[tuple[Path | str, str]] = []
+    for spec in policy.facts.values():
+        origin = _module_origin(spec.split(":", 1)[0])
+        if origin:
+            paths.append((origin, "file"))
+    for arg in policy.files:
+        if arg.kind == "path" and arg.folder:
+            paths.append((arg.folder, "folder"))
+    return paths
+
+
+def _scanner_paths(scan: Mapping[str, Any]) -> list[tuple[Path | str, str]]:
+    """A command scanner's program."""
     command = scan.get("command")
     if scan.get("type") == "command" and isinstance(command, list) and command and isinstance(command[0], str):
         program = _program(command[0])
         if program:
-            paths.append((program, "file"))
-    return paths
+            return [(program, "file")]
+    return []
 
 
 def check_tools_signed(config: ProxyConfig, two_key: Any) -> None:

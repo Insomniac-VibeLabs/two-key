@@ -271,26 +271,37 @@ def _tools(value: Any, base: Path | None = None) -> dict[str, ToolPolicy]:
     out: dict[str, ToolPolicy] = {}
     upstream_names: dict[str, str] = {}
     for tool, settings in value.items():
-        if not isinstance(tool, str) or len(tool) > MAX_TOOL_NAME_CHARS or not TOOL_NAME.fullmatch(tool):
-            raise ProxyConfigError(f"tools: {str(tool)[:80]!r} is not a signed tool id (lower case a-z, 0-9, _ . : / -)")
-        where = f"tools.{tool}"
-        settings = _mapping(settings if settings is not None else {}, where, _TOOL_KEYS)
-        name = settings.get("upstream_name")
-        if name is not None:
-            if not isinstance(name, str) or not UPSTREAM_NAME.fullmatch(name):
-                raise ProxyConfigError(f"{where}.upstream_name: expected an MCP tool name")
-            if name in upstream_names:
-                raise ProxyConfigError(f"{where}.upstream_name: {name!r} is also the upstream name of "
-                                       f"{upstream_names[name]!r}")
-            upstream_names[name] = tool
-        proposal = settings.get("proposal")
-        if proposal is not None:
-            proposal = _text(proposal, f"{where}.proposal", MAX_PROPOSAL_CHARS)
-        out[tool] = ToolPolicy(claim=valid_claim(settings.get("claim", "none"), f"{where}.claim"),
-                               proposal=proposal, upstream_name=name,
-                               facts=_facts(settings.get("facts"), f"{where}.facts"),
-                               files=_files(base or Path("."), settings.get("files"), f"{where}.files"))
+        out[tool] = _tool_policy(tool, settings, base or Path("."), upstream_names)
     return out
+
+
+def _tool_policy(tool: Any, settings: Any, base: Path, upstream_names: dict[str, str]) -> ToolPolicy:
+    """One ``tools:`` entry. ``upstream_names`` (upstream name to tool id) spans the entries, so one upstream
+    tool is not offered under two ids."""
+    if not isinstance(tool, str) or len(tool) > MAX_TOOL_NAME_CHARS or not TOOL_NAME.fullmatch(tool):
+        raise ProxyConfigError(f"tools: {str(tool)[:80]!r} is not a signed tool id (lower case a-z, 0-9, _ . : / -)")
+    where = f"tools.{tool}"
+    settings = _mapping(settings if settings is not None else {}, where, _TOOL_KEYS)
+    name = _upstream_name(settings.get("upstream_name"), where, tool, upstream_names)
+    proposal = settings.get("proposal")
+    if proposal is not None:
+        proposal = _text(proposal, f"{where}.proposal", MAX_PROPOSAL_CHARS)
+    return ToolPolicy(claim=valid_claim(settings.get("claim", "none"), f"{where}.claim"),
+                      proposal=proposal, upstream_name=name,
+                      facts=_facts(settings.get("facts"), f"{where}.facts"),
+                      files=_files(base, settings.get("files"), f"{where}.files"))
+
+
+def _upstream_name(name: Any, where: str, tool: str, upstream_names: dict[str, str]) -> str | None:
+    if name is None:
+        return None
+    if not isinstance(name, str) or not UPSTREAM_NAME.fullmatch(name):
+        raise ProxyConfigError(f"{where}.upstream_name: expected an MCP tool name")
+    if name in upstream_names:
+        raise ProxyConfigError(f"{where}.upstream_name: {name!r} is also the upstream name of "
+                               f"{upstream_names[name]!r}")
+    upstream_names[name] = tool
+    return name
 
 
 def _ttl(value: Any) -> int:
@@ -304,6 +315,21 @@ def _writable_mode(value: Any) -> str:
     if value not in ("warn", "refuse"):
         raise ProxyConfigError("on_writable_paths: expected warn or refuse")
     return value
+
+
+def _scan_block(top: Mapping, tools: Mapping[str, ToolPolicy]) -> dict | None:
+    """The checked ``scan:`` block, or None. A tool that declares files needs one."""
+    scan = None
+    if "scan" in top:
+        try:
+            scan = check_scan_block(top["scan"])
+        except ScanConfigError as e:
+            raise ProxyConfigError(str(e)) from None
+    with_files = sorted(tool for tool, policy in tools.items() if policy.files)
+    if with_files and scan is None:
+        raise ProxyConfigError(f"tools: {with_files} declare files, which are for the content scanner; add a "
+                               "scan: block")
+    return scan
 
 
 def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
@@ -321,16 +347,7 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
         if key in top:
             meta[key] = _text(top[key], key, 256)
     tools = _tools(top.get("tools"), base)
-    scan = None
-    if "scan" in top:
-        try:
-            scan = check_scan_block(top["scan"])
-        except ScanConfigError as e:
-            raise ProxyConfigError(str(e)) from None
-    with_files = sorted(tool for tool, policy in tools.items() if policy.files)
-    if with_files and scan is None:
-        raise ProxyConfigError(f"tools: {with_files} declare files, which are for the content scanner; add a "
-                               "scan: block")
+    scan = _scan_block(top, tools)
     return ProxyConfig(
         path=path,
         constitution=_path(base, top["constitution"], "constitution"),

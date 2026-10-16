@@ -271,27 +271,37 @@ if WINDOWS:  # pragma: no cover - exercised on the Windows CI runner
                 trusted.add(OWNER_RIGHTS_SID)
             if not dacl.value:
                 return "it has no access list, so everyone has full access"
-            info = _ACL_SIZE_INFORMATION_T()
-            if not _adv.GetAclInformation(dacl, ctypes.byref(info), ctypes.sizeof(info), _ACL_SIZE_INFORMATION):
-                return "its access list cannot be read"
-            for index in range(info.AceCount):
-                ace = ctypes.c_void_p()
-                if not _adv.GetAce(dacl, index, ctypes.byref(ace)):
-                    return "its access list cannot be read"
-                header = _ACE_HEADER.from_address(ace.value)
-                if header.AceFlags & _INHERIT_ONLY_ACE or header.AceType == _ACCESS_DENIED_ACE_TYPE:
-                    continue
-                if header.AceType != _ACCESS_ALLOWED_ACE_TYPE:
-                    return f"its access list has an entry of type {header.AceType} that Two-Key does not read"
-                allowed = _ACCESS_ALLOWED_ACE.from_address(ace.value)
-                sid = _sid_string(ace.value + _ACCESS_ALLOWED_ACE.SidStart.offset)
-                if sid not in trusted and allowed.Mask & (~_HARMLESS if forbidden is None else forbidden):
-                    if granted:
-                        return f"{_sid_label(sid)} {granted}"
-                    return f"{sid} has access to it"
-            return None
+            return _dacl_problem(dacl, trusted, ~_HARMLESS if forbidden is None else forbidden, granted)
         finally:
             _k32.LocalFree(descriptor)
+
+    def _dacl_problem(dacl, trusted: set, mask: int, granted: str | None) -> str | None:
+        """Why an entry in the access list gives an account outside ``trusted`` any right in ``mask``, or None."""
+        info = _ACL_SIZE_INFORMATION_T()
+        if not _adv.GetAclInformation(dacl, ctypes.byref(info), ctypes.sizeof(info), _ACL_SIZE_INFORMATION):
+            return "its access list cannot be read"
+        for index in range(info.AceCount):
+            ace = ctypes.c_void_p()
+            if not _adv.GetAce(dacl, index, ctypes.byref(ace)):
+                return "its access list cannot be read"
+            problem = _ace_problem(ace.value, trusted, mask, granted)
+            if problem:
+                return problem
+        return None
+
+    def _ace_problem(address: int, trusted: set, mask: int, granted: str | None) -> str | None:
+        """Why one entry gives an account outside ``trusted`` a right in ``mask``, or None. An inherit-only or
+        deny entry grants nothing here; any type but allow is not read, so it is a problem."""
+        header = _ACE_HEADER.from_address(address)
+        if header.AceFlags & _INHERIT_ONLY_ACE or header.AceType == _ACCESS_DENIED_ACE_TYPE:
+            return None
+        if header.AceType != _ACCESS_ALLOWED_ACE_TYPE:
+            return f"its access list has an entry of type {header.AceType} that Two-Key does not read"
+        allowed = _ACCESS_ALLOWED_ACE.from_address(address)
+        sid = _sid_string(address + _ACCESS_ALLOWED_ACE.SidStart.offset)
+        if sid in trusted or not allowed.Mask & mask:
+            return None
+        return f"{_sid_label(sid)} {granted}" if granted else f"{sid} has access to it"
 
 
 def open_nofollow(path, flags: int = os.O_RDONLY) -> int:

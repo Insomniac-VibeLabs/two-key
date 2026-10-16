@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 
 from .strict import StrictParseError, load_file_strict, loads_json
@@ -10,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+from . import _platform
 from .action import DATA_CLASSES
 from .canonical import canonical_bytes, canonical_hash
 from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path, has_caller_fields,
@@ -93,23 +95,28 @@ def _field_mapping(where: str, defn: Mapping, entry: Any) -> dict:
     ``{source: caller, json_path}`` for a caller-supplied fact (the path is where the tool receives it). The scan
     field may add ``encrypted: pass``."""
     if is_caller(defn):
-        if not isinstance(entry, Mapping) or entry.get("source") != "caller" or \
-                set(entry) - {"source", "json_path", "encrypted"}:
-            raise ConstitutionError(f"{where}: a caller-supplied field maps as {{source: caller}} or "
-                                    "{source: caller, json_path: ...}")
-        if "encrypted" in entry:
-            if entry["encrypted"] != "pass":
-                raise ConstitutionError(f"{where}.encrypted: expected pass (omit it and an encrypted file is "
-                                        "flagged)")
-            if defn.get("type") != "enum" or ENCRYPTED not in (defn.get("values") or ()):
-                raise ConstitutionError(f"{where}.encrypted: only the scan field takes encrypted: pass, an enum "
-                                        "whose values include encrypted")
+        _check_caller_mapping(where, defn, entry)
         return dict(entry)
     if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
         if isinstance(entry, Mapping) and "source" in entry:
             raise ConstitutionError(f"{where}: source: caller needs the field declared source: caller under fields:")
         raise ConstitutionError(f"{where}: expected json_path only, or not_applicable")
     return dict(entry)
+
+
+def _check_caller_mapping(where: str, defn: Mapping, entry: Any) -> None:
+    if not isinstance(entry, Mapping) or entry.get("source") != "caller" or \
+            set(entry) - {"source", "json_path", "encrypted"}:
+        raise ConstitutionError(f"{where}: a caller-supplied field maps as {{source: caller}} or "
+                                "{source: caller, json_path: ...}")
+    if "encrypted" not in entry:
+        return
+    if entry["encrypted"] != "pass":
+        raise ConstitutionError(f"{where}.encrypted: expected pass (omit it and an encrypted file is "
+                                "flagged)")
+    if defn.get("type") != "enum" or ENCRYPTED not in (defn.get("values") or ()):
+        raise ConstitutionError(f"{where}.encrypted: only the scan field takes encrypted: pass, an enum "
+                                "whose values include encrypted")
 
 
 V3_FEATURES = ("caller-supplied fields (source: caller), case: exact fields, not_applicable marks, and @domain "
@@ -481,7 +488,17 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
 
 
 def save_envelope(path: Path | str, envelope: dict) -> None:
-    Path(path).write_text(json.dumps(envelope, indent=2) + "\n", encoding="utf-8", newline="\n")
+    """Write a signed constitution to a new file beside ``path``, then rename it over ``path``: a reader never
+    sees half a constitution, and a link at ``path`` is replaced, not written through."""
+    target = Path(path)
+    tmp = target.parent / f".{target.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp"
+    try:
+        with os.fdopen(_platform.create_new(tmp, owner_only=False), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(envelope, indent=2) + "\n")
+        _platform.replace(tmp, target)
+    finally:
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
 
 
 def load_envelope(path: Path | str) -> dict:

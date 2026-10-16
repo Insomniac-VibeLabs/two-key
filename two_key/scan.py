@@ -240,34 +240,52 @@ _FILE_KEYS = ("folder", "kind", "max_bytes", "path")
 def file_arg(value: Any, where: str) -> FileArg:
     """A checked ``FileArg`` from a ``FileArg`` or ``{path, kind, folder, max_bytes}``. Raises
     ``ScanConfigError``."""
-    if isinstance(value, FileArg):
-        item = value
-    elif isinstance(value, Mapping):
-        extra = sorted(str(k) for k in set(value) - set(_FILE_KEYS))
-        if extra:
-            raise ScanConfigError(f"{where}: unknown key(s) {extra}; allowed: {list(_FILE_KEYS)}")
-        item = FileArg(value.get("path"), value.get("kind", "base64"), value.get("folder"), value.get("max_bytes"))
-    else:
-        raise ScanConfigError(f"{where}: expected {{path: ..., kind: base64|base64url|path, max_bytes: ...}}")
-    if not isinstance(item.path, str) or not item.path or len(item.path) > 512:
-        raise ScanConfigError(f"{where}.path: expected an argument path such as attachments[].content")
-    if not all(_SEGMENT.fullmatch(seg) for seg in item.path.split(".")) or item.path.count(".") >= 16:
-        raise ScanConfigError(f"{where}.path: {item.path[:80]!r} is not an argument path (names joined by '.', "
-                              "'[]' after a name for each item of a list)")
+    item = _file_arg_item(value, where)
+    _check_argument_path(item.path, where)
     if item.kind not in FILE_KINDS:
         raise ScanConfigError(f"{where}.kind: expected one of {list(FILE_KINDS)}")
-    if item.kind == "path":
-        if not isinstance(item.folder, (str, os.PathLike)) or not os.fspath(item.folder):
-            raise ScanConfigError(f"{where}.folder: a path file needs the folder it must be in")
-        folder = os.fspath(item.folder)
-        if not os.path.isabs(folder):
-            raise ScanConfigError(f"{where}.folder: expected an absolute path")
-        if not os.path.isdir(folder):
-            raise ScanConfigError(f"{where}.folder: {folder} is not a directory")
-        item = FileArg(item.path, item.kind, os.path.normpath(folder), item.max_bytes)
-    elif item.folder is not None:
-        raise ScanConfigError(f"{where}.folder: only a kind: path file has a folder")
-    # Required, with no default: the operator says how large a file the tool needs.
+    item = _with_checked_folder(item, where)
+    _check_max_bytes(item, where)
+    return item
+
+
+def _file_arg_item(value: Any, where: str) -> FileArg:
+    if isinstance(value, FileArg):
+        return value
+    if not isinstance(value, Mapping):
+        raise ScanConfigError(f"{where}: expected {{path: ..., kind: base64|base64url|path, max_bytes: ...}}")
+    extra = sorted(str(k) for k in set(value) - set(_FILE_KEYS))
+    if extra:
+        raise ScanConfigError(f"{where}: unknown key(s) {extra}; allowed: {list(_FILE_KEYS)}")
+    return FileArg(value.get("path"), value.get("kind", "base64"), value.get("folder"), value.get("max_bytes"))
+
+
+def _check_argument_path(path: Any, where: str) -> None:
+    if not isinstance(path, str) or not path or len(path) > 512:
+        raise ScanConfigError(f"{where}.path: expected an argument path such as attachments[].content")
+    if not all(_SEGMENT.fullmatch(seg) for seg in path.split(".")) or path.count(".") >= 16:
+        raise ScanConfigError(f"{where}.path: {path[:80]!r} is not an argument path (names joined by '.', "
+                              "'[]' after a name for each item of a list)")
+
+
+def _with_checked_folder(item: FileArg, where: str) -> FileArg:
+    """A ``kind: path`` file needs an absolute folder that exists (kept normalized); no other kind has one."""
+    if item.kind != "path":
+        if item.folder is not None:
+            raise ScanConfigError(f"{where}.folder: only a kind: path file has a folder")
+        return item
+    if not isinstance(item.folder, (str, os.PathLike)) or not os.fspath(item.folder):
+        raise ScanConfigError(f"{where}.folder: a path file needs the folder it must be in")
+    folder = os.fspath(item.folder)
+    if not os.path.isabs(folder):
+        raise ScanConfigError(f"{where}.folder: expected an absolute path")
+    if not os.path.isdir(folder):
+        raise ScanConfigError(f"{where}.folder: {folder} is not a directory")
+    return FileArg(item.path, item.kind, os.path.normpath(folder), item.max_bytes)
+
+
+def _check_max_bytes(item: FileArg, where: str) -> None:
+    """Required, with no default: the operator says how large a file the tool needs."""
     limit = MAX_FILE_BYTES if item.kind == "path" else MAX_INLINE_FILE_BYTES
     size = item.max_bytes
     if size is None:
@@ -275,13 +293,13 @@ def file_arg(value: Any, where: str) -> FileArg:
                               f"(at most {limit} for kind {item.kind})")
     if isinstance(size, bool) or not isinstance(size, int) or size < 1:
         raise ScanConfigError(f"{where}.max_bytes: expected a whole number of bytes from 1 to {limit}")
-    if size > limit:
-        if item.kind == "path":
-            raise ScanConfigError(f"{where}.max_bytes: at most {MAX_FILE_BYTES} (100 MiB) for a path file")
-        raise ScanConfigError(f"{where}.max_bytes: a {item.kind} file arrives inside the call, which is at most "
-                              f"{MAX_ARGS_BYTES // 1024} KiB, so at most {MAX_INLINE_FILE_BYTES} bytes; a tool that "
-                              "needs larger files takes a path (kind: path)")
-    return item
+    if size <= limit:
+        return
+    if item.kind == "path":
+        raise ScanConfigError(f"{where}.max_bytes: at most {MAX_FILE_BYTES} (100 MiB) for a path file")
+    raise ScanConfigError(f"{where}.max_bytes: a {item.kind} file arrives inside the call, which is at most "
+                          f"{MAX_ARGS_BYTES // 1024} KiB, so at most {MAX_INLINE_FILE_BYTES} bytes; a tool that "
+                          "needs larger files takes a path (kind: path)")
 
 
 def stance_of(rules: list, field_name: str) -> str:
@@ -368,6 +386,57 @@ class Outcome:
                 "categories": list(self.categories), "files": len(self.files), "arguments_withheld": withheld}
 
 
+def _tool_files(tool: Any, items: Any) -> tuple[FileArg, ...]:
+    """One ``files`` entry: a signed tool id and its list of file arguments, each path declared once."""
+    if not isinstance(tool, str) or len(tool) > MAX_TOOL_NAME_CHARS or not TOOL_NAME.fullmatch(tool):
+        raise ScanConfigError(f"files: {str(tool)[:80]!r} is not a signed tool id")
+    if isinstance(items, (str, bytes, Mapping)) or not isinstance(items, Iterable):
+        raise ScanConfigError(f"files.{tool}: expected a list of file arguments")
+    parsed = tuple(file_arg(item, f"files.{tool}[{i}]") for i, item in enumerate(items))
+    if len(parsed) > MAX_FILES_PER_TOOL:
+        raise ScanConfigError(f"files.{tool}: more than {MAX_FILES_PER_TOOL} file arguments")
+    if len({f.path for f in parsed}) != len(parsed):
+        raise ScanConfigError(f"files.{tool}: a path is declared twice")
+    return parsed
+
+
+def _confined_path(value: Any, folder: str) -> str:
+    """``value`` normalized, when it is an absolute path strictly inside ``folder`` with no link or junction
+    below the folder. Raises ``_Unreadable``."""
+    if not isinstance(value, str) or not value or "\x00" in value or len(value) > 4096:
+        raise _Unreadable("not_a_path")
+    if not os.path.isabs(value) or any(p in (".", "..") for p in re.split(r"[\\/]", value)):
+        raise _Unreadable("not_absolute")
+    norm = os.path.normpath(value)
+    base = os.path.normpath(folder)
+    if os.path.normcase(norm) == os.path.normcase(base) or not os.path.normcase(norm).startswith(
+            os.path.normcase(base).rstrip("\\/") + os.sep):
+        raise _Unreadable("outside_folder")
+    expected = os.path.join(os.path.realpath(base), os.path.relpath(norm, base))
+    if os.path.normcase(os.path.realpath(norm)) != os.path.normcase(expected):
+        raise _Unreadable("link")      # a link or junction inside the folder: the tool could be sent elsewhere
+    return norm
+
+
+def _read_regular_file(fd: int, limit: int) -> bytes:
+    """The open file's bytes: a regular file of at most ``limit`` bytes, else ``_Unreadable`` or ``_Over``."""
+    st = os.fstat(fd)
+    if not stat.S_ISREG(st.st_mode):
+        raise _Unreadable("not_a_file")
+    if st.st_size > limit:
+        raise _Over(st.st_size)
+    chunks, total = [], 0
+    while True:
+        chunk = os.read(fd, min(1024 * 1024, limit + 1 - total))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > limit:      # it grew after fstat
+            raise _Over(total)
+    return b"".join(chunks)
+
+
 class Scanner:
     """The scanner Two-Key calls, and how: ``TwoKey(..., scanner=Scanner(inspector, files=...))``.
 
@@ -391,18 +460,8 @@ class Scanner:
         self.timeout_seconds = float(timeout_seconds)
         self.field = field
         self.label = _label(label if label is not None else getattr(inspector, "label", type(inspector).__name__))
-        self.files: dict[str, tuple[FileArg, ...]] = {}
-        for tool, items in (files or {}).items():
-            if not isinstance(tool, str) or len(tool) > MAX_TOOL_NAME_CHARS or not TOOL_NAME.fullmatch(tool):
-                raise ScanConfigError(f"files: {str(tool)[:80]!r} is not a signed tool id")
-            if isinstance(items, (str, bytes, Mapping)) or not isinstance(items, Iterable):
-                raise ScanConfigError(f"files.{tool}: expected a list of file arguments")
-            parsed = tuple(file_arg(item, f"files.{tool}[{i}]") for i, item in enumerate(items))
-            if len(parsed) > MAX_FILES_PER_TOOL:
-                raise ScanConfigError(f"files.{tool}: more than {MAX_FILES_PER_TOOL} file arguments")
-            if len({f.path for f in parsed}) != len(parsed):
-                raise ScanConfigError(f"files.{tool}: a path is declared twice")
-            self.files[tool] = parsed
+        self.files: dict[str, tuple[FileArg, ...]] = {
+            tool: _tool_files(tool, items) for tool, items in (files or {}).items()}
         self._lock = threading.Lock()
         self._down = False
         self._stance = "monitor"
@@ -411,8 +470,7 @@ class Scanner:
     # -- start-up ------------------------------------------------------------------------------------------
     def bind(self, compiled) -> list[str]:
         """Check this configuration against the signed constitution. Returns notes for stderr."""
-        registry = compiled.fields or {}
-        defn = registry.get(self.field)
+        defn = (compiled.fields or {}).get(self.field)
         if defn is None:
             raise ScanConfigError(f"scan_field_missing: the constitution declares no field {self.field!r}; declare "
                                   f"{self.field}: {{type: enum, values: [clean, flagged, unavailable], default: "
@@ -420,6 +478,15 @@ class Scanner:
         specs = compiled.tool_specs or {}
         self._check_encrypted_marks(specs)
         passing = sorted(t for t, s in specs.items() if self.passes_encrypted(s))
+        self._check_verdict_field(defn, passing)
+        for tool, items in self.files.items():
+            self._check_tool_files(tool, items, specs.get(tool))
+        self._stance = stance_of(compiled.rules, self.field)
+        self._encrypted_tools = tuple(passing)
+        return self._bind_notes(specs, passing, compiled.rules)
+
+    def _check_verdict_field(self, defn: Mapping[str, Any], passing: list[str]) -> None:
+        """The scan field is a caller enum of the verdicts, with ``encrypted`` exactly when a tool passes it."""
         values = set(defn.get("values") or ())
         if defn.get("type") != "enum" or defn.get("source") != "caller" or not set(VERDICTS) <= values <= set(CALL_VERDICTS):
             raise ScanConfigError(f"scan_field_invalid: {self.field!r} must be a caller-supplied enum (source: caller) "
@@ -432,22 +499,23 @@ class Scanner:
             raise ScanConfigError(f"scan_field_invalid: the value encrypted is only for a tool that passes encrypted "
                                   f"files; mark one {self.field}: {{source: caller, encrypted: pass}} or remove the "
                                   "value")
-        for tool, items in self.files.items():
-            spec = specs.get(tool)
-            if spec is None:
-                raise ScanConfigError(f"files.{tool}: not a tool in the signed constitution")
-            if not self.scans(spec):
-                raise ScanConfigError(f"files.{tool}: the tool does not map {self.field!r}, so it is not scanned; "
-                                      f"map {self.field}: {{source: caller}} in its spec")
-            payload = [e["json_path"] for e in spec.get("payload") or []
-                       if isinstance(e, Mapping) and isinstance(e.get("json_path"), str)]
-            for item in items:
-                key = item.key_path()
-                if not any(key == p or key.startswith(p + ".") for p in payload):
-                    raise ScanConfigError(f"files.{tool}: {item.path!r} is not under a payload path the signed spec "
-                                          "passes to the tool")
-        self._stance = stance_of(compiled.rules, self.field)
-        self._encrypted_tools = tuple(passing)
+
+    def _check_tool_files(self, tool: str, items: tuple[FileArg, ...], spec: Mapping[str, Any] | None) -> None:
+        """A tool with file arguments is signed, is scanned, and passes each file under one of its payload paths."""
+        if spec is None:
+            raise ScanConfigError(f"files.{tool}: not a tool in the signed constitution")
+        if not self.scans(spec):
+            raise ScanConfigError(f"files.{tool}: the tool does not map {self.field!r}, so it is not scanned; "
+                                  f"map {self.field}: {{source: caller}} in its spec")
+        payload = [e["json_path"] for e in spec.get("payload") or []
+                   if isinstance(e, Mapping) and isinstance(e.get("json_path"), str)]
+        for item in items:
+            key = item.key_path()
+            if not any(key == p or key.startswith(p + ".") for p in payload):
+                raise ScanConfigError(f"files.{tool}: {item.path!r} is not under a payload path the signed spec "
+                                      "passes to the tool")
+
+    def _bind_notes(self, specs: Mapping[str, Any], passing: list[str], rules: list) -> list[str]:
         scanned = sorted(t for t, s in specs.items() if self.scans(s))
         unscanned = sorted(set(specs) - set(scanned))
         notes = [f"scanner {self.label or 'configured'}: stance {self._stance}; scans {len(scanned)} of "
@@ -456,7 +524,7 @@ class Scanner:
             notes.append(f"not scanned (they do not map {self.field}): {', '.join(unscanned)}")
         if passing:
             notes.append(f"encrypted files pass without a look inside (encrypted: pass): {', '.join(passing)}")
-            if denies_encrypted(compiled.rules, self.field):
+            if denies_encrypted(rules, self.field):
                 notes.append(f"a rule on {self.field} alone denies encrypted, so encrypted: pass lets nothing more "
                              "through")
         return notes
@@ -541,38 +609,13 @@ class Scanner:
         """The file at ``value``, which must be an absolute path inside ``folder`` with no link or junction
         below the folder. Opened without following a link; a regular file of at most ``limit`` bytes (``_Over``
         past it: nothing beyond ``limit`` is kept, and a file whose size says it is larger is not read)."""
-        if not isinstance(value, str) or not value or "\x00" in value or len(value) > 4096:
-            raise _Unreadable("not_a_path")
-        if not os.path.isabs(value) or any(p in (".", "..") for p in re.split(r"[\\/]", value)):
-            raise _Unreadable("not_absolute")
-        norm = os.path.normpath(value)
-        base = os.path.normpath(folder)
-        if os.path.normcase(norm) == os.path.normcase(base) or not os.path.normcase(norm).startswith(
-                os.path.normcase(base).rstrip("\\/") + os.sep):
-            raise _Unreadable("outside_folder")
-        expected = os.path.join(os.path.realpath(base), os.path.relpath(norm, base))
-        if os.path.normcase(os.path.realpath(norm)) != os.path.normcase(expected):
-            raise _Unreadable("link")      # a link or junction inside the folder: the tool could be sent elsewhere
+        norm = _confined_path(value, folder)
         try:
             fd = _platform.open_nofollow(norm)
         except OSError:
             raise _Unreadable("cannot_open") from None
         try:
-            st = os.fstat(fd)
-            if not stat.S_ISREG(st.st_mode):
-                raise _Unreadable("not_a_file")
-            if st.st_size > limit:
-                raise _Over(st.st_size)
-            chunks, total = [], 0
-            while True:
-                chunk = os.read(fd, min(1024 * 1024, limit + 1 - total))
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                total += len(chunk)
-                if total > limit:      # it grew after fstat
-                    raise _Over(total)
-            return b"".join(chunks)
+            return _read_regular_file(fd, limit)
         except OSError:
             raise _Unreadable("cannot_read") from None
         finally:
@@ -590,27 +633,35 @@ class Scanner:
         out = []
         total = 0
         for item, (name, value, where) in found:
-            limit = min(item.max_bytes, MAX_CALL_FILE_BYTES - total)
-            try:
-                if isinstance(value, _Unreadable):
-                    raise value
-                if item.kind == "path":
-                    data = self.read_confined(value, item.folder, limit)
-                else:
-                    data = self._decode(value, item.kind)
-                    if len(data) > limit:
-                        raise _Over(len(data))
-            except _Unreadable as e:
-                raise FileDeniedError("file_unreadable", {"file": name, "kind": item.kind, "why": e.why}) from None
-            except _Over as over:
-                if over.size > item.max_bytes:
-                    raise FileDeniedError("file_too_large", {"file": name, "bytes": over.size,
-                                                             "max_bytes": item.max_bytes}) from None
-                raise FileDeniedError("call_files_too_large", {"file": name, "bytes": total + over.size,
-                                                               "max_bytes": MAX_CALL_FILE_BYTES}) from None
+            data = self._read_file(name, item, value, total)
             total += len(data)
             out.append((name, item, value, data, where))
         return out
+
+    def _read_file(self, name: str, item: FileArg, value: Any, total: int) -> bytes:
+        """One declared file's bytes, read up to the smaller of its ``max_bytes`` and what the call has left
+        after the ``total`` bytes already read. Raises ``FileDeniedError``."""
+        limit = min(item.max_bytes, MAX_CALL_FILE_BYTES - total)
+        try:
+            return self._file_bytes(item, value, limit)
+        except _Unreadable as e:
+            raise FileDeniedError("file_unreadable", {"file": name, "kind": item.kind, "why": e.why}) from None
+        except _Over as over:
+            if over.size > item.max_bytes:
+                raise FileDeniedError("file_too_large", {"file": name, "bytes": over.size,
+                                                         "max_bytes": item.max_bytes}) from None
+            raise FileDeniedError("call_files_too_large", {"file": name, "bytes": total + over.size,
+                                                           "max_bytes": MAX_CALL_FILE_BYTES}) from None
+
+    def _file_bytes(self, item: FileArg, value: Any, limit: int) -> bytes:
+        if isinstance(value, _Unreadable):
+            raise value
+        if item.kind == "path":
+            return self.read_confined(value, item.folder, limit)
+        data = self._decode(value, item.kind)
+        if len(data) > limit:
+            raise _Over(len(data))
+        return data
 
     def prepare(self, tool: str, arguments: Any, proposal: Any) -> Prepared:
         """Build the parts for one call. ``arguments`` and ``proposal`` are Two-Key's plain copies. Raises

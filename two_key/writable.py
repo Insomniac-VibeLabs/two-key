@@ -101,27 +101,39 @@ def runtime_targets() -> list[tuple[str, str]]:
     if sys.executable:
         targets.append((sys.executable, "file"))
     for entry in list(sys.path):
-        if not isinstance(entry, str):
-            continue
-        try:
-            entry = entry or os.getcwd()
-        except OSError:         # the working directory was removed
-            continue
-        if os.path.isfile(entry):
-            targets.append((entry, "file"))
-            continue
-        targets.append((entry, "folder"))
-        try:
-            names = sorted(os.listdir(entry))
-        except OSError:
-            continue
-        targets.extend((os.path.join(entry, n), "file") for n in names if n.endswith(".pth"))
+        targets.extend(_import_path_targets(entry))
     for module in list(sys.modules.values()):
-        for attr in ("__file__", "__cached__"):
-            value = getattr(module, attr, None)
-            if isinstance(value, str) and value:
-                targets.append((value, "file"))
-                targets.append((os.path.dirname(os.path.abspath(value)), "folder"))
+        targets.extend(_module_targets(module))
+    return targets
+
+
+def _import_path_targets(entry: object) -> list[tuple[str, str]]:
+    """One ``sys.path`` entry: a file, or a folder and the ``.pth`` files in it."""
+    if not isinstance(entry, str):
+        return []
+    try:
+        entry = entry or os.getcwd()
+    except OSError:         # the working directory was removed
+        return []
+    if os.path.isfile(entry):
+        return [(entry, "file")]
+    targets = [(entry, "folder")]
+    try:
+        names = sorted(os.listdir(entry))
+    except OSError:
+        return targets
+    targets.extend((os.path.join(entry, n), "file") for n in names if n.endswith(".pth"))
+    return targets
+
+
+def _module_targets(module: object) -> list[tuple[str, str]]:
+    """A loaded module's file and compiled file, each with its folder."""
+    targets: list[tuple[str, str]] = []
+    for attr in ("__file__", "__cached__"):
+        value = getattr(module, attr, None)
+        if isinstance(value, str) and value:
+            targets.append((value, "file"))
+            targets.append((os.path.dirname(os.path.abspath(value)), "folder"))
     return targets
 
 

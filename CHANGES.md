@@ -96,6 +96,7 @@
 - [Run 7 follow-ups: key errors, scanner scope, relay — 2026-10-16](#run-7-follow-ups-key-errors-scanner-scope-relay--2026-10-16)
 - [Release v0.6.0: Windows, content scanning, writable-path check — 2026-10-16](#release-v060-windows-content-scanning-writable-path-check--2026-10-16)
 - [PR #12 review: TLS 1.2 for icaps, suppressed Semgrep findings — 2026-10-16](#pr-12-review-tls-12-for-icaps-suppressed-semgrep-findings--2026-10-16)
+- [PR #12 review: SonarCloud findings — 2026-10-16](#pr-12-review-sonarcloud-findings--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3328,3 +3329,25 @@ above, from "Semgrep findings printed to the job log" on, are the detail.
   does not read that mark. `semgrep.yml` now drops suppressed results
   before the upload and prints how many. The job log was already at 0
   findings.
+
+## PR #12 review: SonarCloud findings — 2026-10-16
+
+- SonarCloud (path traversal, `constitution.save_envelope`): the only
+  caller is `two-key sign-constitution --out`, which the principal runs, so
+  no boundary was crossed. The write is still better through `_platform`:
+  `save_envelope` now writes a new file beside the target (no-follow,
+  exclusive) and renames it over the target. A reader never sees half a
+  constitution, a failed write keeps the old file, and a link at `--out` is
+  replaced rather than written through. Test: `tests/test_save_envelope.py`.
+- Fourteen 0.6.0 functions over SonarCloud's cognitive complexity limit
+  (15) are split into smaller ones, with no change in behavior or messages:
+  the ICAP verdict and response reader (`scanners.py`); file arguments, the
+  scanner's start-up checks, confined path reads, and per-file reads
+  (`scan.py`); the Windows access-list check (`_platform.py`); the import
+  path walk (`writable.py`); caller-field mappings (`constitution.py`);
+  proxy tool settings and the scan block (`mcp_proxy/config.py`); and the
+  file-input schema walk and start-up paths (`mcp_proxy/core.py`).
+- Left as they are (SonarCloud warnings, not blockers): `[A-Za-z0-9_]` stays
+  rather than `\w`, which would also match non-ASCII letters; the
+  `list(...)` copies in `writable.py` keep the loop safe if `sys.path` or
+  `sys.modules` changes; the ctypes structure names follow the Windows API.
