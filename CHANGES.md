@@ -91,6 +91,7 @@
 - [File size limits; unreadable files denied under every stance (0.6.0) — 2026-10-15](#file-size-limits-unreadable-files-denied-under-every-stance-060--2026-10-15)
 - [Encrypted files: signed per-tool pass (0.6.0) — 2026-10-15](#encrypted-files-signed-per-tool-pass-060--2026-10-15)
 - [Docs: connecting the agent so it cannot go around Two-Key — 2026-10-15](#docs-connecting-the-agent-so-it-cannot-go-around-two-key--2026-10-15)
+- [Docs: the proxy wrapper leaves the agent's folder — 2026-10-16](#docs-the-proxy-wrapper-leaves-the-agents-folder--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3147,3 +3148,17 @@ On branch `working`. Docs only; no behavior changes.
   OS users, the sudo hops, where each secret lives, and the closed paths),
   Route 2 (what the model is offered and what it never is), and a loopback
   port takeover. Each was rendered with Mermaid 11.4.1 before commit.
+
+## Docs: the proxy wrapper leaves the agent's folder — 2026-10-16
+
+On branch `working`. Docs only; no behavior changes.
+
+- sudo keeps the caller's working directory, and the upstream server
+  inherits the proxy's unless `upstream.cwd` is set. Left in the agent's
+  folder, `npx` looks for the server in that folder's `node_modules` and
+  reads its `.npmrc` first, so an agent could plant a server that
+  receives the tool's credential. The `run-proxy` example in HOWTO now
+  changes to `/opt/two-key` first, HOWTO and CONNECTING explain why and
+  say to run the `two-key` command rather than `python -m two_key` (which
+  puts the working directory on the import path), the `upstream.cwd` row
+  says what the default is, and the CONNECTING checklist has a line for it.

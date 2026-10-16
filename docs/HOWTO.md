@@ -1766,9 +1766,18 @@ and `run-proxy` is:
 
 ```bash
 #!/bin/sh
+cd /opt/two-key || exit 1                      # not the agent's folder (below)
 set -a; . /etc/two-key/proxy.env; set +a       # mode 0600, owner two-key
 exec /opt/two-key/.venv/bin/two-key mcp-proxy --config /etc/two-key/proxy.yaml
 ```
+
+sudo keeps the caller's working directory, and the upstream server
+inherits the proxy's unless `upstream.cwd` is set. Left in the agent's
+folder, `npx` would look for the server in that folder's `node_modules`
+and read its `.npmrc` first, so the agent could plant a server that
+receives `BILLING_TOKEN`. Hence the `cd` to a folder the agent cannot
+write. Run the `two-key` command, not `python -m two_key`, which puts the
+working directory on the import path.
 
 The proxy prints `two-key: mcp-proxy: serving 2 signed tool(s)
 ['pay_vendor', 'read_report']` on stderr. Nothing but MCP goes to stdout.
@@ -1791,7 +1800,7 @@ refused. Relative paths are relative to the file.
 | `allow_unresolved_identity` | no | `true` starts despite an `unresolved_identity` warning (default `false`) |
 | `upstream.command` | yes | Program and arguments, as a list; no shell |
 | `upstream.env` | no | Variables for the child: a literal, or `{env: NAME}` read from the proxy's environment (unset refuses to start) |
-| `upstream.cwd` | no | The child's working directory |
+| `upstream.cwd` | no | The child's working directory. Without it, the child gets the proxy's, which under sudo is the agent's unless the wrapper changes it; use a folder the agent cannot write |
 | `upstream.schema_digest` | yes | `sha256:...` from `mcp-draft-specs` |
 | `upstream.on_schema_change` | no | `refuse` (default) or `warn` |
 | `upstream.call_timeout_seconds` | no | Per upstream call, at most 3600 (default 60) |

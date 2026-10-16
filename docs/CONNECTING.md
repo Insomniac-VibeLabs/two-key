@@ -130,6 +130,15 @@ flowchart LR
    proxy from the `two-key` virtualenv with a fixed config path. Leave
    sudo's `env_reset` on (the default), so nothing from the agent's
    environment (`PYTHONPATH`, `LD_PRELOAD`) reaches the proxy.
+   `run-proxy` also changes to a folder the agent cannot write (`cd
+   /opt/two-key`) before it starts the proxy. sudo keeps the agent's
+   working directory, and the upstream server inherits it unless
+   `upstream.cwd` is set; `npx` looks for the server in that folder's
+   `node_modules` and reads its `.npmrc` first, so an agent could plant a
+   server that receives the tool's credential. For the same reason the
+   wrapper runs the `two-key` command, not `python -m two_key`, which puts
+   the working directory on the import path
+   ([HOWTO, step 6](HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy)).
 3. **Remove the real server from the client.** The client's MCP list must
    not also start `@example/billing-mcp` (or any other server for the
    same system). The agent must not hold `BILLING_TOKEN` in its
@@ -200,7 +209,7 @@ what an agent would try, and what stops it.
 
 | Connection or hook | Connect it so | An agent might try | Stopped by |
 | --- | --- | --- | --- |
-| Agent host to Two-Key | Route 1: the client starts the proxy wrapper through the exact sudoers rule. Route 2: the framework is offered guarded functions only | Starting the real server, or the proxy with its own config | Removing the real server from the client; sudoers allowing only the wrapper with no arguments; `env_reset` |
+| Agent host to Two-Key | Route 1: the client starts the proxy wrapper through the exact sudoers rule. Route 2: the framework is offered guarded functions only | Starting the real server, or the proxy with its own config | Removing the real server from the client; sudoers allowing only the wrapper with no arguments; `env_reset`; the wrapper's `cd` to a folder the agent cannot write |
 | Two-Key to the tool (upstream server, or the registered function) | The gateway is the only caller. The upstream runs as its own user with only its credential (`upstream.command` with `sudo -u mcp-billing` or a container) | Calling the tool's API directly; reading the proxy's keys through the upstream | The agent has no tool credential and no network route; the upstream's user cannot read the `two-key` user's files or `/proc` |
 | Tool credentials (`BILLING_TOKEN`, API keys) | In a file only `two-key` reads (`proxy.env`, mode 0600), passed to the upstream through `upstream.env` | Reading it from the environment, a file, a log, or the prompt | Separate users; never in the prompt, the instruction, or an argument |
 | Signed constitution and principal key | Owned by `two-key`; the key mode 0600 in an owner-only directory | Replacing the constitution, or signing a looser one | The constitution's signature is checked on every load; Two-Key refuses a key readable by others; the agent's user cannot write either file |
@@ -282,6 +291,8 @@ items above and the checklist below.
     every directory on the proxy's PYTHONPATH.
 [ ] Route 1: the client starts only the proxy wrapper, through a sudoers rule
     with no arguments; the real server is not in the client's list.
+[ ] Route 1: the wrapper changes to a folder the agent cannot write before it
+    starts the proxy (or upstream.cwd names one), and runs the two-key command.
 [ ] Route 2: the framework offers only guarded functions; no shell, code runner,
     HTTP, or file tool that reaches the same systems; model output is never executed.
 [ ] No tool credential is in the agent's environment, files, prompt, or arguments.
