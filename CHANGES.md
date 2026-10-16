@@ -107,6 +107,7 @@
 - [Live harness: what a pass does not cover — 2026-10-16](#live-harness-what-a-pass-does-not-cover--2026-10-16)
 - [The proxy refuses an agent that is, or can change, Two-Key (0.7.0) — 2026-10-16](#the-proxy-refuses-an-agent-that-is-or-can-change-two-key-070--2026-10-16)
 - [Live harness: the start-up account check — 2026-10-16](#live-harness-the-start-up-account-check--2026-10-16)
+- [The `on_agent_access` tests on macOS and Windows — 2026-10-16](#the-on_agent_access-tests-on-macos-and-windows--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3622,3 +3623,14 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   agent account that is root, cannot be told, or could change Two-Key's files
   needs a second account, and `tests/test_agent_access.py` covers those
   alone. 74 cases in the batch after run 8 (70 in run 8).
+
+## The `on_agent_access` tests on macOS and Windows — 2026-10-16
+
+- `tests/test_agent_access.py` read `os.geteuid()` in a decorator, which
+  Python evaluates when the class is defined, before the class's own
+  Windows skip can take effect; the module failed to import on Windows. The
+  account id is now read once, and only on POSIX.
+- The same tests built their expectations from the path `tempfile` returned.
+  The writable-path check names the real path, and on macOS `/var` is a link
+  to `/private/var`, so two tests looked for a path the check never names.
+  They now resolve the temporary directory first.

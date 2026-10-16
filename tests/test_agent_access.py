@@ -15,6 +15,9 @@ from two_key.mcp_proxy.config import ProxyConfigError, parse_proxy_config
 
 DIGEST = "sha256:" + "0" * 64
 OTHER = 4_000_123            # an account no test machine has
+# Windows has no POSIX account id, and the decorators below are read when the class is defined, before its
+# skip can take effect. The Accounts tests skip there, so the id is only read on POSIX.
+EUID = None if _platform.WINDOWS else os.geteuid()
 
 
 def config(**over):
@@ -45,7 +48,9 @@ class Accounts(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.dir = Path(tmp.name)
+        # The real path: the writable-path check names what it checked, and on macOS /var is a link to
+        # /private/var, so an expectation built from the name tempfile returns would not match.
+        self.dir = Path(tmp.name).resolve()
         os.chmod(self.dir, 0o700)
         self.file = self.dir / "proxy.yaml"
         self.file.write_text("x", encoding="utf-8")
@@ -56,17 +61,17 @@ class Accounts(unittest.TestCase):
         self.addCleanup(runtime.stop)
 
     def found(self, uid, label="agent (uid 4000123)"):
-        return agent_access.problems([(self.file, "file")], parent=(uid, label), own_uid=os.geteuid())
+        return agent_access.problems([(self.file, "file")], parent=(uid, label), own_uid=EUID)
 
     def test_another_account_that_cannot_write_starts(self):
         self.assertEqual(self.found(OTHER), [])
 
     def test_the_same_account_is_refused(self):
-        (line,) = self.found(os.geteuid(), "two-key (uid 996)")
+        (line,) = self.found(EUID, "two-key (uid 996)")
         self.assertTrue(line.startswith("agent_same_account: the proxy was started by two-key (uid 996), "
                                         "Two-Key's own account"), line)
 
-    @unittest.skipIf(os.geteuid() == 0, "root is Two-Key's own account here")
+    @unittest.skipIf(EUID == 0, "root is Two-Key's own account here")
     def test_root_is_refused(self):
         (line,) = self.found(0, "root (uid 0)")
         self.assertTrue(line.startswith("agent_account_root: "), line)
@@ -110,7 +115,7 @@ class Accounts(unittest.TestCase):
         err = io.StringIO()
         with self.assertRaises(AgentAccessError) as raised:
             agent_access.check([(self.file, "file")], "refuse", why="on_agent_access: refuse (the default)",
-                               stream=err, parent=(os.geteuid(), "two-key (uid 996)"), own_uid=os.geteuid())
+                               stream=err, parent=(EUID, "two-key (uid 996)"), own_uid=EUID)
         self.assertEqual(str(raised.exception),
                          "agent_same_account: the proxy was started by two-key (uid 996), Two-Key's own account, "
                          "so the agent could read Two-Key's keys and change its settings; run the agent as another "
@@ -119,7 +124,7 @@ class Accounts(unittest.TestCase):
     def test_warn_names_it_and_starts(self):
         err = io.StringIO()
         found = agent_access.check([(self.file, "file")], "warn", why="", stream=err,
-                                   parent=(os.geteuid(), "two-key (uid 996)"), own_uid=os.geteuid())
+                                   parent=(EUID, "two-key (uid 996)"), own_uid=EUID)
         self.assertEqual(len(found), 1)
         self.assertIn("two-key: WARNING: agent_same_account: ", err.getvalue())
         self.assertIn("on_agent_access: warn starts anyway", err.getvalue())
