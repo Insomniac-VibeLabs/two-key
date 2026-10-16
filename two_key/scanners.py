@@ -345,9 +345,9 @@ class IcapInspector:
 
     def _returned_body(self, rest: bytes, offsets: dict[str, int]) -> bytes:
         """The body a 200 sends back, dechunked, to compare with the part's bytes."""
-        body_key = "req-body" if self.method == "reqmod" else "res-body"
-        if body_key in offsets:
-            body = _dechunk(rest[offsets[body_key]:])
+        section = "req-body" if self.method == "reqmod" else "res-body"     # an Encapsulated section name
+        if section in offsets:
+            body = _dechunk(rest[offsets[section]:])
             if body is None:
                 raise _Unanswered("body cut short")
             return body

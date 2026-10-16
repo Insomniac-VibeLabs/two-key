@@ -3347,6 +3347,9 @@ above, from "Semgrep findings printed to the job log" on, are the detail.
   path walk (`writable.py`); caller-field mappings (`constitution.py`);
   proxy tool settings and the scan block (`mcp_proxy/config.py`); and the
   file-input schema walk and start-up paths (`mcp_proxy/core.py`).
+- DeepSource read `body_key = "req-body"` in the ICAP adapter as a
+  hard-coded credential. The variable is now `section`, the name ICAP gives
+  the parts of `Encapsulated`.
 - Left as they are (SonarCloud warnings, not blockers): `[A-Za-z0-9_]` stays
   rather than `\w`, which would also match non-ASCII letters; the
   `list(...)` copies in `writable.py` keep the loop safe if `sys.path` or
