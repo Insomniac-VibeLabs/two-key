@@ -218,6 +218,17 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   point is refused; the lock is `LockFileEx`. Do not accept a wider access
   list or fall back to "no lock". Text files Two-Key writes use
   `newline="\n"` and a named encoding (`tests/test_text_io.py`).
+- Writable paths (0.6.0, `two_key/writable.py`): at start, `TwoKey` names
+  each file or folder of the running Python (program, import path, `.pth`
+  files, loaded modules and their compiled files) and of `check_paths`,
+  and every folder above them, that an account other than its own (or
+  root, SYSTEM, Administrators, TrustedInstaller) could change, through
+  `_platform.write_problem`. `warn` is the default; `on_writable_paths:
+  refuse` refuses; `high_assurance` always refuses and refuses `warn`
+  (maintainer's decision, 2026-10-16). A path that cannot be checked is
+  named, not passed. There is no setting that turns it off, and on POSIX a
+  group write bit counts for every group but 0; do not add either. It runs
+  before anything is written to the ledger (`tests/test_writable_paths.py`).
 - Content scanning (0.6.0, `two_key/scan.py`): Two-Key alone starts a scan,
   for every call to a tool whose signed spec maps the scan field, and fills
   the verdict; nothing the agent writes turns it on or off, and `scan` in

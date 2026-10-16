@@ -39,6 +39,11 @@ SYSTEM_SID = "S-1-5-18"
 # OWNER RIGHTS: an entry for whoever owns the file, which is checked to be one of the trusted accounts.
 OWNER_RIGHTS_SID = "S-1-3-4"
 ADMINISTRATORS_SID = "S-1-5-32-544"
+# The account that owns Windows' own files (Program Files, System32): trusted for write_problem only.
+TRUSTED_INSTALLER_SID = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"
+# Names for the accounts a write_problem message most often names.
+_SID_NAMES = {"S-1-1-0": "Everyone", "S-1-5-11": "Authenticated Users", "S-1-5-32-545": "Users",
+              "S-1-5-4": "INTERACTIVE"}
 
 if WINDOWS:  # pragma: no cover - exercised on the Windows CI runner
     import ctypes
@@ -244,17 +249,19 @@ if WINDOWS:  # pragma: no cover - exercised on the Windows CI runner
         inherit = "OICI" if directory else ""
         return f"D:P(A;{inherit};FA;;;{current_user_sid()})"
 
-    def _access_problem_handle(handle, forbidden: int | None = None) -> str | None:
-        owner, dacl, descriptor = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    def _access_problem_handle(handle, forbidden: int | None = None, *, owner: bool = False,
+                               also_trusted: tuple = (), granted: str | None = None) -> str | None:
+        owner_psid, dacl, descriptor = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
         rc = _adv.GetSecurityInfo(handle, _SE_FILE_OBJECT,
                                   _OWNER_SECURITY_INFORMATION | _DACL_SECURITY_INFORMATION,
-                                  ctypes.byref(owner), None, ctypes.byref(dacl), None, ctypes.byref(descriptor))
+                                  ctypes.byref(owner_psid), None, ctypes.byref(dacl), None,
+                                  ctypes.byref(descriptor))
         if rc:
             return f"its access list cannot be read ({ctypes.FormatError(rc).strip()})"
         try:
-            trusted = {current_user_sid(), SYSTEM_SID, ADMINISTRATORS_SID}
-            owner_sid = _sid_string(owner)
-            if owner_sid not in trusted and forbidden is None:
+            trusted = {current_user_sid(), SYSTEM_SID, ADMINISTRATORS_SID, *also_trusted}
+            owner_sid = _sid_string(owner_psid)
+            if owner_sid not in trusted and (forbidden is None or owner):
                 return f"it is owned by {owner_sid}, not by you"
             if owner_sid in trusted:
                 trusted.add(OWNER_RIGHTS_SID)
@@ -274,8 +281,9 @@ if WINDOWS:  # pragma: no cover - exercised on the Windows CI runner
                     return f"its access list has an entry of type {header.AceType} that Two-Key does not read"
                 allowed = _ACCESS_ALLOWED_ACE.from_address(ace.value)
                 sid = _sid_string(ace.value + _ACCESS_ALLOWED_ACE.SidStart.offset)
-                granted = allowed.Mask & (~_HARMLESS if forbidden is None else forbidden)
-                if sid not in trusted and granted:
+                if sid not in trusted and allowed.Mask & (~_HARMLESS if forbidden is None else forbidden):
+                    if granted:
+                        return f"{_SID_NAMES[sid]} ({sid}) {granted}" if sid in _SID_NAMES else f"{sid} {granted}"
                     return f"{sid} has access to it"
             return None
         finally:
@@ -452,6 +460,61 @@ def dir_write_problem(path) -> str | None:
     fd = _create_file_dir(path)  # pragma: no cover
     try:  # pragma: no cover
         return _access_problem_handle(msvcrt.get_osfhandle(fd), write)
+    finally:  # pragma: no cover
+        os.close(fd)
+
+
+if WINDOWS:  # pragma: no cover
+    # GENERIC_ALL, GENERIC_WRITE, WRITE_OWNER, WRITE_DAC, DELETE, delete child, add subdirectory, add file
+    _WRITE_RIGHTS = 0x10000000 | 0x40000000 | 0x80000 | 0x40000 | 0x10000 | 0x40 | 0x4 | 0x2
+    # What it takes to rename or remove an entry: GENERIC_ALL, WRITE_OWNER, WRITE_DAC, DELETE, delete child.
+    _RENAME_RIGHTS = 0x10000000 | 0x80000 | 0x40000 | 0x10000 | 0x40
+
+
+def _posix_account(uid: int) -> str:
+    try:
+        import pwd
+        return f"{pwd.getpwuid(uid).pw_name} (uid {uid})"
+    except (ImportError, KeyError):
+        return f"uid {uid}"
+
+
+def _posix_group(gid: int) -> str:
+    try:
+        import grp
+        return f"{grp.getgrgid(gid).gr_name} (gid {gid})"
+    except (ImportError, KeyError):
+        return f"gid {gid}"
+
+
+def write_problem(path, rule: str = "file") -> str | None:
+    """Why an account other than this process's user could change ``path``, or None. Follows links.
+
+    ``rule`` is what matters about ``path``: ``file``, its contents; ``folder``, adding, removing, or renaming
+    its entries; ``parent``, renaming or removing an entry in it, which a POSIX sticky bit (or on Windows, the
+    right to add entries only) does not allow. Root, and on Windows SYSTEM, Administrators, and
+    TrustedInstaller, can change anything anyway, so they are not counted.
+
+    POSIX: an owner other than this user or root, the other write bit, or the group write bit for any group
+    but 0 (Two-Key cannot list a group's members reliably). Windows: an owner, or an "allow" entry with a
+    write right, other than this user or those accounts.
+    """
+    if not WINDOWS:
+        st = os.stat(path)
+        if st.st_uid not in (0, os.geteuid()):
+            return f"owned by {_posix_account(st.st_uid)}"
+        if rule == "parent" and stat.S_ISDIR(st.st_mode) and st.st_mode & stat.S_ISVTX:
+            return None
+        if st.st_mode & stat.S_IWOTH:
+            return "writable by everyone"
+        if st.st_mode & stat.S_IWGRP and st.st_gid != 0:
+            return f"writable by group {_posix_group(st.st_gid)}"
+        return None
+    fd = _create_file_dir(path)  # pragma: no cover
+    try:  # pragma: no cover
+        return _access_problem_handle(msvcrt.get_osfhandle(fd),
+                                      _RENAME_RIGHTS if rule == "parent" else _WRITE_RIGHTS, owner=True,
+                                      also_trusted=(TRUSTED_INSTALLER_SID,), granted="can change it")
     finally:  # pragma: no cover
         os.close(fd)
 

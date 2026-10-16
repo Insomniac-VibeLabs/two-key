@@ -989,7 +989,11 @@ Use it for destructive, irreversible, financial, or external-send tools.
 `examples/judges.yaml` meets it with the cloud hooks plus local Qwen. Other
 quorum keys still apply on top of the profile. `require_local_yes: true`
 with no local judge does not start
-(`require_local_yes_without_local_judge`).
+(`require_local_yes_without_local_judge`). It also does not start when
+another account could change a file or folder Two-Key runs or reads
+(`writable_path`; see
+[CONNECTING](CONNECTING.md#what-two-key-checks-for-you)), and it does not
+accept `on_writable_paths: warn`.
 
 A judge's maker is who made the judge's model, as the operator labels it:
 the per-judge `maker:` key, or its `provider` when `maker:` is omitted. It
@@ -1219,6 +1223,13 @@ decision = tk.authorize(
     agent_session=os.environ["OPENAI_AGENT_API_KEY"],
 )
 ```
+
+At start, `TwoKey` names each file or folder of the running Python, and
+each path in `check_paths=` (your integration's own settings, as paths or
+`(path, "file" | "folder")` pairs), that another account could change.
+`on_writable_paths="refuse"` makes that a refusal; a high_assurance
+quorum always refuses
+([CONNECTING](CONNECTING.md#what-two-key-checks-for-you)).
 
 `decision.token` is set only when both paths allow and the signed ledger
 head was written. `decision.to_record()` leaves the token out and gives
@@ -1798,6 +1809,7 @@ refused. Relative paths are relative to the file.
 | `agent_session_env` | no | The variable holding the agent's session, read once at start; unset or empty refuses to start |
 | `agent_id`, `hosting` | no | Ledger metadata, at most 256 characters; not trust |
 | `allow_unresolved_identity` | no | `true` starts despite an `unresolved_identity` warning (default `false`) |
+| `on_writable_paths` | no | `warn` (default) names each file or folder the proxy runs or reads that another account could change, and starts; `refuse` does not start. `high_assurance` refuses either way and does not accept `warn` ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you), 0.6.0) |
 | `upstream.command` | yes | Program and arguments, as a list; no shell |
 | `upstream.env` | no | Variables for the child: a literal, or `{env: NAME}` read from the proxy's environment (unset refuses to start) |
 | `upstream.cwd` | no | The child's working directory. Without it, the child gets the proxy's, which under sudo is the agent's unless the wrapper changes it; use a folder the agent cannot write |
@@ -1864,6 +1876,7 @@ on stderr and exits 1.
 | `upstream_env_missing: upstream.env.X ...` | The variable `{env: NAME}` reads is unset or empty | Set it in the proxy's environment |
 | `agent_session_env: ...` | The agent session variable is unset or empty | Set it, or remove the key |
 | `TwoKeyConfigError: ...`, `JudgeConfigError: ...`, `LedgerError: ...` | Two-Key itself refused, as `two-key authorize` would | See the sections on judges, the monitored agent, and the ledger |
+| `TwoKeyConfigError: writable_path: <path>: ...` | Another account could change a file or folder Two-Key runs or reads, and `on_writable_paths: refuse` or `high_assurance` is set | Make it owned by Two-Key's account (or root) and not writable by group or others ([CONNECTING](CONNECTING.md#run-two-key-as-a-service-account)) |
 | `unresolved_identity: ...` | Two-Key cannot tell who serves a judge or the agent (a local proxy serving an alias, an unrecognized host), so it cannot rule out a judge that is the agent | Declare `upstream:` for that side in `judges.yaml`, or set `allow_unresolved_identity: true` to accept the risk |
 | `tools: [...] are not tools in the signed constitution` | A `tools:` entry names an unsigned tool | Remove it, or sign the tool |
 | `upstream_unavailable: <type>: ...` | The child did not start, or did not speak MCP | Check the command and its user |
@@ -1886,7 +1899,10 @@ So does a `two-key: WARNING: mcp-proxy: <tool>: <path> ... has no
 description in the upstream schema` line for each input Path A reads that
 the server leaves undescribed (step 1 above), and a `two-key: WARNING:
 mcp-proxy: <tool>: <path> looks like a file ...` line for each input of a
-scanned tool that looks like a file but is not declared under `files`.
+scanned tool that looks like a file but is not declared under `files`, and
+a `two-key: WARNING: writable_path: <path>: ...` line for each file or
+folder another account could change (at most ten, then a count; see
+[CONNECTING](CONNECTING.md#what-two-key-checks-for-you)).
 
 At call time, a refused call is an MCP tool error whose text is `two-key
 denied this call: <reason>`: printable ASCII, at most 200 characters, never
@@ -2255,6 +2271,12 @@ names the setting or declaration that controls it.
   outside its folder, for example) is denied under every stance. The
   stance is the signed
   `scan` rule (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)).
+
+- `on_writable_paths`: `warn` (the default) starts when another account
+  could change a file or folder Two-Key runs or reads, and names it on
+  stderr, where a background process can hide it. `refuse` stops that
+  setup from running, at the cost of not starting where, for example, an
+  admin group can write Python's folders. `high_assurance` always refuses.
 
 - `encrypted: pass` on a tool (default off): encrypted files the scanner
   cannot open reach that tool unscanned, so a malicious agent can carry

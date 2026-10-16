@@ -669,7 +669,10 @@ class Configuration(Base):
                                           "attachments": [{"content": b64(b"ok")}]})
         self.assertTrue(r.allowed, r.reason)
 
-    def test_start_up_warnings(self):
+    # high_assurance refuses to start on a machine where another account can change Python's files
+    # (two_key/writable.py); this test is about the scan warnings, so it does not look at the machine.
+    @mock.patch("two_key.writable.runtime_targets", return_value=[])
+    def test_start_up_warnings(self, _):
         self.make(timeout_seconds=55)
         self.assertIn("over 60 s", self.startup.getvalue())
         self.assertIn("stance default", self.startup.getvalue())

@@ -305,6 +305,11 @@ claims to close.
   machine, an agent can also take a loopback port a judge, scanner, or
   hook back end left free (after a crash or restart) and answer in its
   place. docs/CONNECTING.md lists each connection and how to close it.
+  Two-Key names, at start, each file or folder it runs or reads that
+  another account could change (`writable_path`), and refuses under
+  `high_assurance` or `on_writable_paths: refuse`. That catches a setup
+  mistake; it cannot see the wrapper that started it or the upstream's
+  files, and code already changed has already run.
 - MCP proxy (0.5.0):
   - An agent that can reach the upstream server directly, or holds its
     credential, bypasses the proxy entirely. The proxy cannot see or stop

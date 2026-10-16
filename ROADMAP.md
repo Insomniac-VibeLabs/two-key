@@ -273,6 +273,12 @@ in this plan, these win; nothing above is removed.
   all three. CodeQL runs on all three as well; Semgrep stays on Linux, where
   its container image runs.
 - HOWTO explains, with diagrams, how to hook a scanner in.
+- docs/CONNECTING.md shows how to connect the agent so it cannot go around
+  Two-Key, and to run Two-Key as a service account. At start, Two-Key
+  names each file or folder it runs or reads that another account could
+  change (`writable_path`); `on_writable_paths: refuse` makes that a
+  refusal, and `high_assurance` always refuses (maintainer's decision,
+  2026-10-16).
 
 ## 0.7.0: Ledger export for SIEM
 

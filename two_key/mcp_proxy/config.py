@@ -37,7 +37,8 @@ ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")
 UPSTREAM_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
 _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "head_anchor", "ttl_seconds",
-             "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools", "scan"}
+             "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools", "scan",
+             "on_writable_paths"}
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
 _KEY_KEYS = {"principal"}
 _UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds"}
@@ -110,6 +111,9 @@ class ProxyConfig:
     allow_unresolved_identity: bool = False
     # The content scanner block (two_key.scanners), checked for shape; built when the proxy starts.
     scan: Mapping[str, Any] | None = None
+    # warn (None: the default) or refuse when another account can change a path the proxy runs or reads
+    # (two_key/writable.py); high_assurance refuses either way.
+    on_writable_paths: str | None = None
 
     def tool_policy(self, tool: str) -> ToolPolicy:
         return self.tools.get(tool) or ToolPolicy()
@@ -296,6 +300,12 @@ def _ttl(value: Any) -> int:
     return value
 
 
+def _writable_mode(value: Any) -> str:
+    if value not in ("warn", "refuse"):
+        raise ProxyConfigError("on_writable_paths: expected warn or refuse")
+    return value
+
+
 def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
     """A validated ``ProxyConfig`` from a parsed document. ``path`` is the file it came from."""
     base = path.parent
@@ -338,6 +348,7 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
                            if "agent_session_env" in top else None),
         allow_unresolved_identity=(_bool(top["allow_unresolved_identity"], "allow_unresolved_identity")
                                    if "allow_unresolved_identity" in top else False),
+        on_writable_paths=_writable_mode(top["on_writable_paths"]) if "on_writable_paths" in top else None,
         **meta,
     )
 

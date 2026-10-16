@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import copy
 import importlib
+import importlib.util
 import os
 import re
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -446,10 +448,59 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
         ledger = Ledger(config.ledger, key, witness_public_key=witness, anchor_path=config.head_anchor)
         return TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
                            private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
-                           scanner=scanner)
+                           scanner=scanner, on_writable_paths=config.on_writable_paths,
+                           check_paths=startup_paths(config))
     except (OSError, ValueError, JudgeConfigError, IdentityError, LedgerError, ConstitutionError,
             ConstitutionSignatureError, TwoKeyConfigError, ScanConfigError) as e:
         raise ProxyConfigError(f"{type(e).__name__}: {e}") from None
+
+
+def _program(name: str) -> str | None:
+    return shutil.which(name) or (name if os.path.isabs(name) else None)
+
+
+def _module_origin(module: str) -> str | None:
+    """The file a hook module would be imported from, found without running it (its parent packages do run,
+    as they would when the hook is imported)."""
+    try:
+        spec = importlib.util.find_spec(module)
+    except Exception:       # loading the hooks refuses to start with the reason
+        return None
+    origin = getattr(spec, "origin", None)
+    return origin if isinstance(origin, str) and os.path.isabs(origin) else None
+
+
+def startup_paths(config: ProxyConfig) -> list[tuple[Path | str, str]]:
+    """What the proxy reads or starts, for the writable-path check at start (two_key/writable.py): its
+    config and the files it names, the ledger, the upstream program and the folder it starts in (the
+    proxy's own when ``upstream.cwd`` is unset, which under sudo is the caller's), each fact hook's module,
+    the folders of files sent by path, and a command scanner's program. (clamd's socket belongs to clamd's
+    own account, so it is left to the checklist in docs/CONNECTING.md.)"""
+    paths: list[tuple[Path | str, str]] = [(config.path, "file"), (config.constitution, "file"),
+                                           (config.principal_key, "file"), (config.judges, "file"),
+                                           (config.ledger, "folder")]
+    for extra in (config.witness_public_key, config.head_anchor):
+        if extra is not None:
+            paths.append((extra, "file"))
+    paths.append((config.upstream.cwd or Path.cwd(), "folder"))
+    program = _program(config.upstream.command[0])
+    if program:
+        paths.append((program, "file"))
+    for policy in config.tools.values():
+        for spec in policy.facts.values():
+            origin = _module_origin(spec.split(":", 1)[0])
+            if origin:
+                paths.append((origin, "file"))
+        for arg in policy.files:
+            if arg.kind == "path" and arg.folder:
+                paths.append((arg.folder, "folder"))
+    scan = config.scan or {}
+    command = scan.get("command")
+    if scan.get("type") == "command" and isinstance(command, list) and command and isinstance(command[0], str):
+        program = _program(command[0])
+        if program:
+            paths.append((program, "file"))
+    return paths
 
 
 def check_tools_signed(config: ProxyConfig, two_key: Any) -> None:

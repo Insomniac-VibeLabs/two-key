@@ -44,7 +44,11 @@ min_responding 1 (its default then), one judge approves alone while the others a
 at start (lone_judge_warning) and does not refuse. QuorumPolicy.high_assurance
 (profile: high_assurance) needs judges from 2 makers (min_makers; maker: is the operator's
 label for who made a judge's model, not verified, never compared with the agent), 1 local judge,
-and a local yes. The old names vendor/min_vendors are refused (removed in 0.2.3). Each ballot is one
+and a local yes. The old names vendor/min_vendors are refused (removed in 0.2.3). At start, TwoKey
+warns (writable_path) for each file or folder of the running Python, or of check_paths (the proxy
+passes proxy.yaml, the files it names, hook modules, the upstream program and folder), that another
+account could change; on_writable_paths: refuse refuses, and high_assurance always refuses (0.6.0).
+Run Two-Key as a service account (docs/CONNECTING.md). Each ballot is one
 stateless request at temperature 0; a judge endpoint that keeps memory across ballots carries agent text from one
 call into the vote on another, which Two-Key cannot see: give each judge a fresh context per ballot.
 TwoKey needs monitored_agent, declared by the operator. A judge may run any

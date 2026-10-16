@@ -122,6 +122,9 @@ A provider floor of one does not require provider diversity. The default policy 
 - At least one local judge.
 - An affirmative vote from a local judge.
 - `required_yes=2` by default, unless the caller overrides it.
+- Two-Key does not start when another account could change a file or
+  folder it runs or reads (`writable_path`, docs/CONNECTING.md), and
+  `on_writable_paths: warn` is refused.
 
 `QuorumPolicy.section4()` applies those same diversity requirements and sets `require_path_a_first=True`. In the current implementation, however, `TwoKey.authorize` does not read that flag to skip Path B. Both paths run once a request is well-formed and within limits; the one exception is a call Path A cannot read under its spec (`derive_failed:`), which is not sent to the judges unless `tool_args_on_derive_deny` is set.
 

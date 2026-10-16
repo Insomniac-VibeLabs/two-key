@@ -40,6 +40,10 @@ is how to report a vulnerability. It is not the model.
   arguments or claim, a v1 or v2 constitution accepted with a caller field,
   or a redemption that runs the tool after the fact changed (branch
   `mcp-proxy`)
+- A start that does not name, or under `high_assurance` or
+  `on_writable_paths: refuse` does not refuse, a file or folder Two-Key
+  runs or reads that another account could change, where
+  docs/CONNECTING.md says it is checked (0.6.0, branch `working`)
 - A judge that is the monitored agent being accepted at start-up: a judge
   holding the agent's credential (the same API token, or the same username
   and password) at any address, whether or not either side sends it, or

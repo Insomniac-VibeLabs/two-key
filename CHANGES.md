@@ -92,6 +92,7 @@
 - [Encrypted files: signed per-tool pass (0.6.0) — 2026-10-15](#encrypted-files-signed-per-tool-pass-060--2026-10-15)
 - [Docs: connecting the agent so it cannot go around Two-Key — 2026-10-15](#docs-connecting-the-agent-so-it-cannot-go-around-two-key--2026-10-15)
 - [Docs: the proxy wrapper leaves the agent's folder — 2026-10-16](#docs-the-proxy-wrapper-leaves-the-agents-folder--2026-10-16)
+- [Start-up check: paths another account could change (0.6.0) — 2026-10-16](#start-up-check-paths-another-account-could-change-060--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3162,3 +3163,45 @@ On branch `working`. Docs only; no behavior changes.
   say to run the `two-key` command rather than `python -m two_key` (which
   puts the working directory on the import path), the `upstream.cwd` row
   says what the default is, and the CONNECTING checklist has a line for it.
+
+## Start-up check: paths another account could change (0.6.0) — 2026-10-16
+
+On branch `working`. Maintainer's decision: warn by default, a setting to
+refuse, and refuse under `high_assurance`; document running Two-Key as a
+service account, not a standard user.
+
+- New `two_key/writable.py` and `_platform.write_problem`. When a `TwoKey`
+  starts, it looks at Python itself, each folder on the import path and
+  the `.pth` files in it, each loaded module with its compiled file and
+  folder, each path in the new `check_paths=`, and every folder above
+  them. Each one that an account other than its own (or root, SYSTEM,
+  Administrators, or TrustedInstaller) could change is named on stderr:
+  `two-key: WARNING: writable_path: <path>: <why>`, at most ten lines,
+  nothing named twice under a folder already named. On Linux and macOS:
+  another owner, the other write bit, or the group write bit for any group
+  but 0; a sticky bit on a folder above is fine. On Windows: another
+  owner, or an allow entry with a write right (for a folder above, a right
+  to rename or remove an entry). A path that cannot be checked is named.
+- `TwoKey(on_writable_paths="refuse")`, or `on_writable_paths: refuse` in
+  `proxy.yaml`, refuses to start instead (`writable_path:`), before
+  anything is written to the ledger. A high_assurance quorum always
+  refuses, and `on_writable_paths: warn` with it is a configuration error.
+  Nothing turns the check off.
+- The MCP proxy passes `proxy.yaml`, the constitution, the principal key,
+  `judges.yaml`, the ledger folder, the witness key and head anchor when
+  set, the upstream program, the folder the upstream starts in (the
+  proxy's own when `upstream.cwd` is unset, which under sudo is the
+  caller's), each fact hook's module (found without running it), the
+  folders of files sent by path, and a command scanner's program.
+- Results for the interpreter's own paths are kept for the life of the
+  process, so a second `TwoKey` in one process does not look again.
+- docs/CONNECTING.md: a new "Run Two-Key as a service account" section
+  (not a person's account, not root or an administrator, nobody signs in
+  as it, in no group that leads to root, with commands for Linux, macOS,
+  and Windows), the check under "What Two-Key checks for you", and two
+  checklist lines. HOWTO (the `proxy.yaml` table, the refusal table and
+  warnings, high_assurance, Python, known trade-offs), THREAT_MODEL,
+  JUDGES_AND_QUORUM, SECURITY, ROADMAP, AGENTS.md, and llms.txt updated.
+- `tests/test_writable_paths.py` (19 tests). `tests/test_scan.py`'s
+  start-up warnings test no longer depends on the machine it runs on.
+

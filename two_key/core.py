@@ -41,6 +41,7 @@ from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, check_judge_set, convene, lone_judge_warning, unmeetable_floor
 from .scan import CLIENT_BUDGET_SECONDS, FileDeniedError, Outcome, ScanConfigError, Scanner
+from .writable import WritablePathsError, check as check_writable, report as report_writable, resolve_mode
 
 
 class TwoKeyConfigError(ValueError):
@@ -113,7 +114,7 @@ class TwoKey:
     def __init__(self, ledger, public_key, constitution: Constitution, judges: list, *,
                  private_key=None, quorum: QuorumPolicy | None = None, ttl_seconds: int = 120,
                  allow_test_doubles: bool = False, clock=None, monitored_agent: Any = None,
-                 scanner: Scanner | None = None):
+                 scanner: Scanner | None = None, on_writable_paths: str | None = None, check_paths=()):
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
             raise ValueError("test-double judges refused; pass allow_test_doubles=True only for offline tests")
         if not constitution.specs_enforced:
@@ -146,6 +147,7 @@ class TwoKey:
             raise TwoKeyConfigError("Path B needs a hard deadline: quorum timeout_seconds must be a positive "
                                     "number, not None")
         check_judge_set(self.judges, self.quorum)
+        self._check_writable(on_writable_paths, check_paths)
         self.scanner = self._check_scanner(scanner)
         lone = lone_judge_warning(self.judges, self.quorum)
         if lone:      # allowed, and recorded in quorum_policy; said once, so the operator sees it (run 6x, X03)
@@ -231,6 +233,29 @@ class TwoKey:
                                     "so it has no gateway")
         return ToolGateway(self.ledger, self.issuer.verifier(), self.compiled, tools=tools, scanner=self.scanner,
                            **kw)
+
+    def _check_writable(self, mode: str | None, paths) -> None:
+        """Paths another account could change (two_key/writable.py): this interpreter's program, import path,
+        and loaded modules, and ``check_paths`` (paths, or ``(path, "file" | "folder")`` pairs, such as the
+        integration's own settings). Named on stderr; with ``on_writable_paths="refuse"``, or a
+        high_assurance quorum, refused before anything is written to the ledger."""
+        try:
+            mode = resolve_mode(mode, self.quorum.is_high_assurance)
+        except ValueError as e:
+            raise TwoKeyConfigError(str(e)) from None
+        targets = []
+        for item in paths:
+            path, rule = item if isinstance(item, tuple) else (item, None)
+            path = os.fspath(path)
+            rule = rule or ("folder" if os.path.isdir(path) else "file")
+            if rule not in ("file", "folder"):
+                raise TwoKeyConfigError(f"check_paths: {path}: expected file or folder, got {rule!r}")
+            targets.append((path, rule))
+        why = "high_assurance" if self.quorum.is_high_assurance else "on_writable_paths: refuse"
+        try:
+            report_writable(check_writable(targets), mode, why=why)
+        except WritablePathsError as e:
+            raise TwoKeyConfigError(str(e)) from None
 
     def _check_scanner(self, scanner: Any) -> Scanner | None:
         """Check the content scanner against the signed constitution, and say what it scans (scan.py)."""

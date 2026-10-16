@@ -17,6 +17,7 @@ short version.
 <!-- toc -->
 - [In plain words](#in-plain-words)
 - [Pick your route](#pick-your-route)
+- [Run Two-Key as a service account](#run-two-key-as-a-service-account)
 - [Route 1: an MCP client, through `two-key mcp-proxy`](#route-1-an-mcp-client-through-two-key-mcp-proxy)
 - [Route 2: your own agent loop, through the Guard or the library](#route-2-your-own-agent-loop-through-the-guard-or-the-library)
 - [Every connection and hook](#every-connection-and-hook)
@@ -45,7 +46,8 @@ machine), give everything Two-Key trusts to a separate `two-key` user, and
 give each tool's real credential only to the side that calls the tool.
 The examples use Linux and macOS users and `sudo`; on Windows, use a
 separate account for the agent and a service account for Two-Key, with
-the same rules.
+the same rules. The `two-key` user is a service account, not a standard
+user ([Run Two-Key as a service account](#run-two-key-as-a-service-account)).
 
 ```mermaid
 flowchart LR
@@ -75,6 +77,43 @@ flowchart LR
 | An MCP client (a desktop assistant, an IDE, an agent framework that speaks MCP), or code you do not control, in any language | Route 1, `two-key mcp-proxy` | Two-Key runs as a separate process and OS user, so the agent cannot reach its memory, keys, or tools |
 | A model your own Python code calls, where your code decides which functions run | Route 2, `Guard` (or `authorize` and the gateway) | Two-Key runs in your process; only the model's text is untrusted |
 | Untrusted code that would run inside your Python process | Route 1 | Python gives no isolation inside one process: that code could read every key and call the tool directly ([HOWTO](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)) |
+
+## Run Two-Key as a service account
+
+Run Two-Key (the proxy, or the process that holds your `TwoKey`) as an
+account made for it alone, not as a standard user:
+
+- **Not a person's account, not the agent's, and not root or an
+  administrator.** A person's account runs other programs, holds other
+  files, and is often the one the agent's host runs as. Root or an
+  administrator would hand the upstream server and every hook the whole
+  machine.
+- **Nobody signs in as it.** No password, no login shell, no interactive
+  or remote sign-in. It is started by the Route 1 wrapper through its sudo
+  rule, or by a service manager (systemd, launchd, a Windows service),
+  never by hand.
+- **In no group that leads to root**, such as `sudo`, `wheel`, `admin`, or
+  `docker`.
+- **It owns its keys, ledger, and settings.** The code it runs (the
+  virtualenv, hook modules, a scanner command) is owned by it or by root,
+  and nobody else can write any of it, or the folders above it.
+
+On Linux:
+
+```bash
+sudo useradd --system --home-dir /var/lib/two-key --create-home --shell /usr/sbin/nologin two-key
+```
+
+On macOS, use a hidden role account with no login shell (a name that
+starts with an underscore, such as `_twokey`), made with `dscl` or, on
+recent macOS, `sysadminctl -addUser _twokey -roleAccount`. On Windows, use
+a local account made for Two-Key that is not in Administrators, with "Deny
+log on locally" and "Deny log on through Remote Desktop Services" set for
+it in Local Security Policy.
+
+Two-Key checks what it can see of this when it starts, and names any file
+or folder another account could change
+([What Two-Key checks for you](#what-two-key-checks-for-you)).
 
 ## Route 1: an MCP client, through `two-key mcp-proxy`
 
@@ -214,7 +253,7 @@ what an agent would try, and what stops it.
 | Tool credentials (`BILLING_TOKEN`, API keys) | In a file only `two-key` reads (`proxy.env`, mode 0600), passed to the upstream through `upstream.env` | Reading it from the environment, a file, a log, or the prompt | Separate users; never in the prompt, the instruction, or an argument |
 | Signed constitution and principal key | Owned by `two-key`; the key mode 0600 in an owner-only directory | Replacing the constitution, or signing a looser one | The constitution's signature is checked on every load; Two-Key refuses a key readable by others; the agent's user cannot write either file |
 | `proxy.yaml`, `judges.yaml`, `agents.yaml`, `scan:` block, declared files | Owned by `two-key`, not writable by the agent | Turning a tool's scan off (declared files are not signed), adding a looser judge, pointing the scanner at its own server | File permissions. Which tools are scanned and the stance are signed; which arguments are files is not |
-| Fact hooks (`module:function`) | The module, and every directory on the proxy's `PYTHONPATH`, owned by root or `two-key` and not writable by the agent. Run the installed `two-key` command, not `python -m` from a directory the agent can write (Python imports from the current directory) | Planting a module that returns the fact it wants, or a `json.py` the proxy imports first | Directory permissions and a fixed working directory. A hook looks facts up by id and never echoes an argument; the tool still checks |
+| Fact hooks (`module:function`) | The module, and every directory on the proxy's `PYTHONPATH`, owned by root or `two-key` and not writable by the agent. Run the installed `two-key` command, not `python -m` from a directory the agent can write (Python imports from the current directory) | Planting a module that returns the fact it wants, or a `json.py` the proxy imports first | Two-Key names each such file or folder it finds writable at start (`writable_path`), and refuses under `high_assurance` or `on_writable_paths: refuse`; directory permissions and a fixed working directory. A hook looks facts up by id and never echoes an argument; the tool still checks |
 | Judges | Their own credentials, not the agent's (`judges.yaml` auth by `env`, `keyring`, or `callback`). Cloud judges over HTTPS. A local judge's model, server, and config owned by `two-key` or root | Holding a judge's key, pointing a judge at its own account, rewriting a local judge's system prompt or model, answering on a local judge's port | Two-Key refuses a judge with the agent's credential at any address and warns on other overlaps; HTTPS is verified; the rest is permissions and [Services on the same machine](#services-on-the-same-machine) |
 | Monitored agent endpoint (`authorize_from_agent`, `agent_session_env`) | Its own API key, different from every judge's | Sharing a key with a judge so its own model votes | The judge-is-not-the-agent check at start ([HOWTO](HOWTO.md#the-monitored-agent-and-the-judge-is-not-the-agent-rule)) |
 | Content scanner, `clamd` | A Unix socket in clamd's own directory (`unix:/run/clamav/clamd.ctl`), with `LocalSocketMode 660` and a `LocalSocketGroup` that has `two-key` in it and not the agent; or TCP on a host the agent cannot reach | Answering "OK" in clamd's place, or flooding it so it is unavailable | The agent cannot write clamd's directory, so it cannot put its own socket there, and cannot open the socket; the strict stance denies while it is down; the agent never starts or sees a scan ([SCANNERS](SCANNERS.md)) |
@@ -275,16 +314,37 @@ At start and on every call, without any setup from you:
 - The agent cannot write a caller-supplied fact or the scan verdict
   (`caller_field_in_arguments`, `scan_fact_supplied`), and the gateway
   checks the facts and files again before the tool runs.
+- Files and folders another account could change (0.6.0). At start,
+  `TwoKey` looks at Python itself, each folder on the import path and the
+  `.pth` files in it, each module already loaded (Two-Key, its libraries,
+  judge callbacks, scanner hooks) with its compiled file, and every folder
+  above them. The proxy adds `proxy.yaml` and the files it names, the
+  ledger folder, each fact hook's module, the folders of files sent by
+  path, the upstream and scanner programs, and the folder the upstream
+  starts in. Each one that an account other than Two-Key's own (or root,
+  SYSTEM, Administrators, or TrustedInstaller) could change is named:
+  `two-key: WARNING: writable_path: <path>: <why>`. On Linux and macOS a
+  group write bit counts for any group but 0, because Two-Key cannot list
+  a group's members reliably; a sticky bit on a folder above is fine.
+  `on_writable_paths: refuse` in `proxy.yaml` (or
+  `TwoKey(on_writable_paths="refuse")`) makes Two-Key refuse to start
+  instead, and `high_assurance` always refuses. Nothing turns the check
+  off.
 
-What it cannot see: OS users and file permissions other than its own keys,
+What it cannot see: OS users and file permissions beyond the paths above
+(the wrapper that started it, the upstream server's files behind `sudo`),
 the network, the client's other tools, your framework's tool list, and
-whether a port it connects to is the service you meant. Those are the
-items above and the checklist below.
+whether a port it connects to is the service you meant. A start with no
+`writable_path` line is not proof the setup is safe, and code that was
+already changed has already run. Those are the items above and the
+checklist below.
 
 ## Checklist before you let an agent run
 
 ```text
 [ ] The agent runs as its own OS user, container, or machine.
+[ ] Two-Key runs as a service account: no password or login shell, not a person's
+    account, not root or an administrator, in no sudo, admin, or docker group.
 [ ] Two-Key runs as the two-key user, which owns the keys, ledger, constitution,
     proxy.yaml, judges.yaml, agents.yaml, hook code, scanner config, and secrets.
 [ ] The agent's user cannot read or write any of those, or the virtualenv and
@@ -306,5 +366,6 @@ items above and the checklist below.
 [ ] Folders for files sent by path are not writable by the agent or its tools.
 [ ] Loopback judges, scanners, and hook back ends are not on a machine where the
     agent shares 127.0.0.1 (or the agent has its own network namespace).
-[ ] Start-up output read: tools served, scan stance, and no unexplained warning.
+[ ] Start-up output read: tools served, scan stance, no writable_path line, and no
+    unexplained warning. Consider on_writable_paths: refuse once it starts clean.
 ```
