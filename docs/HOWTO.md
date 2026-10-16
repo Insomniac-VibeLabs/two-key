@@ -112,7 +112,10 @@ python -m two_key sign-constitution \
 `init-key` writes `principal.pem` with mode 0600 (created that way, never
 chmodded afterwards) and refuses to overwrite an existing key. Commands that
 take `--key` refuse a key file that the group or others can read
-(`key_file_insecure`) or that is a symlink.
+(`key_file_insecure`) or that is a symlink. `--key` takes the private key,
+`principal.pem`; given `principal.pub.pem`, they say `--key:
+key_file_public` (chmod would not help), and a file that is not a PEM
+private key is `key_file_invalid`. Each refusal is one line on stderr.
 
 The signature covers the prose, the hard rules, `tool_specs`, and the
 custom-field registry (`fields:`) when there is one. A modified file will

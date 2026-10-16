@@ -7,7 +7,7 @@ import os
 import stat
 from pathlib import Path
 
-from cryptography.exceptions import InvalidSignature
+from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
@@ -62,12 +62,22 @@ def load_private_key(path: Path | str) -> Ed25519PrivateKey:
     return key
 
 
+_PUBLIC_PEM = b"-----BEGIN PUBLIC KEY-----"
+
+
+def _public_key_given(path) -> ValueError:
+    return ValueError(f"key_file_public: {path} is a public key; give the private key "
+                      f"(init-key writes principal.pem, mode 0600, next to principal.pub.pem)")
+
+
 def load_private_key_file(path: Path | str) -> Ed25519PrivateKey:
     """The safe loader for a key file named by an operator, as on the command line.
 
     It refuses a symlink (O_NOFOLLOW), anything that is not a regular file, and a file
     that the group or others can read or write (``key_file_insecure``). The check is on
     the open descriptor, so the file cannot be swapped between the check and the read.
+    A public key is ``key_file_public`` (whatever its mode: chmod would not help), and a
+    file that is not an unencrypted PEM private key is ``key_file_invalid``.
     """
     try:
         fd = _platform.open_nofollow(path)
@@ -78,13 +88,20 @@ def load_private_key_file(path: Path | str) -> Ed25519PrivateKey:
         if not stat.S_ISREG(st.st_mode):
             raise ValueError(f"key_file_insecure: {path} is not a regular file")
         problem = _platform.access_problem(fh.fileno(), st)
+        if problem and fh.read(len(_PUBLIC_PEM)) == _PUBLIC_PEM:
+            raise _public_key_given(path)
         if problem and not _platform.WINDOWS:
             raise ValueError(f"key_file_insecure: {path} is mode {stat.S_IMODE(st.st_mode):04o}; "
                              f"run chmod 600 {path}")
         if problem:
             raise ValueError(f"key_file_insecure: {_platform.insecure(path, problem)}")
         data = fh.read()
-    key = serialization.load_pem_private_key(data, password=None)
+    if data.lstrip().startswith(_PUBLIC_PEM):
+        raise _public_key_given(path)
+    try:
+        key = serialization.load_pem_private_key(data, password=None)
+    except (TypeError, ValueError, UnsupportedAlgorithm):
+        raise ValueError(f"key_file_invalid: {path} is not an unencrypted PEM private key") from None
     if not isinstance(key, Ed25519PrivateKey):
         raise ValueError("principal key must be Ed25519")
     return key

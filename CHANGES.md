@@ -93,6 +93,7 @@
 - [Docs: connecting the agent so it cannot go around Two-Key — 2026-10-15](#docs-connecting-the-agent-so-it-cannot-go-around-two-key--2026-10-15)
 - [Docs: the proxy wrapper leaves the agent's folder — 2026-10-16](#docs-the-proxy-wrapper-leaves-the-agents-folder--2026-10-16)
 - [Start-up check: paths another account could change (0.6.0) — 2026-10-16](#start-up-check-paths-another-account-could-change-060--2026-10-16)
+- [Run 7 follow-ups: key errors, scanner scope, relay — 2026-10-16](#run-7-follow-ups-key-errors-scanner-scope-relay--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3212,3 +3213,30 @@ service account, not a standard user.
 - Windows messages name well-known accounts: `owned by NETWORK SERVICE
   (S-1-5-20)`, `Authenticated Users (S-1-5-11) can change it`.
 
+
+## Run 7 follow-ups: key errors, scanner scope, relay — 2026-10-16
+
+From GrokBot's live run 7 and 7x report (on `live-runs`).
+
+- A key file given to `--key` that is a public key is now
+  `key_file_public: <path> is a public key; give the private key ...`,
+  whatever its mode. Before, `two-key audit --key principal.pub.pem` said
+  `key_file_insecure: ... run chmod 600`, which would not help. A file that
+  is not an unencrypted PEM private key is `key_file_invalid` instead of
+  the cryptography library's error. Every file refused before is still
+  refused (`two_key/keys.py`).
+- The CLI prints a `--key` refusal as one line (`--key: key_file_...`)
+  instead of a traceback, and each `--key` help says it takes
+  `principal.pem` from `init-key`, not `principal.pub.pem`.
+- docs/SCANNERS.md: under monitor, judges see `flagged` without the
+  arguments and usually vote no, so monitor denies most flagged calls in
+  practice (run 7, C48 and C49). Scanning does not decode base64 or hex
+  inside free text (run 7x, C29), does not join calls (C19, C50), and a
+  tool marked `scan: not_applicable` is not scanned at all (C44).
+- Live harness: a tool bot reply that refuses or filters a call is a
+  referee incident, `tool_out_of_role_refusal` (run 7, C34; ported from
+  the run 7x copy). RELAY.md names the `manifest_*.json` files the harness
+  writes next to each batch (never sent to a bot, committed with the run)
+  and says results go on the `live-runs` branch.
+- Tests: `tests/test_cli_tokens.py` (public key, invalid key, `--key`
+  help, one-line refusal).

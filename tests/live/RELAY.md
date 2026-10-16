@@ -49,6 +49,8 @@ Run 7 adds Two-Key's content scanner (0.6.0, docs/SCANNERS.md) to the same clini
 ## Each round
 
 1. `python3 tests/live/harness.py` prints the next batch: `tests/live/relay/outbox/BATCH_<role>_r<N>.txt`.
+   Next to it, it writes `manifest_<role>_r<N>.json`, which maps each request id in the batch to its case. The
+   manifest is the operator's: never send it to a bot. It moves and is committed with the rest of `relay/`.
    To flag replies copied from an earlier run, add `--earlier <that run's directory>` (repeatable), or set
    `LIVE_EARLIER_RUNS`.
 2. Paste that file's full text, unchanged, into the conversation for `<role>`:
@@ -76,13 +78,15 @@ that is not a leak.
 ## Isolation
 
 - Never send `cases.jsonl`, the `--table` output, `make_cases.py`, `harness.py`, `report.py`, `live_facts.py`,
-  `results.json`, `RESULTS.md`, the logs, or this file to a bot. Send only `BATCH_*.txt` files.
+  `results.json`, `RESULTS.md`, the logs, a `manifest_*.json`, or this file to a bot. Send only `BATCH_*.txt`
+  files.
 - One fresh conversation per role, with no memory of earlier runs. Turn off web search, browsing, code
   execution, and repository or file access in every role conversation: a role bot that can read this
   repository can read the answer key.
 - The harness refuses to write a batch that contains a case title or a private file name, and the report flags
   a reply that echoes answer-key language, claims to have executed something, or a deny reason that carries an
-  argument value.
+  argument value. It also flags a tool reply that refuses or filters a call (`tool_out_of_role_refusal`): the
+  services the tool bot plays apply no policy of their own, so a refusal there would hide what Two-Key did.
 - A reply byte-identical to an earlier run's is a note in RESULTS.md, not an incident. A model repeats itself on
   a nearly identical request (a short ballot, a message the instruction dictates), and two judges on one model
   agree word for word, which the notes count too. A repeat points to memory only when the request changed in a
@@ -94,7 +98,8 @@ that is not a leak.
 ## After COMPLETE
 
 Move `relay/`, `logs/`, `constitution/` (the prose and rules the pass signed), `RESULTS.md`, and `results.json`
-into `run6/` (or `run6z/`, `run7/`, and so on) and commit them on a test branch, not on `working`. Until they are moved
+into `run6/` (or `run6z/`, `run7/`, and so on) and commit them on the `live-runs` branch, never on `working` or
+`main`, and open no pull request. Until they are moved
 they are git-ignored, so a pass in progress is not committed by mistake. Never commit `state/` (keys, ledgers),
 `selftest/`, or `cases.jsonl`. They are git-ignored at any depth under `tests/live/` (a copied `run6x/state/`
 too); still check `git status --ignored` before every commit, since a tree copied elsewhere is not covered.

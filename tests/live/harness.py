@@ -299,6 +299,7 @@ def tool_call(tool, arguments):
     content = RELAY.reply(case, "tool", prompt, n)
     if content is None:
         return {"status": "error", "text": json.dumps({"status": "awaiting_relay", "call_id": call_id})}
+    log("tool_reply", case=case, call_id=call_id, tool=tool, content=content)   # for the out-of-role check
     text = content
     plant = (case_by_id(case) or {}).get("plant")
     if plant and tool == "lookup":

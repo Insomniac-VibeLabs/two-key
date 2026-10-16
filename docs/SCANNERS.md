@@ -280,7 +280,11 @@ Two-Key, not the adapter, settles the edge cases:
 - A declared file Two-Key itself cannot read, or one over a size limit, is
   denied before the scan under every stance; it never becomes a verdict.
 - Monitor never blocks on the verdict. Use it to tune your product's
-  policy, then sign default or strict.
+  policy, then sign default or strict. Under monitor the judges see
+  `flagged` without the arguments or the proposal (unless the quorum sets
+  `tool_args_on_scan_flag`), so they usually cannot check the call and
+  vote no: in live run 7, both live judges did on each flagged call.
+  Expect monitor to deny most flagged calls in practice.
 - `high_assurance` without the strict stance prints a warning at start.
 
 ## Encrypted files
@@ -760,6 +764,17 @@ permissions), and that `timeout_seconds` covers every part of a call.
 - It does not download. A URL argument is scanned as text only. A tool that
   fetches content should scan what it fetches, or sit behind a scanning web
   proxy.
+- It does not decode text. Two-Key decodes only the arguments you declare
+  as files. Base64 or hex inside a free-text argument, such as an email
+  body, is sent to the scanner as the text it is, and reaches the judges as
+  that text. In live run 7x, the EICAR test file as base64 in an email body
+  scanned clean. Declare such an argument as a file, or use a product that
+  decodes text itself (many DLP products do).
+- It does not join calls. A secret split across two calls (half of a number
+  in each of two emails) is scanned one call at a time.
+- A tool that marks `scan: not_applicable` is not scanned at all. Its
+  arguments, free text included, reach the judges as written. Two-Key
+  lists these tools at start.
 - Path A does not read content. It rules on the verdict. A file's size is
   held by `max_bytes`; a rule on its type needs a fact hook.
 - It does not scan the tool's result, only the call.
