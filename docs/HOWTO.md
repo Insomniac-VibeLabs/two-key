@@ -45,6 +45,7 @@ Commands are from the repository root.
   - [What each refusal or warning means](#what-each-refusal-or-warning-means)
   - [Key custody](#key-custody)
   - [Limits](#limits)
+- [Send the ledger to a SIEM](#send-the-ledger-to-a-siem)
 - [If the ledger will not open after a crash](#if-the-ledger-will-not-open-after-a-crash)
 - [Back up the keys](#back-up-the-keys)
 - [Pin the witness key](#pin-the-witness-key)
@@ -1825,6 +1826,7 @@ refused. Relative paths are relative to the file.
 | `tools.<id>.facts` | for caller-supplied fields | `{field: {hook: "module:function"}}`, one per `source: caller` field the tool maps. Trusted operator code, imported at start |
 | `tools.<id>.files` | no | Arguments that hold a file, for the content scanner: `[{path: "attachments[].content", kind: base64, max_bytes: 65536}]`, `kind: base64url`, or `{path: file_path, kind: path, folder: /srv/outbox, max_bytes: 20971520}`. `max_bytes` is required (base64 at most 196608, path at most 100 MiB). Needs `scan` (0.6.0) |
 | `scan` | no | The content scanner (antivirus or DLP): `type: clamd`, `icap`, `command`, or `python`, with `timeout_seconds` (default 15). The size limit is `max_bytes` on each declared file. See [docs/SCANNERS.md](SCANNERS.md) (0.6.0) |
+| `siem` | no | Send a copy of each ledger entry to a SIEM: `sinks:` (`type: syslog` with `transport: tls` (default), `tcp`, or `udp`, or `type: webhook` with an `https://` URL), with `schema` (`native`, `ecs`, `ocsf`), `format` (`json`, `cef`), and `replay_from`. No argument values. See [docs/SIEM.md](SIEM.md) (0.7.0) |
 
 The claim is the only thing the proxy says about a call, and the agent
 writes none of it. Amount, counterparty, and irreversible are never
@@ -1968,6 +1970,43 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 - **Results are not read.** An upstream result can carry injected text back
   to the agent. Two-Key judges each later call on its own terms; it does not
   scan the result.
+
+## Send the ledger to a SIEM
+
+Two-Key can put a copy of every ledger entry where your organization already
+watches, as each entry is written, and it can write the same events to a file
+on demand. [docs/SIEM.md](SIEM.md) is the reference; this is the short version.
+
+```yaml
+# proxy.yaml
+siem:
+  sinks:
+    - type: syslog
+      host: siem.example.net      # transport: tls and port 6514 unless you say otherwise
+      ca_file: /etc/two-key/siem-ca.pem
+```
+
+From Python, pass `siem=SiemConfig(sinks=(SyslogSink("siem.example.net"),))`
+to `TwoKey`, and call `two_key.close()` at shutdown so the sender gets a last
+pass.
+
+- Syslog over TLS (RFC 5425, port 6514) is the default; `tcp` (514) and `udp`
+  (514) are plaintext, which warns at start and is refused under
+  `high_assurance`. A webhook is an HTTPS POST of a batch, one event per line.
+- Events carry the entry's `seq` and `entry_hash`, digests, sizes, and reason
+  codes. They never carry argument values, the proposal text, the derived
+  amount or counterparty, a custom field value, a judge's rationale, a decline
+  reason, or file content, and no setting adds them.
+- Nothing waits on a SIEM. A sender thread does the network; a collector that
+  is down only puts the copy behind, and the catch-up is marked `replay`.
+- `two-key siem-export --key principal.pem --ledger ./ledger --out events.jsonl`
+  verifies the ledger, decrypts it locally, and writes the same events as a
+  file; `two-key siem-verify --events events.jsonl --require-complete` checks a
+  copy (exported, or pulled back out of the SIEM) against the ledger and
+  reports anything missing, repeated, or changed.
+- A token that does not verify is still refused with no ledger entry; 0.7.0
+  counts those refusals by class and reports the count at most once a minute,
+  on stderr and as a `gateway_token_refused` event.
 
 ## If the ledger will not open after a crash
 
@@ -2274,6 +2313,15 @@ names the setting or declaration that controls it.
   outside its folder, for example) is denied under every stance. The
   stance is the signed
   `scan` rule (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)).
+
+- The SIEM copy (`siem:`). A collector that is down never blocks a call, so
+  your SIEM is behind until it answers; alert on a gap in `seq`, not on
+  silence. Plaintext (`udp`, `tcp`, `http://`) lets anyone on the path read
+  the tool names, outcomes, and reason codes, or forge them; it warns at
+  start and is refused under `high_assurance`. Argument digests let whoever
+  reads the SIEM test a guess of a low-entropy argument, which is the trade
+  for being able to tie two calls together
+  ([SIEM](SIEM.md#trade-offs)).
 
 - `on_writable_paths`: `warn` (the default) starts when another account
   could change a file or folder Two-Key runs or reads, and names it on

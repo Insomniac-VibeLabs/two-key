@@ -20,13 +20,15 @@ substitute for a password manager.
 | Dialogue and execution rails, such as NeMo execution rails | Whether a step in a conversation script may call a tool | Does not model a dialogue. The gateway runs a registered function only after both paths allow and the token matches the argument bytes. |
 | Deterministic policy engines, such as Cedar, OPA, and Cerbos | Whether a request is permitted by policy, independent of a model | Path A is this kind of check, and only for the normalized action record and the compiled hard rules. It is not a general policy engine for the rest of the application. The second key is the judge quorum. The token and the ledger are part of the decision. |
 | Identity and MCP transport authorization | Whether a client may open a session or act as a user | Not user login or MCP session authorization. The MCP proxy (0.5.0) authorizes each `tools/call`, not who may connect. This package has no X.509 or PKI check. |
-| Audit products and DLP | Whether a payload is sensitive, and whether an outside system stores the decision | The ledger is an encrypted hash chain with a signed head. Nothing is exported to a SIEM. No built-in scan of argument text. From 0.6.0, a DLP or antivirus product you run can scan each call to a marked tool, files included; its verdict is a signed Path A fact, told to the judges, and recorded without the content. |
+| Audit products and DLP | Whether a payload is sensitive, and whether an outside system stores the decision | The ledger is an encrypted hash chain with a signed head. No built-in scan of argument text. From 0.6.0, a DLP or antivirus product you run can scan each call to a marked tool, files included; its verdict is a signed Path A fact, told to the judges, and recorded without the content. From 0.7.0, each entry can be copied to the SIEM you run (syslog or an HTTPS webhook, reason codes and digests, no argument values); storing, searching, retaining, and alerting on it stay with that product (SIEM.md). |
 
 ## Do not use this instead of
 
 - a content filter or a moderation API
 - user login, OAuth for your users, or MCP session authorization
 - a DLP or antivirus product (0.6.0 can call yours; it does not replace it)
+- a SIEM, log management, or alerting product (0.7.0 can feed yours; it does
+  not replace it)
 - a FIPS 140-3 validated module
 
 Path A is only as good as the fields the signed tool spec can read. Those
@@ -38,5 +40,6 @@ instead of dropping the key. A copied counterparty must be on that path's
 `allow` list. A payload `shape`, when set, checks only the kind of value.
 It does not read the contents. This package does
 not classify free text and does not track per-value information flow. This
-package has no scanning engine (0.6.0 calls yours), no PKI, and no anchoring.
+package has no scanning engine (0.6.0 calls yours), no SIEM of its own
+(0.7.0 feeds yours), no PKI, and no anchoring.
 What this repository leaves out is [SCOPE.md](SCOPE.md).

@@ -261,6 +261,9 @@ what an agent would try, and what stops it.
 | Content scanner, command or Python hook | An absolute path or module owned by root or `two-key`, not writable by the agent | Replacing the scanner with one that always exits 0 | File and directory permissions; the command gets only a minimal environment and the part's bytes on stdin |
 | Files sent by path (`kind: path`) | A folder only the guarded tools (and whatever legitimately produces the files) can write; not writable by the agent's user or its file tools | Swapping the file after the scan, or linking it to a secret | Two-Key refuses links, files outside the folder, and changed files (`file_changed`); a folder the agent cannot write closes the swap between the last check and the tool |
 | Ledger and its key, witness, and capability directories | Owned by `two-key`; Two-Key creates them owner-only | Deleting or rewriting the history, or minting a token | AES-GCM, the hash chain, the signed and pinned head; the minting key never leaves this process; the agent cannot read the directories |
+| SIEM copy, syslog (`siem:` `type: syslog`, 0.7.0) | `transport: tls` to a collector whose certificate the host trusts (port 6514). Plaintext (`tcp`, `udp`) only on a network segment the agent cannot reach | Reading the copy on the wire, forging entries into the SIEM, or dropping them | TLS with the certificate and hostname always checked, and no setting that turns that off; plaintext warns at start and is refused under `high_assurance`; every event carries `seq` and `entry_hash`, so a gap or a forged event is caught by `two-key siem-verify` ([SIEM](SIEM.md)) |
+| SIEM copy, webhook (`siem:` `type: webhook`, 0.7.0) | An `https://` URL, with the token in a file only `two-key` reads (`auth_value_file`, mode 0600), and `hmac_key_file` where the collector checks a signature | Reading the token, pointing the copy at its own collector, or following a redirect to one | The token file is owner-only and its value never reaches an event, a log line, or the ledger; redirects are never followed; `siem_configured` records the destination in the ledger; the config and secret files are in the writable-path check |
+| SIEM sink files (`ca_file`, `cert_file`, `key_file`, `auth_value_file`, `hmac_key_file`) and the delivery cursor | Owned by `two-key`, not writable by the agent. The cursor is `<ledger>.siem/cursor.json`, which Two-Key creates owner-only beside the ledger | Changing a CA file so a forged collector is trusted, or moving the cursor back so the SIEM is flooded or skipped | The proxy names each of those files in the start-up writable-path check; a wrong cursor can only repeat or delay the copy, never change the ledger |
 | Tool results back to the agent | Nothing to wire | Text in a result that tells the agent to do something else | Not a way around Two-Key: each later call is judged on its own. Results are not scanned |
 
 ## Services on the same machine
@@ -314,6 +317,11 @@ At start and on every call, without any setup from you:
 - The agent cannot write a caller-supplied fact or the scan verdict
   (`caller_field_in_arguments`, `scan_fact_supplied`), and the gateway
   checks the facts and files again before the tool runs.
+- With `siem:` (0.7.0): each sink is reached once at start (a TLS
+  handshake, a TCP connect, or a resolved address) and a plaintext sink is
+  named, or refused under `high_assurance`; the destinations are ledgered
+  as `siem_configured`; and only allowlisted fields leave, never an
+  argument value or the proposal text ([SIEM](SIEM.md#what-leaves-and-what-never-does)).
 - Files and folders another account could change (0.6.0). At start,
   `TwoKey` looks at Python itself, each folder on the import path and the
   `.pth` files in it, each module already loaded (Two-Key, its libraries,

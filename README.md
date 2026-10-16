@@ -37,6 +37,10 @@ What you get:
   and is looked up again just before the tool runs.
 - **An audit trail you can check.** AES-256-GCM at rest, a hash chain, a
   head signed by the principal and a witness key, and `two-key audit`.
+- **A copy in your SIEM** (0.7.0, on `working`). Every decision can go to
+  syslog or an HTTPS webhook as it is written, in Two-Key's own schema, ECS,
+  or OCSF, with reason codes and digests but no argument values. A collector
+  that is down never blocks a decision.
 - **Keys you can recover.** Passphrase backup of every key, in three
   bundles.
 - **Small on purpose.** Python 3.10 or later, one required dependency
@@ -44,7 +48,8 @@ What you get:
 
 **Status:** beta. 0.6.0 is the current release: it adds Windows support,
 content scanning with your antivirus or DLP product, and a start-up check
-for paths another account could change.
+for paths another account could change. 0.7.0, the SIEM export, is built on
+`working` and not released yet.
 Maintainer-reviewed and tested with live LLM agents and judges. Read
 [Known limits](#known-limits) and [docs/FIT.md](docs/FIT.md) before you rely
 on it.
@@ -133,6 +138,7 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
 | [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
 | [docs/CONNECTING.md](docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
 | [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
+| [docs/SIEM.md](docs/SIEM.md) | Sending the ledger to a SIEM, and checking a copy against it (0.7.0, on `working`) |
 | [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Trust boundaries and residual risk |
 | [docs/SCOPE.md](docs/SCOPE.md) | What is included, left out, and planned |
@@ -150,6 +156,12 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
 - **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported (#45). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
 - **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
 - **MCP proxy** (0.5.0; the `mcp` extra): `two-key mcp-proxy` sits between an MCP client and one upstream MCP server. It shows the agent only the signed tools, pins their schemas, and runs every `tools/call` through both keys and the in-process gateway. `two-key mcp-draft-specs` drafts the tool specs for the principal to review and sign. See HOWTO "Put Two-Key in front of an MCP server".
+- **SIEM export** (0.7.0, on `working`): the ledger can copy each entry, as
+  it is written, to a syslog sink or an HTTPS webhook, and `two-key siem-export`
+  writes the same events to a file that `two-key siem-verify` checks back
+  against the ledger. A per-kind field allowlist decides what leaves: reason
+  codes, digests, sizes, the tool id, and the data class, never argument
+  values or proposal text. See [docs/SIEM.md](docs/SIEM.md).
 - **Caller-supplied facts and the guard** (0.5.0): a field declared `source: caller` gets its value from your integration (`facts=`), never from the agent's arguments, and is looked up again before the tool runs. `two_key.guard.Guard` does both lookups and both keys in one call for any agent loop; the MCP proxy runs on it. See HOWTO "Caller-supplied facts".
 
 ## Dual-path authorization
@@ -260,6 +272,7 @@ flowchart TD
   token --> gateway["Tool gateway<br/>same process as TwoKey, shares its ledger<br/>verifier: capability public key only, cannot mint"]
   gateway -->|"redemption_started, then declared paths only"| tool["Registered tool"]
   gateway --> ledger
+  ledger -.->|"0.7.0, optional, after the entry is written"| siem["SIEM sink<br/>syslog or HTTPS webhook<br/>allowlisted fields only<br/>never blocks a decision"]
 ```
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
@@ -458,6 +471,7 @@ behind a service of their own.
 Not in this repository:
 
 - a scanning, antivirus, or DLP engine of its own
+- a SIEM, log management, or alerting product of its own
 - enterprise deployment modes and permissioned-chain anchoring
 - X.509 / PKI identities and agent assertions
 - seed-phrase backup
@@ -466,7 +480,9 @@ Not in this repository:
 Some of this is planned as optional additions. See the
 [roadmap](#roadmap). DLP and antivirus hooks shipped in 0.6.0 (an interface
 that calls your antivirus or DLP product, not a scanning engine:
-[docs/SCANNERS.md](docs/SCANNERS.md)). After 1.0 come PKI with
+[docs/SCANNERS.md](docs/SCANNERS.md)). The SIEM export, built on `working`
+for 0.7.0, feeds the collector you run; it does not store, search, or alert
+([docs/SIEM.md](docs/SIEM.md)). After 1.0 come PKI with
 certificate recovery and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
 backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
 phrases are not planned.
@@ -520,6 +536,12 @@ audited. It is not a FIPS 140-3 validated module.
   call one you run ([docs/SCANNERS.md](docs/SCANNERS.md)). Without one, a
   content leak in free text rests on the judges. Tool results are never
   scanned.
+- It is not a SIEM. From 0.7.0 (on `working`) it can send each ledger entry
+  to the collector you run, over TLS by default; a plaintext sink is
+  refused under `high_assurance` and warns otherwise. Whoever can read that
+  collector reads ledger metadata, a collector that is down leaves the copy
+  behind until it returns, and what the collector keeps or alerts on is
+  yours, not Two-Key's ([docs/SIEM.md](docs/SIEM.md)).
 - Behind the MCP proxy, an agent that can reach the upstream server directly
   bypasses it, and an upstream server running as the proxy's OS user can
   read the proxy's keys. Run each as its own user (HOWTO "Key custody").
@@ -535,8 +557,9 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 ## Roadmap
 
 The MCP adapter shipped in 0.5.0; Windows support, DLP and antivirus hooks,
-and judge connection reuse shipped in 0.6.0. Next come a ledger export for a
-SIEM (0.7.0), a public review, and the 1.0 release.
+and judge connection reuse shipped in 0.6.0. The ledger export for a SIEM
+(0.7.0) is built on `working`, with a live run and the release left; then
+come a public review and the 1.0 release.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
@@ -555,7 +578,7 @@ flowchart LR
 | 0.4.0 | This repository and the package name `two-key` | Released, tag `v0.4.0` |
 | 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners (ClamAV, ICAP products, a command, Python); judge connection reuse (#6) | Released, tag `v0.6.0` |
-| 0.7.0 | Ledger export for a SIEM: verified, decrypted locally, no argument values; a count of refused tokens kept outside the ledger | Next |
+| 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Built on `working`; live run 8 and the release remain |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI. Described as community-reviewed, not audited | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
@@ -609,6 +632,10 @@ Upgrading from an older version: read the "Upgrading" notes in
   it runs or reads that another account could change, and under
   `high_assurance` it refuses to start until there are none. "Release
   v0.6.0" > "Upgrading from 0.5.0" in CHANGES.md.
+- 0.7.0 (on `working`) loads 0.6.0 constitutions, ledgers, keys, and
+  `proxy.yaml` files unchanged, and sends nothing without a `siem` setting.
+  Check before upgrading: under `high_assurance` a plaintext syslog sink
+  (`udp` or `tcp`) refuses to start. "Upgrading from 0.6.0" in CHANGES.md.
 
 A clone installed with `pip install -e` follows the ranges in
 `pyproject.toml`. CI does not: it installs the versions in `uv.lock`
@@ -641,6 +668,9 @@ that file, not a description of the file. This table is the description.
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
 | `two_key/guard.py` | One guarded call through both keys, with caller-supplied fact hooks (any agent loop; the MCP proxy uses it) |
+| `two_key/siem.py`, `siem_sinks.py`, `siem_export.py` | SIEM export: the per-kind field allowlist and schemas, the syslog and webhook sinks, and the file export and its offline check |
+| `two_key/scan.py`, `scanners.py` | Content scanning: the core, and adapters for ClamAV, ICAP, a command, and Python |
+| `two_key/_platform.py`, `writable.py` | Owner-only files, locks, and no-follow opens on POSIX and Windows; the start-up check for paths another account could change |
 | `two_key/mcp_proxy/` | MCP proxy and spec drafter (`mcp` extra). `config.py` and `core.py` decide; `sdk.py` is the only module that imports the MCP SDK; `draft.py` drafts specs |
 | `two_key/keys.py`, `cli.py`, `backup.py` | Key files; `two-key` command line; passphrase backup of the package's own keys |
 | `two_key/action.py` | Normalized action record and its validation |
@@ -648,7 +678,7 @@ that file, not a description of the file. This table is the description.
 | `two_key/canonical.py` | Canonical encoding for the ledger, tokens, and judge bindings |
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
-| `examples/` | Constitution, hard rules, custom fields, judges, agents |
+| `examples/` | Constitution, hard rules, custom fields, judges, agents, and the Elastic SIEM example |
 
 ## History and license
 

@@ -44,7 +44,7 @@ flowchart LR
 | 0.4.0 | This repository and the package name `two-key` (0.3.1 under the new name) | Released, tag `v0.4.0` |
 | 0.5.0 | MCP adapter: `two-key mcp-proxy`, `two-key mcp-draft-specs`, caller-supplied facts, and the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners; a start-up check for writable paths; judge connection reuse (#6) | Released, tag `v0.6.0` |
-| 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger | Next |
+| 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger | Built on `working`, not released |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
@@ -77,9 +77,16 @@ in the same release.
 - **Issues**: #6 shipped in 0.6.0. #2 and #10 shipped in 0.5.0. #1 comes
   before 1.0, and #3 (repository setup after the move) has maintainer
   settings left to confirm.
-- **Next**: 0.7.0, the SIEM export, with a rate-limited count of tokens the
-  gateway refuses without a ledger entry (from live run 7; design note and
-  maintainer review first).
+- **0.7.0 on `working`**: the SIEM export is built. Live delivery to a
+  syslog sink (TLS by default, or plain TCP or UDP) and an HTTPS webhook,
+  Two-Key's own schema plus ECS and OCSF, JSON and CEF, a per-kind field
+  allowlist, a per-sink cursor, `two-key siem-export` and
+  `two-key siem-verify`, the MCP proxy's `siem:` block, and the gateway's
+  rate-limited count of refused tokens. The design note
+  (`0.7.0-siem-export.md`) was approved on 2026-10-16. Live run 8 and the
+  release remain.
+- **Next**: live run 8 (the SIEM export against a real collector, and the
+  code the PR #12 review refactored), then the 0.7.0 release.
 
 ## Ground rules
 
@@ -98,24 +105,44 @@ in the same release.
 
 ## 0.7.0: Ledger export for SIEM
 
-- A command that verifies the ledger, decrypts it locally, and writes events
-  as JSON Lines.
-- Events carry digests, sizes, and reason codes. They do not carry argument
-  values.
-- The export uses a field allowlist. It leaves out the proposal text and the
-  derived amount and counterparty, which the ledger holds today.
-- Field mapping to a common schema (ECS or OCSF), with optional CEF or
-  syslog output. Delivery by file first, then webhook.
-- An offline check that exported events match the ledger head.
-- Tested against Wazuh or Elastic in Docker, with a sample dashboard.
-- A count of refused tokens, kept outside the ledger (live run 7). A token
-  that does not verify (forged, expired, or malformed) is refused without a
-  ledger entry, so an unauthenticated caller cannot fill the ledger, and
-  today it leaves no trace. A rate-limited counter and stderr line, with no
-  token text, would show repeated attempts. It changes the gateway, so it
-  needs a design note and the maintainer's review before code (maintainer's
-  decision, 2026-10-16).
-- A live run that covers the code 0.6.0 changed after live run 7 (PR #12
+Built on `working`, not released. The design note is
+`0.7.0-siem-export.md`, approved by the maintainer on 2026-10-16;
+[docs/SIEM.md](docs/SIEM.md) is the reference.
+
+- Done: a live copy of every ledger entry, sent after the entry is written
+  and fsynced, on its own sender thread. A collector that is down, slow, or
+  gone never blocks or delays an authorization; delivery resumes from a
+  per-sink cursor and marks late events `replay`.
+- Done: sinks. Syslog (RFC 5424) over TLS (RFC 5425, port 6514, the
+  default), plain TCP (RFC 6587, port 514), or UDP (RFC 5426, port 514),
+  every port configurable; and an HTTPS webhook with batched newline JSON,
+  an authorization header read from an owner-only file, an optional HMAC
+  signature, and no redirects followed. TLS always verifies the certificate
+  and the host name. A plaintext sink is refused under `high_assurance` and
+  warns at start everywhere else.
+- Done: events carry digests, sizes, reason codes, the tool id, and the
+  data class, never argument values. An explicit per-kind field allowlist
+  leaves out the proposal text and the derived amount, counterparty, and
+  custom field values, which the ledger holds today; a ledger field nobody
+  has decided about fails the tests rather than leaving the box.
+- Done: Two-Key's own schema (`two-key-siem-v1`, the default), ECS, and
+  OCSF; JSON (the default) or CEF.
+- Done: `two-key siem-export` writes the same events to a file, owner-only
+  and never over an existing file, ending with a signed summary;
+  `two-key siem-verify` re-derives every event from the ledger offline and
+  reports changed fields, gaps, repeats, and events from another ledger.
+- Done: a rate-limited count of refused tokens, by class (bad signature,
+  expired, malformed, other), on stderr and as a SIEM event marked
+  `ledgered: false`. A token that does not verify is still not ledgered, so
+  an unauthenticated caller cannot fill the ledger, and no token text is
+  kept (live run 7).
+- Done: an Elastic and Kibana example in `examples/siem/elastic/` with a
+  sample dashboard, and a manual, non-required workflow that runs it.
+  Wazuh gets documentation only. Unit tests stay network-free (loopback).
+- Remaining: live run 8, then the release. Run 8 covers the SIEM export
+  against a real collector (syslog to a listener the maintainer runs, and
+  the Elastic example), as well as the 0.6.0 code below.
+- Run 8 also covers the code 0.6.0 changed after live run 7 (PR #12
   review): the ICAP verdicts and response reader, file arguments and
   confined path reads, the scanner's start-up checks, the Windows
   access-list check, the writable-path walk, proxy tool settings and

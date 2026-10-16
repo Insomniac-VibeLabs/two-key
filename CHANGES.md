@@ -100,6 +100,7 @@
 - [Docs: a 0.7.0 live run for the PR #12 refactor — 2026-10-16](#docs-a-070-live-run-for-the-pr-12-refactor--2026-10-16)
 - [CI: the CodeQL configuration note — 2026-10-16](#ci-the-codeql-configuration-note--2026-10-16)
 - [SIEM export: live delivery, file export, refused tokens (0.7.0) — 2026-10-16](#siem-export-live-delivery-file-export-refused-tokens-070--2026-10-16)
+- [Docs: the SIEM export everywhere it applies (0.7.0) — 2026-10-16](#docs-the-siem-export-everywhere-it-applies-070--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3458,3 +3459,27 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   with the ledger if a replay after a restore would matter.
 - A long-running `TwoKey` should call `close()` on the way out, so the sender
   gets a last pass. Without it, what is left goes out on the next start.
+
+## Docs: the SIEM export everywhere it applies (0.7.0) — 2026-10-16
+
+- New `docs/SIEM.md`: what leaves and what never does (field tables), turning
+  the live copy on, the sinks and their ports, the schemas and formats, the file
+  export and its offline check, the refused-token count, the Elastic example,
+  the trade-offs, and the reason codes.
+- `docs/HOWTO.md`: a `siem` row in the `proxy.yaml` table, a "Send the ledger to
+  a SIEM" section, and the trade-offs of a plaintext or UDP sink under "Known
+  trade-offs by configuration".
+- `docs/CONNECTING.md`: rows for the syslog sink, the webhook sink, and the sink
+  files and cursor, and the start-up checks they get.
+- `docs/THREAT_MODEL.md`: the new assets (the sink credential files, the cursor,
+  an exported file), the collector as an actor, the two new boundaries (ledger
+  to SIEM, gateway to the refused-token count), what `siem-verify` is meant to
+  stop, the assumption about the collector, and the residual risks of a copy
+  outside the ledger's encryption at rest. The 0.7.0 items leave "Planned
+  changes to this model".
+- `docs/SCOPE.md`, `ROADMAP.md`, `README.md`, `docs/FIT.md`,
+  `docs/COMPARISON.md`, `SECURITY.md`, `CONTRIBUTING.md`, `AGENTS.md`, and
+  `llms.txt`: the export as built on `working`, that Two-Key is still not a SIEM
+  and does not store, search, or alert, and the fail-closed lines to preserve.
+- `two_key/__init__.py` no longer says the package has no scanning or DLP hooks;
+  it names `two_key.scan` (0.6.0) and `two_key.siem` (0.7.0) instead.

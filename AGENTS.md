@@ -20,16 +20,17 @@ any LLM reader is in [llms.txt](llms.txt). Do not replace one with the other.
 ## Scope
 
 Core only: signed constitution, Path A bytecode, Path B judge hooks,
-monitored-agent hooks, encrypted ledger, single-use capability token, and a
-verify-only gateway. Beta (pre-1.0), maintainer-reviewed, not independently
+monitored-agent hooks, encrypted ledger, single-use capability token, a
+verify-only gateway, and the SIEM export. Beta (pre-1.0), maintainer-reviewed, not independently
 audited. Apache-2.0.
 
-Do **not** add a scanning or antivirus engine, chain anchoring, or seed
-phrases here. The items in [ROADMAP.md](ROADMAP.md) are in scope: key backup
-(shipped in 0.3.0), an MCP adapter (0.5.0), DLP and antivirus hooks that call
-external scanners (0.6.0), ledger export for a SIEM (0.7.0), and, after 1.0,
-PKI with certificate recovery, hybrid ML-DSA signatures, a FIPS approved
-mode, and a local GUI. Build them in the order and with the limits stated
+Do **not** add a scanning or antivirus engine, a SIEM or log storage, chain
+anchoring, or seed phrases here. The items in [ROADMAP.md](ROADMAP.md) are in
+scope: key backup (shipped in 0.3.0), an MCP adapter (0.5.0), DLP and
+antivirus hooks that call external scanners (0.6.0), ledger export for a SIEM
+(built on `working` for 0.7.0, not released), and, after 1.0, PKI with
+certificate recovery, hybrid ML-DSA signatures, a FIPS approved mode, and a
+local GUI. Build them in the order and with the limits stated
 there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
@@ -84,8 +85,8 @@ Git install:
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `CHANGES.md`, `SECURITY.md`, `CONTRIBUTING.md`,
-  `AGENTS.md`, and `llms.txt` as needed.
+  `docs/SCOPE.md`, `docs/SIEM.md`, `CHANGES.md`, `SECURITY.md`,
+  `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
 - When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
   in the same release.
 - Keep [docs/HOWTO.md](docs/HOWTO.md) "Known trade-offs by configuration"
@@ -269,5 +270,31 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   or cross-process protocol without the operator. Do not describe
   verify-only as key isolation: the process holds the minting, principal,
   witness, and ledger keys, and the registered tools run there.
+
+- SIEM export (0.7.0, `two_key/siem.py`, `two_key/siem_sinks.py`,
+  `two_key/siem_export.py`): optional, and with no `siem=` nothing is sent
+  and nothing changes. What may leave the box is an explicit per-kind
+  allowlist (`KINDS`): every body key of every ledger kind is `sent`,
+  `hashed`, `excluded`, or extracted, and a key nobody decided fails
+  `tests/test_siem.py`. Argument values, proposal and decline text, the
+  derived amount, counterparties, custom field values, scanner threat names
+  and matched text, and credentials stay excluded, with canary values in the
+  tests; add a new ledger field to the allowlist on purpose or not at all.
+  The ledger observer only enqueues a sequence number: projecting,
+  formatting, and sending happen on the sender thread, so a collector that
+  is down, slow, or hostile never blocks, delays, or changes an
+  authorization, and a full queue drops rather than waits. TLS sets
+  TLS 1.2 as the minimum and always verifies the certificate and the host
+  name; do not add a setting that turns either off. A plaintext sink (`udp`,
+  `tcp`) is refused under `high_assurance` (`siem_plaintext_refused`) and
+  warns at start otherwise. A webhook never follows a redirect and reads its
+  authorization header and HMAC key from owner-only files through
+  `_platform`. A token the gateway refuses is still not ledgered: it only
+  increments an in-memory class counter, reported at most once an interval
+  with no token text, digest, or id (`ledgered: false`, `seq: -1`).
+  `two-key siem-export` verifies the ledger first, writes a new owner-only
+  file and refuses to overwrite, and `two-key siem-verify` re-derives every
+  event from the ledger (`tests/test_siem_export.py`). Keep the unit tests
+  network-free: loopback only, with `tests/tls.py` for certificates.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

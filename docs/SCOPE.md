@@ -77,16 +77,31 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   enum fact that a signed rule decides on, told to the judges and recorded
   without content. An encrypted file passes only on a tool signed
   `encrypted: pass` (docs/SCANNERS.md)
+- in 0.7.0, on `working` (not yet released): the SIEM export
+  (`two_key/siem.py`, `two_key/siem_sinks.py`, `two_key/siem_export.py`).
+  Optional: with no `siem=` setting nothing changes. Each ledger entry is
+  copied, after it is written, to a syslog sink (TLS by default, or plain
+  TCP or UDP) or an HTTPS webhook, in Two-Key's own schema, ECS, or OCSF,
+  as JSON or CEF. An explicit per-kind field allowlist decides what leaves:
+  reason codes, digests, sizes, the tool id, the data class, never argument
+  values, proposal text, derived amounts, counterparties, or custom field
+  values. A collector that is down never blocks an authorization.
+  `two-key siem-export` writes the same events to a file and
+  `two-key siem-verify` checks a file against the ledger. The gateway also
+  counts tokens it refuses without a ledger entry, by class, rate-limited,
+  with no token text (docs/SIEM.md). It is not a SIEM and it does not alert
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
 `two_key/strict.py` (duplicate-key JSON/YAML), `two_key/audit.py` (decision
-digest checks), `two_key/backup.py` (key backup), and the per-install fingerprint key beside the ledger
+digest checks), `two_key/backup.py` (key backup), `two_key/siem.py` and
+`two_key/siem_sinks.py` (the SIEM field allowlist and sinks), and the per-install fingerprint key beside the ledger
 (`*.ledger-key/fingerprint.key`).
 
 It does not include a scanning, antivirus, or DLP engine (the 0.6.0 hooks
-call the operator's product), PKI, permissioned-chain anchoring, seed
-phrases, or hybrid ML-DSA.
+call the operator's product), a SIEM or log management product (the 0.7.0
+export feeds the operator's collector), PKI, permissioned-chain anchoring,
+seed phrases, or hybrid ML-DSA.
 
 ## Planned additions
 
@@ -102,12 +117,13 @@ in the same release.
   package still does not scan or classify content itself.
 - Judge connection reuse (#6, 0.6.0): shipped; a lock-guarded pool keyed by
   origin.
-- Ledger export for SIEM (0.7.0): a command that verifies and decrypts
-  the ledger locally and writes events without argument values. A field
-  allowlist leaves out the proposal text and the derived amount and
-  counterparty, which the ledger holds today. With it, a rate-limited count
-  of tokens the gateway refused without a ledger entry (forged, expired, or
-  malformed), kept outside the ledger (live run 7; design note first).
+- Ledger export for SIEM (0.7.0): built on `working` (above). Live
+  delivery and a file export, both on a field allowlist that leaves out the
+  proposal text and the derived amount, counterparty, and custom field
+  values, which the ledger holds today. With it, a rate-limited count of
+  tokens the gateway refused without a ledger entry (forged, expired, or
+  malformed), kept outside the ledger (live run 7). What the collector
+  stores, who can read it, and what it alerts on stay the operator's.
 - Judge history summary (#1, before 1.0): judges get a summary of recent
   decisions built from the ledger, on by default, after its own security
   review.

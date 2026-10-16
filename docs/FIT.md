@@ -57,6 +57,12 @@ That backup is not a seed phrase.
   head anchor beside the ledger key refuses a rollback of the ledger
   directory alone. It is not an external anchor: deleting that file
   accepts the ledger as it stands.
+- You want the decisions in the SIEM you already run (0.7.0). Each entry can
+  be copied, as it is written, to syslog or an HTTPS webhook, in Two-Key's
+  own schema, ECS, or OCSF: reason codes, digests, sizes, the tool id, and
+  the data class, never argument values. A collector that is down never
+  blocks a decision, and `two-key siem-export` backfills history
+  ([SIEM.md](SIEM.md)).
 
 ## Do not use this if
 
@@ -65,9 +71,10 @@ That backup is not a seed phrase.
 - You need user login or MCP session authorization.
 - You need a validated cryptographic module, or a control that has had an
   independent review. This release has not.
-- You need Two-Key itself to be the DLP or antivirus product, or you need
-  PKI, permissioned anchoring, a seed phrase, or hybrid ML-DSA. Those are
-  not here. (0.6.0 can call a DLP or antivirus product you run.)
+- You need Two-Key itself to be the DLP or antivirus product, or the SIEM,
+  or you need PKI, permissioned anchoring, a seed phrase, or hybrid ML-DSA.
+  Those are not here. (0.6.0 can call a DLP or antivirus product you run,
+  and 0.7.0 can feed a SIEM you run; neither stores, searches, or alerts.)
 
 ## Smallest working shape
 
