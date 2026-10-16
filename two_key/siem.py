@@ -588,10 +588,20 @@ class Cursor:
 
     def _load(self) -> None:
         try:
-            data = loads_json(self.path.read_text(encoding="utf-8"))
-        except (OSError, StrictParseError, ValueError):
-            return
+            text = self.path.read_text(encoding="utf-8")
+        except OSError:
+            return          # no cursor file: a first start, which replay_from decides
+        try:
+            data = loads_json(text)
+        except (StrictParseError, ValueError):
+            data = None
         if not isinstance(data, Mapping) or data.get("format") != CURSOR_FORMAT:
+            # A file that is there but cannot be read is not a first start: say so, because the copy then
+            # begins where replay_from says and the entries in between are only in the ledger
+            # (live run 8x, C72). two-key siem-export backfills them.
+            print(f"two-key: WARNING: the SIEM cursor at {self.path} is not readable; the copy starts where "
+                  "replay_from says and the entries in between are in the ledger only (docs/SIEM.md)",
+                  file=sys.stderr)
             return
         sinks = data.get("sinks")
         if isinstance(sinks, Mapping):

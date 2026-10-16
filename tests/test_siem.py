@@ -431,12 +431,23 @@ class Delivering(Fixture):
             self.assertEqual(stat.S_IMODE(os.stat(path).st_mode) & 0o077, 0)
         self.assertTrue(_platform.is_owner_only_dir(path.parent))
 
-    def test_a_cursor_that_cannot_be_read_starts_from_the_head(self):
+    def test_a_cursor_that_cannot_be_read_starts_from_the_head_and_warns(self):
         path = self.dir / "cursor.json"
         path.write_text("not json", encoding="utf-8")
-        cursor = Cursor(path)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            cursor = Cursor(path)
         self.assertFalse(cursor.exists)
         self.assertEqual(cursor.get("list", 12), 12)
+        # Not a first start: say which entries only the ledger now holds (live run 8x, C72).
+        self.assertIn("is not readable; the copy starts where replay_from says", err.getvalue())
+
+    def test_no_cursor_file_is_a_first_start_and_says_nothing(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            cursor = Cursor(self.dir / "none" / "cursor.json")
+        self.assertFalse(cursor.exists)
+        self.assertEqual(err.getvalue(), "")
 
     def test_a_shrunken_ledger_does_not_stall_the_sender(self):
         """After ``two-key recover`` dropped a tail the sink already took, the cursor comes back."""

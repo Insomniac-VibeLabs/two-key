@@ -109,6 +109,7 @@
 - [Live harness: the start-up account check — 2026-10-16](#live-harness-the-start-up-account-check--2026-10-16)
 - [The `on_agent_access` tests on macOS and Windows — 2026-10-16](#the-on_agent_access-tests-on-macos-and-windows--2026-10-16)
 - [Live run 8x findings: the SIEM copy, a named pipe, signing — 2026-10-16](#live-run-8x-findings-the-siem-copy-a-named-pipe-signing--2026-10-16)
+- [`siem-verify` checks the whole event, and a cursor that cannot be read says so — 2026-10-16](#siem-verify-checks-the-whole-event-and-a-cursor-that-cannot-be-read-says-so--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3674,3 +3675,21 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   alert panel looks for `gateway_denied`, which is the ledger kind, not
   `gateway_deny`. Not verified against a live Kibana from the build
   container, which cannot reach the Elastic registry.
+
+## `siem-verify` checks the whole event, and a cursor that cannot be read says so — 2026-10-16
+
+- `two-key siem-verify` now checks the rest of an event's envelope against
+  the ledger, not only its fields: `prev`, `severity`, that `replay` and
+  `truncated` appear only when true, that `ledgered` is true for an entry
+  the ledger holds, and that `sent_at` is a timestamp. Changing any of them
+  used to pass (live run 8x, C49, C58, C83).
+- It also checks an export's last line against the file it closes: the
+  count, `first_seq` and `last_seq` against the lines read, `ledger_size`
+  and `merkle_root` against the ledger at that size, and that every event
+  carries the summary's `exported_at`, since one export writes one time. A
+  file pulled back out of a SIEM has no summary line and is checked event by
+  event as before.
+- A SIEM cursor file that is there but cannot be read now warns, instead of
+  silently counting as a first start: the copy then begins where
+  `replay_from` says, and the entries in between are in the ledger only
+  (live run 8x, C72). `siem-export` backfills them.

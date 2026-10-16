@@ -135,6 +135,35 @@ class Verify(Fixture):
         self.assertEqual(problems[0]["seq"], decision["seq"])
         self.assertEqual(problems[0]["fields"], ["reason"])
 
+    def test_the_rest_of_the_envelope_is_checked_against_the_ledger(self):
+        """prev, severity, replay, ledgered and sent_at: the ledger decides all but the last, and an
+        export writes one time on every line (live run 8x, C49, C58, C83)."""
+        cases = {"prev": ("sha256:" + "0" * 64, "prev does not match the ledger"),
+                 "severity": (0, "severity does not match the ledger"),
+                 "replay": ("yes", "replay is written only when it is true"),
+                 "ledgered": (False, None),      # counted as unledgered, and the summary's count is then off
+                 "sent_at": ("whenever", "sent_at is not a timestamp")}
+        for name, (value, want) in cases.items():
+            with self.subTest(field=name):
+                path, _ = self.exported(f"envelope-{name}.jsonl")
+                events = self.events_of(path)
+                events[2][name] = value
+                self.rewrite(path, events)
+                problems = [p["problem"] for p in verify(self.ledger, path)["problems"]]
+                self.assertIn(want or "the summary counts a different number of events", problems)
+
+    def test_a_changed_summary_is_caught(self):
+        """The last line counts the lines it closes and names the head they were taken from."""
+        for name, value in (("count", 3), ("first_seq", 2), ("last_seq", 99),
+                            ("ledger_size", 9999), ("merkle_root", "sha256:" + "0" * 64),
+                            ("exported_at", "2020-01-01T00:00:00.000Z")):
+            with self.subTest(field=name):
+                path, _ = self.exported(f"summary-{name}.jsonl")
+                events = self.events_of(path)       # the summary is the last of them
+                events[-1][name] = value
+                self.rewrite(path, events)
+                self.assertFalse(verify(self.ledger, path)["ok"])
+
     def test_a_changed_hash_is_caught(self):
         path, _ = self.exported()
         events = self.events_of(path)

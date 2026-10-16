@@ -16,6 +16,7 @@ ledger, from 0 to the current head.
 from __future__ import annotations
 
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
@@ -25,6 +26,8 @@ from .siem import ENVELOPE_KEYS, SCHEMA_FORMAT, Event, Renderer, event_for, now_
 from .strict import StrictParseError, loads_json
 
 EXPORT_FORMAT = "two-key-siem-export-v1"
+# What ``now_text`` writes: an RFC 3339 instant in UTC, to the millisecond.
+TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z")
 SUMMARY_KIND = "siem_export_summary"
 # The envelope an event carries around its allowlisted fields. Everything else is a field to check.
 ENVELOPE = frozenset(ENVELOPE_KEYS)
@@ -133,6 +136,20 @@ def check_event(ledger: Any, obj: Mapping[str, Any], number: int) -> dict | None
         return {"line": number, "seq": seq, "problem": "entry_hash does not match the ledger"}
     if obj.get("kind") != entry.kind:
         return {"line": number, "seq": seq, "problem": "kind does not match the ledger"}
+    # The rest of the envelope, which the ledger also decides (live run 8x, C49/C58/C83). ``sent_at`` is
+    # the only part no ledger can give back: it is checked for shape here, and against the summary below.
+    ledger_side = event_for(entry)
+    for name, want in (("prev", ledger_side.prev), ("severity", ledger_side.severity)):
+        if obj.get(name) != want:
+            return {"line": number, "seq": seq, "problem": f"{name} does not match the ledger",
+                    "found": obj.get(name), "expected": want}
+    for name in ("replay", "truncated"):
+        if name in obj and obj[name] is not True:
+            return {"line": number, "seq": seq, "problem": f"{name} is written only when it is true"}
+    if obj.get("ledgered") is not True:
+        return {"line": number, "seq": seq, "problem": "ledgered is not true for an event in the ledger"}
+    if not isinstance(obj.get("sent_at"), str) or not TIMESTAMP.fullmatch(obj["sent_at"]):
+        return {"line": number, "seq": seq, "problem": "sent_at is not a timestamp"}
     expected = project(entry.kind, entry.body)
     got = {k: v for k, v in obj.items() if k not in ENVELOPE}
     if obj.get("truncated") is True:
@@ -151,6 +168,8 @@ def verify(ledger: Any, path: Path | str, *, require_complete: bool = False) -> 
     seen: list[int] = []
     unledgered = 0
     summary_line = None
+    sent_ats: set = set()
+    read: list = []     # one per ledgered event line, failed checks included: what the summary counts
     for number, line in enumerate(_read_lines(path), start=1):
         obj = _parsed(line, number, problems)
         if obj is None:
@@ -161,6 +180,7 @@ def verify(ledger: Any, path: Path | str, *, require_complete: bool = False) -> 
         if obj.get("ledgered") is False:
             unledgered += 1
             continue
+        read.append(obj.get("seq") if isinstance(obj.get("seq"), int) and obj.get("seq") is not True else None)
         if obj.get("schema") != SCHEMA_FORMAT:
             problems.append({"line": number, "problem": f"not a {SCHEMA_FORMAT} event; "
                                                         "siem-verify reads the native JSON schema"})
@@ -170,10 +190,46 @@ def verify(ledger: Any, path: Path | str, *, require_complete: bool = False) -> 
             problems.append(problem)
         else:
             seen.append(obj["seq"])
+            sent_ats.add(obj["sent_at"])
     result = _coverage(ledger, seen, require_complete)
     problems.extend(result.pop("problems"))
+    problems.extend(_summary_problems(ledger, summary_line, read, sent_ats))
     return {"ok": not problems, "events": len(seen), "unledgered_events": unledgered,
             "ledger_size": ledger.size(), "summary": summary_line, "problems": problems, **result}
+
+
+def _summary_problems(ledger: Any, line: Mapping[str, Any] | None, read: Sequence, sent_ats: set) -> list[dict]:
+    """An export's last line against the file it closes and the head it names (live run 8x, C83).
+
+    ``read`` is one entry per ledgered event line, a failed check included, since the summary counts the
+    lines the export wrote. A file pulled back out of a SIEM has no summary line, and is checked event by
+    event as before.
+    """
+    if line is None:
+        return []
+    out: list[dict] = []
+    order = sorted({seq for seq in read if seq is not None})
+    count = line.get("count")
+    if count != len(read):
+        out.append({"problem": "the summary counts a different number of events", "count": count,
+                    "events": len(read)})
+    for name, want in (("first_seq", order[0] if order else None), ("last_seq", order[-1] if order else None)):
+        if line.get(name) != want:
+            out.append({"problem": f"the summary's {name} is not the file's", "count": line.get(name),
+                        "events": want})
+    size = line.get("ledger_size")
+    if not isinstance(size, int) or isinstance(size, bool) or not 0 <= size <= ledger.size():
+        out.append({"problem": "the summary's ledger_size is not a size this ledger has",
+                    "ledger_size": size})
+    elif line.get("merkle_root") != ledger.merkle_root(size):
+        out.append({"problem": "the summary's merkle_root is not the ledger's at that size",
+                    "ledger_size": size})
+    exported_at = line.get("exported_at")
+    if sent_ats and sent_ats != {exported_at}:
+        # One export writes one time, on every line it holds.
+        out.append({"problem": "an event's sent_at is not the summary's exported_at",
+                    "exported_at": exported_at, "events": sorted(sent_ats)[:4]})
+    return out
 
 
 def _coverage(ledger: Any, seen: Sequence[int], require_complete: bool) -> dict:
