@@ -57,8 +57,9 @@ import os
 import sys
 from pathlib import Path
 
-from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, load_unsigned_with_fields, save_envelope,
-                           sign_constitution)
+from . import _platform
+from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, encrypted_pass_notes, load_unsigned_with_fields,
+                           save_envelope, sign_constitution)
 from .fields import case_warnings, not_applicable_notes
 from .keys import generate_private_key, load_private_key_file, load_public_key, save_private_key, save_public_key
 from .policy_vm import ConstitutionError
@@ -77,8 +78,16 @@ def _init_key(args) -> int:
     return 0
 
 
+def _principal_key(args):
+    """The principal private key named by ``--key``. A refusal is one line, not a traceback."""
+    try:
+        return load_private_key_file(args.key)
+    except ValueError as e:
+        raise SystemExit(f"--key: {e}") from None
+
+
 def _sign(args) -> int:
-    key = load_private_key_file(args.key)
+    key = _principal_key(args)
     try:
         prose, rules, specs, fields = load_unsigned_with_fields(args.prose, args.rules)
         envelope = sign_constitution(prose, rules, key, specs, fields=fields, envelope_format=args.envelope_format)
@@ -94,6 +103,8 @@ def _sign(args) -> int:
         print(f"two-key: WARNING: {line}", file=sys.stderr)
     for warn, line in domain_allow_notes(signed["tool_specs"]):
         print(f"two-key: {'WARNING' if warn else 'note'}: {line}", file=sys.stderr)
+    for line in encrypted_pass_notes(signed["tool_specs"]):
+        print(f"two-key: WARNING: {line}", file=sys.stderr)
     print(f"wrote {args.out}")
     return 0
 
@@ -183,7 +194,7 @@ def _open_ledger(args, key):
 
 def _rotate_witness(args) -> int:
     from .ledger import LedgerError
-    key = load_private_key_file(args.key)
+    key = _principal_key(args)
     ledger = _open_ledger(args, key)
     if ledger is None:
         return 1
@@ -203,7 +214,7 @@ def _rotate_witness(args) -> int:
 
 def _audit(args) -> int:
     from .audit import check_decision_digests
-    key = load_private_key_file(args.key)
+    key = _principal_key(args)
     ledger = _open_ledger(args, key)
     if ledger is None:
         return 1
@@ -216,9 +227,8 @@ def _audit(args) -> int:
 
 def _write_token(path: Path, token: str) -> None:
     """Write the bearer token to a new file, mode 0600 from creation. Never overwrite."""
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(path, flags, 0o600)
-    with os.fdopen(fd, "w", encoding="ascii") as fh:
+    fd = _platform.create_new(path)
+    with os.fdopen(fd, "w", encoding="ascii", newline="\n") as fh:
         fh.write(token + "\n")
 
 
@@ -259,7 +269,7 @@ def _authorize(args) -> int:
     if token_path is not None and (token_path.exists() or token_path.is_symlink()):
         print(f"refusing to overwrite {token_path}", file=sys.stderr)
         return 1
-    key = load_private_key_file(args.key)
+    key = _principal_key(args)
     judges, policy = load_config_file(Path(args.judges))
     # The monitored agent is declared by the operator in the judges file, never by the agent.
     agent = load_monitored_agent_file(Path(args.judges))
@@ -329,8 +339,7 @@ def _draft_env(items: list[str] | None) -> dict[str, str]:
 
 
 def _write_new(path: Path, text: str) -> None:
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    with os.fdopen(os.open(path, flags, 0o644), "w", encoding="utf-8") as fh:
+    with os.fdopen(_platform.create_new(path, owner_only=False), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
 
 
@@ -405,7 +414,7 @@ def _mcp_draft_specs(args) -> int:
 
 def _recover(args) -> int:
     from .ledger import Ledger, LedgerError
-    key = load_private_key_file(args.key)
+    key = _principal_key(args)
     try:
         result = Ledger.recover_tail(args.ledger, key, witness_public_key=_witness_pin(args),
                                      anchor_path=_anchor_arg(args))
@@ -470,6 +479,7 @@ def _backup_restore(args) -> int:
     return 0
 
 
+_KEY_HELP = "the principal private key (principal.pem from init-key, mode 0600); not principal.pub.pem"
 _PASSPHRASE_HELP = "name of the environment variable holding this bundle's passphrase; not the passphrase"
 
 
@@ -486,7 +496,7 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument("dir")
     init.set_defaults(func=_init_key)
     sign = sub.add_parser("sign-constitution")
-    sign.add_argument("--key", required=True)
+    sign.add_argument("--key", required=True, help=_KEY_HELP)
     sign.add_argument("--prose", required=True)
     sign.add_argument("--rules", required=True)
     sign.add_argument("--envelope-format", choices=ENVELOPE_FORMATS, default="auto",
@@ -497,7 +507,7 @@ def main(argv: list[str] | None = None) -> int:
     sign.add_argument("--out", required=True)
     sign.set_defaults(func=_sign)
     auth = sub.add_parser("authorize", help="run Path A and Path B; do not execute the tool")
-    auth.add_argument("--key", required=True)
+    auth.add_argument("--key", required=True, help=_KEY_HELP)
     auth.add_argument("--ledger", required=True)
     auth.add_argument("--constitution", required=True)
     auth.add_argument("--judges", required=True)
@@ -526,20 +536,20 @@ def main(argv: list[str] | None = None) -> int:
     auth.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     auth.set_defaults(func=_authorize)
     rotate = sub.add_parser("rotate-witness", help="replace the ledger's witness key with a new one, ledgered")
-    rotate.add_argument("--key", required=True)
+    rotate.add_argument("--key", required=True, help=_KEY_HELP)
     rotate.add_argument("--ledger", required=True)
     rotate.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     rotate.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     rotate.add_argument("--reason", default="", help="recorded in the witness_rotated entry (at most 200 characters)")
     rotate.set_defaults(func=_rotate_witness)
     audit = sub.add_parser("audit", help="verify the ledger and print its witness pins and digest checks")
-    audit.add_argument("--key", required=True)
+    audit.add_argument("--key", required=True, help=_KEY_HELP)
     audit.add_argument("--ledger", required=True)
     audit.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     audit.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     audit.set_defaults(func=_audit)
     recover = sub.add_parser("recover", help="drop an uncheckpointed tail and record it; does not run on open")
-    recover.add_argument("--key", required=True)
+    recover.add_argument("--key", required=True, help=_KEY_HELP)
     recover.add_argument("--ledger", required=True)
     recover.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     recover.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
@@ -549,7 +559,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--ledger-passphrase-env", required=True, metavar="NAME", help=_PASSPHRASE_HELP)
         parser.add_argument("--witness-passphrase-env", required=True, metavar="NAME", help=_PASSPHRASE_HELP)
     export = sub.add_parser("backup-export", help="write three passphrase-protected key bundles")
-    export.add_argument("--key", required=True)
+    export.add_argument("--key", required=True, help=_KEY_HELP)
     export.add_argument("--ledger", required=True)
     export.add_argument("--out", required=True, help="directory for the three new bundle files")
     export.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)

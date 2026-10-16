@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import copy
 import importlib
+import importlib.util
 import os
 import re
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -175,6 +177,83 @@ def undescribed_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str
     return out
 
 
+# Names that suggest an input holds a file. A hint for the operator, never a decision: what is a file is declared.
+FILE_LIKE_NAME = re.compile(r"(^|_)(file|files|path|filepath|attachment|attachments|blob|base64|b64|upload|uploads)$")
+_CONTENT_NAMES = ("content", "data", "bytes", "body")
+MAX_SCHEMA_DEPTH = 8
+
+
+def _file_like(name: str, node: Mapping[str, Any], in_file_container: bool) -> bool:
+    if node.get("contentEncoding") in ("base64", "base64url") or node.get("format") in ("byte", "binary") \
+            or isinstance(node.get("contentMediaType"), str):
+        return True
+    if node.get("type") not in ("string", None):
+        return False
+    low = name.casefold()
+    return bool(FILE_LIKE_NAME.search(low)) or (in_file_container and low in _CONTENT_NAMES)
+
+
+def file_like_inputs(schema: Any) -> list[tuple[str, str]]:
+    """Inputs the upstream schema suggests hold a file, as (path, kind guess). ``[]`` marks each item of a list.
+    The kind is ``path`` for a path-like name, ``base64url`` or ``base64`` from ``contentEncoding``, else
+    ``base64``. A hint for the drafter and the start-up warning only."""
+    out: list[tuple[str, str]] = []
+    _walk_file_inputs(schema, "", 0, False, out)
+    return out
+
+
+def _file_kind_guess(name: str, node: Mapping[str, Any]) -> str:
+    if node.get("contentEncoding") == "base64url":
+        return "base64url"
+    if node.get("contentEncoding") == "base64" or node.get("format") in ("byte", "binary"):
+        return "base64"
+    return "path" if "path" in name.casefold() else "base64"
+
+
+def _walk_file_inputs(node: Any, prefix: str, depth: int, container: bool, out: list[tuple[str, str]]) -> None:
+    props = node.get("properties") if isinstance(node, Mapping) else None
+    if not isinstance(props, Mapping) or depth > MAX_SCHEMA_DEPTH:
+        return
+    for name, sub in sorted(props.items()):
+        if isinstance(name, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) and isinstance(sub, Mapping):
+            _file_input(name, sub, prefix, depth, container, out)
+
+
+def _file_input(name: str, sub: Mapping[str, Any], prefix: str, depth: int, container: bool,
+                out: list[tuple[str, str]]) -> None:
+    """One property: walk into an object or a list of objects; otherwise note it if it looks like a file. A
+    file-like name makes its objects a file container."""
+    path = f"{prefix}.{name}" if prefix else name
+    inner = container or bool(FILE_LIKE_NAME.search(name.casefold()))
+    items = sub.get("items")
+    if sub.get("type") == "array" and isinstance(items, Mapping):
+        if items.get("type") == "object" or "properties" in items:
+            _walk_file_inputs(items, f"{path}[]", depth + 1, inner, out)
+        elif _file_like(name, items, container):
+            out.append((f"{path}[]", _file_kind_guess(name, items)))
+    elif sub.get("type") == "object" or "properties" in sub:
+        _walk_file_inputs(sub, path, depth + 1, inner, out)
+    elif _file_like(name, sub, container):
+        out.append((path, _file_kind_guess(name, sub)))
+
+
+def undeclared_file_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str, Any]], scanner: Any) -> list[str]:
+    """One line per input of a scanned tool that looks like a file in the upstream schema but is not declared under
+    ``tools.<id>.files``: it is scanned as text, not as a file. Advice, never a refusal."""
+    if scanner is None:
+        return []
+    out = []
+    for tool in sorted(selection.views):
+        if not scanner.scans(specs.get(tool)):
+            continue
+        declared = {f.path for f in scanner.files.get(tool, ())}
+        for path, kind in file_like_inputs(selection.views[tool].get("inputSchema")):
+            if path not in declared:
+                out.append(f"{tool}: {path} looks like a file in the upstream schema but is not declared under "
+                           f"tools.{tool}.files (kind: {kind}?), so it is scanned as text, not as a file")
+    return out
+
+
 def identity_refusal(separation: Any, allow_unresolved: bool) -> str | None:
     """The proxy refuses an unresolved judge or agent identity unless ``allow_unresolved_identity: true``.
 
@@ -227,7 +306,8 @@ def load_hooks(config: ProxyConfig) -> dict[str, dict[str, Callable]]:
         for name, spec in policy.facts.items():
             module, fn = spec.split(":", 1)
             try:
-                hook = getattr(importlib.import_module(module), fn)
+                # The module named in the operator's proxy.yaml, checked by config.HOOK: trusted configuration.
+                hook = getattr(importlib.import_module(module), fn)  # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
             except (ImportError, AttributeError) as e:
                 raise ProxyConfigError(f"tools.{tool_id}.facts.{name}.hook: cannot import {spec!r} "
                                        f"({type(e).__name__})") from None
@@ -360,17 +440,85 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
     from ..judges.config import JudgeConfigError, load_config_file
     from ..keys import load_private_key_file, load_public_key
     from ..ledger import Ledger, LedgerError
+    from ..scan import ScanConfigError
+    from ..scanners import scanner_from_config
     try:
+        scanner = None
+        if config.scan is not None:
+            scanner = scanner_from_config(config.scan, {tool: policy.files for tool, policy in config.tools.items()
+                                                        if policy.files})
         key = load_private_key_file(config.principal_key)
         judges, policy = load_config_file(config.judges, judge_transport)
         agent = load_monitored_agent_file(config.judges)
         witness = load_public_key(config.witness_public_key) if config.witness_public_key else None
         ledger = Ledger(config.ledger, key, witness_public_key=witness, anchor_path=config.head_anchor)
         return TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
-                           private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds)
+                           private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
+                           scanner=scanner, on_writable_paths=config.on_writable_paths,
+                           check_paths=startup_paths(config))
     except (OSError, ValueError, JudgeConfigError, IdentityError, LedgerError, ConstitutionError,
-            ConstitutionSignatureError, TwoKeyConfigError) as e:
+            ConstitutionSignatureError, TwoKeyConfigError, ScanConfigError) as e:
         raise ProxyConfigError(f"{type(e).__name__}: {e}") from None
+
+
+def _program(name: str) -> str | None:
+    return shutil.which(name) or (name if os.path.isabs(name) else None)
+
+
+def _module_origin(module: str) -> str | None:
+    """The file a hook module would be imported from, found without running it (its parent packages do run,
+    as they would when the hook is imported)."""
+    try:
+        spec = importlib.util.find_spec(module)
+    except Exception:       # loading the hooks refuses to start with the reason
+        return None
+    origin = getattr(spec, "origin", None)
+    return origin if isinstance(origin, str) and os.path.isabs(origin) else None
+
+
+def startup_paths(config: ProxyConfig) -> list[tuple[Path | str, str]]:
+    """What the proxy reads or starts, for the writable-path check at start (two_key/writable.py): its
+    config and the files it names, the ledger, the upstream program and the folder it starts in (the
+    proxy's own when ``upstream.cwd`` is unset, which under sudo is the caller's), each fact hook's module,
+    the folders of files sent by path, and a command scanner's program. (clamd's socket belongs to clamd's
+    own account, so it is left to the checklist in docs/CONNECTING.md.)"""
+    paths: list[tuple[Path | str, str]] = [(config.path, "file"), (config.constitution, "file"),
+                                           (config.principal_key, "file"), (config.judges, "file"),
+                                           (config.ledger, "folder")]
+    for extra in (config.witness_public_key, config.head_anchor):
+        if extra is not None:
+            paths.append((extra, "file"))
+    paths.append((config.upstream.cwd or Path.cwd(), "folder"))
+    program = _program(config.upstream.command[0])
+    if program:
+        paths.append((program, "file"))
+    for policy in config.tools.values():
+        paths.extend(_tool_paths(policy))
+    paths.extend(_scanner_paths(config.scan or {}))
+    return paths
+
+
+def _tool_paths(policy: ToolPolicy) -> list[tuple[Path | str, str]]:
+    """A tool's fact hook modules, and the folders of the files it takes by path."""
+    paths: list[tuple[Path | str, str]] = []
+    for spec in policy.facts.values():
+        origin = _module_origin(spec.split(":", 1)[0])
+        if origin:
+            paths.append((origin, "file"))
+    for arg in policy.files:
+        if arg.kind == "path" and arg.folder:
+            paths.append((arg.folder, "folder"))
+    return paths
+
+
+def _scanner_paths(scan: Mapping[str, Any]) -> list[tuple[Path | str, str]]:
+    """A command scanner's program."""
+    command = scan.get("command")
+    if scan.get("type") == "command" and isinstance(command, list) and command and isinstance(command[0], str):
+        program = _program(command[0])
+        if program:
+            return [(program, "file")]
+    return []
 
 
 def check_tools_signed(config: ProxyConfig, two_key: Any) -> None:

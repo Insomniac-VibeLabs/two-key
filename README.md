@@ -42,8 +42,9 @@ What you get:
 - **Small on purpose.** Python 3.10 or later, one required dependency
   (`cryptography`), Apache-2.0.
 
-**Status:** beta. 0.5.0 is the current release: it adds the MCP proxy and
-caller-supplied facts.
+**Status:** beta. 0.6.0 is the current release: it adds Windows support,
+content scanning with your antivirus or DLP product, and a start-up check
+for paths another account could change.
 Maintainer-reviewed and tested with live LLM agents and judges. Read
 [Known limits](#known-limits) and [docs/FIT.md](docs/FIT.md) before you rely
 on it.
@@ -67,10 +68,10 @@ on it.
 
 ## Quick start
 
-Install the 0.5.0 release from git (it is not on PyPI yet):
+Install the 0.6.0 release from git (it is not on PyPI yet):
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"
+pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.6.0"
 ```
 
 Or run the offline demo from a clone. It uses test-double judges, so it
@@ -85,14 +86,15 @@ python -m two_key authorize --help
 ```
 
 Real judges are configured in `examples/judges.yaml`. The operator guide is
-[docs/HOWTO.md](docs/HOWTO.md).
+[docs/HOWTO.md](docs/HOWTO.md). Before a real agent runs, close every way
+around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 
 ## Put Two-Key in front of an MCP server
 
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"
+pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.6.0"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -129,6 +131,8 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
 | --- | --- |
 | [docs/FIT.md](docs/FIT.md) | Whether Two-Key is the right control for you |
 | [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
+| [docs/CONNECTING.md](docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
+| [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
 | [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Trust boundaries and residual risk |
 | [docs/SCOPE.md](docs/SCOPE.md) | What is included, left out, and planned |
@@ -205,8 +209,10 @@ agent nor the server can reach the proxy's keys (HOWTO "Key custody").
    `ttl_seconds` (default 120, at most 300). Redemption writes an intent before the tool
    runs, so a crash cannot run that token twice.
 4. The gateway redeems that token with the public half of the capability
-   key. It does not hold the minting key, and it does not inspect file
-   contents, mail, or tool output for DLP or malware.
+   key. It does not hold the minting key, and it never scans. With a
+   content scanner configured (0.6.0), Two-Key scans the call
+   before the two keys decide, and the gateway checks the verdict and file
+   digests the token binds. Tool output is not scanned.
 
 Both paths answer once the call is well-formed, within limits, and readable
 under its spec. A Path A deny does not skip Path B, so the ledger has both
@@ -451,15 +457,16 @@ behind a service of their own.
 
 Not in this repository:
 
-- payload scanning, antivirus, and DLP hooks
+- a scanning, antivirus, or DLP engine of its own
 - enterprise deployment modes and permissioned-chain anchoring
 - X.509 / PKI identities and agent assertions
 - seed-phrase backup
 - hybrid ML-DSA-65
 
 Some of this is planned as optional additions. See the
-[roadmap](#roadmap): DLP and antivirus hooks next (0.6.0, an interface that
-calls external scanners, not a scanning engine), and, after 1.0, PKI with
+[roadmap](#roadmap). DLP and antivirus hooks shipped in 0.6.0 (an interface
+that calls your antivirus or DLP product, not a scanning engine:
+[docs/SCANNERS.md](docs/SCANNERS.md)). After 1.0 come PKI with
 certificate recovery and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
 backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
 phrases are not planned.
@@ -509,7 +516,10 @@ audited. It is not a FIPS 140-3 validated module.
   are on the roadmap.
 - Identities are bare keys. There is no certificate chain, expiry, or
   revocation. PKI with certificate recovery is on the roadmap.
-- It does not scan payloads, and it is not an antivirus or DLP product.
+- It is not an antivirus or DLP product. From 0.6.0 it can
+  call one you run ([docs/SCANNERS.md](docs/SCANNERS.md)). Without one, a
+  content leak in free text rests on the judges. Tool results are never
+  scanned.
 - Behind the MCP proxy, an agent that can reach the upstream server directly
   bypasses it, and an upstream server running as the proxy's OS user can
   read the proxy's keys. Run each as its own user (HOWTO "Key custody").
@@ -524,9 +534,9 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Roadmap
 
-The MCP adapter shipped in 0.5.0. Next come DLP and antivirus hooks
-(0.6.0) and a ledger export for a SIEM (0.7.0), then a public review and the
-1.0 release.
+The MCP adapter shipped in 0.5.0; Windows support, DLP and antivirus hooks,
+and judge connection reuse shipped in 0.6.0. Next come a ledger export for a
+SIEM (0.7.0), a public review, and the 1.0 release.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
@@ -534,7 +544,7 @@ are targets, not dates. The detail, and what comes after 1.0, is in
 ```mermaid
 flowchart LR
   r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
-  r05 --> r06["0.6.0<br/>DLP and AV hooks"]
+  r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM"]
   r07 --> r10["1.0.0<br/>Review and release"]
   r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
@@ -544,25 +554,28 @@ flowchart LR
 | --- | --- | --- |
 | 0.4.0 | This repository and the package name `two-key` | Released, tag `v0.4.0` |
 | 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | Released, tag `v0.5.0` |
-| 0.6.0 | DLP and antivirus hooks that call external scanners (ClamAV, a secret scanner); judge connection reuse (#6) | Next |
-| 0.7.0 | Ledger export for a SIEM: verified, decrypted locally, no argument values | Planned |
+| 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners (ClamAV, ICAP products, a command, Python); judge connection reuse (#6) | Released, tag `v0.6.0` |
+| 0.7.0 | Ledger export for a SIEM: verified, decrypted locally, no argument values; a count of refused tokens kept outside the ledger | Next |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI. Described as community-reviewed, not audited | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
 
-Two-Key is not on PyPI yet. Install a tagged release from git:
+Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
+three (HOWTO "Platforms"). It is not on PyPI yet. Install a tagged release
+from git:
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"
+pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.6.0"
 ```
 
-`v0.5.0` adds the MCP proxy (`two-key mcp-proxy`, with the `mcp` extra),
-the spec drafter (`two-key mcp-draft-specs`), caller-supplied facts, the
-guard core, and the live run 6 follow-ups (constitution v3). `main` holds
-that release and the fixes merged since; `working` is where the next changes
-land. For the previous release, use `@v0.4.0`: the 0.3.1 code under the new
-package name `two-key`. Tags `v0.3.1` and earlier are in the archived
+`v0.6.0` adds Windows support, content scanning that calls your antivirus or
+DLP product (ClamAV, ICAP, a command, or Python), a start-up check for paths
+another account could change, and judge connection reuse. `main` holds that
+release and the fixes merged since; `working` is where the next changes
+land. For the previous release, use `@v0.5.0`: the MCP proxy, the spec
+drafter, caller-supplied facts, the guard core, and constitution v3.
+`@v0.4.0` is the 0.3.1 code under the new package name `two-key`. Tags `v0.3.1` and earlier are in the archived
 `two-key-concept` repository, where `v0.3.0` stays on `e44be56`, `v0.2.4` on
 `fc836bb`, `v0.2.3` on `4a4352e`, and `v0.2.0` on `2f756ac`.
 
@@ -591,6 +604,11 @@ Upgrading from an older version: read the "Upgrading" notes in
   no longer loads, and an `allow` entry that starts with `@` is now a whole
   domain. A call that cannot be read under its spec is no longer sent to the
   judges. "Upgrading from 0.4.0" and the run 6 entries in CHANGES.md.
+- 0.6.0 loads 0.5.0 constitutions, ledgers, keys, and `proxy.yaml` files
+  unchanged. Check before upgrading: at start it names each file or folder
+  it runs or reads that another account could change, and under
+  `high_assurance` it refuses to start until there are none. "Release
+  v0.6.0" > "Upgrading from 0.5.0" in CHANGES.md.
 
 A clone installed with `pip install -e` follows the ranges in
 `pyproject.toml`. CI does not: it installs the versions in `uv.lock`

@@ -4,7 +4,6 @@ import hashlib
 import io
 import json
 import os
-import stat
 import tempfile
 import unittest
 from contextlib import redirect_stderr
@@ -13,6 +12,7 @@ from pathlib import Path
 from two_key.cli import main
 from two_key.keys import generate_private_key, save_private_key
 from two_key.ledger import ANCHOR_FORMAT, Ledger, LedgerError
+from perm import chmod, private
 
 
 class CreateWarning(unittest.TestCase):
@@ -35,7 +35,7 @@ class CreateWarning(unittest.TestCase):
             anchor = path.parent / f"{path.name}.ledger-key" / "head.anchor"
             self.assertTrue(anchor.is_file())
             self.assertFalse(str(anchor.resolve()).startswith(str(path.resolve()) + os.sep))
-            self.assertEqual(stat.S_IMODE(anchor.stat().st_mode) & 0o077, 0)
+            self.assertTrue(private(anchor))
 
     def test_anchor_inside_the_ledger_directory_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -104,7 +104,7 @@ class AnchorRollback(unittest.TestCase):
         stored["signature"] = sign(self.key, message)
         stored["witness_signature"] = sign(self.led._witness, message)
         self.led._anchor_path.write_bytes((json.dumps(stored) + "\n").encode())
-        os.chmod(self.led._anchor_path, 0o600)
+        chmod(self.led._anchor_path, 0o600)
         with self.assertRaises(LedgerError) as raised:
             Ledger(self.path, self.key)
         self.assertIn("differs from", str(raised.exception))
@@ -114,7 +114,7 @@ class AnchorRollback(unittest.TestCase):
         self.led.append("note", {"n": 2})
         self.led.checkpoint()
         self.led._anchor_path.write_bytes(stale)
-        os.chmod(self.led._anchor_path, 0o600)
+        chmod(self.led._anchor_path, 0o600)
         reopened = Ledger(self.path, self.key)
         self.assertEqual(reopened.size(), self.led.size())
         fresh = json.loads(reopened._anchor_path.read_text())

@@ -22,10 +22,12 @@ from ..action import MAX_TOOL_NAME_CHARS, TOOL_NAME
 from ..fields import FIELD_NAME
 from ..guard import GuardConfigError
 from ..guard import valid_claim as _guard_claim
+from ..judges.config import HOOK
+from ..scan import FileArg, ScanConfigError, file_arg
+from ..scanners import check_scan_block
 from ..strict import StrictParseError, load_file_strict
 
 ON_SCHEMA_CHANGE = ("refuse", "warn")
-HOOK = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*")
 DEFAULT_CALL_TIMEOUT_SECONDS = 60.0
 MAX_CALL_TIMEOUT_SECONDS = 3600.0
 MAX_PROPOSAL_CHARS = 1000
@@ -35,11 +37,12 @@ ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")
 UPSTREAM_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
 _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "head_anchor", "ttl_seconds",
-             "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools"}
+             "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools", "scan",
+             "on_writable_paths"}
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
 _KEY_KEYS = {"principal"}
 _UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds"}
-_TOOL_KEYS = {"claim", "proposal", "upstream_name", "facts"}
+_TOOL_KEYS = {"claim", "proposal", "upstream_name", "facts", "files"}
 
 
 class ProxyConfigError(ValueError):
@@ -49,11 +52,13 @@ class ProxyConfigError(ValueError):
 @dataclass(frozen=True)
 class ToolPolicy:
     """Per-tool settings. ``claim`` is ``floor``, ``none`` (omitted, so ``classified``), or a data class.
-    ``facts`` maps each caller-supplied field the tool maps to its hook, ``module:function``."""
+    ``facts`` maps each caller-supplied field the tool maps to its hook, ``module:function``. ``files`` lists
+    the arguments that hold a file, for the content scanner (``scan:``)."""
     claim: str = "none"
     proposal: str | None = None
     upstream_name: str | None = None
     facts: Mapping[str, str] = field(default_factory=dict)
+    files: tuple[FileArg, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -104,6 +109,11 @@ class ProxyConfig:
     agent_id: str | None = None
     hosting: str | None = None
     allow_unresolved_identity: bool = False
+    # The content scanner block (two_key.scanners), checked for shape; built when the proxy starts.
+    scan: Mapping[str, Any] | None = None
+    # warn (None: the default) or refuse when another account can change a path the proxy runs or reads
+    # (two_key/writable.py); high_assurance refuses either way.
+    on_writable_paths: str | None = None
 
     def tool_policy(self, tool: str) -> ToolPolicy:
         return self.tools.get(tool) or ToolPolicy()
@@ -233,7 +243,27 @@ def _facts(value: Any, where: str) -> dict[str, str]:
     return out
 
 
-def _tools(value: Any) -> dict[str, ToolPolicy]:
+def _files(base: Path, value: Any, where: str) -> tuple[FileArg, ...]:
+    """``[{path: attachments[].content, kind: base64|base64url|path, folder: dir}]``; a relative folder is
+    relative to the config file's directory."""
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ProxyConfigError(f"{where}: expected a list of {{path, kind, folder}}")
+    out = []
+    for i, item in enumerate(value):
+        if isinstance(item, Mapping) and isinstance(item.get("folder"), str) and item["folder"]:
+            item = dict(item, folder=str(_path(base, item["folder"], f"{where}[{i}].folder")))
+        try:
+            out.append(file_arg(item, f"{where}[{i}]"))
+        except ScanConfigError as e:
+            raise ProxyConfigError(str(e)) from None
+    if len({f.path for f in out}) != len(out):
+        raise ProxyConfigError(f"{where}: a path is declared twice")
+    return tuple(out)
+
+
+def _tools(value: Any, base: Path | None = None) -> dict[str, ToolPolicy]:
     if value is None:
         return {}
     if not isinstance(value, Mapping):
@@ -241,25 +271,37 @@ def _tools(value: Any) -> dict[str, ToolPolicy]:
     out: dict[str, ToolPolicy] = {}
     upstream_names: dict[str, str] = {}
     for tool, settings in value.items():
-        if not isinstance(tool, str) or len(tool) > MAX_TOOL_NAME_CHARS or not TOOL_NAME.fullmatch(tool):
-            raise ProxyConfigError(f"tools: {str(tool)[:80]!r} is not a signed tool id (lower case a-z, 0-9, _ . : / -)")
-        where = f"tools.{tool}"
-        settings = _mapping(settings if settings is not None else {}, where, _TOOL_KEYS)
-        name = settings.get("upstream_name")
-        if name is not None:
-            if not isinstance(name, str) or not UPSTREAM_NAME.fullmatch(name):
-                raise ProxyConfigError(f"{where}.upstream_name: expected an MCP tool name")
-            if name in upstream_names:
-                raise ProxyConfigError(f"{where}.upstream_name: {name!r} is also the upstream name of "
-                                       f"{upstream_names[name]!r}")
-            upstream_names[name] = tool
-        proposal = settings.get("proposal")
-        if proposal is not None:
-            proposal = _text(proposal, f"{where}.proposal", MAX_PROPOSAL_CHARS)
-        out[tool] = ToolPolicy(claim=valid_claim(settings.get("claim", "none"), f"{where}.claim"),
-                               proposal=proposal, upstream_name=name,
-                               facts=_facts(settings.get("facts"), f"{where}.facts"))
+        out[tool] = _tool_policy(tool, settings, base or Path("."), upstream_names)
     return out
+
+
+def _tool_policy(tool: Any, settings: Any, base: Path, upstream_names: dict[str, str]) -> ToolPolicy:
+    """One ``tools:`` entry. ``upstream_names`` (upstream name to tool id) spans the entries, so one upstream
+    tool is not offered under two ids."""
+    if not isinstance(tool, str) or len(tool) > MAX_TOOL_NAME_CHARS or not TOOL_NAME.fullmatch(tool):
+        raise ProxyConfigError(f"tools: {str(tool)[:80]!r} is not a signed tool id (lower case a-z, 0-9, _ . : / -)")
+    where = f"tools.{tool}"
+    settings = _mapping(settings if settings is not None else {}, where, _TOOL_KEYS)
+    name = _upstream_name(settings.get("upstream_name"), where, tool, upstream_names)
+    proposal = settings.get("proposal")
+    if proposal is not None:
+        proposal = _text(proposal, f"{where}.proposal", MAX_PROPOSAL_CHARS)
+    return ToolPolicy(claim=valid_claim(settings.get("claim", "none"), f"{where}.claim"),
+                      proposal=proposal, upstream_name=name,
+                      facts=_facts(settings.get("facts"), f"{where}.facts"),
+                      files=_files(base, settings.get("files"), f"{where}.files"))
+
+
+def _upstream_name(name: Any, where: str, tool: str, upstream_names: dict[str, str]) -> str | None:
+    if name is None:
+        return None
+    if not isinstance(name, str) or not UPSTREAM_NAME.fullmatch(name):
+        raise ProxyConfigError(f"{where}.upstream_name: expected an MCP tool name")
+    if name in upstream_names:
+        raise ProxyConfigError(f"{where}.upstream_name: {name!r} is also the upstream name of "
+                               f"{upstream_names[name]!r}")
+    upstream_names[name] = tool
+    return name
 
 
 def _ttl(value: Any) -> int:
@@ -267,6 +309,27 @@ def _ttl(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_TTL_SECONDS:
         raise ProxyConfigError(f"ttl_seconds: expected an integer from 1 to {MAX_TTL_SECONDS}")
     return value
+
+
+def _writable_mode(value: Any) -> str:
+    if value not in ("warn", "refuse"):
+        raise ProxyConfigError("on_writable_paths: expected warn or refuse")
+    return value
+
+
+def _scan_block(top: Mapping, tools: Mapping[str, ToolPolicy]) -> dict | None:
+    """The checked ``scan:`` block, or None. A tool that declares files needs one."""
+    scan = None
+    if "scan" in top:
+        try:
+            scan = check_scan_block(top["scan"])
+        except ScanConfigError as e:
+            raise ProxyConfigError(str(e)) from None
+    with_files = sorted(tool for tool, policy in tools.items() if policy.files)
+    if with_files and scan is None:
+        raise ProxyConfigError(f"tools: {with_files} declare files, which are for the content scanner; add a "
+                               "scan: block")
+    return scan
 
 
 def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
@@ -283,6 +346,8 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
     for key in ("agent_id", "hosting"):
         if key in top:
             meta[key] = _text(top[key], key, 256)
+    tools = _tools(top.get("tools"), base)
+    scan = _scan_block(top, tools)
     return ProxyConfig(
         path=path,
         constitution=_path(base, top["constitution"], "constitution"),
@@ -290,7 +355,8 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
         ledger=_path(base, top["ledger"], "ledger"),
         judges=_path(base, top["judges"], "judges"),
         upstream=_upstream(base, top["upstream"]),
-        tools=_tools(top.get("tools")),
+        tools=tools,
+        scan=scan,
         witness_public_key=(_path(base, top["witness_public_key"], "witness_public_key")
                             if "witness_public_key" in top else None),
         head_anchor=_path(base, top["head_anchor"], "head_anchor") if "head_anchor" in top else None,
@@ -299,6 +365,7 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
                            if "agent_session_env" in top else None),
         allow_unresolved_identity=(_bool(top["allow_unresolved_identity"], "allow_unresolved_identity")
                                    if "allow_unresolved_identity" in top else False),
+        on_writable_paths=_writable_mode(top["on_writable_paths"]) if "on_writable_paths" in top else None,
         **meta,
     )
 

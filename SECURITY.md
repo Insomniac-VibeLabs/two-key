@@ -40,15 +40,33 @@ is how to report a vulnerability. It is not the model.
   arguments or claim, a v1 or v2 constitution accepted with a caller field,
   or a redemption that runs the tool after the fact changed (branch
   `mcp-proxy`)
+- A start that does not name, or under `high_assurance` or
+  `on_writable_paths: refuse` does not refuse, a file or folder Two-Key
+  runs or reads that another account could change, where
+  docs/CONNECTING.md says it is checked (0.6.0)
 - A judge that is the monitored agent being accepted at start-up: a judge
   holding the agent's credential (the same API token, or the same username
   and password) at any address, whether or not either side sends it, or
   both sides keyless on one address. Other overlaps start with a warning
   by design.
+- With a content scanner configured (0.6.0): a call to a
+  scanned tool that reaches Path A without a scan, a verdict the agent can
+  set or avoid (in its arguments, claim, or proposal, or through
+  `facts=`), an unavailable or failed scan read as `clean`, a declared file
+  that goes unscanned or reaches the tool when it cannot be read (a path
+  outside its folder, a link, bad base64) or is over its `max_bytes`, under
+  any stance, an encrypted file that passes on a tool whose signed spec
+  does not say `encrypted: pass` or alongside another finding, a
+  file that changes between the scan and the tool without `file_changed`,
+  or content (an argument value, a file, a matched string) in the ledger, a
+  reason code, or a judge's prompt where docs/SCANNERS.md says it is
+  withheld
 
 ## Out of scope for this repository
 
-- Malware or DLP scanning of tool payloads. It is intentionally absent here.
+- A malware or DLP scanning engine. Two-Key has none; from 0.6.0 it can
+  call your antivirus or DLP product (docs/SCANNERS.md). What that product
+  detects, or misses, is a matter for its vendor.
 - FIPS validation. Algorithms are Ed25519 and SHA-256 from `cryptography`.
 - An agent that reaches an MCP server directly, around the proxy, and an
   upstream server run as the proxy's OS user. Both are deployment

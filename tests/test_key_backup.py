@@ -7,7 +7,6 @@ head.anchor from the same moment as the ledger and does not delete it.
 import io
 import json
 import os
-import stat
 import tempfile
 import time
 import unittest
@@ -26,6 +25,7 @@ from two_key.keys import generate_private_key, load_private_key_file, save_priva
 from two_key.ledger import Ledger, LedgerError
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
+from perm import chmod, private
 
 RULES = [{"id": "t", "allow_only_tools": ["search"]}]
 SPECS = {"search": {"irreversible": False, "data_class_floor": "public"}}
@@ -88,7 +88,7 @@ class ExportShape(BackupFixture):
         self.assertNotIn("ledger.key", opened["principal"]["files"])
         for name in BUNDLE_NAMES.values():
             path = self.out / name
-            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertTrue(private(path))
             header = json.loads(path.read_text())
             self.assertEqual(header["format"], FORMAT)
             self.assertEqual(header["version"], 1)
@@ -140,7 +140,7 @@ class ExportShape(BackupFixture):
     def test_refuses_a_symlink_or_a_group_writable_output_directory(self):
         real = self.root / "real-out"
         real.mkdir()
-        os.chmod(real, 0o777)  # skipcq: BAN-B103 -- deliberately world-writable; export must refuse it
+        chmod(real, 0o777)  # skipcq: BAN-B103 -- deliberately world-writable; export must refuse it
         link = self.root / "out-link"
         link.symlink_to(real, target_is_directory=True)
         with self.assertRaisesRegex(BackupError, "symlink"):
@@ -148,17 +148,17 @@ class ExportShape(BackupFixture):
         self.assertEqual(list(real.iterdir()), [])
         wide = self.root / "wide-out"
         wide.mkdir()
-        os.chmod(wide, 0o775)  # skipcq: BAN-B103 -- deliberately group-writable; export must refuse it
+        chmod(wide, 0o775)  # skipcq: BAN-B103 -- deliberately group-writable; export must refuse it
         with self.assertRaisesRegex(BackupError, "writable"):
             export_backup(self.ledger, self.key_path, wide, PHRASES, iterations=FAST)
         self.assertEqual(list(wide.iterdir()), [])
-        private = self.root / "private-out"
-        private.mkdir()
-        os.chmod(private, 0o755)  # skipcq: BAN-B103 -- an ordinary directory; export must accept it
+        private_out = self.root / "private-out"
+        private_out.mkdir()
+        chmod(private_out, 0o755)  # skipcq: BAN-B103 -- an ordinary directory; export must accept it
         err = io.StringIO()
         with redirect_stderr(err):
-            export_backup(self.ledger, self.key_path, private, PHRASES, iterations=FAST)
-        self.assertTrue((private / "principal.bundle.json").is_file())
+            export_backup(self.ledger, self.key_path, private_out, PHRASES, iterations=FAST)
+        self.assertTrue((private_out / "principal.bundle.json").is_file())
 
 
 class VerifyAndPassphrase(BackupFixture):

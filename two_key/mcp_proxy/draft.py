@@ -33,7 +33,8 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from ..action import MAX_TOOL_NAME_CHARS, TOOL_NAME
-from .core import pinned_view, schema_digest, undescribed_advice
+from ..scan import MAX_INLINE_FILE_BYTES
+from .core import file_like_inputs, pinned_view, schema_digest, undescribed_advice
 
 FACT_LIKE = re.compile(r"(^|_)(matched|verified|approved|confirmed|validated)$")
 AMOUNT_LIKE = re.compile(r"^(amount|amount_usd|amount_cents|price|total|cost|sum|value_usd|usd|cents)$")
@@ -51,6 +52,7 @@ class ToolDraft:
     notes: list[str] = field(default_factory=list)
     facts: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    files: list[tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -171,6 +173,10 @@ def draft_tool(view: Mapping[str, Any]) -> ToolDraft | str:
         spec["counterparties"] = parties
     if payload:
         spec["payload"] = payload
+    draft.files = file_like_inputs(schema)
+    for path, kind in draft.files:
+        draft.notes.append(f"{path}: looks like a file ({kind}?); to scan it as a file, map scan on this tool and "
+                           f"declare it under tools.{tool_id}.files in proxy.yaml (docs/SCANNERS.md)")
     return draft
 
 
@@ -232,7 +238,21 @@ def render_rules(draft: Draft, command: list[str]) -> str:
     if draft.skipped:
         lines.append("# Not drafted:")
         lines.extend(f"# - {_comment(s)}" for s in draft.skipped)
+    lines.extend(SCAN_TEMPLATE)
     return "\n".join(lines) + "\n"
+
+
+SCAN_TEMPLATE = [
+    "# To scan calls with an antivirus or DLP product (docs/SCANNERS.md), add this field, map it on each tool",
+    "# to scan (fields: {scan: {source: caller}}; mark the others scan: not_applicable), and add one rule:",
+    "# fields:",
+    "#   scan: {type: enum, values: [clean, flagged, unavailable], default: clean, source: caller}",
+    "# hard_rules:",
+    "#   - {id: scan, deny_if_fields: {scan: {eq: flagged}}}                  # default stance",
+    "#   - {id: scan, deny_if_fields: {scan: {in: [flagged, unavailable]}}}   # strict stance, instead",
+    "# Monitor mode: no rule; the verdict is recorded and shown to the judges.",
+    "# An encrypted file is flagged; to let one tool pass it, see docs/SCANNERS.md, Encrypted files.",
+]
 
 
 def render_proxy_tools(draft: Draft) -> str:
@@ -246,6 +266,14 @@ def render_proxy_tools(draft: Draft) -> str:
         lines.append("    claim: none")
         if t.upstream_name != t.tool_id:
             lines.append(f"    upstream_name: {_yaml_value(t.upstream_name)}")
+        if t.files:      # commented: a scan: block is needed first, and each file needs its size (and folder)
+            lines.append("    # files:   # for the content scanner; review each kind, and set max_bytes to the")
+            lines.append(f"    #          # largest file the tool needs (base64: at most {MAX_INLINE_FILE_BYTES}); "
+                         "docs/SCANNERS.md")
+            for path, kind in t.files:
+                folder = ", folder: REPLACE_WITH_FOLDER" if kind == "path" else ""
+                lines.append(f"    #   - {{path: {_yaml_value(path)}, kind: {kind}{folder}, "
+                             "max_bytes: REPLACE_WITH_BYTES}")
     return "\n".join(lines) + "\n"
 
 

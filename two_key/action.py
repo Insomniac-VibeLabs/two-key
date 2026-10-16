@@ -115,6 +115,9 @@ class Action:
     # The names among ``fields`` that are caller-supplied facts (``source: caller``), so a judge can tell an
     # integration's fact from an agent-written field. Never from the claim.
     fact_fields: tuple[str, ...] = ()
+    # The content scan's summary for the judges' trusted <scan_result> section (scan.py). Set by Two-Key only,
+    # never part of the record or its hash: the verdict itself is a field, and so already in both.
+    scan: Mapping[str, Any] | None = field(default=None, compare=False, repr=False)
 
     def field_value(self, name: str) -> Any:
         """A built-in field. Any other name is a ``KeyError``: ``raw`` is the agent's, never a field."""
@@ -138,6 +141,7 @@ class Action:
             d["fact_fields"] = list(self.fact_fields)
         else:
             del d["fact_fields"]
+        del d["scan"]
         return d
 
 

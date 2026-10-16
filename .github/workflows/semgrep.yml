@@ -21,10 +21,33 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Run Semgrep
-        run: semgrep scan --config=auto --sarif --output=semgrep.sarif
+        # Findings print to this log as text as well as going to the Security tab as SARIF, so they can be
+        # read without code-scanning access.
+        run: semgrep scan --config=auto --sarif-output=semgrep.sarif
+
+      - name: Leave out findings suppressed in the code
+        # Each `# nosemgrep: <rule-id>` line carries its reason in the code (CHANGES, "Semgrep findings
+        # suppressed with reasons"). Semgrep still writes those findings to the SARIF, marked as suppressed,
+        # and code scanning shows them as open alerts, so they are dropped before the upload.
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import json
+          with open("semgrep.sarif", encoding="utf-8") as f:
+              sarif = json.load(f)
+          dropped = 0
+          for run in sarif.get("runs", []):
+              results = run.get("results", [])
+              kept = [r for r in results if not r.get("suppressions")]
+              dropped += len(results) - len(kept)
+              run["results"] = kept
+          with open("semgrep.sarif", "w", encoding="utf-8") as f:
+              json.dump(sarif, f)
+          print(f"left out {dropped} suppressed finding(s)")
+          EOF
 
       - name: Upload SARIF to GitHub
         if: always()
-        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: semgrep.sarif

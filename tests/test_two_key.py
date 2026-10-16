@@ -405,7 +405,10 @@ class CoreTests(unittest.TestCase):
         with self.assertRaisesRegex(JudgeConfigError, r"^too_few_judges_configured:2<3 "):
             load_config({"judges": judges, "quorum": {"required_yes": 1, "min_responding": 3}})
 
-    def test_section4_does_not_skip_path_b(self):
+    # section4 has the high_assurance floors, which refuse to start on a machine where another account can
+    # change Python's files (two_key/writable.py); this test is about Path B, so it does not look at the machine.
+    @patch("two_key.writable.runtime_targets", return_value=[])
+    def test_section4_does_not_skip_path_b(self, _):
         with tempfile.TemporaryDirectory() as tmp:
             _, tk = _engine(tmp, quorum=QuorumPolicy.section4(required_yes=2))
             decision = tk.authorize(

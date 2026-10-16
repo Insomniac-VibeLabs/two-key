@@ -1,4 +1,5 @@
-"""Redeem a capability token. No scanning, antivirus, or DLP hooks.
+"""Redeem a capability token. It never scans: a scanned tool's token carries the verdict and each file's digest
+(scan.py), and the gateway checks the files again just before the tool runs (``file_changed``).
 
 The gateway keeps a ``CapabilityVerifier``. It does not keep the minting
 key. It refuses a verifier whose key is the principal key, and it redeems a
@@ -38,11 +39,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - POSIX only
-    fcntl = None
-
+from . import _platform
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          capability_key_fingerprint)
 from .agent_meta import cap_ledger_text, type_tag
@@ -51,6 +48,7 @@ from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_
 from .derive import (MAX_ARGS_BYTES, DeriveError, args_too_large, blocked_from_rules, caller_fields, canonical_too_large,
                      derive, dropped_keys, form_for, forms_match, project_arguments, size_record)
 from .ledger import LedgerError
+from .scan import CALL_VERDICTS, ENCRYPTED
 
 
 _MAX_REASON_CHARS = 200
@@ -136,7 +134,7 @@ def _as_verifier(issuer) -> CapabilityVerifier:
 class ToolGateway:
     def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None,
                  max_denied_jtis: int | None = None,
-                 deny_inflight_wait_seconds: float | None = None):
+                 deny_inflight_wait_seconds: float | None = None, scanner=None):
         self.ledger = ledger
         _warn_unbound_ledger(ledger)
         self.issuer = _as_verifier(issuer)
@@ -146,6 +144,9 @@ class ToolGateway:
         self._fingerprint = capability_key_fingerprint(self.issuer.public_key)
         self.compiled = compiled
         self.tools = tools or {}
+        # TwoKey's content scanner, for its configuration only (which tools are scanned, which arguments are
+        # files): the gateway never calls it. None when no scanner is configured.
+        self.scanner = scanner
         # One in-process lock per jti being redeemed. #42: _lock_refs counts the threads that hold or
         # wait on each lock, under _locks_guard; the entry is removed when the count reaches zero, so the
         # map holds only jtis in flight. No LRU cap: evicting a held lock would split one jti in two.
@@ -305,6 +306,19 @@ class ToolGateway:
                 return GatewayResult(False, "fact_mismatch" if has_facts else "derived_mismatch")
             if args_too_large(facts):
                 return GatewayResult(False, "fact_mismatch" if has_facts else "derived_mismatch")
+        scan = None
+        if self.scanner is not None and self.scanner.scans(spec):
+            # No second scan: the verdict is the one the token binds. Supplied any other way, it is refused.
+            scan = payload.get("scan")
+            if (not isinstance(scan, dict) or scan.get("verdict") not in CALL_VERDICTS
+                    or not isinstance(scan.get("files"), list)
+                    or (scan["verdict"] == ENCRYPTED and not self.scanner.passes_encrypted(spec))):
+                return GatewayResult(False, "scan_mismatch")
+            if facts is not None and (not isinstance(facts, dict) or self.scanner.field in facts):
+                return GatewayResult(False, "fact_mismatch")
+            facts = {**(facts or {}), self.scanner.field: scan["verdict"]}
+        elif "scan" in payload:
+            return GatewayResult(False, "scan_mismatch")
         try:
             derived = derive(spec, arguments, self.compiled.fields, facts)
             fresh = form_for(derived, payload["claimed_data_class"],
@@ -334,6 +348,14 @@ class ToolGateway:
                 return GatewayResult(False, "already_redeemed")
             if self.ledger.redemption_started(payload["jti"]):
                 return GatewayResult(False, "already_attempted")
+            # Last, just before the tool runs: each declared file is the one that was scanned.
+            if scan is not None:
+                try:
+                    same = self.scanner.file_digests(tool, arguments) == scan["files"]
+                except Exception:       # could not read them again: not the files that were scanned
+                    same = False
+                if not same:
+                    return GatewayResult(False, "file_changed")
             try:
                 self.ledger.append_bounded("redemption_started", {"jti": payload["jti"], "tool": tool,
                                                                   "dropped_keys": dropped_keys(spec, arguments)})
@@ -386,12 +408,10 @@ class ToolGateway:
                     gateway._unref(jti)
                     raise
                 self.fd = None
-                if fcntl is None:
-                    return self
                 try:
                     path = gateway.ledger.redeem_lock_path(jti)
-                    self.fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
-                    fcntl.flock(self.fd, fcntl.LOCK_EX)
+                    self.fd = _platform.open_lock_file(path)
+                    _platform.lock(self.fd)
                     return self
                 except BaseException:
                     if self.fd is not None:
@@ -404,7 +424,7 @@ class ToolGateway:
                 try:
                     if self.fd is not None:
                         try:
-                            fcntl.flock(self.fd, fcntl.LOCK_UN)
+                            _platform.unlock(self.fd)
                         finally:
                             os.close(self.fd)
                 finally:

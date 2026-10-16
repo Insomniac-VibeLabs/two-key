@@ -1,6 +1,9 @@
 # Threat model
 
-This is the design model for `two-key` 0.5.0. Tag `v0.5.0` on `main` is the tagged release; `v0.4.0` renamed the package and its formats. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+This is the design model for `two-key` 0.6.0. Tag `v0.6.0` on `main` is the tagged release; `v0.5.0` is the one before, and `v0.4.0` renamed the package and its formats. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
+0.6.0 adds Windows support (`two_key/_platform.py`), optional content scanning through the
+operator's antivirus or DLP product (`two_key/scan.py`), a start-up check for paths another
+account could change (`two_key/writable.py`), and judge connection reuse, described below.
 0.5.0 adds the MCP proxy (`two-key mcp-proxy`), the spec drafter
 (`two-key mcp-draft-specs`), caller-supplied facts (`source: caller`, constitution v3), and the
 guard core (`two_key/guard.py`), described below, and the run 6 follow-ups: every tool decides
@@ -132,7 +135,34 @@ the code wins, then this file should be corrected.
   bytes, then `redemption_started` is checkpointed, then the registered
   function is called with declared paths only. Unnamed keys are not passed
   in. A counterparty path is the canonical party, not the raw spelling.
-  Nothing in this package scans those bytes.
+  The gateway never scans: with a content scanner configured, it takes the
+  verdict from the token and hashes each file sent by path again
+  (`file_changed`).
+- Two-Key to the content scanner (0.6.0; docs/SCANNERS.md).
+  Optional. For each call to a tool the signed constitution marks (it maps
+  the `scan` field), Two-Key sends the scanner every argument (keys the
+  tool will not receive included), each declared file decoded or read from
+  its folder, and the proposal text, after the call reads under its spec
+  and before Path A. The agent cannot start, skip, or answer a scan: `scan`
+  in its arguments is `caller_field_in_arguments`, and in `facts=` it is
+  `scan_fact_supplied`. The scanner is trusted to answer, not to decide: a
+  timeout, an exception, or an answer Two-Key cannot read is
+  `unavailable`; a result it could not finish, or content it could not
+  look inside (`encrypted`), is `flagged`. The signed rule on the verdict
+  decides. Only a tool whose signed spec says `encrypted: pass` turns an
+  `encrypted` finding into the verdict `encrypted`, and only when it is the
+  sole finding; the gateway refuses that verdict for any other tool
+  (`scan_mismatch`). A declared file Two-Key cannot read (bad base64,
+  a path outside its folder, a link, a missing file), or a call over a file
+  limit (each file's required `max_bytes`, 32 files, 100 MiB together), is
+  denied before the scanner and both paths under every stance, and nothing
+  past a limit is read.
+  The scanner sees content, so it is a new audience for it, as cloud judges
+  are; its adapters get no keys, and a command scanner gets a minimal
+  environment. Judges get the verdict in a trusted section, file digests in
+  place of files, and, when flagged, no arguments or proposal unless
+  `tool_args_on_scan_flag`. The ledger gets digests, sizes, the verdict,
+  categories, and the scanner's label and version, never content.
 - Agent host to the MCP proxy (stdio). The host sees the signed tools only,
   under their signed ids, with the pinned fields (`name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`). Each
@@ -269,6 +299,20 @@ These are accepted or still open. They are not bugs the design already
 claims to close.
 
 - No independent review, and no production deployment.
+- Any route around Two-Key is outside what it can see: a tool
+  credential the agent holds, a network route to the system of record, a
+  second tool on the agent host that reaches the same system (a shell, an
+  HTTP or browser tool, a file tool that writes into a `kind: path`
+  folder), or write access to what Two-Key trusts (config files, hook
+  modules or anything on its `PYTHONPATH`, a local judge's model). On one
+  machine, an agent can also take a loopback port a judge, scanner, or
+  hook back end left free (after a crash or restart) and answer in its
+  place. docs/CONNECTING.md lists each connection and how to close it.
+  Two-Key names, at start, each file or folder it runs or reads that
+  another account could change (`writable_path`), and refuses under
+  `high_assurance` or `on_writable_paths: refuse`. That catches a setup
+  mistake; it cannot see the wrapper that started it or the upstream's
+  files, and code already changed has already run.
 - MCP proxy (0.5.0):
   - An agent that can reach the upstream server directly, or holds its
     credential, bypasses the proxy entirely. The proxy cannot see or stop
@@ -371,8 +415,8 @@ claims to close.
   `shape` of `string`, `number`, or `list` (strings only) refuses a
   different kind. `max_length` bounds a string or a list. A boolean is not
   a number. `payload_shape` is a derive deny. Shape does not read contents.
-  Meaning stays with Path B. A DLP hook is planned (see
-  [ROADMAP.md](../ROADMAP.md)). The token still binds
+  Meaning stays with Path B, or, from 0.6.0, with a content scanner the
+  operator connects (see "Trust boundaries"). The token still binds
   the caller's original argument bytes. Redeem with those same bytes. The
   function is called with the projection. Missing `data_class` still becomes
   `classified` before the floor, and the floor cannot lower that default.
@@ -465,8 +509,53 @@ claims to close.
   amount, counterparties, and custom field values.
 - A crash after `redemption_started` and before the tool runs refuses a
   retry, even if the tool did not run. Exactly-once execution is not claimed.
-- Where `fcntl` is absent, another process can still append. This package
-  does not claim cross-process exclusion on those platforms.
+- Cross-process exclusion (the append lock and the redemption locks) is
+  `flock` on Linux and macOS and `LockFileEx` on Windows (0.6.0;
+  `two_key/_platform.py`). The Windows lock is mandatory, not advisory, but
+  it sits on byte 0 of a separate lock file, so it blocks only another
+  Two-Key process taking the same lock, never a reader of the ledger. Both
+  are released when the process ends. On a platform with neither, taking
+  the lock raises, so nothing is appended.
+- **Owner-only on Windows** (0.6.0) means: the key file's owner, and every
+  entry in its access list that grants more than metadata access, is the
+  current user, SYSTEM, or the local Administrators group (or OWNER RIGHTS
+  when the owner is one of those). SYSTEM and Administrators can read the
+  key, as they can read any file on the machine, and as root can on Linux
+  and macOS; backup software reads through the backup privilege either way
+  (maintainer's decision, 2026-10-15). Two-Key creates a key with an access
+  list for the current user only, set when the file is created. Another
+  ordinary user cannot read it. Files open with
+  `FILE_FLAG_OPEN_REPARSE_POINT`, so a symlink or junction as the last part
+  of the path is refused, as `O_NOFOLLOW` does on POSIX; a link earlier in
+  the path is followed on every platform.
+- **Content scanning** (0.6.0) is only as good as the
+  operator's product and its signatures. Under the default stance a
+  scanner that is down lets calls through to the two keys (ledgered once,
+  told to the judges); only the strict stance denies them. Monitor blocks
+  nothing on the verdict (an unreadable or oversized file is still denied).
+  The file limits hold per call, not over time: many calls can still fill
+  a disk a tool writes to. Which arguments are files
+  is operator configuration (`proxy.yaml` or `Scanner(files=...)`), not
+  signed: an undeclared file is scanned as text, not decoded (the proxy
+  warns at start about inputs that look like files). A URL is scanned as
+  text; Two-Key does not download it. Tool results are not scanned. A file
+  sent by path is hashed again just before the tool runs, but a writer
+  outside Two-Key can swap it between that check and the tool opening it;
+  declare a folder only the guarded tools can write to. Two-Key passes the
+  path, not the bytes, so a tool with another view of the disk (a
+  container, another mount) could open a different file than the one
+  scanned; run it on the same host and filesystem. The gateway does
+  not scan again, so a signature update between authorization and
+  redemption (at most 300 s) does not apply to that call. A scanner that
+  is still running when its time limit passes is abandoned, not stopped.
+  A scanner cannot see inside encrypted content. On a tool signed
+  `encrypted: pass`, an encrypted container passes unscanned, so an agent
+  can carry anything it can encrypt through that tool; only the receiving
+  side, the tool's signed allow lists, and the judges check it. Raw
+  ciphertext (PGP, age, a custom format) looks like noise to most
+  products and was never flagged on any tool. With ClamAV's
+  `HeuristicScanPrecedence yes`, malware in a readable part of an
+  encrypted archive can be reported as `Heuristics.Encrypted` only.
 - There is no TEE. OAuth device-code judge auth is rejected. A username and
   password is accepted only as HTTP Basic over HTTPS (`type: basic`). Use
   `env`, `keyring`, `callback`, or `basic`.
@@ -505,39 +594,32 @@ claims to close.
   a rule.
 - A vulnerability in a judge vendor's API.
 - Using this package as an MCP server, as user login, or as a DLP or
-  antivirus product. It is none of those. An optional MCP adapter and
-  scanner hooks are planned (see [ROADMAP.md](../ROADMAP.md)). They would sit
-  in front of or beside the gateway, and they would not make this package a
-  server or a scanner.
+  antivirus product. It is none of those. The MCP proxy (0.5.0) sits in
+  front of the gateway, and the scanner hooks (0.6.0) call
+  the operator's own product; neither makes this package a server or a
+  scanner. What a connected product detects or misses is out of scope.
 - Full per-value information-flow tracking, and a content classifier. A
   tool-spec floor is not a taint label. Scanning engines, external or
   permissioned-chain anchoring, and seed phrases are not here and are not
-  planned. Planned scanner hooks, PKI with certificate recovery, and hybrid
-  signatures are in [ROADMAP.md](../ROADMAP.md). Key backup shipped in
-  0.3.0. See [SCOPE.md](SCOPE.md).
+  planned. Scanner hooks that call an external product shipped in 0.6.0. PKI with
+  certificate recovery and hybrid signatures are in [ROADMAP.md](../ROADMAP.md). Key backup
+  shipped in 0.3.0. See [SCOPE.md](SCOPE.md).
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md), in its order: the MCP adapter
-(0.5.0), DLP and antivirus hooks (0.6.0), the SIEM export (0.7.0), then 1.0;
-the rest come after 1.0. None of what follows is in a release yet, and
-nothing here describes current behavior except where an item says it is
-built. Each item is added to the sections above in the release that ships
-it. Key backup and custom Path A fields shipped in 0.3.0 and are described
+These come from [ROADMAP.md](../ROADMAP.md), in its order: the SIEM export
+(0.7.0), then 1.0; the rest come after 1.0. None of what follows is in a
+release yet. Each item is added to the sections above in the release that
+ships it. Key backup and custom Path A fields (0.3.0), the MCP adapter
+(0.5.0), and the DLP and antivirus hooks (0.6.0) shipped and are described
 above, not here.
 
-- MCP adapter (0.5.0). The stdio proxy, the spec drafter, and
-  caller-supplied facts with the guard core (#2 P1, design reviewed by the
-  maintainer) are built and described above; live test run 6 runs before
-  the release. HTTP transports come later. A `tool_specs` draft made from
-  MCP schemas stays a proposal for the principal to review and sign, not
-  trusted input.
-- Inspection hooks for DLP and antivirus (0.6.0, next). New trust boundary:
-  the scanner. A scanner error, timeout, or missing result is meant to be a
-  deny. A scanner sees only what the tool spec lets through, so a payload
-  value it cannot read stays a residual risk. Where the hook runs relative to
-  the judges is an open choice, because cloud judges receive `tool_args`
-  today.
+- Refused-token count (0.7.0, with the SIEM export; design note and
+  maintainer review first). A token that does not verify (forged, expired,
+  or malformed) is refused without a ledger entry, so an unauthenticated
+  caller cannot fill the ledger; today such refusals leave no trace. A
+  rate-limited count kept outside the ledger would show them. It must
+  carry no token text.
 - Ledger export for SIEM (0.7.0). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.
@@ -615,4 +697,5 @@ above, not here.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
 - `two_key/mcp_proxy/`: only `sdk.py` imports the MCP SDK. Each `tools/call` runs `authorize`, then `gateway.invoke` in the same process; the upstream call is the gateway's registered tool, with projected arguments. Only signed tools are shown, under their signed ids; any other name is `tool_not_offered`, ledgered. Caller-supplied paths are removed from the `inputSchema` shown. `mcp_proxy_started` is ledgered before serving; if that fails, the proxy does not start. Fact hooks load at start; one that does not import refuses to start. The schema digest covers exactly the fields shown, as the upstream lists them (before caller paths are removed); a mismatch refuses unless `on_schema_change: warn`. `unresolved_identity` refuses unless `allow_unresolved_identity: true`. The claim is the per-tool policy only (`floor`, a class, or none = classified). The child gets `upstream.env` plus the SDK's minimal set. Nothing but MCP goes to stdout. `draft.py`: placeholders that signing refuses, fact-like properties left out, server text in ASCII comments only. `undescribed_inputs` warns, never refuses, for each input Path A reads that the upstream schema does not describe.
+- `two_key/_platform.py`: POSIX does exactly what it did before 0.6.0 (mode 0600 and 0700, `O_NOFOLLOW`, `flock`, the same messages). On Windows a key is created with a protected access list for the current user only, in `CreateFileW` itself; a key is accepted only when its owner and every allow entry with more than metadata access are the current user, SYSTEM, Administrators, or OWNER RIGHTS; a reparse point as the last part is refused; locks are `LockFileEx`; descriptors are binary. Every key read and write in the package goes through it, and every text file Two-Key writes uses `newline="\n"` and a named encoding (`tests/test_text_io.py`).
 - `two_key/backup.py`: three bundles; the ledger key and the witness key are never in one file; a wrong passphrase or a tampered bundle is a refusal; restore writes `head.anchor` from the same moment as the ledger and does not delete it. `--replace-ledger` is the only path that overwrites a different ledger, and it also overwrites a key file that differs. A missing anchor on a newer ledger is left missing; the next open adopts that head.

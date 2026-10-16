@@ -73,6 +73,30 @@
 - [Release v0.5.0: MCP proxy, caller-supplied facts, run 6 follow-ups — 2026-10-15](#release-v050-mcp-proxy-caller-supplied-facts-run-6-follow-ups--2026-10-15)
 - [PR #11 review: SonarCloud maintainability findings — 2026-10-15](#pr-11-review-sonarcloud-maintainability-findings--2026-10-15)
 - [PR #11 review: no raw bidirectional characters — 2026-10-15](#pr-11-review-no-raw-bidirectional-characters--2026-10-15)
+- [Semgrep findings printed to the job log — 2026-10-15](#semgrep-findings-printed-to-the-job-log--2026-10-15)
+- [Roadmap: where we are, and the plan to 0.6.0 — 2026-10-15](#roadmap-where-we-are-and-the-plan-to-060--2026-10-15)
+- [CI: an informational macOS and Windows run — 2026-10-15](#ci-an-informational-macos-and-windows-run--2026-10-15)
+- [macOS: the one failing test; first portability results — 2026-10-15](#macos-the-one-failing-test-first-portability-results--2026-10-15)
+- [Semgrep findings suppressed with reasons; judge hooks checked like proxy hooks — 2026-10-15](#semgrep-findings-suppressed-with-reasons-judge-hooks-checked-like-proxy-hooks--2026-10-15)
+- [CodeQL action v4; the maintainer's 0.6.0 decisions in ROADMAP — 2026-10-15](#codeql-action-v4-the-maintainers-060-decisions-in-roadmap--2026-10-15)
+- [CI on Linux, macOS, and Windows (0.6.0 Phase 1) — 2026-10-15](#ci-on-linux-macos-and-windows-060-phase-1--2026-10-15)
+- [Windows support, part 1: owner-only files, locks, no-follow opens (0.6.0 Phase 2) — 2026-10-15](#windows-support-part-1-owner-only-files-locks-no-follow-opens-060-phase-2--2026-10-15)
+- [Windows support, part 2: docs; one message (0.6.0 Phase 2) — 2026-10-15](#windows-support-part-2-docs-one-message-060-phase-2--2026-10-15)
+- [Windows CI blocks (0.6.0 Phase 2 done) — 2026-10-15](#windows-ci-blocks-060-phase-2-done--2026-10-15)
+- [Judge connection reuse (#6, 0.6.0 Phase 5) — 2026-10-15](#judge-connection-reuse-6-060-phase-5--2026-10-15)
+- [Content scanning, part 1: the core (0.6.0 Phase 3) — 2026-10-15](#content-scanning-part-1-the-core-060-phase-3--2026-10-15)
+- [Content scanning, part 2: adapters and the proxy (0.6.0 Phase 4) — 2026-10-15](#content-scanning-part-2-adapters-and-the-proxy-060-phase-4--2026-10-15)
+- [Content scanning, part 3: docs (0.6.0 Phase 6) — 2026-10-15](#content-scanning-part-3-docs-060-phase-6--2026-10-15)
+- [Live run 7 harness: content scanning (0.6.0 Phase 7) — 2026-10-15](#live-run-7-harness-content-scanning-060-phase-7--2026-10-15)
+- [File size limits; unreadable files denied under every stance (0.6.0) — 2026-10-15](#file-size-limits-unreadable-files-denied-under-every-stance-060--2026-10-15)
+- [Encrypted files: signed per-tool pass (0.6.0) — 2026-10-15](#encrypted-files-signed-per-tool-pass-060--2026-10-15)
+- [Docs: connecting the agent so it cannot go around Two-Key — 2026-10-15](#docs-connecting-the-agent-so-it-cannot-go-around-two-key--2026-10-15)
+- [Docs: the proxy wrapper leaves the agent's folder — 2026-10-16](#docs-the-proxy-wrapper-leaves-the-agents-folder--2026-10-16)
+- [Start-up check: paths another account could change (0.6.0) — 2026-10-16](#start-up-check-paths-another-account-could-change-060--2026-10-16)
+- [Run 7 follow-ups: key errors, scanner scope, relay — 2026-10-16](#run-7-follow-ups-key-errors-scanner-scope-relay--2026-10-16)
+- [Release v0.6.0: Windows, content scanning, writable-path check — 2026-10-16](#release-v060-windows-content-scanning-writable-path-check--2026-10-16)
+- [PR #12 review: TLS 1.2 for icaps, suppressed Semgrep findings — 2026-10-16](#pr-12-review-tls-12-for-icaps-suppressed-semgrep-findings--2026-10-16)
+- [PR #12 review: SonarCloud findings — 2026-10-16](#pr-12-review-sonarcloud-findings--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -2680,3 +2704,653 @@ On branch `working`. Tests only.
 - `tests/test_no_bidi_chars.py` fails on any raw bidirectional control
   character in the repository's text files (Trojan Source, CVE-2021-42574).
 
+## Semgrep findings printed to the job log — 2026-10-15
+
+On branch `working`. CI only.
+
+- `.github/workflows/semgrep.yml` runs `semgrep scan --config=auto
+  --sarif-output=semgrep.sarif`: the SARIF still goes to the Security tab,
+  and the findings now also print to the job log as text, so they can be
+  read without code-scanning access (`--sarif --output` printed only a
+  count).
+
+## Roadmap: where we are, and the plan to 0.6.0 — 2026-10-15
+
+On branch `working`. Docs only; nothing removed.
+
+- ROADMAP "Where we are (2026-10-15)": 0.5.0 released (tag `v0.5.0`), the
+  checks on `main`, live runs 6 and 6z, the open scanner findings and how
+  each was triaged, open issues, and branches.
+- ROADMAP "Plan to 0.6.0": housekeeping first (suppress the 11 Semgrep
+  findings with their reasons, the CodeQL action to v4, close shipped
+  issues), then a design note for the scanner hook for the maintainer's
+  review (an `Inspector` interface reached in-process, over ICAP, or through
+  `clamd`; fail-closed; the result to Path A as a fact; digests only in the
+  ledger), the core and adapters, judge connection reuse (#6), docs, live
+  run 7, and the release. The 0.6.0 status in ROADMAP and README says so.
+- Semgrep's 11 findings on `main`, triaged: 8 `insecure-file-permissions`
+  on directories set to `0o700` (owner only; the rule's `0o644` would be
+  weaker), 2 `non-literal-import` of operator-configured hooks (trusted
+  configuration), and 1 `httpsconnection-detected` on a connection that
+  verifies certificates and host names. None is a vulnerability.
+
+## CI: an informational macOS and Windows run — 2026-10-15
+
+On branch `working`. CI only.
+
+- `.github/workflows/portability.yml` runs the test suite and `python -m
+  two_key demo` on `macos-latest` and `windows-latest` (Python 3.12, from
+  `uv.lock`), on pushes to `working` and by hand. It does not block
+  (`continue-on-error`): Linux (`tests.yml`) stays the gate until those
+  platforms are supported.
+
+## macOS: the one failing test; first portability results — 2026-10-15
+
+On branch `working`. Tests and CI only.
+
+- First run of `portability.yml`: macOS passes 721 of 722 tests and the demo.
+  The one failure was the test's own assumption: macOS adds
+  `__CF_USER_TEXT_ENCODING` (a text encoding code, no secret) to every
+  process it starts, so the upstream MCP server's environment had one more
+  name than the Linux list. The test now allows it; the proxy still passes
+  only the declared and minimal variables.
+- Windows fails 422 of 722 tests and the demo, almost all for one reason:
+  the key-file check refuses a key readable by group or others, and Python
+  reports every file on Windows as mode 0666, so no key loads and no ledger
+  opens (fail-closed). Also on Windows: no cross-process lock, `chmod 0700`
+  does not restrict access, and tests that start a child with only `PATH`
+  lose `SYSTEMROOT`, which Windows networking needs. ROADMAP's 0.6.0 plan
+  takes this up.
+- `portability.yml` jobs stop after 30 minutes.
+
+
+## Semgrep findings suppressed with reasons; judge hooks checked like proxy hooks — 2026-10-15
+
+On branch `working`. No behaviour change for a valid configuration.
+
+- The 11 Semgrep findings triaged on 2026-10-15 carry `# nosemgrep:
+  <rule-id>` with a one-line reason above each: 8
+  `insecure-file-permissions` on owner-only `0o700` key directories
+  (`capability.py`, `identity.py`, `keys.py`, `ledger.py` x5; the rule's
+  `0o644` would let others read), 2 `non-literal-import` of hooks the
+  operator names in `judges.yaml` and `proxy.yaml`, and 1
+  `httpsconnection-detected` on a connection built with
+  `ssl.create_default_context()`, which verifies the certificate and host
+  name.
+- `judges.yaml` `auth: {type: callback}` hooks are now checked against the
+  same `module:function` pattern as `proxy.yaml` fact hooks before anything
+  is imported (`two_key.judges.config.HOOK`, which `mcp_proxy/config.py`
+  now imports instead of keeping its own copy). A spec such as `m:f:g`,
+  `.m:f`, or one with spaces is refused with `hook must be
+  'module:function'`, cut to 80 characters in the message
+  (`tests/test_judge_hook_spec.py`).
+
+## CodeQL action v4; the maintainer's 0.6.0 decisions in ROADMAP — 2026-10-15
+
+On branch `working`. CI and docs only.
+
+- `codeql.yml` (`init`, `analyze`) and `semgrep.yml` (`upload-sarif`) move
+  from CodeQL action v3, deprecated in December 2026, to v4.39.0, pinned by
+  commit SHA (`6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee`).
+- ROADMAP "Plan to 0.6.0" gains "Decisions for 0.6.0": the scanner hook is
+  optional and fails open by default after a time limit, could-not-finish is
+  flagged, the stance (default, strict, monitor) is a signed rule on a
+  caller-supplied verdict, fail-open is ledgered and warned about, the
+  judges get the verdict and never content; Two-Key runs on Linux, macOS,
+  and Windows, every CI pipeline that runs code (and CodeQL) runs on all
+  three. Additions only.
+
+## CI on Linux, macOS, and Windows (0.6.0 Phase 1) — 2026-10-15
+
+On branch `working`. CI and tests only.
+
+- `tests.yml` runs on `ubuntu-latest`, `macos-latest`, and `windows-latest`
+  with Python 3.10, 3.11, and 3.12 (bash, installed from `uv.lock` as
+  before): the tests, then `python -m two_key demo`. Jobs stop after 30
+  minutes. Windows jobs are `continue-on-error` until Windows support lands
+  (Phase 2). `portability.yml` is folded in and removed.
+- `build.yml` builds the sdist and wheel on all three, installs the wheel
+  into a fresh venv, imports `two_key` from it (from outside the checkout),
+  and runs the demo.
+- `security.yml` (bandit) runs on all three.
+- `codeql.yml` runs on all three (maintainer, 2026-10-15). Linux keeps the
+  default category so its earlier alerts carry on; macOS and Windows upload
+  as `/language:python/os:<os>`. Semgrep and coverage stay on Linux
+  (CONTRIBUTING says why).
+- `tests/child_env.py`: a child process a test starts gets `PATH` and what
+  the test names, plus, on Windows, `SYSTEMROOT`, `COMSPEC`, `PATHEXT`,
+  `TEMP`, `TMP`, and `USERPROFILE` (without `SYSTEMROOT`, asyncio fails with
+  WinError 10106). `test_mcp_draft.py` and `test_mcp_proxy_sdk.py` use it.
+  The upstream-environment test also allows the MCP SDK's own minimal list
+  (`DEFAULT_INHERITED_ENV_VARS`), which differs on Windows; the proxy still
+  passes only the declared and minimal variables.
+
+## Windows support, part 1: owner-only files, locks, no-follow opens (0.6.0 Phase 2) — 2026-10-15
+
+On branch `working`. Maintainer-reviewed design (the Windows design note,
+approved 2026-10-15). Linux and macOS behave as before.
+
+- New `two_key/_platform.py`, standard library only (`ctypes` on Windows, no
+  pywin32): `create_new`, `open_nofollow`, `access_problem`, `owner_only_dir`,
+  `open_lock_file`, `lock`/`unlock`, `inside`, `replace`, `fsync_dir`,
+  `is_link`, `dir_writable_by_others`, and `resolve_program`. On POSIX each
+  does what the callers did before (mode 0600 and 0700, `O_NOFOLLOW`,
+  `flock`, `chmod 600` in the messages).
+- On Windows a key file is created with a protected access list for the
+  current user only (in `CreateFileW` itself, so it is never readable by
+  others); a key directory gets the same, inheritable. A key is accepted
+  when its owner and every "allow" entry are the current user, SYSTEM, or
+  Administrators; anything else is `*_insecure`, with the `icacls` command
+  that fixes it. Files open with `FILE_FLAG_OPEN_REPARSE_POINT`, so a
+  symlink or junction is refused without a gap between check and open. The
+  ledger and redemption locks are `LockFileEx` on the separate lock files
+  (before, Windows had no cross-process lock at all). Every descriptor is
+  binary (`O_BINARY`).
+- Moved to it: `ledger.py` (key reads and writes, the key, witness,
+  redemption-lock and recovery directories, the ledger lock, the anchor,
+  `os.replace`, the directory fsyncs, the outside-the-ledger checks),
+  `identity.py`, `keys.py`, `capability.py`, `backup.py`, `gateway.py`
+  (redemption lock), `cli.py` (token and draft files).
+- Text files Two-Key writes use `newline="\n"` (the ledger entries, the
+  signed constitution, token and draft files), and every text open names
+  its encoding; `tests/test_text_io.py` fails on one that does not.
+- The MCP upstream command (proxy and drafter) is resolved with
+  `shutil.which` on Windows, so `npx` finds `npx.cmd`. No shell.
+- `tests/test_platform.py` tests each function on the platform it runs on.
+- The key-file tests assert "owner-only" through `tests/perm.py` (mode bits on
+  POSIX, the access list on Windows), and loosen a file with an Everyone
+  entry on Windows. The read-only-directory test is POSIX only. An "OWNER
+  RIGHTS" entry is accepted when the owner is.
+
+## Windows support, part 2: docs; one message (0.6.0 Phase 2) — 2026-10-15
+
+On branch `working`. Docs, and one Windows-only message.
+
+- HOWTO "Platforms": Linux, macOS, and Windows; how keys are protected on
+  each, the fix command for each (`chmod 600` or `icacls`), backups through
+  `two-key backup-export`, and `npx` through `PATHEXT`.
+- THREAT_MODEL: what owner-only means on Windows (the user, SYSTEM, and
+  Administrators; anyone else refused), the Windows lock (`LockFileEx`,
+  mandatory, on the separate lock files only), and `_platform.py` in the
+  re-check list. It replaces the line that said there was no cross-process
+  lock without `fcntl`.
+- AGENTS.md: the platform invariant; README and AGENTS: Windows from 0.6.0.
+- On Windows, a backup output directory that other accounts can write is
+  refused as "writable by other accounts", naming the account.
+
+## Windows CI blocks (0.6.0 Phase 2 done) — 2026-10-15
+
+On branch `working`. CI and docs only.
+
+- Every test and the demo pass on Windows, macOS, and Linux (Python 3.10 to
+  3.12), and the wheel installs and runs the demo on all three (CI on
+  `9c6f850`). The golden-hash tests pass unchanged on all three.
+- `tests.yml` and `build.yml` drop `continue-on-error` for Windows: a
+  Windows failure now fails the check. CONTRIBUTING says so.
+
+## Judge connection reuse (#6, 0.6.0 Phase 5) — 2026-10-15
+
+On branch `working`.
+
+- `two_key/judges/transport.py` pools connections per origin (scheme, host,
+  port) behind a lock, shared across threads, so a quorum round reuses the
+  connection the last round opened. Before, each thread kept its own, and
+  every round runs its judges on new threads, so nothing was reused. A
+  connection is pooled again only after a clean response; one that errored,
+  was redirected, said `Connection: close`, or returned an HTTP error is
+  closed. At most four idle per origin. Parallel judges on one origin each
+  get a connection.
+- `tests/test_judge_connection_reuse.py` (a loopback HTTP server): a second
+  round on another thread reuses the connection; `Connection: close` and an
+  error status are not reused; parallel requests do not share one.
+- HOWTO "Judges" says so.
+
+
+## Content scanning, part 1: the core (0.6.0 Phase 3) — 2026-10-15
+
+On branch `working`. Design note approved by the maintainer on 2026-10-15,
+with their additions: Two-Key alone starts a scan, and a call can carry a
+file. Adapters (ClamAV, ICAP, a command, a Python hook), the `proxy.yaml`
+block, and the docs follow in Phases 4 and 6.
+
+- `two_key/scan.py`: `Inspector.inspect(ScanRequest) -> ScanResult`, and
+  `Scanner`, passed as `TwoKey(..., scanner=...)`. A tool is scanned when
+  its signed spec maps the scan field (`scan` by default), a caller-supplied
+  enum with exactly the values `clean`, `flagged`, `unavailable`; the signed
+  `deny_if_fields` rule on it is the stance (default, strict, or monitor).
+  Without a scanner, nothing changes: the judge prompts, the tokens, and the
+  ledger are as before.
+- Two-Key starts the scan for every call to a scanned tool, from every
+  entry point, after the call reads under its spec and before Path A.
+  `scan` in the arguments is already a deny; with a scanner configured,
+  `scan` in `facts=` is too (`derive_failed:scan_fact_supplied`). A guard
+  needs no hook for it and may not have one.
+- What is scanned: every argument (keys the tool drops included, since the
+  judges see them), the proposal text, and each declared file, decoded from
+  base64 (`base64`, `base64url`) or read from the operator's folder
+  (`path`: absolute, inside the folder, no link below it, a regular file, at
+  most `max_file_bytes`). A declared file that cannot be read is flagged
+  (`unreadable` or `limits_exceeded`).
+- Two-Key sets the verdict when the scan fails: a timeout, an exception, or
+  an invalid result is `unavailable`; a result naming `limits_exceeded` is
+  `flagged`. The scanner going down and coming back are each one ledger
+  entry and one stderr line, never one per call.
+- Judges: a trusted `<scan_result>` section (scanner label, verdict,
+  categories) before the untrusted record; each file appears as its digest
+  and size, never its content. When flagged, the arguments and the proposal
+  are withheld unless the new quorum flag `tool_args_on_scan_flag` is set
+  (recorded in the policy only when set). A call to a tool outside the
+  constitution sends no arguments to the judges when a scanner is
+  configured.
+- Ledger: a `scan` entry per scanned call (verdict, categories, stance,
+  scanner label and version, elapsed time, each part's name, size, and
+  SHA-256); `scanner_unavailable` and `scanner_recovered`; the scanner
+  configuration in `constitution_loaded`. Never content.
+- Token and gateway: a scanned tool's token carries the verdict and each
+  file's digest (`scan`). The gateway does not scan again: it uses that
+  verdict, refuses a `scan` fact (`fact_mismatch`), and reads each file again
+  just before the tool runs (`file_changed`).
+- Start-up: the stance and the unscanned tools; a warning when the scan
+  limit plus the judges' deadline is over 60 s, and for `high_assurance`
+  without the strict stance; a one-time note when no scanner is configured.
+- `tests/test_scan.py` (in-process fakes): every stance against every
+  verdict, timeouts, exceptions, invalid and could-not-finish results, the
+  agent unable to steer the scan, base64 and path files, links and paths
+  outside the folder, what judges and the ledger get, the token and the
+  gateway, the guard, and the warnings.
+- AGENTS.md: the scanner invariants.
+
+## Content scanning, part 2: adapters and the proxy (0.6.0 Phase 4) — 2026-10-15
+
+On branch `working`. Reference adapters that call an external scanner; no
+scanning engine is added. All four are standard library only.
+
+- `two_key/scanners.py`:
+  - `ClamdInspector`: ClamAV `clamd` INSTREAM over TCP (`host:3310`) or a
+    unix socket. `FOUND` is `malware`; ClamAV's own limits
+    (`Heuristics.Limits.Exceeded`, `size limit exceeded`) are
+    `limits_exceeded`, so the call is flagged.
+  - `IcapInspector`: ICAP REQMOD or RESPMOD (RFC 3507), `icap://` or
+    `icaps://` (TLS, system trust store), with `Allow: 204`. 204 is clean;
+    403, an infection header, or a blocked encapsulated response is flagged;
+    anything else is `unavailable`. Each part is sent with
+    `X-Two-Key-Tool` and `X-Two-Key-Part`.
+  - `CommandInspector`: runs a command with the part on stdin, a minimal
+    environment, and the time left; exit 0 is clean, 1 is flagged (optional
+    `two-key-categories:` line), anything else is `unavailable`.
+  - `hook_inspector("module:function")`: your own Python code.
+  - `scanner_from_config` builds a `Scanner` from a `scan:` block.
+- `proxy.yaml`: a top-level `scan:` block (`type: clamd|icap|command|python`
+  and its keys, `timeout_seconds`, `max_file_bytes`, `field`, `label`) and
+  per-tool `files:` (`path`, `kind`, `folder`; a relative folder is relative
+  to `proxy.yaml`). Files without a `scan:` block are refused.
+- `two-key mcp-draft-specs`: inputs that look like files (a base64
+  `contentEncoding`, `format: binary`, a `contentMediaType`, or a file-like
+  name) get a note and a commented `files:` entry in the drafted
+  `proxy.yaml`; the drafted rules end with a commented scan-field template.
+  Nothing is declared or signed for you.
+- `two-key mcp-proxy`: a start-up WARNING for each file-like input of a
+  scanned tool that `files:` does not declare (it is scanned as text).
+- Tests: `tests/test_scanners.py` (fake clamd and ICAP servers on
+  127.0.0.1, a command, a hook, the config, and end-to-end denies) and
+  `tests/test_mcp_scan.py` (the config, the hints, and a `tools/call` with an
+  attached file through the scanner, both paths, and the gateway).
+- HOWTO: the `proxy.yaml` table lists `scan` and `tools.<id>.files`.
+
+## Content scanning, part 3: docs (0.6.0 Phase 6) — 2026-10-15
+
+On branch `working`.
+
+- `docs/SCANNERS.md` (new): how to connect an antivirus or DLP product,
+  for operators and vendors. Five diagrams: where the scanner sits, a call
+  with an attached file (agent to scanner, Path A, Path B, gateway, tool),
+  verdict and stance, the `clamd` `INSTREAM` exchange, and the ICAP
+  exchange. ClamAV setup on Linux, macOS, and Windows, the `clamd.conf`
+  lines that matter, and an EICAR test; the exact ICAP request Two-Key
+  sends, how each answer maps, and a vendor checklist; the command
+  contract; a Python Inspector; files by path and what they give up; the
+  ledger entries, warnings, and troubleshooting.
+- HOWTO: "Scan content with an antivirus or DLP product" (field, stance,
+  tools, files, adapter, test), the proxy's scan refusals and warnings,
+  the gateway's scan checks, and three entries in "Known trade-offs by
+  configuration" (stance, `tool_args_on_scan_flag`, files by path).
+- `examples/scanning.yaml`: a rules file with the scan field, the default
+  stance, a scanned tool, and one marked `not_applicable` (signed and run
+  in `tests/test_scanners.py`).
+- The "no scanning" lines in README, SECURITY (a new in-scope item for the
+  scanner), llms.txt, COMPARISON, SCOPE, THREAT_MODEL (the scanner as a
+  trust boundary, and its residual risks), FIT, JUDGES_AND_QUORUM,
+  CONTRIBUTING, and ROADMAP now say what is built on `working`.
+- ICAP: a `200` whose body differs from the part sent (the product
+  redacted or replaced something) is flagged, as the design note says; an
+  unchanged `200` is still clean. `clamd`: `Heuristics.Encrypted` (with
+  `AlertEncrypted yes`) is flagged `unreadable`.
+
+## Live run 7 harness: content scanning (0.6.0 Phase 7) — 2026-10-15
+
+On branch `working`. For the maintainer's relay operator; no package code
+changes except one start-up note's wording.
+
+- `tests/live/`: the proxy's `scan:` block points at a toy ICAP scanner the
+  harness serves on loopback (EICAR, a Luhn-valid card number, a short
+  diagnosis list). `send_message` is scanned and takes base64
+  attachments, declared as files. The main pass signs the default stance;
+  host cases marked strict or monitor run against their own proxy,
+  constitution, and ledger. Cases can take the scanner down or make it
+  slow.
+- Cases (44): the diagnosis and card-number cases now expect Path A's
+  `rule_denied:scan`; an agent and a host case attach EICAR; scanner down
+  under default (the call goes on, `scanner_unavailable` is ledgered) and
+  under strict (denied); a slow scanner under strict; a card number under
+  monitor (recorded, not denied); clean controls.
+- The report checks each scan case's judge prompts: the `<scan_result>`
+  verdict, and no flagged content. RELAY.md describes run 7.
+- The start-up note now reads `not scanned (they do not map scan): ...`.
+
+## File size limits; unreadable files denied under every stance (0.6.0) — 2026-10-15
+
+On branch `working`. The maintainer's decisions of 2026-10-15: the operator
+states the file size each tool needs, and an agent cannot push an oversized
+or unreadable file through any stance.
+
+- Every declared file states `max_bytes`, the largest file the tool needs,
+  with no default: `Scanner(files=)` and `proxy.yaml` `tools.<id>.files`
+  refuse a file without it. A `base64` or `base64url` file is at most
+  196608 bytes (it travels inside the 256 KiB call; the error says a tool
+  that needs larger files takes a path), a `path` file at most 100 MiB.
+  The scanner-wide `max_file_bytes` (from earlier on `working`) is
+  removed, and a `scan:` block that sets it is refused with a pointer to
+  `max_bytes`.
+- A call is held to its files' `max_bytes`, 32 files, and 100 MiB of files
+  together. Two-Key counts the files before reading any, does not open a
+  path file whose size is over its limit, and stops reading one that grows
+  past it. This also closes a memory exhaustion: a list of paths could name
+  one large file thousands of times in a single call.
+- A declared file Two-Key cannot read (bad base64, a value of the wrong
+  type, a path outside its folder, a link, a missing file, not a regular
+  file) was a `flagged` verdict, which the monitor stance let through. It
+  is now denied, like a call over a file limit, before the scanner and
+  both paths under every stance: `file_unreadable`, `file_too_large`,
+  `too_many_files`, `call_files_too_large`. The judges are not asked. The
+  `decision` entry records `file_denied` (the argument path, why, and
+  sizes, never content); the agent gets the reason code. The gateway
+  denies a file it cannot read again, or one over its limit, as
+  `file_changed`.
+- `two-key mcp-draft-specs` drafts `max_bytes: REPLACE_WITH_BYTES` on each
+  commented file entry.
+- Docs: docs/SCANNERS.md "File size limits", HOWTO (scanning steps, proxy
+  reasons, parsing limits, trade-offs), THREAT_MODEL, SECURITY, AGENTS.md,
+  llms.txt, ROADMAP, and examples/scanning.yaml.
+- Live run 7: `send_message` attachments declare `max_bytes: 65536`; two
+  host cases under the monitor stance (an attachment over the limit, and
+  one that is not base64) expect `file_too_large` and `file_unreadable`
+  (46 cases).
+
+## Encrypted files: signed per-tool pass (0.6.0) — 2026-10-15
+
+On branch `working`. The maintainer's decision of 2026-10-15: some
+deployments move encrypted files, which an antivirus or DLP product cannot
+open, so the principal can let a tool pass them and leave scanning to
+wherever they are decrypted. It is signed, per tool, and off by default,
+because encrypting a file is also a way past the scanner.
+
+- A new scanner category, `encrypted`. clamd's `Heuristics.Encrypted...`
+  (with `AlertEncrypted yes`) is now `encrypted` (it was `unreadable`). An
+  ICAP answer whose infection headers name only `Heuristics.Encrypted...`
+  is `encrypted`; any other name is still `malware`. A command reports it
+  with `two-key-categories: encrypted`, a Python inspector with
+  `ScanResult.flagged("encrypted")`.
+- `tool_specs.<tool>.fields.scan: {source: caller, encrypted: pass}` lets
+  that tool pass encrypted files. The scan field then needs a fourth value,
+  `encrypted`, which is refused when no tool passes. `encrypted: pass` is
+  refused on any other field. A constitution without it signs byte for
+  byte as before.
+- On such a tool, a call whose only finding is `encrypted` gets the
+  verdict `encrypted`, which the default and strict stances do not deny.
+  With any other finding it is `flagged`; when another part could not be
+  scanned it is `unavailable` (strict denies it). On every other tool an
+  encrypted file is `flagged`, as before. A scanner cannot answer the
+  verdict `encrypted` itself.
+- The judges see the verdict `encrypted` with one added line saying what
+  it means, and get the arguments. Every other judge prompt is unchanged.
+  The token binds the verdict; the gateway refuses it for a tool that does
+  not pass encrypted files (`scan_mismatch`). `constitution_loaded`
+  records `encrypted_pass` (the tools) when there are any.
+- `sign-constitution` warns for each tool that passes encrypted files. At
+  start, Two-Key lists them, and notes when a rule on `scan` alone denies
+  `encrypted` (the pass then does nothing). `two-key mcp-draft-specs`
+  points to the docs in its scan template.
+- Docs: docs/SCANNERS.md "Encrypted files" (and the ClamAV, ICAP, command,
+  and Python sections; `HeuristicScanPrecedence no`), HOWTO (scanning,
+  trade-offs), THREAT_MODEL, SECURITY, AGENTS.md, JUDGES_AND_QUORUM,
+  SCOPE, ROADMAP, llms.txt, and examples/scanning.yaml.
+- Live run 7: the toy scanner reports a zip with the encryption bit set as
+  `Heuristics.Encrypted.Zip`. Three host cases: the zip is denied under the
+  main pass, sent with the verdict `encrypted` under a new
+  `encrypted_pass` stance, and still denied beside the EICAR file (49
+  cases).
+
+## Docs: connecting the agent so it cannot go around Two-Key — 2026-10-15
+
+On branch `working`. Docs only; no behavior changes.
+
+- New docs/CONNECTING.md: the two routes (an MCP client through
+  `two-key mcp-proxy`, and your own loop through the Guard or the
+  library), with the exact sudoers rule and client entry for the proxy;
+  a table of every connection and hook (agent host, upstream, tool
+  credentials, constitution and key, config files, fact hooks and the
+  Python import path, judges, the monitored agent endpoint, each scanner
+  type, files sent by path, the ledger, tool results) with what an agent
+  would try and what stops it; services that share 127.0.0.1 with the
+  agent (a free loopback port can be taken after a crash or restart); what
+  Two-Key checks for you and what it cannot see; and a checklist.
+- THREAT_MODEL residual risks: routes around Two-Key it cannot see, and
+  loopback port takeover on a shared machine. SCANNERS: prefer clamd's
+  Unix socket (mode 660, a group without the agent) when the agent shares
+  the machine. HOWTO (key custody, the guard), README, llms.txt, and
+  AGENTS.md point to the new guide; `tests/test_doc_toc.py` covers it.
+- docs/CONNECTING.md diagrams: the three trust zones, Route 1 (the three
+  OS users, the sudo hops, where each secret lives, and the closed paths),
+  Route 2 (what the model is offered and what it never is), and a loopback
+  port takeover. Each was rendered with Mermaid 11.4.1 before commit.
+
+## Docs: the proxy wrapper leaves the agent's folder — 2026-10-16
+
+On branch `working`. Docs only; no behavior changes.
+
+- sudo keeps the caller's working directory, and the upstream server
+  inherits the proxy's unless `upstream.cwd` is set. Left in the agent's
+  folder, `npx` looks for the server in that folder's `node_modules` and
+  reads its `.npmrc` first, so an agent could plant a server that
+  receives the tool's credential. The `run-proxy` example in HOWTO now
+  changes to `/opt/two-key` first, HOWTO and CONNECTING explain why and
+  say to run the `two-key` command rather than `python -m two_key` (which
+  puts the working directory on the import path), the `upstream.cwd` row
+  says what the default is, and the CONNECTING checklist has a line for it.
+
+## Start-up check: paths another account could change (0.6.0) — 2026-10-16
+
+On branch `working`. Maintainer's decision: warn by default, a setting to
+refuse, and refuse under `high_assurance`; document running Two-Key as a
+service account, not a standard user.
+
+- New `two_key/writable.py` and `_platform.write_problem`. When a `TwoKey`
+  starts, it looks at Python itself, each folder on the import path and
+  the `.pth` files in it, each loaded module with its compiled file and
+  folder, each path in the new `check_paths=`, and every folder above
+  them. Each one that an account other than its own (or root, SYSTEM,
+  Administrators, or TrustedInstaller) could change is named on stderr:
+  `two-key: WARNING: writable_path: <path>: <why>`, at most ten lines,
+  nothing named twice under a folder already named. On Linux and macOS:
+  another owner, the other write bit, or the group write bit for any group
+  but 0; a sticky bit on a folder above is fine. On Windows: another
+  owner, or an allow entry with a write right (for a folder above, a right
+  to rename or remove an entry). A path that cannot be checked is named.
+- `TwoKey(on_writable_paths="refuse")`, or `on_writable_paths: refuse` in
+  `proxy.yaml`, refuses to start instead (`writable_path:`), before
+  anything is written to the ledger. A high_assurance quorum always
+  refuses, and `on_writable_paths: warn` with it is a configuration error.
+  Nothing turns the check off.
+- The MCP proxy passes `proxy.yaml`, the constitution, the principal key,
+  `judges.yaml`, the ledger folder, the witness key and head anchor when
+  set, the upstream program, the folder the upstream starts in (the
+  proxy's own when `upstream.cwd` is unset, which under sudo is the
+  caller's), each fact hook's module (found without running it), the
+  folders of files sent by path, and a command scanner's program.
+- Results for the interpreter's own paths are kept for the life of the
+  process, so a second `TwoKey` in one process does not look again.
+- docs/CONNECTING.md: a new "Run Two-Key as a service account" section
+  (not a person's account, not root or an administrator, nobody signs in
+  as it, in no group that leads to root, with commands for Linux, macOS,
+  and Windows), the check under "What Two-Key checks for you", and two
+  checklist lines. HOWTO (the `proxy.yaml` table, the refusal table and
+  warnings, high_assurance, Python, known trade-offs), THREAT_MODEL,
+  JUDGES_AND_QUORUM, SECURITY, ROADMAP, AGENTS.md, and llms.txt updated.
+- `tests/test_writable_paths.py` (19 tests). The start-up warnings test in
+  `tests/test_scan.py` and the section4 test in `tests/test_two_key.py`
+  build high_assurance quorums, so they no longer look at the machine they
+  run on. On GitHub's runners the check names `/opt` (writable by everyone)
+  on Linux, `/Library/Frameworks/Python.framework/Versions/<v>` (writable
+  by group admin) on macOS, and `C:\hostedtoolcache` (Authenticated Users
+  can change it) and `D:\` (owned by NETWORK SERVICE) on Windows.
+- Windows messages name well-known accounts: `owned by NETWORK SERVICE
+  (S-1-5-20)`, `Authenticated Users (S-1-5-11) can change it`.
+
+
+## Run 7 follow-ups: key errors, scanner scope, relay — 2026-10-16
+
+From GrokBot's live run 7 and 7x report (on `live-runs`).
+
+- A key file given to `--key` that is a public key is now
+  `key_file_public: <path> is a public key; give the private key ...`,
+  whatever its mode. Before, `two-key audit --key principal.pub.pem` said
+  `key_file_insecure: ... run chmod 600`, which would not help. A file that
+  is not an unencrypted PEM private key is `key_file_invalid` instead of
+  the cryptography library's error. Every file refused before is still
+  refused (`two_key/keys.py`).
+- The CLI prints a `--key` refusal as one line (`--key: key_file_...`)
+  instead of a traceback, and each `--key` help says it takes
+  `principal.pem` from `init-key`, not `principal.pub.pem`.
+- docs/SCANNERS.md: under monitor, judges see `flagged` without the
+  arguments and usually vote no, so monitor denies most flagged calls in
+  practice (run 7, C48 and C49). Scanning does not decode base64 or hex
+  inside free text (run 7x, C29), does not join calls (C19, C50), and a
+  tool marked `scan: not_applicable` is not scanned at all (C44).
+- Live harness: a tool bot reply that refuses or filters a call is a
+  referee incident, `tool_out_of_role_refusal` (run 7, C34; ported from
+  the run 7x copy). RELAY.md names the `manifest_*.json` files the harness
+  writes next to each batch (never sent to a bot, committed with the run)
+  and says results go on the `live-runs` branch.
+- Tests: `tests/test_cli_tokens.py` (public key, invalid key, `--key`
+  help, one-line refusal).
+
+## Release v0.6.0: Windows, content scanning, writable-path check — 2026-10-16
+
+Package version 0.6.0 (`pyproject.toml`, `two_key.__version__`; `uv.lock`
+regenerated with uv 0.13.0, which changes only the package's own version).
+To be tagged `v0.6.0` on `main` after the merge. Not on PyPI. The entries
+above, from "Semgrep findings printed to the job log" on, are the detail.
+
+- **Windows support** (maintainer-reviewed design): every key read or
+  write, owner-only folder, lock, and no-follow open goes through
+  `two_key/_platform.py`. On Windows a key gets an access list for the
+  current user only, a key that anyone but the user, SYSTEM,
+  Administrators, or OWNER RIGHTS can open is refused, a reparse point is
+  refused, and the lock is `LockFileEx`. Linux and macOS behave as before.
+- **Content scanning** (maintainer-reviewed design, optional): Two-Key
+  calls the operator's antivirus or DLP product for every call to a tool
+  the signed constitution marks, files included (base64, or a path in a
+  declared folder, each with a required `max_bytes`). Two-Key alone starts
+  the scan; the agent cannot ask for, skip, or answer one. The verdict
+  (clean, flagged, unavailable) is a fact a signed rule decides on
+  (default, strict, or monitor), the judges are told, and the ledger records
+  it without content. A timeout or error is never clean. A file Two-Key
+  cannot read or that is over a limit is denied before both keys under
+  every stance. An encrypted file passes only on a tool signed
+  `encrypted: pass`. Adapters, standard library only: ClamAV `clamd`,
+  ICAP, a command, and a Python hook. The gateway never scans; it checks
+  the token's verdict and file digests. docs/SCANNERS.md.
+- **Start-up check for writable paths** (maintainer's decision,
+  2026-10-16): Two-Key names each file or folder it runs or reads that
+  another account could change. `warn` by default, `on_writable_paths:
+  refuse` refuses, and `high_assurance` always refuses. docs/CONNECTING.md
+  covers connecting the agent so it cannot go around Two-Key, and running
+  Two-Key as a service account.
+- **Judge connection reuse** (#6): connections are pooled per origin across
+  quorum rounds.
+- **CI** on Linux, macOS, and Windows: tests (Python 3.10 to 3.12), the
+  demo, the build, bandit, and CodeQL; Semgrep (0 findings, each
+  suppression with its reason) and coverage on Linux. 862 tests.
+- **Live testing**: run 7 (content scanning, 49 cases) and run 7x (a new
+  organization, 52 cases, 33 of them attacks from a security practitioner)
+  passed every case, with no referee incident. Results are on the
+  `live-runs` branch.
+- Smaller changes: a public key given to `--key` is `key_file_public`;
+  CLI key errors are one line; `tool_out_of_role_refusal` in the live
+  harness.
+- Next (0.7.0, maintainer's decision 2026-10-16): with the SIEM export, a
+  rate-limited count of tokens the gateway refuses without a ledger entry,
+  kept outside the ledger; design note first.
+- Docs: README, ROADMAP (0.6.0 under "Shipped"), HOWTO, SCOPE,
+  THREAT_MODEL, FIT, COMPARISON, JUDGES_AND_QUORUM, SCANNERS, SECURITY,
+  CONTRIBUTING, AGENTS.md, and llms.txt name 0.6.0 as the release and
+  `v0.6.0` as the install ref.
+
+### Upgrading from 0.5.0
+
+- Constitutions, ledgers, keys, backups, `judges.yaml`, and `proxy.yaml`
+  from 0.5.0 load unchanged. Nothing needs re-signing.
+- **Check the start-up output first.** Two-Key now prints
+  `two-key: WARNING: writable_path: ...` for each file or folder it runs or
+  reads that another account could change (its Python, its import path, its
+  config and keys, and, behind the proxy, the upstream program and the
+  folder it starts in). Under `high_assurance` (and the `section4` profile)
+  it refuses to start until there are none. Fix the owner or permissions,
+  or run Two-Key as its own service account (docs/CONNECTING.md).
+- Scanning is off until you configure a scanner. Without one, the judge
+  prompts, the tokens, and the ledger are as in 0.5.0.
+- A constitution that signs `encrypted: pass` needs 0.6.0; 0.5.0 refuses it.
+- Scripts that call `two_key.cli.main` and catch `ValueError` for a bad
+  `--key` file now get `SystemExit` with a one-line message.
+- Maintainers: add the macOS and Windows checks to `main`'s branch
+  protection.
+
+## PR #12 review: TLS 1.2 for icaps, suppressed Semgrep findings — 2026-10-16
+
+- CodeQL (`py/insecure-protocol`, high) on the release PR: the ICAP
+  adapter's `icaps://` connection used `ssl.create_default_context()`,
+  which can allow TLS 1.0 and 1.1 where the system's OpenSSL does. It now
+  sets `minimum_version` to TLS 1.2. The certificate and host name checks
+  are unchanged. Test: `tests/test_scanners.py` (`test_icaps_needs_tls_1_2`).
+  docs/SCANNERS.md vendor checklist says so.
+- Semgrep on the release PR showed the findings already suppressed in the
+  code (each `# nosemgrep: <rule-id>` with its reason) as new alerts:
+  Semgrep writes them to the SARIF marked as suppressed, and code scanning
+  does not read that mark. `semgrep.yml` now drops suppressed results
+  before the upload and prints how many. The job log was already at 0
+  findings.
+
+## PR #12 review: SonarCloud findings — 2026-10-16
+
+- SonarCloud (path traversal, `constitution.save_envelope`): the only
+  caller is `two-key sign-constitution --out`, which the principal runs, so
+  no boundary was crossed. The write is still better through `_platform`:
+  `save_envelope` now writes a new file beside the target (no-follow,
+  exclusive) and renames it over the target. A reader never sees half a
+  constitution, a failed write keeps the old file, and a link at `--out` is
+  replaced rather than written through. Test: `tests/test_save_envelope.py`.
+- Fourteen 0.6.0 functions over SonarCloud's cognitive complexity limit
+  (15) are split into smaller ones, with no change in behavior or messages:
+  the ICAP verdict and response reader (`scanners.py`); file arguments, the
+  scanner's start-up checks, confined path reads, and per-file reads
+  (`scan.py`); the Windows access-list check (`_platform.py`); the import
+  path walk (`writable.py`); caller-field mappings (`constitution.py`);
+  proxy tool settings and the scan block (`mcp_proxy/config.py`); and the
+  file-input schema walk and start-up paths (`mcp_proxy/core.py`).
+- DeepSource took a variable in the ICAP adapter that holds an
+  `Encapsulated` section name for a hard-coded credential, because its name
+  ended in "key". It is now `section`.
+- Left as they are (SonarCloud warnings, not blockers): `[A-Za-z0-9_]` stays
+  rather than `\w`, which would also match non-ASCII letters; the
+  `list(...)` copies in `writable.py` keep the loop safe if `sys.path` or
+  `sys.modules` changes; the ctypes structure names follow the Windows API.

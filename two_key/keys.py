@@ -7,9 +7,11 @@ import os
 import stat
 from pathlib import Path
 
-from cryptography.exceptions import InvalidSignature
+from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+
+from . import _platform
 
 
 def generate_private_key() -> Ed25519PrivateKey:
@@ -31,20 +33,21 @@ def save_private_key(path: Path | str, private_key: Ed25519PrivateKey, *, privat
 
     The file is opened with O_CREAT | O_EXCL (and O_NOFOLLOW where available), so an
     existing file or a planted symlink is an error rather than a silent overwrite, and
-    there is no window in which the key is readable before a chmod. A directory this
-    creates is mode 0700. ``private_dir=True`` also sets an existing directory to 0700;
-    use it for directories Two-Key owns, such as ``<ledger>.capability``.
+    there is no window in which the key is readable before a chmod. On Windows it gets a
+    private access list instead of mode 0600 (``two_key._platform``). A directory this
+    creates is mode 0700. ``private_dir=True`` also sets an existing directory to 0700
+    (a private access list on Windows); use it for directories Two-Key owns, such as
+    ``<ledger>.capability``.
     """
     path = Path(path)
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if private_dir:
-        os.chmod(path.parent, 0o700)
+        _platform.owner_only_dir(path.parent)
     data = private_key.private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption())
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(path, flags, 0o600)
+    fd = _platform.create_new(path)
     with os.fdopen(fd, "wb") as fh:
         fh.write(data)
         fh.flush()
@@ -59,27 +62,46 @@ def load_private_key(path: Path | str) -> Ed25519PrivateKey:
     return key
 
 
+_PUBLIC_PEM = b"-----BEGIN PUBLIC KEY-----"
+
+
+def _public_key_given(path) -> ValueError:
+    return ValueError(f"key_file_public: {path} is a public key; give the private key "
+                      f"(init-key writes principal.pem, mode 0600, next to principal.pub.pem)")
+
+
 def load_private_key_file(path: Path | str) -> Ed25519PrivateKey:
     """The safe loader for a key file named by an operator, as on the command line.
 
     It refuses a symlink (O_NOFOLLOW), anything that is not a regular file, and a file
     that the group or others can read or write (``key_file_insecure``). The check is on
     the open descriptor, so the file cannot be swapped between the check and the read.
+    A public key is ``key_file_public`` (whatever its mode: chmod would not help), and a
+    file that is not an unencrypted PEM private key is ``key_file_invalid``.
     """
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
-        fd = os.open(path, flags)
+        fd = _platform.open_nofollow(path)
     except OSError as e:
         raise ValueError(f"key_file_unreadable: {path}: {e.strerror}") from None
     with os.fdopen(fd, "rb") as fh:
         st = os.fstat(fh.fileno())
         if not stat.S_ISREG(st.st_mode):
             raise ValueError(f"key_file_insecure: {path} is not a regular file")
-        if st.st_mode & 0o077:
+        problem = _platform.access_problem(fh.fileno(), st)
+        if problem and fh.read(len(_PUBLIC_PEM)) == _PUBLIC_PEM:
+            raise _public_key_given(path)
+        if problem and not _platform.WINDOWS:
             raise ValueError(f"key_file_insecure: {path} is mode {stat.S_IMODE(st.st_mode):04o}; "
                              f"run chmod 600 {path}")
+        if problem:
+            raise ValueError(f"key_file_insecure: {_platform.insecure(path, problem)}")
         data = fh.read()
-    key = serialization.load_pem_private_key(data, password=None)
+    if data.lstrip().startswith(_PUBLIC_PEM):
+        raise _public_key_given(path)
+    try:
+        key = serialization.load_pem_private_key(data, password=None)
+    except (TypeError, ValueError, UnsupportedAlgorithm):
+        raise ValueError(f"key_file_invalid: {path} is not an unencrypted PEM private key") from None
     if not isinstance(key, Ed25519PrivateKey):
         raise ValueError("principal key must be Ed25519")
     return key

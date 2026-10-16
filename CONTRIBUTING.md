@@ -6,8 +6,9 @@ the items in [ROADMAP.md](ROADMAP.md) is also in scope, in the order and with
 the limits given there.
 
 Do not add a scanning, antivirus, or DLP engine here. Hooks that call external
-scanners are next on the roadmap (0.6.0); PKI and certificate recovery come
-after 1.0.
+scanners shipped in 0.6.0 (`two_key/scan.py`,
+`two_key/scanners.py`, docs/SCANNERS.md): an adapter calls a product, it
+never detects anything itself. PKI and certificate recovery come after 1.0.
 Permissioned-chain anchoring and seed phrases are not planned. Key backup
 shipped in 0.3.0 (three passphrase bundles, not a seed phrase).
 
@@ -23,3 +24,13 @@ After adding, renaming, or moving a heading in a document that has a table of
 contents, run `python tests/test_doc_toc.py --write`; the test suite fails
 while a table is out of date.
 Run `python -m unittest discover -s tests` before opening a pull request.
+
+CI runs every pipeline that runs code on Linux, macOS, and Windows: the tests
+and the demo (`tests.yml`, Python 3.10 to 3.12), the build with a wheel
+install and the demo (`build.yml`), and bandit (`security.yml`). Every job
+blocks, Windows included. CodeQL (`codeql.yml`)
+runs on all three as well. Semgrep (`semgrep.yml`) stays on Linux: it
+analyses the source, not the running system, and its container image runs
+only on Linux runners. Coverage (`coverage.yml`) is one report, from Linux.
+Tests that start a child process build its environment with
+`tests/child_env.py`, which keeps the variables Windows needs.

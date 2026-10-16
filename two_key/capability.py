@@ -13,12 +13,12 @@ import base64
 import hashlib
 import json
 import math
-import os
 import secrets
 import time
 from dataclasses import dataclass
 from typing import Any
 
+from . import _platform
 from .canonical import canonical_bytes, canonical_hash
 from .strict import loads_json
 from cryptography.hazmat.primitives import serialization
@@ -101,7 +101,7 @@ def open_capability_key(ledger, principal_public=None):
     path = ledger.capability_key_path()
     issued = any(e.kind == "capability_issued" for e in getattr(ledger, "entries", []))
     if path.exists():
-        os.chmod(path.parent, 0o700)
+        _platform.owner_only_dir(path.parent)
         try:   # the safe loader: no symlink, a regular file, no group or other access (#57)
             key = load_private_key_file(path)
         except ValueError as e:
@@ -189,8 +189,10 @@ class CapabilityIssuer(CapabilityVerifier):
     def issue(self, *, tool: str, arguments: dict, ledger_root: str, ledger_size: int,
               bytecode_hash: str, nl_hash: str, ttl_seconds: int = 120,
               spec_hash: str = "", form: dict | None = None,
-              claimed_data_class: str | None = None, args_digest: str | None = None) -> IssuedCapability:
-        """Mint a token. ``args_digest`` is ``args_hash(arguments)`` when the caller already encoded them."""
+              claimed_data_class: str | None = None, args_digest: str | None = None,
+              scan: dict | None = None) -> IssuedCapability:
+        """Mint a token. ``args_digest`` is ``args_hash(arguments)`` when the caller already encoded them.
+        ``scan`` (a scanned tool only) binds the verdict and each file's digest; the gateway checks them."""
         if self.private_key is None:
             raise TokenError("verifier_cannot_mint")
         valid_ttl(ttl_seconds)
@@ -213,6 +215,8 @@ class CapabilityIssuer(CapabilityVerifier):
         if form is not None:
             payload["form"] = form
             payload["claimed_data_class"] = claimed_data_class
+        if scan is not None:      # absent otherwise, so a token for an unscanned tool keeps its 0.5.0 shape
+            payload["scan"] = scan
         body = _b64u(canonical_bytes(payload))
         signature = sign(self.private_key, body.encode("ascii"))
         return IssuedCapability(f"tk1.{body}.{signature}", payload)

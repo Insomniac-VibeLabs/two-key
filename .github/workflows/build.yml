@@ -9,7 +9,15 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -20,4 +28,13 @@ jobs:
           pip install --only-binary :all: "build==1.6.1"
       - name: Build sdist and wheel
         run: python -m build
-
+      - name: Install the wheel into a fresh venv and run the demo
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          if [ -x "$RUNNER_TEMP/wheel-venv/Scripts/python.exe" ]; then py="$RUNNER_TEMP/wheel-venv/Scripts/python.exe"
+          else py="$RUNNER_TEMP/wheel-venv/bin/python"; fi
+          "$py" -m pip install --only-binary :all: dist/*.whl
+          # From outside the checkout, so the installed wheel is imported, not the source tree.
+          cd "$RUNNER_TEMP"
+          "$py" -c "import two_key; print(two_key.__version__, two_key.__file__); assert 'site-packages' in two_key.__file__"
+          "$py" -m two_key demo

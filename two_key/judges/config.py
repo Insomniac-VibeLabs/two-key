@@ -16,6 +16,7 @@ Format (see examples/judges.yaml):
       ballot_binding: stamp            # stamp | echo
       require_path_a_first: false      # stored, not a skip
       tool_args_on_derive_deny: false # true sends argument bytes after a derive deny
+      tool_args_on_scan_flag: false   # true sends arguments and proposal to judges when the scanner flags
       # allow_same_provider_judge: deprecated, no effect (the same provider is allowed)
       # allow_same_model_distinct_tenant: deprecated, no effect (a judge is refused on the agent's credential)
     monitored_agent:             # required; read by identity.load_monitored_agent_file
@@ -50,6 +51,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -62,6 +64,9 @@ from .credentials import (BasicAuthCredential, CallbackTokenProvider, Credential
 from .gemini import GeminiJudge
 from .ollama import OllamaJudge
 from .openai_compat import OpenAICompatibleJudge
+
+# A hook is "module:function": dotted identifiers, then one identifier. Shared with mcp_proxy/config.py.
+HOOK = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*")
 
 ADAPTERS = {
     "openai_compatible": OpenAICompatibleJudge,
@@ -77,7 +82,8 @@ JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", 
               "tenant", "upstream"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
                "min_makers", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
-               "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "profile",
+               "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "tool_args_on_scan_flag",
+               "profile",
                "allow_same_provider_judge", "allow_same_model_distinct_tenant"}
 TOP_LEVEL_KEYS = {"judges", "quorum", "monitored_agent"}
 # default: one judge is enough. high_assurance: QuorumPolicy.high_assurance() (2 makers, 1 local, local yes).
@@ -94,11 +100,12 @@ class JudgeConfigError(ValueError):
 
 
 def _hook(spec: Any) -> Callable:
-    if not isinstance(spec, str) or ":" not in spec:
-        raise JudgeConfigError(f"hook must be 'module:function', got {spec!r}")
+    if not isinstance(spec, str) or not HOOK.fullmatch(spec):
+        raise JudgeConfigError(f"hook must be 'module:function', got {str(spec)[:80]!r}")
     mod, fn = spec.split(":", 1)
     try:
-        return getattr(importlib.import_module(mod), fn)
+        # The module named in the principal's judges.yaml, checked by HOOK: trusted configuration.
+        return getattr(importlib.import_module(mod), fn)  # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
     except (ImportError, AttributeError) as e:
         raise JudgeConfigError(f"cannot import hook {spec!r}: {e}") from e
 

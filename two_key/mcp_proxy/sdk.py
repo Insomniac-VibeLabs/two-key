@@ -36,9 +36,10 @@ except ImportError as e:  # pragma: no cover - exercised only without the extra
     raise ImportError('two-key mcp-proxy needs the MCP SDK: pip install "two-key[mcp]"') from e
 
 from .. import __version__
+from .._platform import resolve_program
 from .config import ProxyConfig, ProxyConfigError
 from .core import CallOutcome, ProxyCore, ToolSelection, agent_session, build_two_key, check_tools_signed, \
-    identity_refusal, schema_check, select_tools, undescribed_inputs
+    identity_refusal, schema_check, select_tools, undeclared_file_inputs, undescribed_inputs
 
 SERVER_NAME = "two-key-mcp-proxy"
 MAX_TOOL_PAGES = 100           # tools/list pages read from the upstream at start
@@ -52,7 +53,8 @@ def _wire(model: Any) -> dict:
 
 def upstream_parameters(config: ProxyConfig) -> StdioServerParameters:
     command = config.upstream.command
-    return StdioServerParameters(command=command[0], args=list(command[1:]), env=config.upstream.resolved_env(),
+    return StdioServerParameters(command=resolve_program(command[0]), args=list(command[1:]),
+                                 env=config.upstream.resolved_env(),
                                  cwd=config.upstream.cwd)
 
 
@@ -143,6 +145,8 @@ async def start_core(stack: AsyncExitStack, config: ProxyConfig, *, two_key: Any
         print(line, file=sys.stderr)
     for line in undescribed_inputs(selection, tk.compiled.tool_specs):      # advice; it still starts
         print(f"two-key: WARNING: mcp-proxy: {line}", file=sys.stderr)
+    for line in undeclared_file_inputs(selection, tk.compiled.tool_specs, getattr(tk, "scanner", None)):
+        print(f"two-key: WARNING: mcp-proxy: {line}", file=sys.stderr)
     core = ProxyCore(tk, config, selection, upstream_caller(client, config.upstream.call_timeout_seconds),
                      agent_session=session)
     try:
@@ -200,7 +204,7 @@ def run(config: ProxyConfig) -> int:
 
 async def fetch_upstream_tools(command: list[str], env: dict[str, str]) -> list[dict]:
     """``two-key mcp-draft-specs``: start the server once, list its tools, and stop it."""
-    params = StdioServerParameters(command=command[0], args=list(command[1:]), env=env)
+    params = StdioServerParameters(command=resolve_program(command[0]), args=list(command[1:]), env=env)
     async with Client(params, cache=None, mode="auto") as client:
         return await list_upstream_tools(client)
 

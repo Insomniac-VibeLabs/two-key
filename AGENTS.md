@@ -34,10 +34,10 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.5.0 (package name `two-key`) is tag `v0.5.0` on `main`; 0.4.0
-  (tag `v0.4.0`) was the first release from this repository. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`.
+- Package 0.6.0 (package name `two-key`) is tag `v0.6.0` on `main`; 0.5.0 is
+  tag `v0.5.0`, and 0.4.0 (tag `v0.4.0`) was the first release from this repository. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`.
   Tag `v0.2.4` stays on `fc836bb`.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
   where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
@@ -48,7 +48,9 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key`, import name `two_key`,
-version `0.5.0`, tag `v0.5.0` on `main`. Not on PyPI.
+version `0.6.0`, tag `v0.6.0` on `main`. Not on PyPI.
+Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
+the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
 ```bash
 python3 -m venv .venv
@@ -73,13 +75,14 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0) |
 
 Git install:  
-`pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.5.0"`
+`pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.6.0"`
 
 ## Tests and docs
 
 - Tests: `python -m unittest discover -s tests` (no network). Keep the suite
   network-free; use `two_key.testing` doubles only where the docs allow.
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
+  `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
   `docs/SCOPE.md`, `CHANGES.md`, `SECURITY.md`, `CONTRIBUTING.md`,
   `AGENTS.md`, and `llms.txt` as needed.
@@ -206,6 +209,60 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   the draft, at `--constitution`, and at proxy start, for any field, never
   a looser match (`core.undescribed_inputs`). SDK tests skip without the extra; CI installs
   it (`--extra mcp`).
+- Platforms (0.6.0): every key read or write, owner-only directory, lock,
+  and no-follow open goes through `two_key/_platform.py`. On POSIX it does
+  what the code did before (mode 0600/0700, `O_NOFOLLOW`, `flock`, the same
+  messages). On Windows a key is created with an access list for the
+  current user only, and one whose owner or allow entries name anyone but
+  the user, SYSTEM, Administrators, or OWNER RIGHTS is refused; a reparse
+  point is refused; the lock is `LockFileEx`. Do not accept a wider access
+  list or fall back to "no lock". Text files Two-Key writes use
+  `newline="\n"` and a named encoding (`tests/test_text_io.py`).
+- Writable paths (0.6.0, `two_key/writable.py`): at start, `TwoKey` names
+  each file or folder of the running Python (program, import path, `.pth`
+  files, loaded modules and their compiled files) and of `check_paths`,
+  and every folder above them, that an account other than its own (or
+  root, SYSTEM, Administrators, TrustedInstaller) could change, through
+  `_platform.write_problem`. `warn` is the default; `on_writable_paths:
+  refuse` refuses; `high_assurance` always refuses and refuses `warn`
+  (maintainer's decision, 2026-10-16). A path that cannot be checked is
+  named, not passed. There is no setting that turns it off, and on POSIX a
+  group write bit counts for every group but 0; do not add either. It runs
+  before anything is written to the ledger (`tests/test_writable_paths.py`).
+- Content scanning (0.6.0, `two_key/scan.py`): Two-Key alone starts a scan,
+  for every call to a tool whose signed spec maps the scan field, and fills
+  the verdict; nothing the agent writes turns it on or off, and `scan` in
+  `facts=` is refused (`scan_fact_supplied`). Unavailable is never clean: a
+  timeout, an exception, or an invalid result is `unavailable`.
+  Could-not-finish (`limits_exceeded`) is flagged. A declared file Two-Key
+  cannot read (`file_unreadable`), one over its `max_bytes`
+  (`file_too_large`), more than 32 files (`too_many_files`), or more than
+  100 MiB of files in one call (`call_files_too_large`) is denied before
+  the scanner and both paths under every stance, monitor included
+  (maintainer's decision, 2026-10-15); nothing past a limit is read. Every
+  declared file states `max_bytes`, with no default (base64 at most
+  196608). Do not make these denies depend on the stance or give
+  `max_bytes` a default. An encrypted file is flagged; only a tool whose
+  signed spec maps the scan field with `encrypted: pass` turns an
+  `encrypted` finding into the verdict `encrypted`, and only when it is the
+  sole finding (with another finding it is flagged; with a part not
+  scanned, unavailable). The gateway refuses that verdict for any other
+  tool (`scan_mismatch`); an adapter reads only ClamAV's
+  `Heuristics.Encrypted` name as encrypted (`tests/test_scan_encrypted.py`).
+  Do not make it a `proxy.yaml` setting or a default (maintainer's
+  decision, 2026-10-15). The stance is the signed rule. Content never reaches
+  the ledger or a reason code, and file content never reaches a judge; a
+  flagged call's arguments and proposal reach the judges only with
+  `tool_args_on_scan_flag`. The gateway never scans: it checks the token's
+  verdict and file digests (`file_changed`). Without a scanner, the judge
+  prompts, tokens, and ledger stay byte for byte as before
+  (`tests/test_scan.py`). Do not add a scanning engine; adapters
+  (`two_key/scanners.py`, standard library only) call external products,
+  never keep a threat name or matched text, and read an answer they cannot
+  parse as `unavailable`; an ICAP 200 that changes the body is flagged
+  (`tests/test_scanners.py`). A `kind: path` file stays inside its declared
+  folder (no `..`, no link below it, a regular file), opened through
+  `_platform`; do not widen that.
 - The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
   (`TwoKey.gateway()`). A gateway in another process or host is not
   supported (#45); do not add a gateway-only ledger role, remote gateway,

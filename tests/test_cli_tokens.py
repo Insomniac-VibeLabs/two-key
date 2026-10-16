@@ -4,7 +4,6 @@ loads the principal key through the safe loader, uses the configured TTL, and le
 import io
 import json
 import os
-import stat
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -15,10 +14,11 @@ from two_key.capability import _b64u_dec
 from two_key.cli import main
 from two_key.constitution import save_envelope, sign_constitution
 from two_key.core import TwoKey
-from two_key.keys import generate_private_key, load_private_key_file, save_private_key
+from two_key.keys import generate_private_key, load_private_key_file, save_private_key, save_public_key
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
+from perm import chmod, private
 
 PROSE = "Drafts to ada are allowed."
 RULES = [{"id": "tools", "allow_only_tools": ["email_draft"]}]
@@ -72,7 +72,7 @@ class CliTokens(unittest.TestCase):
         path = self.dir / "token.txt"
         code, out, _ = self.run_cli("--emit-token", str(path))
         self.assertEqual(code, 0)
-        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        self.assertTrue(private(path))
         token = path.read_text().strip()
         self.assertTrue(token.startswith("tk1."))
         self.assertNotIn(token, out)
@@ -127,17 +127,45 @@ class CliTokens(unittest.TestCase):
 
     def test_safe_loader_refuses_group_or_world_readable_key(self):
         path = self.dir / "principal.pem"
-        os.chmod(path, 0o644)
+        chmod(path, 0o644)
         with self.assertRaisesRegex(ValueError, "key_file_insecure"):
             load_private_key_file(path)
-        with self.assertRaisesRegex(ValueError, "key_file_insecure"):
+        with self.assertRaisesRegex(SystemExit, "^--key: key_file_insecure"):    # one line, no traceback
             self.run_cli()
-        os.chmod(path, 0o600)
+        chmod(path, 0o600)
         link = self.dir / "link.pem"
         link.symlink_to(path)
         with self.assertRaisesRegex(ValueError, "key_file_unreadable"):
             load_private_key_file(link)
         load_private_key_file(path)
+
+    def test_public_key_named_as_such(self):
+        """Live run 7: audit --key given principal.pub.pem said 'run chmod 600', which would not help."""
+        public = self.dir / "principal.pub.pem"
+        save_public_key(public, self.key.public_key())
+        chmod(public, 0o644)
+        with self.assertRaisesRegex(ValueError, "^key_file_public: .*principal.pub.pem is a public key"):
+            load_private_key_file(public)
+        chmod(public, 0o600)        # whatever its mode
+        with self.assertRaisesRegex(ValueError, "^key_file_public:"):
+            load_private_key_file(public)
+        with self.assertRaisesRegex(SystemExit, "^--key: key_file_public:"):
+            main(["audit", "--key", str(public), "--ledger", str(self.dir / "ledger")])
+
+    def test_not_a_private_key(self):
+        junk = self.dir / "junk.pem"
+        junk.write_text("not a key\n", encoding="ascii")
+        chmod(junk, 0o600)
+        with self.assertRaisesRegex(ValueError, "^key_file_invalid: .*not an unencrypted PEM private key"):
+            load_private_key_file(junk)
+
+    def test_key_help_names_the_private_key(self):
+        out = io.StringIO()
+        with redirect_stdout(out), self.assertRaises(SystemExit):
+            main(["audit", "--help"])
+        text = " ".join(out.getvalue().split())     # argparse wraps to the terminal width
+        self.assertIn("the principal private key (principal.pem", text)
+        self.assertIn("not principal.pub.pem", text)
 
 
 class CliOmittedClaims(unittest.TestCase):

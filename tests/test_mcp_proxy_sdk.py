@@ -16,6 +16,7 @@ from pathlib import Path
 try:
     import anyio
     from mcp import Client
+    from mcp.client.stdio import DEFAULT_INHERITED_ENV_VARS
     from two_key.mcp_proxy import sdk
 except ImportError:  # pragma: no cover - the suite runs without the extra too
     sdk = None
@@ -23,6 +24,7 @@ except ImportError:  # pragma: no cover - the suite runs without the extra too
 from two_key.mcp_proxy.config import ProxyConfigError, parse_proxy_config
 from two_key.mcp_proxy.core import DENY_PREFIX, select_tools
 
+from child_env import child_env
 from test_mcp_proxy import DIGEST, SPECS, two_key
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -116,7 +118,9 @@ class ThroughTheSdk(unittest.TestCase):
         self.assertNotIn("TWO_KEY_TEST_JUDGE_SECRET", names)
         self.assertIn("FAKE_MCP_LOG", names)
         self.assertLessEqual(names - {"FAKE_MCP_LOG", "FAKE_MCP_VARIANT"},
-                             {"HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER", "LC_CTYPE"})
+                             {"HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER", "LC_CTYPE",
+                              "__CF_USER_TEXT_ENCODING",    # macOS sets it in every process: a text encoding code
+                              *DEFAULT_INHERITED_ENV_VARS})  # the SDK's own minimal list (Windows has its own)
 
     def test_paged_tools_list(self):
         cfg = proxy_config(self.tmp, anyio.run(pinned_digest, self.tmp, "paged"), variant="paged")
@@ -219,8 +223,7 @@ class CommandLine(unittest.TestCase):
         return self.dir / "proxy.json"
 
     def run_proxy(self, config):
-        env = {"PATH": os.environ.get("PATH", ""), "TK_TEST_AGENT_KEY": "agent-key", "TK_TEST_JUDGE_KEY": "judge-key",
-               "PYTHONPATH": str(ROOT)}
+        env = child_env(TK_TEST_AGENT_KEY="agent-key", TK_TEST_JUDGE_KEY="judge-key", PYTHONPATH=str(ROOT))
         return subprocess.run([sys.executable, "-m", "two_key", "mcp-proxy", "--config", str(config)],  # nosec B603
                               capture_output=True, text=True, env=env, timeout=120, stdin=subprocess.DEVNULL)
 

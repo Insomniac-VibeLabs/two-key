@@ -33,6 +33,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+from . import _platform
 from .canonical import EncodingError, canonical_bytes
 from .capability import capability_key_fingerprint
 from .keys import load_private_key_file, public_raw
@@ -124,9 +125,9 @@ def _sha256(data: bytes) -> str:
 
 
 def _write_new(path: Path, data: bytes) -> None:
-    """Create ``path`` at mode 0600. An existing file or a symlink is an error, not an overwrite."""
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(path, flags, 0o600)
+    """Create ``path`` owner-only (mode 0600, or a private access list on Windows). An existing file or a
+    symlink is an error, not an overwrite."""
+    fd = _platform.create_new(path)
     with os.fdopen(fd, "wb") as fh:
         fh.write(data)
         fh.flush()
@@ -135,11 +136,7 @@ def _write_new(path: Path, data: bytes) -> None:
 
 def _fsync_dir(directory: Path) -> None:
     """The file fsync is not enough: the directory entry has to reach disk too."""
-    fd = os.open(directory, os.O_RDONLY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    _platform.fsync_dir(directory)
 
 
 def _read_file(path: Path, limit: int, *, secret: bool = True) -> bytes:
@@ -149,15 +146,16 @@ def _read_file(path: Path, limit: int, *, secret: bool = True) -> bytes:
     so those two are read even when the group can read them. Keys, the anchor, and bundles are not.
     """
     try:
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        fd = _platform.open_nofollow(path)
     except OSError as e:
         raise BackupError(f"backup_refused: {path} cannot be read ({e.strerror})") from None
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             raise BackupError(f"backup_refused: {path} is not a regular file")
-        if secret and st.st_mode & 0o077:
-            raise BackupError(f"backup_refused: {path} is readable by group or others; chmod 600 it")
+        problem = _platform.access_problem(fd, st) if secret else None
+        if problem:
+            raise BackupError(f"backup_refused: {_platform.insecure(path, problem)}")
         if st.st_size > limit:
             raise BackupError(f"backup_too_large: {path} is over {limit} bytes")
         chunks = []
@@ -508,7 +506,7 @@ def _install(path: Path, data: bytes, *, overwrite: bool, name: str) -> str:
         tmp = path.parent / f".{path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp"
         try:
             _write_new(tmp, data)
-            os.replace(tmp, path)
+            _platform.replace(tmp, path)
         finally:
             if os.path.lexists(tmp):
                 os.unlink(tmp)
@@ -719,13 +717,16 @@ def _prepare_output_dir(out: Path) -> Path:
     """
     out = Path(out)
     if os.path.lexists(out):
-        if os.path.islink(out):
+        if _platform.is_link(out):
             raise BackupError("backup_refused: the output directory is a symlink")
         st = os.lstat(out)
         if not stat.S_ISDIR(st.st_mode):
             raise BackupError("backup_refused: the output directory is not a directory")
-        if st.st_mode & 0o022:
+        problem = _platform.dir_write_problem(out)
+        if problem and not _platform.WINDOWS:
             raise BackupError("backup_refused: the output directory is writable by group or others")
+        if problem:
+            raise BackupError(f"backup_refused: the output directory is writable by other accounts: {problem}")
         return out
     try:
         out.mkdir(mode=0o700, parents=True, exist_ok=False)

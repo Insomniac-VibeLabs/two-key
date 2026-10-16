@@ -1,7 +1,7 @@
 
 # Judges and quorum
 
-This document describes judge and quorum behavior in `two-key` 0.5.0 (tag `v0.5.0` on `main`). It is not an independent review or a claim of formal verification. If this document disagrees with the implementation, the code wins; correct the document after verifying the intended behavior.
+This document describes judge and quorum behavior in `two-key` 0.6.0 (tag `v0.6.0` on `main`). It is not an independent review or a claim of formal verification. If this document disagrees with the implementation, the code wins; correct the document after verifying the intended behavior.
 
 See [THREAT_MODEL.md](THREAT_MODEL.md) for the threat register, [SCOPE.md](SCOPE.md) for the project's boundaries, and [FIT.md](FIT.md) for when this package is or is not suitable.
 
@@ -122,6 +122,9 @@ A provider floor of one does not require provider diversity. The default policy 
 - At least one local judge.
 - An affirmative vote from a local judge.
 - `required_yes=2` by default, unless the caller overrides it.
+- Two-Key does not start when another account could change a file or
+  folder it runs or reads (`writable_path`, docs/CONNECTING.md), and
+  `on_writable_paths: warn` is refused.
 
 `QuorumPolicy.section4()` applies those same diversity requirements and sets `require_path_a_first=True`. In the current implementation, however, `TwoKey.authorize` does not read that flag to skip Path B. Both paths run once a request is well-formed and within limits; the one exception is a call Path A cannot read under its spec (`derive_failed:`), which is not sent to the judges unless `tool_args_on_derive_deny` is set.
 
@@ -156,6 +159,8 @@ The final decision allows the action only if Path A allows, the quorum passes, a
 
 A Path A deny does not skip Path B. After a derive deny, judge input omits argument bytes by default. A call that cannot be read under its spec (`derive_failed:`) is the one exception: the judges would get a form with nothing derived in it and no arguments, so they are not asked, and Path B is ledgered as `skipped:derive_failed` (0.5.0). With `tool_args_on_derive_deny: true` they see the arguments and are asked. A mismatch (`amount_mismatch` and the like) and a rule deny still go to the judges. `require_path_a_first` does not change this behavior.
 
+With a content scanner configured (0.6.0), a scanned call reaches the judges with a trusted `<scan_result>` section (scanner label, verdict, categories) before the untrusted record, and each declared file appears in the record as its digest and size, never its content. When the verdict is flagged, the arguments and the proposal are withheld unless the quorum sets `tool_args_on_scan_flag: true`. The verdict `encrypted` (an encrypted file on a tool the principal signed `encrypted: pass`) comes with a line saying the scanner could not look inside, and the arguments are sent. A scan deny is a Path A deny, so the judges still vote. See [SCANNERS.md](SCANNERS.md).
+
 Malformed or oversized requests can be denied before either path runs.
 
 ## What a quorum pass means
@@ -165,7 +170,7 @@ A quorum pass means the configured Path B requirements were met for that authori
 - The judges are correct, infallible, or independent.
 - The maker labels are truthful.
 - The proposal or action is safe in every relevant context.
-- The payload has been scanned for malware, data loss, or sensitive information.
+- The payload has been scanned for malware, data loss, or sensitive information. That holds only for a tool the signed constitution marks for scanning with a content scanner configured (0.6.0), and then the judges were told the verdict, not shown the content; see [SCANNERS.md](SCANNERS.md).
 - The deployment has been independently audited or formally verified.
 - The package is a FIPS 140-3 validated cryptographic module.
 
@@ -181,7 +186,7 @@ Before relying on a deployment:
 4. For higher-impact actions, consider `QuorumPolicy.high_assurance()` and check the configured local judge and maker labels.
 5. Decide whether judges receive only the normalized record or also the proposal text.
 6. Give each judge a fresh context for every ballot: turn off any memory its endpoint keeps across requests.
-7. Review `tool_args_on_derive_deny`; argument bytes are withheld by default after a derive deny, and a call that cannot be read is then not sent to the judges at all.
+7. Review `tool_args_on_derive_deny`; argument bytes are withheld by default after a derive deny, and a call that cannot be read is then not sent to the judges at all. With a content scanner, review `tool_args_on_scan_flag` the same way.
 8. Test timeout, malformed ballot, binding mismatch, insufficient response, and deny cases.
 9. Read [THREAT_MODEL.md](THREAT_MODEL.md) and [FIT.md](FIT.md) before deployment.
 
