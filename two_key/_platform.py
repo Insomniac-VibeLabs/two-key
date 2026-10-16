@@ -43,7 +43,11 @@ ADMINISTRATORS_SID = "S-1-5-32-544"
 TRUSTED_INSTALLER_SID = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"
 # Names for the accounts a write_problem message most often names.
 _SID_NAMES = {"S-1-1-0": "Everyone", "S-1-5-11": "Authenticated Users", "S-1-5-32-545": "Users",
-              "S-1-5-4": "INTERACTIVE"}
+              "S-1-5-4": "INTERACTIVE", "S-1-5-19": "LOCAL SERVICE", "S-1-5-20": "NETWORK SERVICE"}
+
+
+def _sid_label(sid: str) -> str:
+    return f"{_SID_NAMES[sid]} ({sid})" if sid in _SID_NAMES else sid
 
 if WINDOWS:  # pragma: no cover - exercised on the Windows CI runner
     import ctypes
@@ -262,7 +266,7 @@ if WINDOWS:  # pragma: no cover - exercised on the Windows CI runner
             trusted = {current_user_sid(), SYSTEM_SID, ADMINISTRATORS_SID, *also_trusted}
             owner_sid = _sid_string(owner_psid)
             if owner_sid not in trusted and (forbidden is None or owner):
-                return f"it is owned by {owner_sid}, not by you"
+                return f"owned by {_sid_label(owner_sid)}" if granted else f"it is owned by {owner_sid}, not by you"
             if owner_sid in trusted:
                 trusted.add(OWNER_RIGHTS_SID)
             if not dacl.value:
@@ -283,7 +287,7 @@ if WINDOWS:  # pragma: no cover - exercised on the Windows CI runner
                 sid = _sid_string(ace.value + _ACCESS_ALLOWED_ACE.SidStart.offset)
                 if sid not in trusted and allowed.Mask & (~_HARMLESS if forbidden is None else forbidden):
                     if granted:
-                        return f"{_SID_NAMES[sid]} ({sid}) {granted}" if sid in _SID_NAMES else f"{sid} {granted}"
+                        return f"{_sid_label(sid)} {granted}"
                     return f"{sid} has access to it"
             return None
         finally:

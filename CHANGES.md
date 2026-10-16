@@ -3202,6 +3202,13 @@ service account, not a standard user.
   checklist lines. HOWTO (the `proxy.yaml` table, the refusal table and
   warnings, high_assurance, Python, known trade-offs), THREAT_MODEL,
   JUDGES_AND_QUORUM, SECURITY, ROADMAP, AGENTS.md, and llms.txt updated.
-- `tests/test_writable_paths.py` (19 tests). `tests/test_scan.py`'s
-  start-up warnings test no longer depends on the machine it runs on.
+- `tests/test_writable_paths.py` (19 tests). The start-up warnings test in
+  `tests/test_scan.py` and the section4 test in `tests/test_two_key.py`
+  build high_assurance quorums, so they no longer look at the machine they
+  run on. On GitHub's runners the check names `/opt` (writable by everyone)
+  on Linux, `/Library/Frameworks/Python.framework/Versions/<v>` (writable
+  by group admin) on macOS, and `C:\hostedtoolcache` (Authenticated Users
+  can change it) and `D:\` (owned by NETWORK SERVICE) on Windows.
+- Windows messages name well-known accounts: `owned by NETWORK SERVICE
+  (S-1-5-20)`, `Authenticated Users (S-1-5-11) can change it`.
 
