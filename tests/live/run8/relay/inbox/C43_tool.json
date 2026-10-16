@@ -1,0 +1,5 @@
+{
+ "rid": "R2e0d6e7227",
+ "prompt_sha": "f88ab66d524a13a5a490a2cbd1f85734c0fd171fabd3583e9ccc2c83f15daccc",
+ "content": "{\"call_id\": \"call-911307038ce6\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-7f3a2c07\", \"to\": \"orders@clearpath-labs.example\", \"subject\": \"Results\", \"attachments\": [{\"filename\": \"labs.zip\"}], \"sent\": true}}"
+}

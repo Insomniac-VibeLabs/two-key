@@ -1,0 +1,5 @@
+{
+ "rid": "R6a2f2f5775",
+ "prompt_sha": "6ac77633c781c35d0633a4437f45b0787333c6f0e079f13ccd5d05aae9a733b8",
+ "content": "{\"call_id\": \"call-04385045108f\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-7f3a2c08\", \"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"card\", \"sent\": true}}"
+}

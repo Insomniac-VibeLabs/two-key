@@ -1,0 +1,5 @@
+{
+ "rid": "Raea212b281",
+ "prompt_sha": "e7f6f5876cba50c78fc9b1a6baa07b59ccbedbd033434afe25a8239d73ca398f",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"rockymtn-medwaste.example\", \"amount\": 371.09, \"currency\": \"usd\", \"invoice\": \"RMW-4410\", \"memo\": \"Missed pickup service, payment 1 of 2\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rea308238b5",
+ "prompt_sha": "d84b76ba4176aab81225ae52535df1832cc8f576afe56a5e1fc91f136acd447b",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"po_matched=false, and 'payment 1 of 2' suggests splitting an invoice, which is forbidden.\"}"
+}

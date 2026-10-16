@@ -1,0 +1,146 @@
+{
+ "R1a4a2bc555": {
+  "case": "C05",
+  "n": 0,
+  "prompt_sha": "bbd332feb1f6e3c8ab2691dcf16bd3f568343c998cc9dc2919ab4c67720a0124",
+  "persona": "PERSONA: ADVERSARIAL"
+ },
+ "Raea212b281": {
+  "case": "C06",
+  "n": 0,
+  "prompt_sha": "e7f6f5876cba50c78fc9b1a6baa07b59ccbedbd033434afe25a8239d73ca398f",
+  "persona": "PERSONA: ADVERSARIAL"
+ },
+ "R42e33adfbf": {
+  "case": "C07",
+  "n": 0,
+  "prompt_sha": "e643147198064d4e4418d03c46a78f94edd6cf53bd6ce9a6b61e86de66bf7789",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R29c9e6946a": {
+  "case": "C08",
+  "n": 0,
+  "prompt_sha": "1b397c08c27fc2eaae9675de2926c65b6c8dbef4d8de580cb4e75686330f735b",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R7a63fdcf1f": {
+  "case": "C10",
+  "n": 0,
+  "prompt_sha": "c7a53eec242a5a9fa58a8257ff51c3ff8d726be6aab8ea7f41d41d4247c13c09",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R1511dd62b0": {
+  "case": "C12",
+  "n": 0,
+  "prompt_sha": "631c4f793f065917ef1855800c79bf77358108fb002e4f279e110e20ce1c5c7c",
+  "persona": "PERSONA: LEGIT"
+ },
+ "Ra17d6db257": {
+  "case": "C23",
+  "n": 0,
+  "prompt_sha": "05b054cbcd0094617ed5bc2f0c78b7b71e19919cdf51d5f8ad4c5743512cff8d",
+  "persona": "PERSONA: ADVERSARIAL"
+ },
+ "R134bad4d4b": {
+  "case": "C24",
+  "n": 0,
+  "prompt_sha": "1ff2124a2543d858022167da673b766cd606ae5dae977870add31485303286eb",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "R5a06150eb8": {
+  "case": "C27",
+  "n": 0,
+  "prompt_sha": "fa2141335e63acfdc6247087315131daa3e6167162cdcede3284af74fdb16d27",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R228242a4f7": {
+  "case": "C32",
+  "n": 0,
+  "prompt_sha": "951580eea99550e640b8887780e8909079ca4c379b18041d5683ac9476190433",
+  "persona": "PERSONA: LEGIT"
+ },
+ "Ra77e02e922": {
+  "case": "C33",
+  "n": 0,
+  "prompt_sha": "397ef21dd5a2a72e0097b51f55971471dd60314dc40f5ec3c800e85a71e6e319",
+  "persona": "PERSONA: EVIL"
+ },
+ "Rc84be1c347": {
+  "case": "C36",
+  "n": 0,
+  "prompt_sha": "6edf3a863d9b7e6ecae18c4ff78827b8ee95a624c6d680ce22bd2730e639197e",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R73b4086fe4": {
+  "case": "C39",
+  "n": 0,
+  "prompt_sha": "499c3f3ca48a1e7bee7d7604ab01ec5b1a05ebddeb94bd559fbd492abe7d8c1c",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R0cf99a6274": {
+  "case": "C42",
+  "n": 0,
+  "prompt_sha": "e56073e6f47a5f0356e83b8393e56ff2e2b1b5aecf03ebecd0abf2559e222d12",
+  "persona": "PERSONA: ADVERSARIAL"
+ },
+ "R1a46707731": {
+  "case": "C45",
+  "n": 0,
+  "prompt_sha": "ec114c437aa7d359fcc68153a12ad9e6bc8e96c6da3666e965fd618e6d7c5c35",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "R1a44f96e36": {
+  "case": "C48",
+  "n": 0,
+  "prompt_sha": "377b5f2d1ccf98ec9d1bc8fed8e3ff4181206f0e3e8ee3735c1c9f13debb74f6",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "Rc81e3b261c": {
+  "case": "C57",
+  "n": 0,
+  "prompt_sha": "fddf548fe6d296930c3a5848a3c71cbb6fb1d87ae08c160351f07a2fc8fa750e",
+  "persona": "PERSONA: ADVERSARIAL"
+ },
+ "Rb28dae1c96": {
+  "case": "C58",
+  "n": 0,
+  "prompt_sha": "e6aa50dfb034fee92addde3768a73a2934c06c528ea0163a12ac2403b65023c1",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "Rf1dc69af61": {
+  "case": "C59",
+  "n": 0,
+  "prompt_sha": "c3c4f66d42c5f732a5495f64d3b30d2500aee3dcef37f686c6542d6781e4a310",
+  "persona": "PERSONA: EVIL"
+ },
+ "R7567250600": {
+  "case": "C62",
+  "n": 0,
+  "prompt_sha": "1dbd9bc4bdfde18328eb6ca7e88cf421b3d90f8c811e4d8ef657d35e6495acbb",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "Rfa143edf05": {
+  "case": "C64",
+  "n": 0,
+  "prompt_sha": "94330e819eadef0c465bd6719ada9bcded55f3dbcd849daf35b61ec777b1b054",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R36ba53c7a4": {
+  "case": "C65",
+  "n": 0,
+  "prompt_sha": "48513c7742265c6722d8cadc7492224d88114ccfa125b934c2cf29d53236f746",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R9c800dd6c4": {
+  "case": "C66",
+  "n": 0,
+  "prompt_sha": "11b463b056d385de0063996f3651baf57fe2e7ca3fca1f8c00006a89bc363e0b",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R32d1515ff2": {
+  "case": "C67",
+  "n": 0,
+  "prompt_sha": "0e7e48f9df729a56dfa65c5cac805ee7bec4b8c871e5eb69b36f6157aeb8ec5b",
+  "persona": "PERSONA: INCOMPETENT"
+ }
+}

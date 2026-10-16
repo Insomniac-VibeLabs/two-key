@@ -1,0 +1,5 @@
+{
+ "rid": "R63415f15e1",
+ "prompt_sha": "56c9223f37018f648141c9bd92829d30a54f99d49b057205e779ca4dbd9719e7",
+ "content": "{\"call_id\": \"call-fe79b9f04ad6\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-7f3a2c05\", \"to\": \"orders@clearpath-labs.example\", \"subject\": \"Lab order: PT-20931 - lipid panel and A1C\", \"sent\": true}}"
+}

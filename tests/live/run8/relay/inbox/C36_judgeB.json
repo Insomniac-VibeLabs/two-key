@@ -1,0 +1,5 @@
+{
+ "rid": "R0f44911ca9",
+ "prompt_sha": "b3d8c87d617595a34a4d528baf3d2de964a2c24833173cda3e07a725aa147ce4",
+ "content": "{\"consistent\": true, \"confidence\": 0.8, \"rationale\": \"Approved vendor, USD, under $400, po_matched=true, memo consistent.\"}"
+}

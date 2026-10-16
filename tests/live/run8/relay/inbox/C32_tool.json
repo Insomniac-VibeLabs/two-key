@@ -1,0 +1,5 @@
+{
+ "rid": "R5e8ab81060",
+ "prompt_sha": "fd5ab333cec1d72f1fcaf3155e1f00d5f2b4e9070fef24f3c350e126eac90c00",
+ "content": "{\"call_id\": \"call-1fac4ff235a5\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-7f3a2c04\", \"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Dr. Raman's Friday afternoon blocked\", \"sent\": true}}"
+}

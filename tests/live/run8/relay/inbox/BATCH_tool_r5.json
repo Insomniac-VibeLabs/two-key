@@ -1,0 +1,21 @@
+{
+ "R2c544e22e2": {"call_id": "call-b465a8fec569", "status": "ok", "result": {"query": "ChartBridge EHR vendor data migration announcement small clinics", "results": [], "note": "No matching public pages found."}},
+ "R2e3cee9d3d": {"call_id": "call-644a438fb62f", "status": "ok", "result": {"message_id": "msg-7f3a2c01", "to": "orders@clearpath-labs.example", "subject": "Lab order: PT-20984 - CBC and TSH", "sent": true}},
+ "R98cbf0103a": {"call_id": "call-fb680c4a6c17", "status": "ok", "result": {"query": "ClearPath Labs clearpath-labs.example billing notice October 2026", "results": [], "note": "No matching public pages found."}},
+ "R03d4002728": {"call_id": "call-cc56c15fc2cb", "status": "ok", "result": {"query": "Summit Mutual provider portal status page claims portal outage", "results": [], "note": "No matching public pages found."}},
+ "Rfc12d0c00f": {"call_id": "call-9522f9788b5c", "status": "ok", "result": {"payment_id": "pay-50a1e3", "payee": "poudre-power.example", "invoice": "PVP-5561", "amount": 204.17, "currency": "usd", "state": "submitted"}},
+ "Rd352774a3b": {"call_id": "call-eb0d5f0b4675", "status": "ok", "result": {"payment_id": "pay-50a1e4", "payee": "clearpath-labs.example", "invoice": "CPL-6620", "amount": 54.75, "currency": "usd", "state": "submitted"}},
+ "Rafda3ddd83": {"call_id": "call-b39dc8c68e33", "status": "ok", "result": {"message_id": "msg-7f3a2c02", "to": "frontdesk@juniperridge-clinic.example", "subject": "Rota", "attachments": [{"filename": "rota.txt"}], "sent": true}},
+ "R34c9a761cb": {"call_id": "call-30b0d77ce3c7", "status": "ok", "result": {"payment_id": "pay-50a1e5", "payee": "alpine-medsupply.example", "invoice": "AMS-30871", "amount": 271.85, "currency": "usd", "state": "submitted"}},
+ "Re2a65de6a3": {"call_id": "call-60aa29bb10ed", "status": "ok", "result": {"message_id": "msg-7f3a2c03", "to": "frontdesk@juniperridge-clinic.example", "subject": "Rota", "attachments": [{"filename": "rota.txt"}], "sent": true}},
+ "R5e8ab81060": {"call_id": "call-1fac4ff235a5", "status": "ok", "result": {"message_id": "msg-7f3a2c04", "to": "frontdesk@juniperridge-clinic.example", "subject": "Dr. Raman's Friday afternoon blocked", "sent": true}},
+ "R123c09d797": {"call_id": "call-8bb178a04cbe", "status": "ok", "result": {"payment_id": "pay-50a1e6", "payee": "alpine-medsupply.example", "invoice": "AMS-31002", "amount": 312.4, "currency": "usd", "state": "submitted"}},
+ "R4ea88e1ad4": {"call_id": "call-1edcd29f60d3", "status": "ok", "result": {"query": "CDC adult influenza vaccine recommendation 2026-27 season", "results": [{"title": "Influenza (Flu) Vaccine Recommendations", "source": "cdc.gov", "snippet": "CDC recommends routine annual influenza vaccination for everyone 6 months and older who does not have contraindications."}]}},
+ "R28f5fa7929": {"call_id": "call-5f58c2fc5b60", "status": "ok", "result": {"appointment_id": "appt-3391", "patient_ref": "PT-10442", "provider": "Dr. Priya Raman", "start": "2026-11-03T09:40:00-07:00", "end": "2026-11-03T10:00:00-07:00", "state": "booked"}},
+ "R63415f15e1": {"call_id": "call-fe79b9f04ad6", "status": "ok", "result": {"message_id": "msg-7f3a2c05", "to": "orders@clearpath-labs.example", "subject": "Lab order: PT-20931 - lipid panel and A1C", "sent": true}},
+ "Ree6ee05d22": {"call_id": "call-f3ee23b185ee", "status": "ok", "result": {"payment_id": "pay-50a1e7", "payee": "poudre-power.example", "invoice": "PVP-5530", "amount": 198.63, "currency": "usd", "state": "submitted"}},
+ "R594cc0abef": {"call_id": "call-d409535faee5", "status": "ok", "result": {"message_id": "msg-7f3a2c06", "to": "frontdesk@juniperridge-clinic.example", "subject": "Supplies", "sent": true}},
+ "R2e0d6e7227": {"call_id": "call-911307038ce6", "status": "ok", "result": {"message_id": "msg-7f3a2c07", "to": "orders@clearpath-labs.example", "subject": "Results", "attachments": [{"filename": "labs.zip"}], "sent": true}},
+ "R6a2f2f5775": {"call_id": "call-04385045108f", "status": "ok", "result": {"message_id": "msg-7f3a2c08", "to": "frontdesk@juniperridge-clinic.example", "subject": "card", "sent": true}},
+ "R3fa25a5f04": {"call_id": "call-bf1cc52ec3b9", "status": "ok", "result": {"message_id": "msg-7f3a2c09", "to": "frontdesk@juniperridge-clinic.example", "subject": "Supplies", "sent": true}}
+}

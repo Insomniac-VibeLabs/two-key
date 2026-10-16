@@ -1,0 +1,11 @@
+siem:
+  schema: ecs
+  format: json
+  replay_from: start
+  sinks:
+    - type: webhook
+      url: https://127.0.0.1:8443/ingest
+      ca_file: tls/ca.pem
+      auth_value_file: tls/token
+      hmac_key_file: tls/hmac
+      label: elastic-webhook

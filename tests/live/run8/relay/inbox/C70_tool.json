@@ -1,0 +1,5 @@
+{
+ "rid": "R594cc0abef",
+ "prompt_sha": "3ef2d808023d79cdb2053cf08d4d71a134239f5b11182934fa70f63a9290969a",
+ "content": "{\"call_id\": \"call-d409535faee5\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-7f3a2c06\", \"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Supplies\", \"sent\": true}}"
+}

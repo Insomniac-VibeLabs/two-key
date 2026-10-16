@@ -95,6 +95,7 @@
 - [Live run 7x results — 2026-10-15](#live-run-7x-results--2026-10-15)
 - [Live run 6 results (MCP proxy: run 6, 6x, 6y) — 2026-10-15](#live-run-6-results-mcp-proxy-run-6-6x-6y--2026-10-15)
 - [Live run 6z results — 2026-10-15](#live-run-6z-results--2026-10-15)
+- [Live run 8 results — 2026-10-16](#live-run-8-results--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3266,3 +3267,39 @@ Details:
 - Never committed: keys, ledgers, `state/`, `selftest/`, `cases.jsonl`, and the `--table` output.
   `tests/live/.gitignore` covers `*.pem`, the ledger key, witness, capability and redeem-lock
   directories, `ledger/`, `keys/`, PLAN.md, and private relay notes, at any depth (added with run 7x).
+
+## Live run 8 results — 2026-10-16
+
+On branch `live-runs`. The branch is cut from an older `working` (a0bd296) and is not rebased. The run used
+`working` @ 7e636d3 (0.7.0 SIEM export, the run 8 harness bf6bcad). Tests and docs only; no library change.
+
+- **Live pass** (clinic behind the MCP proxy, four personas, 70 cases): 68 PASS / 2 INCONCLUSIVE / 0 FAIL after
+  8 relay rounds. Self-test 70 PASS. The two INCONCLUSIVE cases (C06, C59) were stopped, by a different correct
+  deny than the case expected. RESULTS.md lists no referee incidents. One incident was added by hand: the agent
+  bot ran a script that tried to open an earlier batch (nothing read).
+- **Persona ladder** (8 cases): 7 PASS / 1 INCONCLUSIVE (C59). LEGIT was never denied. INCOMPETENT, ADVERSARIAL,
+  and EVIL never declined (17 of 17 calls), and none reached the system of record.
+- **SIEM copy in the pass:** 385 events for 385 ledger entries, 0 of 118 argument values in an event, 0
+  duplicates, 12 replay.
+- **Section 5 by hand:** `siem-export` 309 events, and `siem-verify --require-complete` ok. Export refuses to
+  overwrite. `siem_plaintext_refused` under high_assurance for udp, tcp, and http. The one-byte flip was **not**
+  caught (finding 1: the envelope and the summary are not verified).
+- **Section 6 by hand:** `on_writable_paths: refuse` and high_assurance refuse (high_assurance refuses `warn`).
+  `sign-constitution --out` is atomic and does not follow a link, but it overwrites an existing file (finding 3).
+  Windows ACL check skipped (no Windows machine).
+- **Section 8, Elastic and Kibana 8.15.3** (first run from a cloud box; needed a host-network override):
+  - The syslog/TLS sink lost 11 to 12 of the demo's 17 events on close (finding 2).
+  - The webhook sink delivered 17 of 17, and a run 8 ledger copy delivered 311 of 311.
+  - Outage: no slowdown, a stderr warning, and 102 of 102 late events marked replay per sink.
+  - Refused tokens: `ledgered: false`, seq -1, ledger not grown.
+  - Canary search: 0 of 128 values.
+  - The dashboard's denies and allows panels are empty with the example's ECS schema (finding 4).
+
+Details:
+
+- `tests/live/run8/REPORT.md`: the INCONCLUSIVE rows and why, the section 7 checks, the ladder, the SIEM
+  section, personas, role behavior and freshness, per-call timing in ms, seven findings, and referee notes.
+- `tests/live/run8/siem/NOTES.md`: the manual checks, with the verify outputs, the tamper matrix, and the scripts
+  and override files used. No `tls/`, keys, ledgers, or `run8.jsonl`.
+- `tests/live/run8/` holds `relay/`, `logs/`, `constitution/`, `RESULTS.md`, `results.json`, and `MASKED.md`
+  (3 files masked).

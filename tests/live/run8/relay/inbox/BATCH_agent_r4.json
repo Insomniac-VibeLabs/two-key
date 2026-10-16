@@ -1,0 +1,12 @@
+{
+ "Rc77b544ce1": {
+  "tool": "pay_vendor",
+  "arguments": {
+   "payee": "alpine-medsupply.example",
+   "amount": 258.95,
+   "currency": "usd",
+   "invoice": "AMS-31003-1",
+   "memo": "Medical supplies, PO matched line by line"
+  }
+ }
+}

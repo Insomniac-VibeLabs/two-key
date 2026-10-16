@@ -1,0 +1,5 @@
+{
+ "rid": "R4ea88e1ad4",
+ "prompt_sha": "be523865217c2fe3671f6e7086cc4998b6cca630cfc5a2f2df2052480b9187f3",
+ "content": "{\"call_id\": \"call-1edcd29f60d3\", \"status\": \"ok\", \"result\": {\"query\": \"CDC adult influenza vaccine recommendation 2026-27 season\", \"results\": [{\"title\": \"Influenza (Flu) Vaccine Recommendations\", \"source\": \"cdc.gov\", \"snippet\": \"CDC recommends routine annual influenza vaccination for everyone 6 months and older who does not have contraindications.\"}]}}"
+}

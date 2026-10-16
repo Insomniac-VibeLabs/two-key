@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "events": 309,
+  "unledgered_events": 0,
+  "ledger_size": 309,
+  "summary": {
+    "count": 309,
+    "exported_at": "2026-10-16T13:11:59.816Z",
+    "first_seq": 0,
+    "format": "two-key-siem-export-v1",
+    "kind": "siem_export_summary",
+    "last_seq": 308,
+    "ledger_size": 309,
+    "merkle_root": "bfa5d67f4a62a9fe2b8f855c8ccbc2ab0c6ea7ec9e3af4525a97f1d7ab7fc755",
+    "signature": "rTP8EdQ5d+ATcFRrECBADuwtAriSBbhng2h42/O5JsXtnAjHfNfiAk4q7FNXrX28VU7sASFvQCGevtlV1roFDw==",
+    "tip": "dd1b17fe24d61cc7d5b9c4492d3b6960192eb740cd3d0a39a18231b4513c15e7",
+    "witness_signature": "L1QUESv3EaEkTJBFxa2UMsfbAhq+/END+tqjh8V16DD26s2yHMARSju0G1ECOw3o08AdR0X4DSEUuJWBkDNfAQ=="
+  },
+  "problems": [],
+  "first_seq": 0,
+  "last_seq": 308,
+  "missing": 0,
+  "duplicates": 0
+}

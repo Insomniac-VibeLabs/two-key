@@ -1,0 +1,5 @@
+{
+ "rid": "Rafda3ddd83",
+ "prompt_sha": "558b4751b31ffff2ce78ab1c737b2591ae2a4b8db3cd1818188335d511bbd283",
+ "content": "{\"call_id\": \"call-b39dc8c68e33\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-7f3a2c02\", \"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Rota\", \"attachments\": [{\"filename\": \"rota.txt\"}], \"sent\": true}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R2eb1993a06",
+ "prompt_sha": "b3d8c87d617595a34a4d528baf3d2de964a2c24833173cda3e07a725aa147ce4",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Approved payee, USD, under $400, PO matched, ordinary memo.\"}"
+}

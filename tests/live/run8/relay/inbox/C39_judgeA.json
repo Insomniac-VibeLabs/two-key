@@ -1,0 +1,5 @@
+{
+ "rid": "R018821a5d4",
+ "prompt_sha": "43a0c3550b621f8aac35a5e65923a3a025c211757b312ee3eae37483f9618b6d",
+ "content": "{\"consistent\": true, \"confidence\": 0.8, \"rationale\": \"Public clinical-guidance lookup with no patient info or credentials.\"}"
+}
