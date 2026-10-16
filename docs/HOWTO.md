@@ -1781,10 +1781,19 @@ and `run-proxy` is:
 
 ```bash
 #!/bin/sh
+umask 077                                      # the ledger is created owner-only (below)
 cd /opt/two-key || exit 1                      # not the agent's folder (below)
 set -a; . /etc/two-key/proxy.env; set +a       # mode 0600, owner two-key
 exec /opt/two-key/.venv/bin/two-key mcp-proxy --config /etc/two-key/proxy.yaml
 ```
+
+The `umask` matters on the first start, when the proxy creates the ledger:
+the ledger folder and its files take their mode from it. On Ubuntu 24.04,
+`sudo -u two-key` gives the proxy a umask of 002 (sudo's PAM session sets
+it for an account whose group has its own name), so without the line the
+ledger folder is group-writable, and the proxy's own start-up check names
+it (`writable_path: /var/lib/two-key/ledger: writable by group two-key`)
+or, with `on_writable_paths: refuse`, does not start.
 
 sudo keeps the caller's working directory, and the upstream server
 inherits the proxy's unless `upstream.cwd` is set. Left in the agent's
@@ -1964,6 +1973,17 @@ Run the proxy as its own OS user, and the upstream server as a third one.
   runs twice per allowed call). The tool should still check the fact.
 - **One upstream, over stdio.** HTTP transports come later. One call runs at
   a time, so a slow judge round delays the next call.
+- **The agent host connects over stdio only.** The proxy does not listen on
+  the network. An agent on another machine starts it over SSH, which
+  carries stdio
+  ([CONNECTING](CONNECTING.md#an-agent-on-another-machine-route-1-over-ssh)).
+- **One running proxy per ledger.** Each proxy holds its own copy of the
+  ledger's state. When a second proxy on the same ledger writes, every
+  later call through the first is denied with `ledger_failed:ledger file
+  changed by another writer; reopen the ledger` until it restarts. It
+  fails closed, but it stops working. Give each agent session that can run
+  at the same time its own `proxy.yaml` and ledger, or let only one run at
+  a time.
 - **The pin covers what the agent is shown,** not what the server does: a
   server can change its behavior without changing a schema. Pin the
   version.

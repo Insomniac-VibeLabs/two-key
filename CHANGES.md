@@ -103,6 +103,7 @@
 - [Docs: the SIEM export everywhere it applies (0.7.0) — 2026-10-16](#docs-the-siem-export-everywhere-it-applies-070--2026-10-16)
 - [CI: two tests looked at the machine, one at the drive (0.7.0) — 2026-10-16](#ci-two-tests-looked-at-the-machine-one-at-the-drive-070--2026-10-16)
 - [Live harness: run 8 (four personas, the SIEM copy, the paths 0.6.0 refactored) — 2026-10-16](#live-harness-run-8-four-personas-the-siem-copy-the-paths-060-refactored--2026-10-16)
+- [Docs: an agent on another machine, over SSH — 2026-10-16](#docs-an-agent-on-another-machine-over-ssh--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3523,3 +3524,32 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
 - `examples/siem/elastic/receiver.py` read the structured-data placeholder as the syslog MSGID (the sixth field,
   not the seventh), so a CEF event's `kind` was `-`. The harness reuses the same reader.
 - 70 cases (49 in run 7); `python3 tests/live/harness.py --selftest` ends with every case PASS.
+
+## Docs: an agent on another machine, over SSH — 2026-10-16
+
+- `docs/CONNECTING.md`: a new section, "An agent on another machine (Route 1
+  over SSH)". The proxy talks to the agent's host over stdio only, so a remote
+  agent host starts it over SSH: a login account that is not `two-key` (sshd
+  runs a forced command through the login shell, and the service account's is
+  `nologin`), a root-owned `authorized_keys` entry with `restrict,command=`, a
+  matching `Match User` block, and only SSH open from the agent machine. It
+  says what changes for the keys, the judges, and the start-up writable check,
+  and adds a row to "Pick your route", a row to "Every connection and hook",
+  and checklist items.
+- `run-proxy` sets `umask 077` (`docs/HOWTO.md`, `docs/CONNECTING.md`). Under
+  `sudo -u two-key` on Ubuntu 24.04 the proxy gets umask 002, so the ledger it
+  creates on the first start was group-writable, and its own start-up check
+  named the ledger folder, or with `on_writable_paths: refuse` did not start.
+- `docs/HOWTO.md` "Limits" and `docs/THREAT_MODEL.md`: one running proxy per
+  ledger. When a second proxy on the same ledger writes, every later call
+  through the first is denied with `ledger_failed:ledger file changed by
+  another writer` until it restarts. This holds on one machine too.
+- `README.md` and `llms.txt`: the proxy listens on stdio only, a remote agent
+  connects over SSH, and one running proxy per ledger.
+- Checked end to end on Ubuntu 24.04 with real OS users (`two-key`,
+  `mcp-billing`, a `tk-agent` login account), sudo rules, the fake upstream
+  server, and a loopback judge: an MCP client ran the forced command's chain
+  (`sudo -n -u two-key run-proxy`) with `on_writable_paths: refuse`, got the
+  three signed tools, one allowed call, and the expected denies. The
+  `sshd_config` block was checked with `sshd -t` and `sshd -T`; sshd itself
+  was not run in the test container.

@@ -129,6 +129,9 @@ example, is HOWTO
 ["Put Two-Key in front of an MCP server"](docs/HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).
 Run the proxy and the upstream server as separate OS users, so neither the
 agent nor the server can reach the proxy's keys (HOWTO "Key custody").
+The proxy speaks stdio only and does not listen on the network; an agent
+on another machine starts it over SSH with a forced command
+([CONNECTING](docs/CONNECTING.md#an-agent-on-another-machine-route-1-over-ssh)).
 
 ## Documentation
 

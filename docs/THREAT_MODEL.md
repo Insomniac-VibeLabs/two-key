@@ -194,7 +194,15 @@ the code wins, then this file should be corrected.
   paths are removed from the `inputSchema` the host sees; their values
   come from the `tools.<id>.facts` hooks, which run in the proxy. A name
   the proxy does not show is refused and ledgered (`tool_not_offered`). A
-  refusal returns a reason code, never a value.
+  refusal returns a reason code, never a value. The proxy does not listen
+  on the network: an agent host on another machine starts it over SSH, as
+  a login account whose forced command is the `run-proxy` sudo rule
+  (CONNECTING, "An agent on another machine"). The forced command,
+  `restrict`, and the firewall are the operator's; Two-Key cannot see
+  them, and its start-up check covers only its own machine. Each running
+  proxy holds its own copy of the ledger's state, so a second proxy on the
+  same ledger makes the first deny every later call (`ledger_failed`)
+  until it restarts: fail-closed, but an outage.
 - MCP proxy to the upstream server (stdio, a child process). The server
   receives only the projected arguments of a redeemed token, and only the
   variables in `upstream.env` plus the SDK's minimal set. It gets no
