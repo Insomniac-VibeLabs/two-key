@@ -26,5 +26,6 @@ jobs:
           languages: python
       - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
-          # Linux keeps the default category, so its earlier alerts carry on.
+          # One category per platform. The single-job configuration main ran before 0.6.0 is stale: until it is
+          # deleted (Security, Code scanning, Tool status), a PR's CodeQL check warns "1 configuration not found".
           category: ${{ matrix.os == 'ubuntu-latest' && '/language:python' || format('/language:python/os:{0}', matrix.os) }}
