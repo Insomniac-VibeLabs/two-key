@@ -99,6 +99,7 @@
 - [PR #12 review: SonarCloud findings — 2026-10-16](#pr-12-review-sonarcloud-findings--2026-10-16)
 - [Docs: a 0.7.0 live run for the PR #12 refactor — 2026-10-16](#docs-a-070-live-run-for-the-pr-12-refactor--2026-10-16)
 - [CI: the CodeQL configuration note — 2026-10-16](#ci-the-codeql-configuration-note--2026-10-16)
+- [SIEM export: live delivery, file export, refused tokens (0.7.0) — 2026-10-16](#siem-export-live-delivery-file-export-refused-tokens-070--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3374,3 +3375,86 @@ above, from "Semgrep findings printed to the job log" on, are the detail.
   (neutral, not a failure) until it is deleted on the code scanning tool
   status page. The comment in `codeql.yml` now says so; the categories stay
   as they are.
+
+## SIEM export: live delivery, file export, refused tokens (0.7.0) — 2026-10-16
+
+The 0.7.0 item from [ROADMAP.md](ROADMAP.md), built to the design note the
+maintainer approved on 2026-10-16. Optional: with no `siem` setting nothing is
+sent, and the judge prompts, tokens, and ledger are byte for byte as in 0.6.0.
+The reference is [docs/SIEM.md](docs/SIEM.md).
+
+- **A live copy of every ledger entry.** `Ledger.observe()` calls back after an
+  entry is written and fsynced with its sequence number only; `two_key/siem.py`
+  projects, renders, and sends it on its own sender thread. A collector that is
+  down, slow, or gone never blocks or delays an authorization (maintainer's
+  decision, 2026-10-16): entries wait on a bounded queue, a full queue drops the
+  oldest and says so on stderr, and delivery resumes from a per-sink cursor
+  (`<ledger>.siem/cursor.json`, owner-only, outside the ledger directory). An
+  event sent late carries `"replay": true`.
+- **An explicit per-kind field allowlist** (`KINDS` in `two_key/siem.py`). Every
+  body key of every ledger kind is `sent`, `hashed`, `excluded`, or extracted;
+  a key nobody has decided about fails the tests rather than leaving the box.
+  Reason codes, digests, sizes, the tool id, the data class, the quorum counts,
+  and the scan verdict leave. Argument values, proposal and decline text, the
+  derived amount, counterparties, custom field values, scanner threat names and
+  matched text, and credentials do not, with canary values in the tests.
+- **Sinks** (standard library only, so no new dependency and no extra):
+  syslog RFC 5424 over TLS (RFC 5425, port 6514, the default), plain TCP
+  (RFC 6587, 514), or UDP (RFC 5426, 514), every port configurable, with octet
+  counting or a line per message; and an HTTPS webhook posting newline JSON in
+  batches, with an authorization header and an optional HMAC signature read
+  from owner-only files, and redirects never followed. TLS is TLS 1.2 at the
+  lowest and always verifies the certificate and the host name; there is no
+  setting that turns either check off. A plaintext sink is refused under
+  `high_assurance` (`siem_plaintext_refused`) and warns at start everywhere
+  else (maintainer's decisions, 2026-10-16).
+- **Schemas and formats**: Two-Key's own `two-key-siem-v1` (the default, with no
+  lossy mapping), ECS 8.x, and OCSF 1.1 (class 3003); `json` (the default) or
+  `cef`. Both mappings are made from the allowlisted event, so neither can
+  carry more than the native one.
+- **`two-key siem-export`** verifies the ledger, decrypts locally, and writes
+  the same events to a new owner-only file (it refuses to overwrite), ending
+  with a signed summary: the first and last `seq`, the count, the Merkle root,
+  the ledger size, and the head signatures. **`two-key siem-verify`** re-derives
+  every event from the ledger offline and reports changed fields, gaps,
+  repeats, and events from another ledger. First delivery starts at `now`, so
+  turning the copy on does not flood a SIEM; `siem-export` backfills the
+  history (maintainer's decision, 2026-10-16).
+- **A count of refused tokens** (live run 7). A token that does not verify is
+  still not ledgered: `two_key/gateway.py` counts it by class (bad signature,
+  expired, malformed, other) in memory, and the counts go to stderr and to the
+  SIEM at most once an interval, as `gateway_token_refused` with
+  `"ledgered": false` and `seq: -1`. No token text, digest, or id is kept, so a
+  caller without a valid token still cannot make the ledger grow.
+- `TwoKey(..., siem=...)` takes a `SiemConfig`; the MCP proxy takes the same
+  settings as a `siem:` block in `proxy.yaml`; `two-key demo --siem FILE` sends
+  a demo ledger to a real collector. `siem_configured` records the schema, the
+  format, and each sink's type, host, port, and transport in the ledger, never a
+  secret. Sink files join the 0.6.0 writable-path check. `TwoKey.close()` gives
+  the sender a last pass.
+- Tests: `tests/test_siem.py` (the allowlist, the canaries, the schemas,
+  delivery, the counter), `tests/test_siem_sinks.py` (every transport and the
+  webhook against loopback collectors, with a throwaway CA in `tests/tls.py`),
+  and `tests/test_siem_export.py` (the file and the offline check). 119 new
+  tests, network-free.
+- `examples/siem/elastic/` is a worked example: Elasticsearch and Kibana in
+  Docker, a receiver that terminates syslog over TLS and the webhook, an ingest
+  pipeline, and a Kibana dashboard. `.github/workflows/siem-integration.yml`
+  runs it on request and weekly; it is not a required check, and the unit suite
+  stays network-free.
+
+### Upgrading from 0.6.0
+
+- Constitutions, ledgers, keys, backups, `judges.yaml`, and `proxy.yaml` from
+  0.6.0 load unchanged. Nothing needs re-signing, and nothing is sent anywhere
+  until you add a `siem` setting.
+- Under `high_assurance` (and the `section4` profile) a plaintext sink (`udp`,
+  `tcp`, or an `http://` webhook) refuses to start. Use `transport: tls`, or
+  drop the profile.
+- The first start with a sink sends only entries from then on. Backfill the
+  history with `two-key siem-export`, or set `replay_from: start` once.
+- Two new files sit beside the ledger when a sink is configured:
+  `<ledger>.siem/cursor.json` (the per-sink cursor) and nothing else. Back it up
+  with the ledger if a replay after a restore would matter.
+- A long-running `TwoKey` should call `close()` on the way out, so the sender
+  gets a last pass. Without it, what is left goes out on the next start.

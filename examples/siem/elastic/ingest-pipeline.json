@@ -1,0 +1,39 @@
+{
+  "description": "Two-Key SIEM events (0.7.0). Give every event an @timestamp so Kibana can show it: from sent_at in Two-Key's own schema, from metadata.logged_time in OCSF, and from the ingest time for a CEF line. ECS events already carry @timestamp. Nothing is added to the event itself.",
+  "processors": [
+    {
+      "date": {
+        "field": "sent_at",
+        "target_field": "@timestamp",
+        "formats": ["ISO8601"],
+        "if": "ctx.sent_at != null && ctx['@timestamp'] == null",
+        "ignore_failure": true
+      }
+    },
+    {
+      "date": {
+        "field": "metadata.logged_time",
+        "target_field": "@timestamp",
+        "formats": ["ISO8601"],
+        "if": "ctx['@timestamp'] == null && ctx.metadata != null && ctx.metadata.logged_time != null",
+        "ignore_failure": true
+      }
+    },
+    {
+      "set": {
+        "field": "@timestamp",
+        "value": "{{{_ingest.timestamp}}}",
+        "if": "ctx['@timestamp'] == null",
+        "ignore_failure": true
+      }
+    },
+    {
+      "set": {
+        "field": "observer.product",
+        "value": "Two-Key",
+        "override": false,
+        "ignore_failure": true
+      }
+    }
+  ]
+}

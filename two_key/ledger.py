@@ -307,6 +307,7 @@ class Ledger:
         if _platform.inside(self._anchor_path, self.path):
             raise LedgerError("head anchor must live outside the ledger directory")
         self._lock = threading.Lock()
+        self._observers: list = []          # called after each append (two_key/siem.py); never blocking
         self.entries: list[Entry] = []
         self._redeemed: set[str] = set()
         self._started: set[str] = set()
@@ -698,7 +699,24 @@ class Ledger:
         self._merkle_add(bytes.fromhex(entry.entry_hash))
         self._note_entries_size()
         self._track(entry, verify=False)
+        self._notify(entry)
         return entry
+
+    def observe(self, callback) -> None:
+        """Call ``callback(entry.seq)`` after each entry is written and fsynced.
+
+        For the SIEM export (``two_key/siem.py``). It runs while this ledger holds its lock, so it must
+        not block or raise: the one caller puts a number on a bounded queue. An exception is caught and
+        reported, because a copy of an entry is never a reason to fail the append.
+        """
+        self._observers.append(callback)
+
+    def _notify(self, entry: Entry) -> None:
+        for callback in self._observers:
+            try:
+                callback(entry.seq)
+            except Exception as e:      # the ledger is the record; the copy is best effort
+                print(f"two-key: ledger observer failed: {type(e).__name__}", file=sys.stderr)
 
     def checkpoint(self) -> dict:
         with self._exclusive():

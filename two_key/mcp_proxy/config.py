@@ -25,6 +25,8 @@ from ..guard import valid_claim as _guard_claim
 from ..judges.config import HOOK
 from ..scan import FileArg, ScanConfigError, file_arg
 from ..scanners import check_scan_block
+from ..siem import SiemConfigError
+from ..siem_sinks import check_siem_block
 from ..strict import StrictParseError, load_file_strict
 
 ON_SCHEMA_CHANGE = ("refuse", "warn")
@@ -38,7 +40,7 @@ UPSTREAM_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
 _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "head_anchor", "ttl_seconds",
              "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools", "scan",
-             "on_writable_paths"}
+             "on_writable_paths", "siem"}
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
 _KEY_KEYS = {"principal"}
 _UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds"}
@@ -114,6 +116,9 @@ class ProxyConfig:
     # warn (None: the default) or refuse when another account can change a path the proxy runs or reads
     # (two_key/writable.py); high_assurance refuses either way.
     on_writable_paths: str | None = None
+    # The SIEM export block (two_key.siem_sinks), checked for shape; the sinks are built when the proxy
+    # starts. None: no copy leaves the ledger.
+    siem: Mapping[str, Any] | None = None
 
     def tool_policy(self, tool: str) -> ToolPolicy:
         return self.tools.get(tool) or ToolPolicy()
@@ -332,6 +337,16 @@ def _scan_block(top: Mapping, tools: Mapping[str, ToolPolicy]) -> dict | None:
     return scan
 
 
+def _siem_block(top: Mapping) -> dict | None:
+    """The checked ``siem:`` block, or None. The sinks are built when the proxy starts."""
+    if "siem" not in top:
+        return None
+    try:
+        return check_siem_block(top["siem"])
+    except SiemConfigError as e:
+        raise ProxyConfigError(str(e)) from None
+
+
 def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
     """A validated ``ProxyConfig`` from a parsed document. ``path`` is the file it came from."""
     base = path.parent
@@ -357,6 +372,7 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
         upstream=_upstream(base, top["upstream"]),
         tools=tools,
         scan=scan,
+        siem=_siem_block(top),
         witness_public_key=(_path(base, top["witness_public_key"], "witness_public_key")
                             if "witness_public_key" in top else None),
         head_anchor=_path(base, top["head_anchor"], "head_anchor") if "head_anchor" in top else None,

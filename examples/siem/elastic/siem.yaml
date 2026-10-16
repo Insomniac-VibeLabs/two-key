@@ -1,0 +1,21 @@
+# The siem: block for the worked example in this folder. Two-Key reads it from
+#   python -m two_key demo --siem examples/siem/elastic/siem.yaml
+# and the same block goes in proxy.yaml for the MCP proxy, or into SiemConfig(...) in code.
+# Paths are relative to this file. See docs/SIEM.md for every setting.
+siem:
+  schema: ecs             # ECS matches the Elasticsearch index and the dashboard here
+  format: json
+  replay_from: start      # the whole (temporary) demo ledger, so the dashboard has something in it
+  sinks:
+    - type: syslog
+      host: 127.0.0.1     # receiver.py; a real collector would be its own host name
+      transport: tls      # the default. tcp or udp is plaintext and warns at start
+      port: 6514
+      ca_file: tls/ca.pem # the CA that signed the receiver's certificate, from the README's openssl step
+      label: elastic-syslog
+    # And, instead of or beside syslog, the webhook (receiver.py --webhook-port 8443):
+    # - type: webhook
+    #   url: https://127.0.0.1:8443/ingest
+    #   ca_file: tls/ca.pem
+    #   auth_value_file: tls/token      # mode 0600; the exact Authorization header value
+    #   hmac_key_file: tls/hmac         # adds X-Two-Key-Signature: sha256=...

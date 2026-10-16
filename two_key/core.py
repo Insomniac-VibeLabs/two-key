@@ -41,6 +41,7 @@ from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, check_judge_set, convene, lone_judge_warning, unmeetable_floor
 from .scan import CLIENT_BUDGET_SECONDS, FileDeniedError, Outcome, ScanConfigError, Scanner
+from .siem import RefusedTokens, SiemConfig, start_delivery as start_siem
 from .writable import WritablePathsError, check as check_writable, report as report_writable, resolve_mode
 
 
@@ -114,7 +115,8 @@ class TwoKey:
     def __init__(self, ledger, public_key, constitution: Constitution, judges: list, *,
                  private_key=None, quorum: QuorumPolicy | None = None, ttl_seconds: int = 120,
                  allow_test_doubles: bool = False, clock=None, monitored_agent: Any = None,
-                 scanner: Scanner | None = None, on_writable_paths: str | None = None, check_paths=()):
+                 scanner: Scanner | None = None, on_writable_paths: str | None = None, check_paths=(),
+                 siem: Any = None):
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
             raise ValueError("test-double judges refused; pass allow_test_doubles=True only for offline tests")
         if not constitution.specs_enforced:
@@ -149,6 +151,9 @@ class TwoKey:
         check_judge_set(self.judges, self.quorum)
         self._check_writable(on_writable_paths, check_paths)
         self.scanner = self._check_scanner(scanner)
+        self.siem = self._check_siem(siem)
+        self.delivery = None
+        self.refused_tokens = None
         lone = lone_judge_warning(self.judges, self.quorum)
         if lone:      # allowed, and recorded in quorum_policy; said once, so the operator sees it (run 6x, X03)
             print(f"two-key: WARNING: {lone}", file=sys.stderr)
@@ -213,6 +218,7 @@ class TwoKey:
             **({"scanner": self.scanner.to_record()} if self.scanner is not None else {}),
         })
         self.ledger.checkpoint()
+        self._start_siem()
 
     def agent_vocabulary(self, tools: list[str] | None = None) -> str:
         """Text for ``MonitoredAgent.complete(vocabulary=...)``: signed tool ids, argument paths, value
@@ -231,8 +237,54 @@ class TwoKey:
         if self.issuer is None:
             raise TwoKeyConfigError("no_issuer_key: a TwoKey started without private_key= issues no tokens, "
                                     "so it has no gateway")
+        kw.setdefault("refused_tokens", self.refused_tokens)
         return ToolGateway(self.ledger, self.issuer.verifier(), self.compiled, tools=tools, scanner=self.scanner,
                            **kw)
+
+    def _check_siem(self, siem: Any):
+        """The SIEM export settings (``two_key/siem.py``), checked at start. Deployment, not policy.
+
+        Plaintext syslog (UDP or TCP) and an ``http://`` webhook are refused under ``high_assurance`` and
+        allowed elsewhere with a warning (maintainer's decision, 2026-10-16). A collector that cannot be
+        reached is a warning too: the ledger keeps every entry, and the copy catches up from its cursor,
+        so no decision waits on a SIEM.
+        """
+        if siem is None:
+            return None
+        if not isinstance(siem, SiemConfig):
+            raise TwoKeyConfigError("siem_invalid: pass a two_key.siem.SiemConfig")
+        plaintext = siem.plaintext_sinks
+        if plaintext and self.quorum.is_high_assurance:
+            raise TwoKeyConfigError(f"siem_plaintext_refused: high_assurance does not send the ledger copy "
+                                    f"in the clear; {plaintext} use syslog over TLS (6514) or an https "
+                                    "webhook")
+        if plaintext:
+            print(f"two-key: WARNING: the SIEM copy goes out in the clear to {plaintext}; anyone on the "
+                  "path can read the tool names, outcomes, and reason codes, or forge entries. Use "
+                  "transport: tls (port 6514) or an https:// webhook", file=sys.stderr)
+        return siem
+
+    def _start_siem(self) -> None:
+        """Record where the copy goes, then start the sender. Both after ``constitution_loaded``, so the
+        SIEM sees that entry too."""
+        if self.siem is None:
+            return
+        self.ledger.append_bounded("siem_configured", self.siem.record())
+        self.ledger.checkpoint()
+        self.delivery = start_siem(self.siem, self.ledger)
+        self.refused_tokens = RefusedTokens(
+            interval_seconds=self.siem.refused_token_interval_seconds,
+            report=lambda counts: self.delivery.report("gateway_token_refused", counts))
+
+    def close(self) -> None:
+        """Stop the SIEM sender, after a last pass. Idempotent; a ``TwoKey`` without one does nothing.
+
+        Whatever has not gone out yet is still in the ledger, and the next start sends it from the cursor.
+        """
+        if self.refused_tokens is not None:
+            self.refused_tokens.flush()
+        if self.delivery is not None:
+            self.delivery.close()
 
     def _check_writable(self, mode: str | None, paths) -> None:
         """Paths another account could change (two_key/writable.py): this interpreter's program, import path,

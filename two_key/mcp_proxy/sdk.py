@@ -188,8 +188,13 @@ async def serve(config: ProxyConfig, *, two_key: Any = None) -> None:
         server = build_server(core)
         print(f"two-key: mcp-proxy: serving {len(core.selection.views)} signed tool(s) "
               f"{sorted(core.selection.views)}", file=sys.stderr)
-        async with stdio_server() as (read, write):
-            await server.run(read, write, server.create_initialization_options())
+        try:
+            async with stdio_server() as (read, write):
+                await server.run(read, write, server.create_initialization_options())
+        finally:
+            # Give the SIEM sender its last pass (0.7.0). What has not gone out is still in the ledger,
+            # and the next start sends it from the cursor.
+            getattr(core.two_key, "close", lambda: None)()
 
 
 def run(config: ProxyConfig) -> int:

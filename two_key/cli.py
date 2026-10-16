@@ -18,9 +18,12 @@
                     --witness-passphrase-env NAME [--witness-public-key PEM] [--head-anchor PATH] \
                     [--replace-ledger]
   two-key audit --key KEY --ledger DIR [--witness-public-key PEM]
+  two-key siem-export --key KEY --ledger DIR [--out FILE] [--schema native|ecs|ocsf]
+                    [--format json|cef] [--from-seq N] [--to-seq N]
+  two-key siem-verify --key KEY --ledger DIR --events FILE [--require-complete]
   two-key mcp-proxy --config FILE
   two-key mcp-draft-specs (--out DIR | --constitution FILE) [--tool NAME]... [--env NAME[=VALUE]]... -- COMMAND...
-  two-key demo
+  two-key demo [--siem FILE]
 
 ``authorize`` never prints the bearer token. It prints the decision with the token's
 jti and digest (the ledger's ``capability_issued.token_hash``). ``--emit-token PATH``
@@ -39,6 +42,13 @@ head anchor (``<ledger>.ledger-key/head.anchor``, or ``--head-anchor``) refuses
 a rollback or a wipe of the ledger directory. Creating a ledger at a new path
 warns on stderr. Opening a ledger made before 0.2.3 pins its witness key
 (trust on first use), whichever command opens it.
+
+``siem-export`` verifies the ledger, decrypts it locally, and writes one event per
+line for a SIEM: digests, sizes, and reason codes, never argument values, the proposal
+text, the derived amount or counterparty, or a custom field value (the allowlist is
+``two_key/siem.py``). ``siem-verify`` checks events against the ledger and reports
+anything missing, repeated, or changed. A live copy, over syslog or an HTTPS webhook,
+is the ``siem:`` block of ``proxy.yaml`` (or ``TwoKey(siem=...)``); see docs/SIEM.md.
 
 ``backup-export`` writes three passphrase-protected bundles (principal, ledger, and witness)
 so that one file never holds every key a signed head needs. The passphrases come from
@@ -63,6 +73,7 @@ from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, encrypted_pass_
 from .fields import case_warnings, not_applicable_notes
 from .keys import generate_private_key, load_private_key_file, load_public_key, save_private_key, save_public_key
 from .policy_vm import ConstitutionError
+from .siem import FORMATS, SCHEMAS
 
 
 def _init_key(args) -> int:
@@ -109,13 +120,34 @@ def _sign(args) -> int:
     return 0
 
 
-def _demo(_args) -> int:
+def _demo_siem(path):
+    """``demo --siem FILE``: the ``siem:`` block of a config file, so a collector can be tried end to end
+    (examples/siem/elastic/). The demo's own ledger is temporary; the copy it sends is real."""
+    if path is None:
+        return None
+    from .siem_sinks import siem_from_config
+    from .strict import StrictParseError, load_file_strict
+    try:
+        data = load_file_strict(path)
+    except (OSError, StrictParseError) as e:
+        raise SystemExit(f"--siem: {path}: {e}") from None
+    except ImportError:
+        raise SystemExit(f'--siem: {path}: reading YAML needs PyYAML (pip install "two-key[yaml]")') from None
+    if not isinstance(data, dict):
+        raise SystemExit(f"--siem: {path}: expected a mapping with a siem: block")
+    block = data["siem"] if "siem" in data else data
+    return siem_from_config(block, Path(path).resolve().parent)
+
+
+def _demo(args) -> int:
     import tempfile
     from .constitution import sign_constitution
     from .core import TwoKey
     from .ledger import Ledger
     from .quorum import QuorumPolicy
     from .testing import TEST_AGENT, FixedJudge
+
+    siem = _demo_siem(getattr(args, "siem", None))
 
     key = generate_private_key()
     prose = "Never wire money. Never spend more than 200 dollars. Drafts are allowed."
@@ -137,7 +169,8 @@ def _demo(_args) -> int:
         judges = [FixedJudge("a", "yes", provider="local-a", maker="local", local_weights=True),
                   FixedJudge("b", "yes", provider="cloud-b", maker="other")]
         tk = TwoKey(ledger, key.public_key(), __import__("two_key.constitution", fromlist=["verify_signed"]).verify_signed(envelope, key.public_key()),
-                    judges, private_key=key, quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT)
+                    judges, private_key=key, quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT,
+                    siem=siem)
         denied = tk.authorize({"tool": "wire_transfer", "amount_usd": 10, "data_class": "public", "irreversible": True},
                               {}, "please wire the funds")
         allowed = tk.authorize({"tool": "email_draft", "amount_usd": 0, "data_class": "public", "irreversible": False},
@@ -145,6 +178,11 @@ def _demo(_args) -> int:
         gateway = tk.gateway(tools={"email_draft": lambda a: {"drafted": a.get("to")}})
         redeemed = gateway.invoke(allowed.token, "email_draft", {"to": "ada@example"}) if allowed.token else None
         replay = gateway.invoke(allowed.token, "email_draft", {"to": "ada@example"}) if allowed.token else None
+        if siem is not None:
+            # One token that does not verify, so the refused-token count has something to report.
+            # It is not ledgered: the gateway counts it by class and the count goes to the SIEM.
+            gateway.invoke("not.a.token", "email_draft", {"to": "ada@example"})
+        tk.close()
     print(json.dumps({
         "wire_denied": denied.reason,
         "draft_allowed": allowed.allowed,
@@ -223,6 +261,38 @@ def _audit(args) -> int:
     print(json.dumps({"ok": not problems, "size": ledger.size(), "witness": witness,
                       "decision_digest_problems": problems}, indent=2))
     return 0 if not problems else 1
+
+
+def _siem_export(args) -> int:
+    from .siem import SiemConfigError
+    from .siem_export import ExportError, write
+    key = _principal_key(args)
+    ledger = _open_ledger(args, key)        # opening verified the chain, the head, and both witness pins
+    if ledger is None:
+        return 1
+    try:
+        result = write(ledger, args.out if args.out != "-" else None, schema=args.schema, fmt=args.format,
+                       from_seq=args.from_seq, to_seq=args.to_seq)
+    except (ExportError, SiemConfigError) as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2), file=sys.stderr)
+        return 1
+    print(json.dumps({"ok": True, **result}, indent=2), file=sys.stderr if args.out == "-" else sys.stdout)
+    return 0
+
+
+def _siem_verify(args) -> int:
+    from .siem_export import ExportError, verify
+    key = _principal_key(args)
+    ledger = _open_ledger(args, key)
+    if ledger is None:
+        return 1
+    try:
+        result = verify(ledger, args.events, require_complete=args.require_complete)
+    except ExportError as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+        return 1
+    print(json.dumps(result, indent=2))
+    return 0 if result["ok"] else 1
 
 
 def _write_token(path: Path, token: str) -> None:
@@ -583,6 +653,35 @@ def main(argv: list[str] | None = None) -> int:
                               "does not delete the anchor")
     _add_passphrases(restore)
     restore.set_defaults(func=_backup_restore)
+    exporter = sub.add_parser("siem-export", help="verify and decrypt the ledger locally and write its "
+                                                  "events for a SIEM, without argument values")
+    exporter.add_argument("--key", required=True, help=_KEY_HELP)
+    exporter.add_argument("--ledger", required=True)
+    exporter.add_argument("--out", default="-", metavar="FILE",
+                          help="write to this new file (never an existing one); - writes to stdout (default)")
+    exporter.add_argument("--schema", choices=SCHEMAS, default="native",
+                          help="native (default): Two-Key's own field names; ecs: Elastic Common Schema; "
+                               "ocsf: OCSF 1.1")
+    exporter.add_argument("--format", choices=FORMATS, default="json",
+                          help="json (default) or cef; cef maps the native schema only")
+    exporter.add_argument("--from-seq", type=int, default=0, metavar="N",
+                          help="start at this entry (default 0)")
+    exporter.add_argument("--to-seq", type=int, default=None, metavar="N",
+                          help="stop at this entry (default: the head)")
+    exporter.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    exporter.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    exporter.set_defaults(func=_siem_export)
+    siem_verify = sub.add_parser("siem-verify", help="check exported events (or events pulled back out of a "
+                                                     "SIEM) against the ledger")
+    siem_verify.add_argument("--key", required=True, help=_KEY_HELP)
+    siem_verify.add_argument("--ledger", required=True)
+    siem_verify.add_argument("--events", required=True, metavar="FILE",
+                             help="the native JSON Lines events to check")
+    siem_verify.add_argument("--require-complete", action="store_true",
+                             help="also require every entry from 0 to the current head")
+    siem_verify.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    siem_verify.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    siem_verify.set_defaults(func=_siem_verify)
     proxy = sub.add_parser("mcp-proxy", help="serve an upstream MCP server's signed tools over stdio, through "
                                              "both keys (needs the mcp extra)")
     proxy.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
@@ -600,6 +699,8 @@ def main(argv: list[str] | None = None) -> int:
     drafter.add_argument("command", nargs=argparse.REMAINDER, help="-- then the server's program and arguments")
     drafter.set_defaults(func=_mcp_draft_specs)
     demo = sub.add_parser("demo")
+    demo.add_argument("--siem", default=None, metavar="FILE",
+                      help="send the demo's ledger entries to the sinks in this file's siem: block")
     demo.set_defaults(func=_demo)
     args = parser.parse_args(argv)
     return args.func(args)

@@ -1,0 +1,35 @@
+# Elasticsearch and Kibana for the worked example in docs/SIEM.md. A local test stack, not a
+# deployment: security is off, there is no password, and both ports listen on 127.0.0.1 only.
+# Two-Key does not talk to these containers. receiver.py takes the syslog or webhook copy and
+# indexes it, so nothing here needs a Two-Key credential.
+#
+#   docker compose up -d        # or podman-compose
+#   docker compose down -v      # and the data is gone
+#
+# Images are pinned to a version tag. Pin them by digest as well if your policy says so:
+#   docker image inspect --format '{{index .RepoDigests 0}}' docker.elastic.co/kibana/kibana:8.15.3
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.license.self_generated.type=basic
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+      - "127.0.0.1:9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health | grep -q '\"status\":\"\\(green\\|yellow\\)\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "127.0.0.1:5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy

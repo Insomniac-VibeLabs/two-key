@@ -442,6 +442,8 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
     from ..ledger import Ledger, LedgerError
     from ..scan import ScanConfigError
     from ..scanners import scanner_from_config
+    from ..siem import SiemConfigError
+    from ..siem_sinks import siem_from_config
     try:
         scanner = None
         if config.scan is not None:
@@ -451,13 +453,14 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
         judges, policy = load_config_file(config.judges, judge_transport)
         agent = load_monitored_agent_file(config.judges)
         witness = load_public_key(config.witness_public_key) if config.witness_public_key else None
+        siem = siem_from_config(config.siem, config.path.parent) if config.siem is not None else None
         ledger = Ledger(config.ledger, key, witness_public_key=witness, anchor_path=config.head_anchor)
         return TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
                            private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
                            scanner=scanner, on_writable_paths=config.on_writable_paths,
-                           check_paths=startup_paths(config))
+                           check_paths=startup_paths(config), siem=siem)
     except (OSError, ValueError, JudgeConfigError, IdentityError, LedgerError, ConstitutionError,
-            ConstitutionSignatureError, TwoKeyConfigError, ScanConfigError) as e:
+            ConstitutionSignatureError, TwoKeyConfigError, ScanConfigError, SiemConfigError) as e:
         raise ProxyConfigError(f"{type(e).__name__}: {e}") from None
 
 
@@ -495,7 +498,23 @@ def startup_paths(config: ProxyConfig) -> list[tuple[Path | str, str]]:
     for policy in config.tools.values():
         paths.extend(_tool_paths(policy))
     paths.extend(_scanner_paths(config.scan or {}))
+    paths.extend(_siem_paths(config.siem or {}, config.path.parent))
     return paths
+
+
+def _siem_paths(siem: Mapping[str, Any], base: Path) -> list[tuple[Path | str, str]]:
+    """The files a SIEM sink reads: a CA bundle, a client certificate and its key, a webhook token, and an
+    HMAC key. Whoever can change one of them can redirect or read the copy."""
+    out: list[tuple[Path | str, str]] = []
+    for sink in siem.get("sinks") or ():
+        if not isinstance(sink, Mapping):
+            continue
+        for name in ("ca_file", "cert_file", "key_file", "auth_value_file", "hmac_key_file"):
+            value = sink.get(name)
+            if isinstance(value, str) and value:
+                path = Path(value).expanduser()
+                out.append((path if path.is_absolute() else base / path, "file"))
+    return out
 
 
 def _tool_paths(policy: ToolPolicy) -> list[tuple[Path | str, str]]:
