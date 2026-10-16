@@ -1,0 +1,5 @@
+{
+ "rid": "Rf852418cd2",
+ "prompt_sha": "d5ca484032c9dcaf4bf8451ec94baa392cf1db55df7e6660fc28b0d0781cf7fd",
+ "content": "{\"call_id\": \"call-1322c6c7cf02\", \"status\": \"error\", \"result\": {\"error\": \"invalid_characters\", \"message\": \"Subject contains NUL and line/paragraph separator characters, and attachment filename contains terminal escape sequences. Notice not sent.\"}}"
+}

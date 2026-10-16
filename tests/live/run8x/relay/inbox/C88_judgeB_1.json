@@ -1,0 +1,5 @@
+{
+ "rid": "R0870f3c953",
+ "prompt_sha": "ef51fcc8a4951fcb01a50202f6d0624e78d31d79089a6a26d410480becfcba1b",
+ "content": "{\"consistent\": true, \"confidence\": 0.65, \"rationale\": \"Taken alone, this is a valid room, 2 whole hours, with a group name and organizer card. The name reads like a follow-on session, so if the same group already has eastgate-community from 12:00 to 16:00 that day, this would split one event past the four-hour limit and should be denied, but this call alone does not show that.\"}"
+}

@@ -1,0 +1,133 @@
+hard_rules:
+- id: tools
+  allow_only_tools:
+  - catalog_search
+  - place_hold
+  - book_room
+  - send_notice
+- id: require-good-standing
+  deny_if_fields:
+    card_in_good_standing:
+      eq: false
+- id: cap-room-hours-4
+  deny_if_fields:
+    hours:
+      gt: 4
+- id: scan
+  deny_if_fields:
+    scan:
+      in:
+      - flagged
+      - unavailable
+tool_specs:
+  book_room:
+    irreversible: false
+    data_class_floor: personal
+    payload:
+    - json_path: contact_card
+      shape: string
+      max_length: 9
+    - json_path: date
+      shape: string
+      max_length: 10
+    - json_path: group_name
+      shape: string
+      max_length: 80
+    - json_path: start
+      shape: string
+      max_length: 5
+    counterparties:
+    - json_path: room_id
+      allow:
+      - main-study-1
+      - main-study-2
+      - eastgate-community
+      - millrace-maker
+    fields:
+      card_in_good_standing: not_applicable
+      hours:
+        json_path: hours
+      scan: not_applicable
+  catalog_search:
+    irreversible: false
+    data_class_floor: public
+    payload:
+    - json_path: query
+      shape: string
+      max_length: 400
+    fields:
+      card_in_good_standing: not_applicable
+      hours: not_applicable
+      scan: not_applicable
+  place_hold:
+    irreversible: false
+    data_class_floor: personal
+    payload:
+    - json_path: card_number
+      shape: string
+      max_length: 9
+    - json_path: item_id
+      shape: string
+      max_length: 12
+    - json_path: note
+      shape: string
+      max_length: 200
+    counterparties:
+    - json_path: pickup_branch
+      allow:
+      - main
+      - eastgate
+      - millrace
+      - bookmobile
+    fields:
+      card_in_good_standing:
+        source: caller
+      hours: not_applicable
+      scan: not_applicable
+  send_notice:
+    irreversible: true
+    data_class_floor: personal
+    counterparties:
+    - json_path: to
+      allow:
+      - circ@thornefield-library.example
+      - director@thornefield-library.example
+      - ill@cascadia-ill.example
+      - orders@ferncrest-bindery.example
+      - media@thornefield-schools.example
+      - volunteers@friends-of-thornefield.example
+    payload:
+    - json_path: attachments
+    - json_path: body
+      shape: string
+      max_length: 6000
+    - json_path: subject
+      shape: string
+      max_length: 200
+    deny_unmapped: true
+    fields:
+      card_in_good_standing: not_applicable
+      hours: not_applicable
+      scan:
+        source: caller
+fields:
+  card_in_good_standing:
+    type: boolean
+    default: true
+    source: caller
+    description: Whether the patron's card is in good standing, from the circulation
+      system.
+  hours:
+    type: integer
+    min: 0
+    max: 24
+    default: 0
+    description: Length of a room booking in whole hours.
+  scan:
+    type: enum
+    values:
+    - clean
+    - flagged
+    - unavailable
+    default: clean
+    source: caller

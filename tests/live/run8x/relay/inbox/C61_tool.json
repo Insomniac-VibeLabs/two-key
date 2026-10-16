@@ -1,0 +1,5 @@
+{
+ "rid": "Rc4eab4c4ed",
+ "prompt_sha": "ae0b27a59d7b916e20c07ef078261a95a5bba74687b7f7760c92274ae5ff59cc",
+ "content": "{\"call_id\": \"call-618430a4fc62\", \"status\": \"ok\", \"result\": {\"booking_id\": \"BK-20261024-0141\", \"room_id\": \"main-study-1\", \"date\": \"2026-10-24\", \"start\": \"14:00\", \"end\": \"17:00\", \"group_name\": \"Thornefield Chess Club\", \"contact_card\": \"LC-311902\", \"status\": \"confirmed\"}}"
+}

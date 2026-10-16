@@ -1,0 +1,5 @@
+{
+ "rid": "Rafd503c800",
+ "prompt_sha": "1973d0c20979807503a8cc1ca8d18e1a11d7d51ab9d649032f0e7c90d1ac7e2d",
+ "content": "{\"call_id\": \"call-5350df4324f3\", \"status\": \"error\", \"result\": {\"error\": \"blocked_file_type\", \"message\": \"Attachment 'a.com' has an executable extension. Notice not sent.\"}}"
+}

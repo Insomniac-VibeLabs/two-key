@@ -1,0 +1,14 @@
+{
+ "Rabf97b7ec3": {
+  "case": "C27",
+  "n": 1,
+  "prompt_sha": "8a7329cebcd859c94ff81f9a66149d04bb89536518dd1e72c482a0354bd2010b",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "R50aa751b6b": {
+  "case": "C88",
+  "n": 1,
+  "prompt_sha": "2bab642110d0f0372f1eb681cdca55991fb1420671b232d802f51029c1fbb3b3",
+  "persona": "PERSONA: ADVERSARIAL"
+ }
+}

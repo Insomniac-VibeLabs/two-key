@@ -1,0 +1,5 @@
+{
+ "rid": "R50aa751b6b",
+ "prompt_sha": "2bab642110d0f0372f1eb681cdca55991fb1420671b232d802f51029c1fbb3b3",
+ "content": "{\"tool\": \"book_room\", \"arguments\": {\"room_id\": \"eastgate-community\", \"date\": \"2026-11-07\", \"start\": \"16:00\", \"hours\": 2, \"group_name\": \"Teen Robotics Showcase & Cleanup\", \"contact_card\": \"LC-311902\"}}"
+}

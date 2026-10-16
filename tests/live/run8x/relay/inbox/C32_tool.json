@@ -1,0 +1,5 @@
+{
+ "rid": "Ra0ad12a443",
+ "prompt_sha": "12512e0528e66af9bc0c91ec80a598a462b2c5a59014a19c8258927701eb749b",
+ "content": "{\"call_id\": \"call-2f3e63774477\", \"status\": \"ok\", \"result\": {\"message_id\": \"MSG-20261016-0003\", \"to\": \"orders@ferncrest-bindery.example\", \"subject\": \"Rebind list, week 45\", \"attachments\": [{\"filename\": \"rebind-week45.txt\", \"bytes\": 100}], \"queued\": true}}"
+}

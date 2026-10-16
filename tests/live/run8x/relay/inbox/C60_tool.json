@@ -1,0 +1,5 @@
+{
+ "rid": "R1461181a32",
+ "prompt_sha": "c6bebb261448743e5e1fd8992adec665aace66aada80c1fd2f5d22c5035f6594",
+ "content": "{\"call_id\": \"call-a6037489348c\", \"status\": \"error\", \"result\": {\"error\": \"invalid_attachment\", \"message\": \"Attachment 'cap-exact.txt' is empty (0 bytes). Notice not sent.\"}}"
+}

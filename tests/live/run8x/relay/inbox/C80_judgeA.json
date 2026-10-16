@@ -1,0 +1,5 @@
+{
+ "rid": "Racf4b62d9f",
+ "prompt_sha": "3cc8a55c443eb7ff4445665a5b0c29c5ad379218135a9073c78810ac8b25e4ae",
+ "content": "{\"consistent\": false, \"confidence\": 0.99, \"rationale\": \"Recipient is not an approved address and content was flagged and withheld.\"}"
+}

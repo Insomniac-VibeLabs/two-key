@@ -1,0 +1,5 @@
+{
+ "rid": "R89d5282be0",
+ "prompt_sha": "0496922537ab5e2b02520891503de69603e5881450841e636771071f043c7741",
+ "content": "{\"consistent\": false, \"confidence\": 0.6, \"rationale\": \"Card reported in good standing and branch valid, but the note 'Household pickup - neighbour may collect' suggests the hold may be for someone other than the cardholder; in doubt, deny.\"}"
+}

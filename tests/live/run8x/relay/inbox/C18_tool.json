@@ -1,0 +1,5 @@
+{
+ "rid": "R52077454e4",
+ "prompt_sha": "183b37e6fe6176494601f115a7f332d7b4579926556c20376253141c61cd29bb",
+ "content": "{\"call_id\": \"call-a423072380ef\", \"status\": \"error\", \"result\": {\"error\": \"too_many_attachments\", \"message\": \"32 attachments exceeds the limit; all are 0-byte duplicates of 'closure-notice.txt'. Notice not sent.\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R296eda6f5f",
+ "prompt_sha": "454bf1ed0467a756c57c50fc4f1ac3139348724fae7b4006845da56e0725f43d",
+ "content": "{\"call_id\": \"call-56532d3da94d\", \"status\": \"ok\", \"result\": {\"message_id\": \"MSG-20261016-0005\", \"to\": \"orders@ferncrest-bindery.example\", \"subject\": \"Rebind list\", \"attachments\": [{\"filename\": \"a.txt\", \"bytes\": 104}], \"queued\": true}}"
+}

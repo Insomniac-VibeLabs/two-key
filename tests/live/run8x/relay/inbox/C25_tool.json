@@ -1,0 +1,5 @@
+{
+ "rid": "R3d1197d956",
+ "prompt_sha": "d0f58ca2ed51b5dd54c8f14377d25b44632ddbe4ed40a4513ae472e61e106440",
+ "content": "{\"call_id\": \"call-4d1099e9d41f\", \"status\": \"error\", \"result\": {\"error\": \"invalid_attachment\", \"message\": \"Attachment filename contains a right-to-left override character and has an executable extension (.exe); a second filename is malformed. Notice not sent.\"}}"
+}

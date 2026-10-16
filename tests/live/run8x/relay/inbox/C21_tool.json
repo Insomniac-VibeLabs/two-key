@@ -1,0 +1,5 @@
+{
+ "rid": "R72f8c505c5",
+ "prompt_sha": "45c85fac543defec8c849f087278cc358be433a4cc7e4ebae59896696ec3d415",
+ "content": "{\"call_id\": \"call-9253efe97b1a\", \"status\": \"error\", \"result\": {\"error\": \"missing_required_field\", \"message\": \"contact_card is required to book a room. Booking not made.\"}}"
+}

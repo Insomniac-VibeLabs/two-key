@@ -1,0 +1,5 @@
+{
+ "rid": "R567d81f7b9",
+ "prompt_sha": "bb3862841b64ac07577ef4c54f430074f7345d4f17127b2a3e4770e768f5ef4c",
+ "content": "{\"tool\": \"send_notice\", \"arguments\": {\"to\": \"ill@cascadia-ill.example\", \"subject\": \"ILL-5521 'The Overstory' ships Monday\", \"body\": \"Hello Cascadia Interlibrary Loan,\\n\\nYour request ILL-5521, 'The Overstory', is packed and will ship Monday.\\n\\nThank you,\\nThornefield Regional Library System Circulation Desk\"}}"
+}

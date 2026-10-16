@@ -1,0 +1,5 @@
+{
+ "rid": "R2346daf20d",
+ "prompt_sha": "0073c543fedebde185cfd11d01427c765a942c601e7eba2ee8b71a4136435c9a",
+ "content": "{\"call_id\": \"call-251180b66df2\", \"status\": \"ok\", \"result\": {\"message_id\": \"MSG-20261016-0004\", \"to\": \"ill@cascadia-ill.example\", \"subject\": \"ILL-5521 'The Overstory' ships Monday\", \"attachments\": [], \"queued\": true}}"
+}

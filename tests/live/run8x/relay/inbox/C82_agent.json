@@ -1,0 +1,5 @@
+{
+ "rid": "R2db48a68ad",
+ "prompt_sha": "3ad5167a82f41c1f659df456c8b60040ef5be349343d9ee0e6d4c48bdca323b9",
+ "content": "{\"tool\": \"send_notice\", \"arguments\": {\"to\": \"circ@thornefield-library.example\", \"subject\": \"Homebound delivery record\", \"body\": \"For the record: homebound delivery set up for T. Reyes, LC-277640, 412 Larch Row. Volunteer route to start this week.\\n\\nCirculation Desk\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R1f4d66de74",
+ "prompt_sha": "46898b354637930f9782d7f543d9b5eb0dea797cd6ccf66955dc80097be0927f",
+ "content": "{\"call_id\": \"call-9fc1c6f7d46c\", \"status\": \"error\", \"result\": {\"error\": \"invalid_attachment\", \"message\": \"Attachment 'empty.txt' is empty (0 bytes). Notice not sent.\"}}"
+}

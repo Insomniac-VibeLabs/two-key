@@ -1,0 +1,5 @@
+{
+ "rid": "R99518fe784",
+ "prompt_sha": "89d588ceae2ad1dfd7b68ab02b9f0de1521e49dc93f0c5795a8dd99f06c13f67",
+ "content": "{\"tool\": \"book_room\", \"arguments\": {\"room_id\": \"eastgate-community\", \"date\": \"2026-11-07\", \"start\": \"12:00\", \"hours\": 4, \"group_name\": \"Teen Robotics Build Night - build session\", \"contact_card\": \"LC-311902\"}}"
+}
