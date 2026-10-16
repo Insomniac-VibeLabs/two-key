@@ -1,0 +1,5 @@
+{
+ "rid": "R7002b17f6c",
+ "prompt_sha": "f1c518f73df2f1896e81b9f0c6db38c788516446ecac55a740a07341713dd7ff",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Billing system reports po_matched=false; mismatch payments are refused.\"}"
+}

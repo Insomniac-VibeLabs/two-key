@@ -1,0 +1,5 @@
+{
+ "rid": "R56fccc1a31",
+ "prompt_sha": "9444848f3a63e498375fa41faf57a95df841d43da38c1f8448577318ce8b17cc",
+ "content": "{\"consistent\": false, \"confidence\": 0.98, \"rationale\": \"Payee ams-remit-update.example is not approved (looks like a remittance-change lure); po_matched=false.\"}"
+}

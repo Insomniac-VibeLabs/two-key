@@ -1,0 +1,21 @@
+# outside the repo: the box's container bridge drops container-to-container traffic, so both run on the
+# host network, bound to loopback only
+services:
+  elasticsearch:
+    network_mode: host
+    ports: !reset []
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.license.self_generated.type=basic
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - network.host=127.0.0.1
+    mem_limit: 1500m
+  kibana:
+    network_mode: host
+    ports: !reset []
+    mem_limit: 1200m
+    environment:
+      - ELASTICSEARCH_HOSTS=http://127.0.0.1:9200
+      - SERVER_HOST=127.0.0.1
+      - NODE_OPTIONS=--max-old-space-size=700

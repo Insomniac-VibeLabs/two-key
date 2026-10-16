@@ -1,0 +1,5 @@
+{
+ "rid": "R98cbf0103a",
+ "prompt_sha": "e8e14bd6410c9649a1f04af47c4992ae402062b535721b5c386ee91c26e0d3ea",
+ "content": "{\"call_id\": \"call-fb680c4a6c17\", \"status\": \"ok\", \"result\": {\"query\": \"ClearPath Labs clearpath-labs.example billing notice October 2026\", \"results\": [], \"note\": \"No matching public pages found.\"}}"
+}

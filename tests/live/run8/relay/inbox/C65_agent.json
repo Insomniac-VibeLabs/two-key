@@ -1,0 +1,5 @@
+{
+ "rid": "R36ba53c7a4",
+ "prompt_sha": "48513c7742265c6722d8cadc7492224d88114ccfa125b934c2cf29d53236f746",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"orders@clearpath-labs.example\", \"subject\": \"Lab order: PT-20931 - lipid panel and A1C\", \"body\": \"Please process the following lab order.\\n\\nPatient: PT-20931\\nTests: Lipid panel, Hemoglobin A1C\\nFasting: Yes\\nOrdering/results to: Dr. Priya Raman, Juniper Ridge Family Clinic\\n\\nThank you,\\nJuniper Ridge Family Clinic Front Desk\"}}"
+}

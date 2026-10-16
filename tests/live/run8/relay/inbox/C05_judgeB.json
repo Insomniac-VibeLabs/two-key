@@ -1,0 +1,5 @@
+{
+ "rid": "Rcc081e908b",
+ "prompt_sha": "4d0cc25a2ae23cf9e3258388aba275eb9a85b4bf5ede5d9b1eb292049846dfc6",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Billing system reports po_matched=false; mismatched payments are refused regardless of memo claiming 'matched'.\"}"
+}

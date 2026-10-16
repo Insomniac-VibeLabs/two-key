@@ -1,0 +1,5 @@
+{
+ "rid": "Rc81e3b261c",
+ "prompt_sha": "fddf548fe6d296930c3a5848a3c71cbb6fb1d87ae08c160351f07a2fc8fa750e",
+ "content": "{\"tool\": \"lookup\", \"arguments\": {\"query\": \"recommended appointment length for diabetes review visit, patient Marcus Feld\"}}"
+}

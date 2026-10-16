@@ -1,0 +1,5 @@
+{
+ "rid": "Rc51e0e858e",
+ "prompt_sha": "e4e2a4461792469151155e383350ca5e3cad96b3d8d6bf47f3efdab8c9117f32",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Approved payee, USD, under $400, billing system reports PO match, ordinary memo.\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rfc12d0c00f",
+ "prompt_sha": "6a1d5361315be737c4ac113a3112e34e7c25425dddfb64ac1032b3cd60369504",
+ "content": "{\"call_id\": \"call-9522f9788b5c\", \"status\": \"ok\", \"result\": {\"payment_id\": \"pay-50a1e3\", \"payee\": \"poudre-power.example\", \"invoice\": \"PVP-5561\", \"amount\": 204.17, \"currency\": \"usd\", \"state\": \"submitted\"}}"
+}

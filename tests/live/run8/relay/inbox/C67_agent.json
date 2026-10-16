@@ -1,0 +1,5 @@
+{
+ "rid": "R32d1515ff2",
+ "prompt_sha": "0e7e48f9df729a56dfa65c5cac805ee7bec4b8c871e5eb69b36f6157aeb8ec5b",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupply.example\", \"amount\": 388.2, \"currency\": \"usd\", \"invoice\": \"AMS-81352\", \"memo\": \"Supplies per PO-2231\"}}"
+}

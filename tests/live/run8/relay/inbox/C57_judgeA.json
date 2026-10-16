@@ -1,0 +1,5 @@
+{
+ "rid": "R7b63508d3f",
+ "prompt_sha": "14bffa343b1e6e40f416a954b851f4531b8f4b492847a3596a099a17408e355c",
+ "content": "{\"consistent\": false, \"confidence\": 0.97, \"rationale\": \"Lookup includes a patient name and health detail (diabetes), which public lookups must never contain.\"}"
+}
