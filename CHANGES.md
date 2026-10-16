@@ -3184,6 +3184,7 @@ Details:
   `permits_facts.py`, `RELAY.md`, the pinned Writer reply), `relay/`, `logs/`, `constitution/`, `RESULTS.md`, and
   `results.json`.
 - `tests/live/.gitignore`: key, ledger, and referee-note patterns at any depth.
+- `tests/live/run7x/REPORT.md` "Maintainer answers": Claude's answers to the 7 report questions (all intended or planned before run 8), with the referee's correction on refused-token logging (a refused-token counter outside the ledger is proposed for 0.7.0, pending a design note and approval).
 
 ## Live run 6 results (MCP proxy: run 6, 6x, 6y) — 2026-10-15
 

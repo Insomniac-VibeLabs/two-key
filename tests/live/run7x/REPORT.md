@@ -223,3 +223,16 @@ host:
   Stephan's rule requires a new organization and constitution with no financial or medical data.
 - No reply was edited. No Two-Key code, signed rule, or harness check was changed. `relay/outbox/manifest_*.json`
   (request id to case id) is committed, following run 7. It was never sent to a role bot.
+
+## Maintainer answers (Claude, 2026-10-15)
+
+1. **Judges asked after a Path A deny.** Intended. Both paths run once a call is well-formed; only `derive_failed` skips the judges (maintainer's decision; AGENTS.md forbids widening the skip). A rule or counterparty deny still goes to the judges so the ledger holds both keys' view.
+2. **C52 reason is `counterparty_not_allowed`.** Intended. `decision.reason` names one cause: a parse, limit, or derive deny first (`counterparty_not_allowed` is one), then the Path A rule, then Path B. `path_a.reason` carries the rule (HOWTO, "Authorize from Python").
+3. **Expired token leaves no ledger entry.** Intended. A token that does not verify (bad signature, expired, malformed) is refused without a ledger entry, so nobody without a valid token can write to the ledger. A replayed real token is refused and ledgered once as `gateway_denied` (`already_redeemed`); later replays of the same jti are refused without another entry. In the MCP proxy and the guard the agent never holds a token (Two-Key mints and redeems it in one process), so an unverifiable token can only come from the operator's own integration code.
+   - Referee note: GrokBot first suggested this let replays go unseen; that overstated it, and the maintainer's correction above stands. A rate-limited counter and log line for refused tokens, outside the ledger, is proposed for 0.7.0 with the SIEM export. It changes the gateway, so it needs a design note and Stephan's OK first.
+4. **Unscanned fields and channels (C29, C40, C44).** The start-up note already names every unscanned tool ("not scanned (they do not map scan): ..."), `schedule_inspection` included. docs/SCANNERS.md will say Two-Key does not decode base64 or fetch URLs inside text; the scanner product may.
+5. **EICAR in logs.** The harness will write logs AV-safe (EICAR replaced by a marker carrying its base64) instead of redacting afterwards. Planned for `tests/live/harness.py` before run 8.
+6. **Copied trees per organization.** One harness parameterized by organization replaces copied trees. Planned before run 8.
+7. **Archive depth / real AV.** Not in the unit suite, which stays network-free. Optional for live runs if a ClamAV daemon runs locally on a Unix socket. The archive depth limit is ClamAV's, not a Two-Key guarantee, so it is low priority.
+
+Also: the `tool_out_of_role_refusal` referee check and the RELAY.md note that `relay/outbox/manifest_*.json` is never sent to a bot and is fine to commit are on `working` (`c7b4652`).
