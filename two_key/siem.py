@@ -30,6 +30,7 @@ from __future__ import annotations
 import atexit
 import hashlib
 import json
+import math
 import os
 import queue
 import stat
@@ -100,7 +101,7 @@ def _scrub(value: Any, depth: int = 0) -> Any:
     if isinstance(value, bool) or value is None or isinstance(value, int):
         return value
     if isinstance(value, float):
-        return value if value == value and abs(value) != float("inf") else None
+        return value if math.isfinite(value) else None   # a NaN or an infinity is not JSON
     if depth >= 2:
         return None
     if isinstance(value, Mapping):

@@ -237,6 +237,12 @@ class Allowlist(Fixture):
         self.assertEqual(len(reason), siem.MAX_TEXT_CHARS)
         self.assertNotIn("\n", reason)
 
+    def test_a_float_json_cannot_spell_is_dropped(self):
+        """NaN and the infinities have no JSON spelling, so an event carries None where one was."""
+        self.assertEqual(siem._scrub(1.5), 1.5)
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            self.assertIsNone(siem._scrub(bad))
+
 
 class Schemas(Fixture):
     def event(self, kind="decision", fields=None):

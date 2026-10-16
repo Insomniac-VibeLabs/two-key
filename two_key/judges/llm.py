@@ -167,8 +167,8 @@ def build_user_prompt(constitution_text: str, action: Action, proposal: str,
     return "".join(parts)
 
 
-def parse_ballot_strict(text: Any, *, echo: bool = False) -> tuple[bool, float, str] | tuple:
-    """Strict schema check. With echo=True returns (consistent, confidence, rationale, echoed hashes)."""
+def parse_ballot_strict(text: Any, *, echo: bool = False) -> tuple[bool, float, str, dict | None]:
+    """Strict schema check: (consistent, confidence, rationale, echoed hashes), the hashes None without echo."""
     if not isinstance(text, str):
         raise MalformedBallot("response is not text")
     try:
@@ -190,9 +190,7 @@ def parse_ballot_strict(text: Any, *, echo: bool = False) -> tuple[bool, float, 
         raise MalformedBallot("confidence must be a number in [0, 1]")
     if not isinstance(why, str):
         raise MalformedBallot("rationale must be a string")
-    if echo:
-        return c, float(conf), why[:MAX_RATIONALE], {k: obj[k] for k in BINDING_KEYS}
-    return c, float(conf), why[:MAX_RATIONALE]
+    return c, float(conf), why[:MAX_RATIONALE], {k: obj[k] for k in BINDING_KEYS} if echo else None
 
 
 def urllib_transport(url: str, headers: dict, body: dict, timeout: float) -> dict:
@@ -362,10 +360,9 @@ class LLMJudge(Judge):
                 mac[:-2], hmac.new(ballot_key.encode(), (body + "}").encode(), sha256).hexdigest())
             if not good:
                 return self.abstain("ballot_mac_mismatch")
-        if echo:
-            consistent, conf, why, echoed = parsed
+        consistent, conf, why, echoed = parsed
+        if echoed is not None:
             return Ballot(self.judge_id, self.provider, "yes" if consistent else "no", conf, why,
                           action_hash=echoed["action_hash"], constitution_hash=echoed["constitution_hash"],
                           binding="echo")
-        consistent, conf, why = parsed
         return Ballot(self.judge_id, self.provider, "yes" if consistent else "no", conf, why)

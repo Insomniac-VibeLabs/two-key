@@ -110,6 +110,7 @@
 - [The `on_agent_access` tests on macOS and Windows — 2026-10-16](#the-on_agent_access-tests-on-macos-and-windows--2026-10-16)
 - [Live run 8x findings: the SIEM copy, a named pipe, signing — 2026-10-16](#live-run-8x-findings-the-siem-copy-a-named-pipe-signing--2026-10-16)
 - [`siem-verify` checks the whole event, and a cursor that cannot be read says so — 2026-10-16](#siem-verify-checks-the-whole-event-and-a-cursor-that-cannot-be-read-says-so--2026-10-16)
+- [SonarCloud findings on the 0.7.0 code — 2026-10-16](#sonarcloud-findings-on-the-070-code--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3693,3 +3694,29 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   silently counting as a first start: the copy then begins where
   `replay_from` says, and the entries in between are in the ledger only
   (live run 8x, C72). `siem-export` backfills them.
+
+## SonarCloud findings on the 0.7.0 code — 2026-10-16
+
+The SIEM and start-up-check work failed SonarCloud's quality gate on its
+reliability rating. Both findings behind it are now gone.
+
+- `two_key/siem.py` used `value == value` to spot a NaN before an event
+  carries a float (`python:S1764`, identical sub-expressions around `==`).
+  It reads as a typo and a later reader may well "fix" it. The check is
+  `math.isfinite(value)` now, which covers the infinities in the same
+  breath, and a test pins all three (`tests/test_siem.py`).
+- `parse_ballot_strict` returned three values, or four with `echo=True`
+  (`python:S8495`, a function whose tuples change length). It always returns
+  four now, the echoed hashes being `None` when they were not asked for, and
+  its one caller reads them to tell the two apart. The parse is unchanged,
+  and `tests/test_strict_parsing.py` checks both shapes.
+- `.github/workflows/tests.yml` passes `--no-build` to `uv run` as well as
+  to `uv sync`. The step already passes `--no-sync`, so nothing was being
+  built; the flag says so to a reader and to a scanner.
+- `examples/siem/elastic/receiver.py` reads two secret files whose paths
+  come from its own command line, which SonarCloud reports as a path
+  traversal (`pythonsecurity:S8707`, written for agentic workflows, where
+  the arguments come from a model). This collector reads Two-Key and never
+  answers it, nothing on the network reaches that code path, and an operator
+  who starts the process can read those files anyway, so the line carries a
+  `NOSONAR` and the reason. A check there would prove nothing.
