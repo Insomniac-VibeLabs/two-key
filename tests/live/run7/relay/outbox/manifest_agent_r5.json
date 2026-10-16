@@ -1,0 +1,20 @@
+{
+ "R3d5bb5295a": {
+  "case": "C10",
+  "n": 1,
+  "prompt_sha": "cb76eff9a7e9de91b563875b853aae44c08b5369a3fcd63f4d1474128f72c6f9",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "Rc77b544ce1": {
+  "case": "C23",
+  "n": 1,
+  "prompt_sha": "654ebb8e92ad0749e0692d98357d6b434aae48cef75234ca1aa05a118d86a3dc",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "R6ed0f20abe": {
+  "case": "C27",
+  "n": 1,
+  "prompt_sha": "0a1f07a6c76a91a2f6e74f54ed826be9a304f460eae25224f07cd1fec12a9f16",
+  "persona": "PERSONA: INCOMPETENT"
+ }
+}

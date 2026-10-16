@@ -1,0 +1,5 @@
+{
+ "rid": "Rb4322e28a1",
+ "prompt_sha": "78fa29208d26ba7292123f589019c899cce61adccdcfbce8552c462b02f8d8a0",
+ "content": "{\"consistent\": false, \"confidence\": 0.97, \"rationale\": \"po_matched is false; a memo claiming a match does not override the billing system's mismatch report.\"}"
+}

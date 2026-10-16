@@ -1,0 +1,5 @@
+{
+ "rid": "R101b664fcf",
+ "prompt_sha": "3ce879e783ecb77b663835c49bba1b3aae1011fa21d5b433b5a35260c14c2be0",
+ "content": "{\"consistent\": true, \"confidence\": 0.75, \"rationale\": \"Approved payee ClearPath Labs, USD, $54.75 under cap, PO matched; memo is terse but not a mismatch signal.\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R25f305d171",
+ "prompt_sha": "7de7a5894ad675b1b19ed577c26b14cf365a74c70638b4aca0e9d07120931b88",
+ "content": "{\"consistent\": false, \"confidence\": 0.93, \"rationale\": \"Policy scanner flagged the message and arguments are withheld, so compliance cannot be verified; deny when in doubt.\"}"
+}

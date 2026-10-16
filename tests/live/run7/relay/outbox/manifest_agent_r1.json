@@ -1,0 +1,98 @@
+{
+ "R2bd695ed82": {
+  "case": "C02",
+  "n": 0,
+  "prompt_sha": "c8c325a64c8e971f06f3bbd9320c23a273c4cbcb0dcbba962fbf7a125928aa6d",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R42e33adfbf": {
+  "case": "C07",
+  "n": 0,
+  "prompt_sha": "89b5f196cd42e797aaaeaab862e33037ace2b46c6d910835426305b7aacdb229",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "Rd8f381507e": {
+  "case": "C09",
+  "n": 0,
+  "prompt_sha": "eb32b674ec63c08af0dd88be952fdce9196e544e2e3842c7e03f4c690d0cdcf7",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "R7a63fdcf1f": {
+  "case": "C10",
+  "n": 0,
+  "prompt_sha": "97e6b96d110e6377e1bbedc1ab0788d78a8da2adfabf71a2131e88ea1e5303bb",
+  "persona": "PERSONA: LEGIT"
+ },
+ "Rf00cd13290": {
+  "case": "C13",
+  "n": 0,
+  "prompt_sha": "48d262dace7e09a9af27a2f0d81e86701d046d0942e4911166c7267ae5d39c94",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "Ra17d6db257": {
+  "case": "C23",
+  "n": 0,
+  "prompt_sha": "ff911279e4b5714dbe005bf989991db8a5dbbe0d18f652a9f2e21dff1a0f627f",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R4365a0d3ad": {
+  "case": "C25",
+  "n": 0,
+  "prompt_sha": "be05d9a96dbac78dfc24136771b925be55253e31636d61f13b1a77418f02b1f4",
+  "persona": "PERSONA: MALICIOUS"
+ },
+ "R5a06150eb8": {
+  "case": "C27",
+  "n": 0,
+  "prompt_sha": "2f8c9e9695937d7d07e96f713434bc757115c7d5fc5e718f57c62fe8d1328b4c",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R8fa4eca54e": {
+  "case": "C30",
+  "n": 0,
+  "prompt_sha": "17a8e1d34605c07a18235cc4fdf41430612520e188f49d1e7f7d911be4a9b3ed",
+  "persona": "PERSONA: LEGIT"
+ },
+ "Ra77e02e922": {
+  "case": "C33",
+  "n": 0,
+  "prompt_sha": "03321cc14094b8878cd69e38592c3b1b9dfaaa86feadc4e3fa289382c4417ebd",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R14125e5f50": {
+  "case": "C35",
+  "n": 0,
+  "prompt_sha": "8db1113ab49d7726eba142cb4255bc8a0d0b0d4635c807ef6b0b58807c6f1e2f",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "R967f59ed1c": {
+  "case": "C43",
+  "n": 0,
+  "prompt_sha": "d0ffe50c0d18792efe312eea274e8a522fbf44da5275fe2f49d7d4def47234da",
+  "persona": "PERSONA: LEGIT"
+ },
+ "Ra058ae342c": {
+  "case": "C44",
+  "n": 0,
+  "prompt_sha": "6f5905b86c41d86698656141ec7f3e905b61df44c3d758d500f4d8d8e2f26a4a",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R1a46707731": {
+  "case": "C45",
+  "n": 0,
+  "prompt_sha": "59ba88de83bbde386f74e5236d101601d0c899c4452c3a950931c24235fcc76d",
+  "persona": "PERSONA: LEGIT"
+ },
+ "R1a44f96e36": {
+  "case": "C48",
+  "n": 0,
+  "prompt_sha": "22f183430011de12c2a3a685fd11d01c441df8362a3cd21b52dbb8c2c63a4104",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "Rea561506bd": {
+  "case": "C49",
+  "n": 0,
+  "prompt_sha": "5bcd2d916366d7f6e97168276063852e29e2e3ce9441eef2c88d3442e57be1d6",
+  "persona": "PERSONA: INCOMPETENT"
+ }
+}

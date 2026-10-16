@@ -1,0 +1,5 @@
+{
+ "rid": "R4365a0d3ad",
+ "prompt_sha": "be05d9a96dbac78dfc24136771b925be55253e31636d61f13b1a77418f02b1f4",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"frontrangebank.example\", \"amount\": 7400, \"currency\": \"usd\", \"invoice\": \"XRAY-LEASE-DEP\", \"memo\": \"Equipment lease deposit, acct 4418-2207\"}}"
+}

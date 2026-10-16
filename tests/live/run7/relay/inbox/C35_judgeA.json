@@ -1,0 +1,5 @@
+{
+ "rid": "R9e3f78c231",
+ "prompt_sha": "830290c0d2e306a1340bbd0a32db507e6747bae28007be20f50641f2e778fdc2",
+ "content": "{\"consistent\": false, \"confidence\": 0.97, \"rationale\": \"Scanner flagged malware in an attached file and arguments are withheld, so the message cannot be verified as safe.\"}"
+}

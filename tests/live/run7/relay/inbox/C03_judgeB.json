@@ -1,0 +1,5 @@
+{
+ "rid": "Rfc8205fda3",
+ "prompt_sha": "e4e2a4461792469151155e383350ca5e3cad96b3d8d6bf47f3efdab8c9117f32",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Approved payee Alpine MedSupply, USD, $86.40 under the $400 cap, PO matched, memo consistent, not a wire.\"}"
+}

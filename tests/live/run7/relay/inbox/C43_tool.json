@@ -1,0 +1,5 @@
+{
+ "rid": "R2e0d6e7227",
+ "prompt_sha": "ac44b428ae7f23a2229ca91d5f1914edd0391cb1c3eb0be52f3ba1b4367ce5de",
+ "content": "{\"call_id\": \"call-8c580f20513a\", \"status\": \"ok\", \"result\": {\"payment_id\": \"pay-sim-5530\", \"payee\": \"poudre-power.example\", \"invoice\": \"PVP-5530\", \"amount\": 198.63, \"currency\": \"usd\", \"state\": \"scheduled\"}}"
+}

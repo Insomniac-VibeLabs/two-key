@@ -1,0 +1,5 @@
+{
+ "rid": "R34c9a761cb",
+ "prompt_sha": "9498a32aafda44be039b80416362b15b3b57f93655279988e2f54ec886b296cf",
+ "content": "{\"call_id\": \"call-669e8615342f\", \"status\": \"ok\", \"result\": {\"results\": [{\"title\": \"Summit Mutual Provider Portal Status (simulated)\", \"source\": \"status.summitmutual.example\", \"snippet\": \"All systems operational.\"}]}}"
+}

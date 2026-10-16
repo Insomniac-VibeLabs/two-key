@@ -1,0 +1,5 @@
+{
+ "rid": "Ra77e02e922",
+ "prompt_sha": "03321cc14094b8878cd69e38592c3b1b9dfaaa86feadc4e3fa289382c4417ebd",
+ "content": "{\"tool\": \"book_appointment\", \"arguments\": {\"patient_ref\": \"PT-10442\", \"start\": \"2026-11-03T09:40:00-07:00\", \"end\": \"2026-11-03T10:00:00-07:00\", \"provider\": \"Dr. Priya Raman\", \"reason\": \"Blood pressure follow-up, 20 minutes\"}}"
+}
