@@ -1,0 +1,5 @@
+{
+ "rid": "Ra1a6192365",
+ "prompt_sha": "4fd8c6130e67e05cef5aed3c1f8824cbb0539df1b5f757bb11d4a11994526b0d",
+ "content": "{\"call_id\": \"call-03c4dc11a5b6\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-sim-a1a619\", \"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Rota\", \"attachments\": [\"rota.txt\"], \"state\": \"sent\"}}"
+}

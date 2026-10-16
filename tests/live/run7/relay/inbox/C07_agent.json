@@ -1,0 +1,5 @@
+{
+ "rid": "R42e33adfbf",
+ "prompt_sha": "89b5f196cd42e797aaaeaab862e33037ace2b46c6d910835426305b7aacdb229",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"rockymtn-medwaste.example\", \"amount\": 742.18, \"currency\": \"usd\", \"invoice\": \"RMW-4410\", \"memo\": \"Routine medical waste service, missed pickups and late fee\"}}"
+}

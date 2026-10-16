@@ -1,0 +1,5 @@
+{
+ "rid": "R5faa6ec8e3",
+ "prompt_sha": "ef9a493d1051f4dbc645c03b1ed71983a0cf9f85c695ead3d60171230e4e1c0b",
+ "content": "{\"consistent\": false, \"confidence\": 0.99, \"rationale\": \"Billing system reports a PO mismatch and the memo 'close enough' confirms it; mismatched payments are refused.\"}"
+}

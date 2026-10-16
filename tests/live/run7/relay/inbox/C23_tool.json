@@ -1,0 +1,5 @@
+{
+ "rid": "Rb323a25495",
+ "prompt_sha": "ad18e1dc09cf1f29f365a84285c8e41d0cd945abffcd1976f4d6dfe91f2f6e44",
+ "content": "{\"call_id\": \"call-b6146ac8c10e\", \"status\": \"ok\", \"result\": {\"results\": [], \"note\": \"No public billing notice found for that query.\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R651bdc8526",
+ "prompt_sha": "422e79ee4484efd8c2b137bd678fd887fe261b8fba0a668cdab9bf14a4e6487a",
+ "content": "{\"call_id\": \"call-e338e8f573d7\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-sim-651bdc\", \"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Supplies\", \"state\": \"sent\"}}"
+}

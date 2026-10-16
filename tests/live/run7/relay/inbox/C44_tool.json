@@ -1,0 +1,5 @@
+{
+ "rid": "R4125b2cbbd",
+ "prompt_sha": "0b95dcf2c320ed918ac52535c3a2e9e31edc9c2128015745c17d7c3c1fe75493",
+ "content": "{\"call_id\": \"call-d3fc07a654a1\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-sim-4125b2\", \"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Dr. Raman unavailable Friday 1-5pm\", \"state\": \"sent\"}}"
+}

@@ -91,6 +91,7 @@
 - [File size limits; unreadable files denied under every stance (0.6.0) — 2026-10-15](#file-size-limits-unreadable-files-denied-under-every-stance-060--2026-10-15)
 - [Encrypted files: signed per-tool pass (0.6.0) — 2026-10-15](#encrypted-files-signed-per-tool-pass-060--2026-10-15)
 - [Docs: connecting the agent so it cannot go around Two-Key — 2026-10-15](#docs-connecting-the-agent-so-it-cannot-go-around-two-key--2026-10-15)
+- [Live run 7 results — 2026-10-15](#live-run-7-results--2026-10-15)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3143,3 +3144,17 @@ On branch `working`. Docs only; no behavior changes.
   Unix socket (mode 660, a group without the agent) when the agent shares
   the machine. HOWTO (key custody, the guard), README, llms.txt, and
   AGENTS.md point to the new guide; `tests/test_doc_toc.py` covers it.
+
+## Live run 7 results — 2026-10-15
+
+On branch `live-runs`, cut from `working` @ a0bd296. The run used `working` @ 2de9383 (0.6.0 content
+scanning). Tests and docs only; no library change.
+
+- **Run 7** (clinic behind the MCP proxy, with the content scanner, 49 cases): 49 PASS / 0 INCONCLUSIVE /
+  0 FAIL. Self-test 49 PASS. No referee incidents.
+
+Details:
+
+- `tests/live/run7/REPORT.md`: each section 4 expectation with the case that shows it, the agent personas, role
+  behavior and freshness, observations for the maintainer, and referee notes.
+- `tests/live/run7/` holds `relay/`, `logs/`, `constitution/`, `RESULTS.md`, and `results.json`.
