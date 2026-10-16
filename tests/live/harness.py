@@ -795,16 +795,21 @@ def setup_stance(stance, digest):
     return d
 
 
-def write_judges(path, *, declare_upstream=True, judge_a_var="LIVE_JUDGE_A_KEY", required_yes=2):
+def write_judges(path, *, declare_upstream=True, judge_a_var="LIVE_JUDGE_A_KEY", required_yes=2, profile=None):
     up = "\n    upstream: api.x.ai" if declare_upstream else ""
     agent_up = "\n  upstream: api.x.ai" if declare_upstream else ""
+    prof = f"\n  profile: {profile}" if profile else ""
+    # high_assurance wants judges from two makers and one local judge (quorum.high_assurance). Judge B is on
+    # loopback whatever the profile, so these two operator labels are all the set needs to load; without them
+    # the config refuses for the judge set and the case never reaches the check it is about.
+    b_extra = "\n    maker: harness-local\n    local_weights: true" if profile else ""
     path.write_text(f"""monitored_agent:
   id: test-monitored-agent
   model: test-monitored-agent
   provider: grokbot
   base_url: http://127.0.0.1:{AGENT_PORT}/v1
   credential_env: LIVE_AGENT_API_KEY{agent_up}
-quorum:
+quorum:{prof}
   required_yes: {required_yes}
   timeout_seconds: 30
 judges:
@@ -821,7 +826,7 @@ judges:
     model: test-judge-b
     base_url: http://127.0.0.1:{JUDGE_B_PORT}/v1
     auth: {{type: env, var: LIVE_JUDGE_B_KEY}}
-    timeout: 20{up}
+    timeout: 20{up}{b_extra}
 """)
 
 
@@ -832,8 +837,15 @@ def siem_block(label, sink=None):
     return {"schema": "native", "replay_from": "start", "sinks": [dict(one, label=label)]}
 
 
+# The harness is the agent's host: it starts the proxy itself, under its own account, which is the case
+# `on_agent_access` refuses by default (0.7.0, two_key/agent_access.py). That default is right for a deployment
+# and impossible here, so every proxy of a pass says `warn`, which names the problem and starts. The config cases
+# below cover the default, the warning, a bad value, and high_assurance rejecting `warn`.
+AGENT_ACCESS = "warn"
+
+
 def write_proxy(path, digest, *, judges="judges.yaml", ledger="ledger", variant="", on_change="refuse", tools=None,
-                siem=None):
+                siem=None, agent_access=AGENT_ACCESS):
     env = {"HARNESS_TOOL_URL": f"http://127.0.0.1:{TOOL_PORT}/call"}
     if variant:
         env["LIVE_MCP_VARIANT"] = variant
@@ -842,6 +854,8 @@ def write_proxy(path, digest, *, judges="judges.yaml", ledger="ledger", variant=
            "upstream": {"command": server_cmd(), "env": env, "schema_digest": digest, "on_schema_change": on_change},
            "tools": CLAIMS if tools is None else tools,
            "scan": {"type": "icap", "url": f"icap://127.0.0.1:{SCAN_PORT}/dlp", "timeout_seconds": SCAN_TIMEOUT}}
+    if agent_access is not None:
+        cfg["on_agent_access"] = agent_access
     if siem is not None:
         cfg["siem"] = siem
     path.write_text(json.dumps(cfg, indent=1))
@@ -862,6 +876,10 @@ def config_siem(attack, d):
     return None
 
 
+# What each config case puts in `on_agent_access`: None leaves the key out, which is the default (refuse).
+AGENT_ACCESS_BY_CASE = {"agent_access_default": None, "agent_access_bad_value": "sometimes"}
+
+
 def run_config_case(case, digest):
     atk = case["attack"]
     d = STATE / f"config_{case['id']}"
@@ -871,11 +889,12 @@ def run_config_case(case, digest):
     judges = d / "judges.yaml"
     write_judges(judges, declare_upstream=atk != "unresolved_identity",
                  judge_a_var="LIVE_AGENT_API_KEY" if atk == "judge_is_agent" else "LIVE_JUDGE_A_KEY",
-                 required_yes=1 if atk == "lone_judge" else 2)
+                 required_yes=1 if atk == "lone_judge" else 2,
+                 profile="high_assurance" if atk == "agent_access_high_assurance" else None)
     variant = "poisoned" if atk.startswith("schema_changed") else ""
     tools = dict(CLAIMS, export_patient_roster={}) if atk == "unsigned_tools_entry" else None
     write_proxy(d / "proxy.json", digest, variant=variant, on_change="warn" if atk == "schema_changed_warn" else "refuse",
-                tools=tools, siem=config_siem(atk, d))
+                tools=tools, siem=config_siem(atk, d), agent_access=AGENT_ACCESS_BY_CASE.get(atk, AGENT_ACCESS))
     r = cli("mcp-proxy", "--config", str(d / "proxy.json"), env=base_env(), stdin=subprocess.DEVNULL)
     return {"rc": r.returncode, "stdout": r.stdout[-2000:], "stderr": r.stderr[-4000:]}
 

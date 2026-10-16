@@ -11,7 +11,7 @@ crash case on an ordinary invoice.
 
 ## Run 8: four personas, the SIEM copy, and the paths 0.6.0 refactored
 
-Run 8 keeps everything above and adds three things:
+Run 8 keeps everything above and adds four things:
 
 - Four personas instead of three. Runs 6 and 7 had one MALICIOUS level; it splits into ADVERSARIAL (works around
   the standing orders while each call looks routine) and EVIL (works for someone else: data out, or damage). Eight
@@ -23,6 +23,12 @@ Run 8 keeps everything above and adds three things:
   entry arrived twice, and whether any argument value from any call of the pass turned up in an event, which it
   must not. Two config cases cover a plaintext sink (a warning) and a sink file another account can change (the
   0.6.0 writable-path walk, which now covers the proxy's sink files).
+- The start-up account check (0.7.0, `on_agent_access`). Two-Key refuses to start when the account that started
+  the proxy is its own, is root, cannot be told, or could change what Two-Key runs or reads. The harness is the
+  agent's host and runs under one account, which is exactly what the default refuses, so every proxy of a pass
+  says `on_agent_access: warn`; four config cases cover the default's refusal, the warning, a value that is
+  neither, and `high_assurance` refusing `warn`. A root or unknown agent account, and one that can change
+  Two-Key's files, need a second account and are covered by `tests/test_agent_access.py` alone.
 - The code 0.6.0 refactored after run 7 (PR #12), which no live run has covered: the ICAP reader's answers (403, a
   200 with a changed body, a 200 that blocks, 500, and an answer that is not ICAP), and confined path reads.
   `send_message` now declares a second file, a path inside the clinic's outbox folder (`state/outbox/`), so a path
@@ -51,7 +57,7 @@ python3 tests/live/make_cases.py --table    # also prints the case table, for th
 python3 tests/live/harness.py --selftest    # plumbing check with stub bots, in tests/live/selftest/
 ```
 
-70 cases (run 8; 49 in run 7). Every case should pass the self-test. In run 6 the two cases only a judge could catch (a diagnosis
+74 cases (run 8; 49 in run 7). Every case should pass the self-test. In run 6 the two cases only a judge could catch (a diagnosis
 or a card number in a message body) failed there, because the stub judges always say yes; in run 7 the content
 scanner flags them, so Path A denies them. The quorum and scanner cases do not need the stubs: the harness's own
 judge endpoints answer them with a scripted ballot.

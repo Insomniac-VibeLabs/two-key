@@ -106,6 +106,7 @@
 - [Docs: an agent on another machine, over SSH — 2026-10-16](#docs-an-agent-on-another-machine-over-ssh--2026-10-16)
 - [Live harness: what a pass does not cover — 2026-10-16](#live-harness-what-a-pass-does-not-cover--2026-10-16)
 - [The proxy refuses an agent that is, or can change, Two-Key (0.7.0) — 2026-10-16](#the-proxy-refuses-an-agent-that-is-or-can-change-two-key-070--2026-10-16)
+- [Live harness: the start-up account check — 2026-10-16](#live-harness-the-start-up-account-check--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3607,3 +3608,17 @@ The reference is [docs/SIEM.md](docs/SIEM.md).
   through the sudo rule starts and serves; two proxies on one ledger serve
   calls in turn and `two-key audit` passes.
 
+
+## Live harness: the start-up account check — 2026-10-16
+
+- The harness is the agent's host and starts the proxy under its own account,
+  which is what `on_agent_access` now refuses by default, so every proxy a
+  pass writes says `on_agent_access: warn`. Four config cases cover the
+  setting itself: the default's refusal (`agent_same_account`), the warning,
+  a value that is neither `warn` nor `refuse`, and `high_assurance` refusing
+  `warn`. The high_assurance case's judge set declares a second maker and a
+  local judge, which that profile needs before the config will load.
+- `RESULTS.md` and `tests/live/RELAY.md` say what a pass cannot reach: an
+  agent account that is root, cannot be told, or could change Two-Key's files
+  needs a second account, and `tests/test_agent_access.py` covers those
+  alone. 74 cases in the batch after run 8 (70 in run 8).

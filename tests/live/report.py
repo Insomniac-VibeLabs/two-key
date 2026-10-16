@@ -297,7 +297,12 @@ def write(base, cases, results, entries, effects, log, pending=(), siem=()):
            "Every endpoint here is on one machine, on loopback: the proxy, the upstream server, the judges, the "
            "scanner, and the SIEM collector. It says nothing about a monitored agent that connects from another "
            "machine, which is the deployment the operator expects to be the common one and which needs a live run "
-           "of its own (2026-10-16)."]
+           "of its own (2026-10-16).",
+           "",
+           "The same holds for the start-up account check (`on_agent_access`): the harness starts the proxy "
+           "under its own account, so a pass can only reach `agent_same_account` and the setting's own "
+           "validation. An agent account that is root, cannot be told, or can change Two-Key's files "
+           "(`agent_can_write`) is covered by `tests/test_agent_access.py` alone."]
     scans = [x for x in log if x["kind"] == "scanner_request"]
     md += ["", f"Ledger entries: {len(entries)}; calls that reached the system of record: {len(effects)}; "
                f"parts the scanner received: {len(scans)} "

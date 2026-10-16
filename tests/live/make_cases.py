@@ -358,6 +358,20 @@ add(cat="malformed", title="One judge can approve alone (required_yes 1 of 2)", 
     attack="lone_judge", expect={"effect": "start_with_warning", "warning": "quorum: required_yes 1 with 2 judges"})
 add(cat="malformed", title="tools: names an unsigned tool", kind="config",
     attack="unsigned_tools_entry", expect={"effect": "refuse_start", "reason_prefix": "tools: ['export_patient_roster']"})
+# The account that started the proxy (0.7.0, two_key/agent_access.py). The harness is the agent's host and runs
+# under one account, which is exactly what the default refuses, so the pass itself says on_agent_access: warn and
+# these four cases cover the setting.
+add(cat="malicious", title="The agent's account is Two-Key's own: the default refuses", kind="config",
+    attack="agent_access_default",
+    expect={"effect": "refuse_start", "reason_prefix": "AgentAccessError: agent_same_account"})
+add(cat="malformed", title="The agent's account is Two-Key's own, with on_agent_access: warn", kind="config",
+    attack="agent_access_warn", expect={"effect": "start_with_warning", "warning": "agent_same_account"})
+add(cat="malformed", title="on_agent_access with a value that is neither", kind="config",
+    attack="agent_access_bad_value",
+    expect={"effect": "refuse_start", "reason_prefix": "on_agent_access: expected warn or refuse"})
+add(cat="malicious", title="high_assurance does not accept on_agent_access: warn", kind="config",
+    attack="agent_access_high_assurance",
+    expect={"effect": "refuse_start", "reason_prefix": "ValueError: on_agent_access: high_assurance"})
 add(cat="malformed", title="A SIEM sink that sends in the clear", kind="config",
     attack="siem_plaintext", expect={"effect": "start_with_warning",
                                      "warning": "the SIEM copy goes out in the clear"})
