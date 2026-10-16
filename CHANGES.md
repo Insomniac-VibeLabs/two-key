@@ -97,6 +97,7 @@
 - [Release v0.6.0: Windows, content scanning, writable-path check — 2026-10-16](#release-v060-windows-content-scanning-writable-path-check--2026-10-16)
 - [PR #12 review: TLS 1.2 for icaps, suppressed Semgrep findings — 2026-10-16](#pr-12-review-tls-12-for-icaps-suppressed-semgrep-findings--2026-10-16)
 - [PR #12 review: SonarCloud findings — 2026-10-16](#pr-12-review-sonarcloud-findings--2026-10-16)
+- [Docs: a 0.7.0 live run for the PR #12 refactor — 2026-10-16](#docs-a-070-live-run-for-the-pr-12-refactor--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3354,3 +3355,10 @@ above, from "Semgrep findings printed to the job log" on, are the detail.
   rather than `\w`, which would also match non-ASCII letters; the
   `list(...)` copies in `writable.py` keep the loop safe if `sys.path` or
   `sys.modules` changes; the ctypes structure names follow the Windows API.
+
+## Docs: a 0.7.0 live run for the PR #12 refactor — 2026-10-16
+
+- ROADMAP 0.7.0: a live run covers the code 0.6.0 changed after live run 7
+  in the PR #12 review (the SonarCloud refactor and the `sign-constitution
+  --out` write). No live run was done before the release; the tests and CI
+  cover those changes (maintainer's decision).

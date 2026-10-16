@@ -115,6 +115,13 @@ in the same release.
   token text, would show repeated attempts. It changes the gateway, so it
   needs a design note and the maintainer's review before code (maintainer's
   decision, 2026-10-16).
+- A live run that covers the code 0.6.0 changed after live run 7 (PR #12
+  review): the ICAP verdicts and response reader, file arguments and
+  confined path reads, the scanner's start-up checks, the Windows
+  access-list check, the writable-path walk, proxy tool settings and
+  start-up paths, and `sign-constitution --out` writing a new file and
+  renaming it into place. The tests and CI cover them; no live run did
+  (maintainer's decision, 2026-10-16).
 
 ## 1.0.0: Review and release
 
