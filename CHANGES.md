@@ -3825,3 +3825,8 @@ unregistered on pypi.org and test.pypi.org on this date.
   say it is not on PyPI: README, HOWTO, FIT, ROADMAP, CONTRIBUTING,
   SECURITY, AGENTS.md, and llms.txt. Past "not published" notes in this
   file are unchanged.
+- Two DeepSource `SCT-A000` hits in docs/HOWTO.md are false positives:
+  the optional witness public-key path `/etc/two-key/witness.pub.pem` in
+  the proxy example, and the `load_public_key(...)` call on that same
+  public key. Both lines now carry `skipcq: SCT-A000`. Nothing else is
+  excluded from secret detection.

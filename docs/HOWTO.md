@@ -1755,7 +1755,7 @@ constitution: constitution.signed.json
 keys: {principal: keys/principal.pem}
 ledger: ledger
 judges: judges.yaml
-witness_public_key: /etc/two-key/witness.pub.pem   # optional; kept where the ledger's writer cannot change it
+witness_public_key: /etc/two-key/witness.pub.pem   # optional; kept where the ledger's writer cannot change it  skipcq: SCT-A000
 agent_session_env: AGENT_API_KEY                   # the agent's session; required with cloud judges
 agent_id: billing-agent                            # ledger metadata, not trust
 allow_unresolved_identity: false
@@ -2264,7 +2264,7 @@ two-key authorize ... --witness-public-key /etc/two-key/witness.pub.pem
 
 ```python
 from two_key.keys import load_public_key
-ledger = Ledger("ledger", key, witness_public_key=load_public_key("/etc/two-key/witness.pub.pem"))
+ledger = Ledger("ledger", key, witness_public_key=load_public_key("/etc/two-key/witness.pub.pem"))  # skipcq: SCT-A000
 ```
 
 With it, a new ledger needs that witness key already in place
