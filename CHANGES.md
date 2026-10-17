@@ -3838,3 +3838,7 @@ unregistered on pypi.org and test.pypi.org on this date.
   line is an example that passes the variable `key` to `private_key`.
   The quoted text was `TwoKey(ledger,`. It now carries `skipcq: SCT-A000`.
   No other line is excluded from secret detection.
+- The diagram pictures on this branch were drawn again in the banner's
+  navy and cyan. The graphs are unchanged. Solid lines are taken paths.
+  Dashed lines are the ones the diagram already marked as optional or closed.
+  The source remains `docs/images/diagrams/src/`.
