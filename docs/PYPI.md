@@ -2,7 +2,7 @@
 
 This page is how to register the distribution name `two-key` and upload a
 release. It does not change what Two-Key does. Application code is not part
-of this packaging, and version `0.7.0` is unchanged: `pyproject.toml` andtwo
+of this packaging, and version `0.7.0` is unchanged: `pyproject.toml` and
 `two_key.__version__` both say `0.7.0`.
 
 The `0.7.0` release is being prepared for its first upload to PyPI. At the time this document was written, `two-key` was not registered on [pypi.org](https://pypi.org/project/two-key/) or [test.pypi.org](https://test.pypi.org/project/two-key/). The PyPI name can be claimed between checks, so always verify availability before attempting the first upload. PyPI treats `two-key`, `two_key`, and `two.key` as the same project. The import name stays `two_key`.
