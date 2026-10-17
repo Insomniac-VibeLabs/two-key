@@ -74,13 +74,10 @@ pinned in `.github/workflows/tests.yml`, then `uv sync --locked --no-build
 dependency range changes, regenerate `uv.lock` with that same uv and commit
 it. The lock is not a consumer pin: a git install still uses the ranges.
 
-The distribution name `two-key` is not on PyPI yet. The `PyPI` branch is
-ready to register it: metadata, the source distribution, and a
-trusted-publishing workflow, with no token stored in the repository.
-Version 0.7.0 and tag `v0.7.0` stay where they are. The steps, and the
-commands that will work only after the upload, are [PYPI.md](PYPI.md).
-Until then, install from a checkout as above, or install a tagged release
-from git as the README describes. `pip install two-key` does not.
+Version 0.7.0 is on PyPI. Tag `v0.7.0` is not moved. Install with
+`pip install "two-key[yaml]==0.7.0"` (the `mcp` extra for the proxy).
+The release steps are [PYPI.md](PYPI.md). A checkout install, above, is
+for working in this repository.
 
 ### Platforms
 

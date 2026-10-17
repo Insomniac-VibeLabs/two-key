@@ -93,13 +93,14 @@ on it.
 
 ## Quick start
 
-Install the 0.7.0 release from git. The `PyPI` branch is prepared for
-registration ([docs/PYPI.md](docs/PYPI.md)) but nothing has been uploaded, so
-`pip install two-key` does not work yet:
+Install 0.7.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
+pip install "two-key[yaml]==0.7.0"
 ```
+
+Tag `v0.7.0` was not moved. It is the git snapshot from before this
+packaging, not a second release.
 
 Or run the offline demo from a clone. It uses test-double judges, so it
 needs no API keys:
@@ -121,7 +122,7 @@ around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
+pip install "two-key[mcp]==0.7.0"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -624,20 +625,17 @@ flowchart LR
 | 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners (ClamAV, ICAP products, a command, Python); judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Released, tag `v0.7.0` |
-| 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI. Described as community-reviewed, not audited | Planned |
+| 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). It is not on PyPI yet. The `PyPI` branch carries
-the metadata, the source-distribution manifest, and a trusted-publishing
-workflow for a later upload ([docs/PYPI.md](docs/PYPI.md)); version 0.7.0
-is unchanged, and tag `v0.7.0` is not moved. Until that upload, install a
-tagged release from git:
+three (HOWTO "Platforms"). Version 0.7.0 is on PyPI. It is this beta, not
+the 1.0 community review. Tag `v0.7.0` is not moved.
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
+pip install "two-key[yaml]==0.7.0"
 ```
 
 `v0.7.0` adds the ledger export for a SIEM, a start-up check for the account
@@ -734,7 +732,7 @@ that file, not a description of the file. This table is the description.
 | `pyproject.toml` | Package name `two-key`, version, dependencies, extras, and the `two-key` command |
 | `MANIFEST.in` | Docs and examples included in the source distribution. The wheel is only `two_key` |
 | `docs/PYPI.md` | How to register the name and publish with trusted publishing, without a token in the repo |
-| `.github/workflows/pypi-publish.yml` | Build, metadata check, SBOM, and the tokenless upload. On the `PyPI` branch |
+| `.github/workflows/pypi-publish.yml` | Build, metadata check, SBOM, and the tokenless upload. The file is on `main`; a run publishes only from branch `PyPI` or a matching version tag |
 
 ## History and license
 
