@@ -1,5 +1,9 @@
 # Two-Key
 
+<p align="center">
+  <img src="docs/images/two-key-banner.png" alt="Two-Key — Authorization and execution control for AI agents">
+</p>
+
 [![tests](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key)](https://github.com/Insomniac-VibeLabs/two-key/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Insomniac-VibeLabs/two-key/blob/main/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key/)
 
