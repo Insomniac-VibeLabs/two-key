@@ -3845,3 +3845,5 @@ unregistered on pypi.org and test.pypi.org on this date.
 - Four of those pictures were replaced with exports of the same diagrams:
   the authorization flow, the version line, the authorization sequence, and
   the MCP proxy. The editor watermark is not in the files.
+- Those four pictures were replaced again from the exports, and the
+  MermaidEditor.io mark in the corner is kept.
