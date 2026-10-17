@@ -273,35 +273,32 @@ flowchart TD
   compile --> judgeText["Path B<br/>Judges"]
 
   instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
-  agent -->|"JSON proposal"| authorize["Two-Key<br/>Authorize"]
+  agent -->|"JSON proposal or decline"| authorize["Two-Key<br/>Authorize"]
 
-  authorize --> pathA["Path A<br/>Policy VM"]
+  authorize --> early{"Early deny?<br/>malformed / size /<br/>agent_declined /<br/>file limits"}
+  early -->|yes| ledger["Encrypted<br/>Ledger"]
+  early -->|no| derive["Derive fields<br/>(optional AV/DLP scan)"]
 
-  authorize -.->|"optional"| scanner["AV/DLP<br/>Hook"]
-  scanner -.->|"scan result"| scanfact["Trusted<br/>Scan Fact"]
-
-  scanfact -.-> pathB["Path B — Judges<br/>≥1; configurable quorum"]
-  scanfact -.-> ledger["Encrypted<br/>Ledger"]
-
-  authorize --> pathB
-  judgeText --> pathB
-
-  pathB --> judges["Independent<br/>Judge(s)"]
-  judges -->|"yes / no / abstain"| pathB
-
+  derive --> pathA["Path A<br/>Policy VM"]
   bytecode --> pathA
+
+  derive --> pbCheck{"derive_failed:<br/>and no<br/>tool_args_on_derive_deny?"}
+  pbCheck -->|yes| skipped["Path B<br/>skipped"]
+  pbCheck -->|no| pathB["Path B — Judges<br/>≥1; configurable quorum"]
+  judgeText --> pathB
 
   pathA --> gate{"Both paths<br/>allow?"}
   pathB --> gate
+  skipped --> gate
 
   pathA --> ledger
   pathB --> ledger
+  skipped --> ledger
 
-  gate -->|"deny"| ledger
-  gate -->|"allow"| token["Single-Use<br/>Capability Token"]
+  gate -->|deny| ledger
+  gate -->|allow| token["Single-Use<br/>Capability Token"]
 
   token --> gateway["Tool<br/>Gateway"]
-
   gateway -->|"verify"| tool["Registered<br/>Tool"]
   gateway --> ledger
 
