@@ -268,16 +268,16 @@ Only the gateway runs a tool.
 
 ```mermaid
 flowchart TD
-  constitution["Signed Constitution"] --> compile["Compile"]
-  compile --> bytecode["Path A Policy"]
-  compile --> judgeText["Path B Judge Prompt"]
+  constitution["Signed<br/>Constitution"] --> compile["Compile"]
+  compile --> bytecode["Path A<br/>Policy"]
+  compile --> judgeText["Path B<br/>Judges"]
 
-  instruction["Untrusted Instruction"] --> agent["Monitored Agent"]
-  agent -->|"JSON proposal"| authorize["Two-Key Authorize"]
+  instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
+  agent -->|"JSON proposal"| authorize["Two-Key<br/>Authorize"]
 
   authorize --> pathA["Path A<br/>Policy VM"]
 
-  authorize --> scanner["AV / DLP<br/>Scanner"]
+  authorize --> scanner["Optional AV / DLP<br/>Hook"]
   scanner -->|"scan result"| scanfact["Trusted<br/>Scan Fact"]
 
   scanfact --> pathB["Path B<br/>Judge Quorum"]
@@ -300,11 +300,11 @@ flowchart TD
   gate -->|"deny"| ledger
   gate -->|"allow"| token["Single-Use<br/>Capability Token"]
 
-  token --> gateway["Tool Gateway"]
+  token --> gateway["Tool<br/>Gateway"]
 
   token -.->|"binds scan verdict<br/>+ file digests"| gateway
 
-  gateway -->|"verify"| tool["Registered Tool"]
+  gateway -->|"verify"| tool["Registered<br/>Tool"]
   gateway --> ledger
 
   ledger -.->|"optional export"| siem["SIEM<br/>syslog / HTTPS"]
