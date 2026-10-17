@@ -3842,3 +3842,6 @@ unregistered on pypi.org and test.pypi.org on this date.
   navy and cyan. The graphs are unchanged. Solid lines are taken paths.
   Dashed lines are the ones the diagram already marked as optional or closed.
   The source remains `docs/images/diagrams/src/`.
+- Four of those pictures were replaced with exports of the same diagrams:
+  the authorization flow, the version line, the authorization sequence, and
+  the MCP proxy. The editor watermark is not in the files.
