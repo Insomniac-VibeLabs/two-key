@@ -1,9 +1,30 @@
 # Two-Key
 
-[![tests](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key)](https://github.com/Insomniac-VibeLabs/two-key/releases)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Insomniac-VibeLabs/two-key/blob/main/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key/)
+**AI agent authorization and MCP gateway — dual-path policy + judge approval, single-use capability tokens, and an encrypted ledger.**
+
+<p align="center">
+  <img src="docs/images/two-key-banner.png" alt="Two-Key — Authorization and execution control for AI agents">
+</p>
 
 **Two independent keys must turn before an AI agent can act.**
+
+[![tests](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key)](https://github.com/Insomniac-VibeLabs/two-key/releases)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Insomniac-VibeLabs/two-key/blob/main/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml)[![CodeQL](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/codeql.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/codeql.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key/)
+
+**Two independent keys must turn before an AI agent can act.**
+
+**🎯 The Problem**
+
+AI agents can be given permission to use a tool without being given
+authority to perform every consequential action that tool can perform.
+
+Traditional tool permissions answer:
+
+> "Can this agent call this tool?"
+
+Two-Key asks a different question:
+
+> "Is this specific action authorized to execute?"
 
 Two-Key is an authorization layer for AI agents that use tools. Before a consequential tool call executes, Two-Key requires independent authorization through a deterministic policy path and an independent judge path:
 
@@ -251,33 +272,44 @@ Only the gateway runs a tool.
 
 ```mermaid
 flowchart TD
-  constitution["Signed constitution<br/>prose, hard rules, tool specs<br/>unnamed keys dropped unless deny_unmapped"] --> compile["compile_both"]
-  compile --> bytecode["Path A bytecode"]
-  compile --> judgeText["Path B judge text"]
-  instruction["Untrusted instruction"] --> agent["MonitoredAgent.complete<br/>Grok, ChatGPT, Claude, Gemini, or local Ollama"]
-  judgeText -->|"constitution prose"| agent
-  constitution -.->|"opt-in"| vocab["agent_vocabulary()<br/>tool ids, paths, value syntax<br/>never a value or a rule"]
-  vocab -.-> agent
-  agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
-  bytecode --> pathA["Path A Policy VM"]
-  authorize --> pathA
-  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B: judges vote<br/>needs 1+ judge; yes votes needed: required_yes,<br/>default min(2, judges)<br/>runs even when Path A denies<br/>high_assurance also needs: judges from 2+ makers,<br/>1+ local judge, and a local judge votes yes"]
+  constitution["Signed<br/>Constitution"] --> compile["Compile"]
+  compile --> bytecode["Path A<br/>Policy"]
+  compile --> judgeText["Path B<br/>Judges"]
+
+  instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
+  agent -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>Authorize"]
+
+  authorize --> early{"Early deny?<br/>malformed / size<br/>agent_declined<br/>file limits"}
+  early -->|yes| ledger["Encrypted<br/>Ledger"]
+  early -->|no| derive["Derive fields"]
+
+  derive -.->|"optional"| hook["AV/DLP<br/>Hook"]
+  hook -.-> derive
+
+  derive --> pathA["Path A<br/>Policy VM"]
+  bytecode --> pathA
+
+  derive --> pbCheck{"derive_failed:<br/>and no<br/>tool_args_on_<br/>derive_deny?"}
+  pbCheck -->|yes| skipped["Path B<br/>skipped"]
+  pbCheck -->|no| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
   judgeText --> pathB
-  declared["monitored_agent<br/>declared by the operator"] -->|"start-up: refused on the agent's credential,<br/>at any address"| judges
-  session["agent_session<br/>no judge may present it"] --> pathB
-  pathB -->|"parallel score, separate credentials"| judges["Judge(s)<br/>one or more; xAI, OpenAI, Anthropic, Gemini, Ollama"]
-  judges -->|"yes, no, or abstain"| pathB
-  pathA --> gate{"both allow?"}
+
+  pathA --> gate{"Both paths<br/>allow?"}
   pathB --> gate
-  pathA --> ledger["Encrypted ledger"]
+  skipped --> gate
+
+  pathA --> ledger
   pathB --> ledger
+  skipped --> ledger
+
   gate -->|no| ledger
-  gate -->|yes| token["Capability token<br/>signed by the capability key"]
-  token --> ledger
-  token --> gateway["Tool gateway<br/>same process as TwoKey, shares its ledger<br/>verifier: capability public key only, cannot mint"]
-  gateway -->|"redemption_started, then declared paths only"| tool["Registered tool"]
+  gate -->|yes| token["Single-Use<br/>Capability<br/>Token"]
+
+  token --> gateway["Tool<br/>Gateway"]
+  gateway -->|"verify"| tool["Registered<br/>Tool"]
   gateway --> ledger
-  ledger -.->|"0.7.0, optional, after the entry is written"| siem["SIEM sink<br/>syslog or HTTPS webhook<br/>allowlisted fields only<br/>never blocks a decision"]
+
+  ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
 ```
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
@@ -405,30 +437,36 @@ sequenceDiagram
     TwoKey-->>Caller: deny, neither path runs, no token
   end
   alt malformed or over a size limit
-    Note over TwoKey: malformed_proposal, proposal_too_large, action_too_large, malformed_action, args_too_large, invalid_call
+    Note over TwoKey: malformed_proposal, proposal_too_large,<br/>action_too_large, malformed_action,<br/>args_too_large, invalid_call, file limits
     TwoKey->>Ledger: decision with size and digest only
     TwoKey-->>Caller: deny, neither path runs
   end
-  TwoKey->>PathA: structured fields
+  TwoKey->>PathA: structured fields (after optional scan / derive)
   PathA-->>TwoKey: allow or deny
-  TwoKey->>PathB: action record and binding hashes
-  Note over PathB: tool args omitted after a derive deny unless tool_args_on_derive_deny
-  PathB->>Judge: score in parallel, own credentials
-  Judge-->>PathB: yes, no, or abstain
-  PathB-->>TwoKey: quorum pass or deny
-  TwoKey->>Ledger: proposal, path_a, path_b
+  alt derive_failed and not tool_args_on_derive_deny
+    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed)
+    TwoKey->>Ledger: proposal, path_a, path_b skipped
+  else
+    TwoKey->>PathB: action record and binding hashes
+    Note over PathB: args omitted on derive deny unless tool_args_on_derive_deny
+    Note over PathB: scan flag can also withhold args/proposal
+    PathB->>Judge: score in parallel, own credentials
+    Judge-->>PathB: yes, no, or abstain
+    PathB-->>TwoKey: quorum pass or deny
+    TwoKey->>Ledger: proposal, path_a, path_b
+  end
   alt both allow
     TwoKey->>Ledger: capability_issued, then decision
     TwoKey-->>Caller: single-use token
     Caller->>Gateway: token, tool, arguments
-    Note over Gateway: same process as TwoKey, verifies with the capability public key only
+    Note over Gateway: same process as TwoKey,<br/>verifies with capability public key only
     opt authenticated token refused
       Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
     end
     Gateway->>Ledger: redemption_started
     Gateway->>Tool: registered function
     Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
-  else either path denies
+  else either path denies or skipped
     TwoKey->>Ledger: decision, no token
     TwoKey-->>Caller: deny
   end
