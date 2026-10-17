@@ -33,20 +33,7 @@ A judge endpoint that keeps its own memory across ballots (a persistent agent, o
 
 ## One judge
 
-```mermaid
-flowchart TD
-    A["Authorization request"] --> B["Build normalized action record"]
-    B --> C["Prepare configured judge input"]
-    C --> D["Call judge adapter"]
-    D --> E{"Usable ballot?"}
-    E -->|Yes| F{"Vote"}
-    F -->|YES| G["One affirmative ballot"]
-    F -->|NO| H["One negative ballot"]
-    E -->|No| I["Abstention"]
-    G --> J["Quorum evaluation"]
-    H --> J
-    I --> J
-```
+![An authorization request becomes one normalized action record per judge, with the real arguments and no chain of thought.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/judge-request-flow.png)
 
 This diagram shows one judge's contribution, not the final authorization decision.
 
@@ -63,19 +50,7 @@ The quorum policy separates the affirmative threshold (`required_yes`) from the 
 - If `required_yes` is unset, Two-Key resolves it to `min(2, number_of_judges)`.
 - If `min_responding` is unset, it follows the effective `required_yes`.
 
-```mermaid
-flowchart TD
-    A["Configured judges: N"] --> B{"required_yes set?"}
-    B -->|Yes| C["Use configured threshold"]
-    B -->|No| D["Use min(2, N)"]
-    C --> E["Resolve min_responding"]
-    D --> E
-    E --> F["Collect and validate ballots"]
-    F --> G["Apply quorum and diversity requirements"]
-    G --> H{"All requirements met?"}
-    H -->|Yes| I["Path B passes"]
-    H -->|No| J["Path B denies"]
-```
+![Quorum: required_yes uses the configured value, otherwise min(2, N). One judge with required_yes 1 warns. required_yes above N refuses to start. N of 1 or 2 can pass.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/quorum-resolution.png)
 
 With the default policy:
 
@@ -141,19 +116,7 @@ For high-impact tools, configure the judge set deliberately, check the actual en
 
 Path A evaluates deterministic policy rules against the normalized structured action record. Path B evaluates the action using the configured judge quorum. Neither path alone is sufficient for authorization.
 
-```mermaid
-flowchart TD
-    A["Well-formed request within limits"] --> B["Path A: deterministic policy VM"]
-    A --> C["Path B: configured judges and quorum"]
-    B --> D{"Path A allows?"}
-    C --> E{"Path B passes?"}
-    D -->|No| F["Deny authorization"]
-    E -->|No| F
-    D -->|Yes| G{"Any other deny condition?"}
-    E -->|Yes| G
-    G -->|Yes| F
-    G -->|No| H["Capability may be issued"]
-```
+![A well-formed request runs Path A and Path B. Both must pass before a token is minted. A request that cannot be read is not sent to the judges.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/path-a-and-b.png)
 
 The final decision allows the action only if Path A allows, the quorum passes, and no other deny condition remains. Capability issuance can still fail, including when the issuer key is unavailable or a required ledger write fails.
 

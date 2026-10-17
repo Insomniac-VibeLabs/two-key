@@ -30,14 +30,7 @@ promise: the order may change, and version numbers are targets, not dates.
 
 ## The path to 1.0
 
-```mermaid
-flowchart LR
-  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
-  r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
-  r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
-  r07 --> r10["1.0.0<br/>Review and release"]
-  r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
-```
+![Version line: 0.4.0, 0.5.0, and 0.6.0 are released; 0.7.0 ledger export for a SIEM is released; 1.0.0 is the review and release; after 1.0 comes PKI, post-quantum, FIPS mode, and a local GUI.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/version-line.png)
 
 | Version | What | Status |
 | --- | --- | --- |
@@ -89,11 +82,10 @@ in the same release.
   start-up check that refuses to run when the monitored agent is Two-Key's
   own account or can change its files (`on_agent_access`). The design note
   (`0.7.0-siem-export.md`) was approved on 2026-10-16.
-- **PyPI packaging is prepared on the `PyPI` branch, and nothing has been
-  uploaded.** The name `two-key` was unregistered on pypi.org and
-  test.pypi.org on 2026-10-16. Metadata, the source-distribution manifest,
-  and the trusted-publishing workflow are in place (docs/PYPI.md). Tag
-  `v0.7.0` is not moved. The upload stays with the 1.0 review below.
+- **0.7.0 is the first PyPI release.** It is still this beta, not the 1.0
+  review below. Metadata, the source-distribution manifest, and the
+  trusted-publishing workflow are in place (docs/PYPI.md). Tag `v0.7.0`
+  is not moved. Install with `pip install "two-key[yaml]==0.7.0"`.
 - **Next**: the judge history summary (#1), then the public review and the
   1.0 release.
 - **Not yet tested enough: agents on another machine.** The maintainer
@@ -143,13 +135,12 @@ in the same release.
   judge down cannot be told from the ledger alone. Reviewed with #1.
 - A time-boxed, public community review with a stated scope.
 - Release only with no unresolved Medium or higher findings from that review.
-- Publish to PyPI with trusted publishing, signed tags, and an SBOM.
-  The files for that publish are on the `PyPI` branch (docs/PYPI.md):
-  `pyproject.toml` metadata, `MANIFEST.in`, and
-  `.github/workflows/pypi-publish.yml` (OpenID Connect, no token in the
-  repository, PEP 740 attestations, and a CycloneDX SBOM kept as a
-  workflow artifact). Nothing has been uploaded. This review and the
-  upload are still this step, not a release that already happened.
+- The first index upload is 0.7.0, from the `PyPI` branch, and it is not
+  this review. Later releases use the same workflow (docs/PYPI.md):
+  trusted publishing, signed tags, and an SBOM. That is `pyproject.toml`
+  metadata, `MANIFEST.in`, and `.github/workflows/pypi-publish.yml`
+  (OpenID Connect, no token in the repository, PEP 740 attestations, and
+  a CycloneDX SBOM kept as a workflow artifact).
 - A ten-minute quickstart and a demo with a real MCP server.
 - 1.0 is described as community-reviewed, not audited, and as not FIPS
   validated itself. A paid audit and any validation of this package are

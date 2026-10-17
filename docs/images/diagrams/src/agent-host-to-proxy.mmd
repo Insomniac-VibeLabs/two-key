@@ -1,0 +1,10 @@
+flowchart LR
+  host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
+  subgraph proxy["two-key mcp-proxy, its own OS user"]
+    tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk
+  end
+  tk -. "normalized record" .-> judges["Judges"]
+  gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
+  up --> sor["System of record"]
+  hooks -. "look facts up" .-> sor

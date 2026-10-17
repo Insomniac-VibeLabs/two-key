@@ -1,0 +1,21 @@
+sequenceDiagram
+  participant Host as Agent host
+  participant Proxy as two-key mcp-proxy
+  participant Judges
+  participant Up as Upstream server
+  Note over Proxy,Up: At start the proxy launches the server, lists its tools, and checks schema_digest
+  Host->>Proxy: tools/list
+  Proxy-->>Host: the signed tools only
+  Host->>Proxy: tools/call pay_vendor with vendor, amount, invoice, memo
+  Proxy->>Proxy: fact hook looks the invoice up, po_matched comes from the system of record
+  Proxy->>Proxy: Path A on the form derived from the arguments, the facts, and the fixed claim
+  Proxy->>Judges: normalized record, with fact_fields
+  Judges-->>Proxy: ballots
+  alt both keys turn
+    Proxy->>Proxy: mint a token, run the fact hook again, the gateway checks both
+    Proxy->>Up: tools/call pay_vendor with vendor, amount, invoice, memo, and the hook's po_matched
+    Up-->>Proxy: result
+    Proxy-->>Host: result
+  else a key does not turn
+    Proxy-->>Host: tool error, two-key denied this call, then the reason code
+  end

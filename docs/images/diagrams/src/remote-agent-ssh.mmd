@@ -1,0 +1,15 @@
+flowchart LR
+  subgraph agentmachine["Agent machine"]
+    host["Agent host<br/>MCP client"]
+  end
+  subgraph tkmachine["Two-Key machine"]
+    login["tk-agent<br/>SSH login, forced command"] -- "sudo -n -u two-key run-proxy<br/>exact rule, no arguments" --> proxy["two-key mcp-proxy<br/>Path A, Path B, gateway"]
+    secrets[("keys, ledger, constitution,<br/>proxy.yaml, judges.yaml,<br/>hook code, proxy.env")]
+    proxy --- secrets
+    proxy -- "after both keys" --> up["Upstream MCP server<br/>mcp-billing user"]
+  end
+  host -- "ssh: MCP over stdio" --> login
+  up --> api["Billing API"]
+  proxy -. "ballots" .-> judges["Judges"]
+  host -. "closed: no route" .-> api
+  host -. "closed: no route" .-> judges

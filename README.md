@@ -93,13 +93,14 @@ on it.
 
 ## Quick start
 
-Install the 0.7.0 release from git. The `PyPI` branch is prepared for
-registration ([docs/PYPI.md](docs/PYPI.md)) but nothing has been uploaded, so
-`pip install two-key` does not work yet:
+Install 0.7.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
+pip install "two-key[yaml]==0.7.0"
 ```
+
+Tag `v0.7.0` was not moved. It is the git snapshot from before this
+packaging, not a second release.
 
 Or run the offline demo from a clone. It uses test-double judges, so it
 needs no API keys:
@@ -121,7 +122,7 @@ around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
+pip install "two-key[mcp]==0.7.0"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -132,18 +133,7 @@ keys before the server sees it. Facts such as a purchase-order match come
 from your own hook, never from the agent. A refused call comes back to the
 agent as a tool error with a reason code.
 
-```mermaid
-flowchart LR
-  host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
-  subgraph proxy["two-key mcp-proxy, its own OS user"]
-    tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk
-  end
-  tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
-  up --> sor["System of record"]
-  hooks -. "look facts up" .-> sor
-```
+![The agent host sends tools/list and tools/call to two-key mcp-proxy. The proxy runs both keys, then calls the upstream MCP server.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/agent-host-to-proxy.png)
 
 `two-key mcp-draft-specs` drafts the tool specs from the server's own
 schemas for you to review and sign. The walkthrough, with a worked
@@ -273,47 +263,7 @@ calls the gateway. The caller runs the agent. Two-Key then runs both paths
 once the call is well-formed and within limits.
 Only the gateway runs a tool.
 
-```mermaid
-flowchart TD
-  constitution["Signed<br/>Constitution"] --> compile["Compile"]
-  compile --> bytecode["Path A<br/>Policy"]
-  compile --> judgeText["Path B<br/>Judges"]
-
-  instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
-  agent -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>Authorize"]
-
-  authorize --> early{"Early deny?<br/>malformed / size<br/>agent_declined<br/>file limits"}
-  early -->|yes| ledger["Encrypted<br/>Ledger"]
-  early -->|no| derive["Derive fields"]
-
-  derive -.->|"optional"| hook["AV/DLP<br/>Hook"]
-  hook -.-> derive
-
-  derive --> pathA["Path A<br/>Policy VM"]
-  bytecode --> pathA
-
-  derive --> pbCheck{"derive_failed:<br/>and no<br/>tool_args_on_<br/>derive_deny?"}
-  pbCheck -->|yes| skipped["Path B<br/>skipped"]
-  pbCheck -->|no| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
-  judgeText --> pathB
-
-  pathA --> gate{"Both paths<br/>allow?"}
-  pathB --> gate
-  skipped --> gate
-
-  pathA --> ledger
-  pathB --> ledger
-  skipped --> ledger
-
-  gate -->|no| ledger
-  gate -->|yes| token["Single-Use<br/>Capability<br/>Token"]
-
-  token --> gateway["Tool<br/>Gateway"]
-  gateway -->|"verify"| tool["Registered<br/>Tool"]
-  gateway --> ledger
-
-  ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
-```
+![A signed constitution is compiled and checked. A tool call runs Path A and Path B. A single-use token is minted only if both pass, and the gateway runs the tool once.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/authorize-flow.png)
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
 It does not receive Path A bytecode, judge credentials, or tool
@@ -420,60 +370,7 @@ tool arguments, the action claim, or a structured proposal nested more than
 
 One call, in code order:
 
-```mermaid
-sequenceDiagram
-  participant Caller
-  participant Agent as Monitored agent
-  participant TwoKey
-  participant PathA as Path A VM
-  participant PathB as Path B quorum
-  participant Judge as Judges
-  participant Ledger
-  participant Gateway
-  participant Tool
-
-  Caller->>Agent: instruction, constitution prose, opt-in vocabulary (syntax only)
-  Agent-->>Caller: JSON proposal or decline, no tool call
-  Caller->>TwoKey: proposal and agent_session
-  alt agent declined
-    TwoKey->>Ledger: decision agent_declined, with the decline reason
-    TwoKey-->>Caller: deny, neither path runs, no token
-  end
-  alt malformed or over a size limit
-    Note over TwoKey: malformed_proposal, proposal_too_large,<br/>action_too_large, malformed_action,<br/>args_too_large, invalid_call, file limits
-    TwoKey->>Ledger: decision with size and digest only
-    TwoKey-->>Caller: deny, neither path runs
-  end
-  TwoKey->>PathA: structured fields (after optional scan / derive)
-  PathA-->>TwoKey: allow or deny
-  alt derive_failed and not tool_args_on_derive_deny
-    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed)
-    TwoKey->>Ledger: proposal, path_a, path_b skipped
-  else
-    TwoKey->>PathB: action record and binding hashes
-    Note over PathB: args omitted on derive deny unless tool_args_on_derive_deny
-    Note over PathB: scan flag can also withhold args/proposal
-    PathB->>Judge: score in parallel, own credentials
-    Judge-->>PathB: yes, no, or abstain
-    PathB-->>TwoKey: quorum pass or deny
-    TwoKey->>Ledger: proposal, path_a, path_b
-  end
-  alt both allow
-    TwoKey->>Ledger: capability_issued, then decision
-    TwoKey-->>Caller: single-use token
-    Caller->>Gateway: token, tool, arguments
-    Note over Gateway: same process as TwoKey,<br/>verifies with capability public key only
-    opt authenticated token refused
-      Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
-    end
-    Gateway->>Ledger: redemption_started
-    Gateway->>Tool: registered function
-    Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
-  else either path denies or skipped
-    TwoKey->>Ledger: decision, no token
-    TwoKey-->>Caller: deny
-  end
-```
+![Sequence: the monitored agent proposes a call, Two-Key runs Path A and the judges, mints a single-use token only if both pass, and the gateway invokes the tool once.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/authorize-sequence.png)
 
 The token is signed by the capability key (`<ledger>.capability/capability.pem`,
 outside the ledger directory). It is bound to the tool, the argument hash,
@@ -609,14 +506,7 @@ It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
 
-```mermaid
-flowchart LR
-  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
-  r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
-  r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
-  r07 --> r10["1.0.0<br/>Review and release"]
-  r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
-```
+![Version line: 0.4.0, 0.5.0, and 0.6.0 are released; 0.7.0 ledger export for a SIEM is released; 1.0.0 is the review and release; after 1.0 comes PKI, post-quantum, FIPS mode, and a local GUI.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/version-line.png)
 
 | Version | What | Status |
 | --- | --- | --- |
@@ -624,20 +514,17 @@ flowchart LR
 | 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners (ClamAV, ICAP products, a command, Python); judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Released, tag `v0.7.0` |
-| 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI. Described as community-reviewed, not audited | Planned |
+| 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). It is not on PyPI yet. The `PyPI` branch carries
-the metadata, the source-distribution manifest, and a trusted-publishing
-workflow for a later upload ([docs/PYPI.md](docs/PYPI.md)); version 0.7.0
-is unchanged, and tag `v0.7.0` is not moved. Until that upload, install a
-tagged release from git:
+three (HOWTO "Platforms"). Version 0.7.0 is on PyPI. It is this beta, not
+the 1.0 community review. Tag `v0.7.0` is not moved.
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
+pip install "two-key[yaml]==0.7.0"
 ```
 
 `v0.7.0` adds the ledger export for a SIEM, a start-up check for the account
@@ -734,7 +621,7 @@ that file, not a description of the file. This table is the description.
 | `pyproject.toml` | Package name `two-key`, version, dependencies, extras, and the `two-key` command |
 | `MANIFEST.in` | Docs and examples included in the source distribution. The wheel is only `two_key` |
 | `docs/PYPI.md` | How to register the name and publish with trusted publishing, without a token in the repo |
-| `.github/workflows/pypi-publish.yml` | Build, metadata check, SBOM, and the tokenless upload. On the `PyPI` branch |
+| `.github/workflows/pypi-publish.yml` | Build, metadata check, SBOM, and the tokenless upload. The file is on `main`; a run publishes only from branch `PyPI` or a matching version tag |
 
 ## History and license
 

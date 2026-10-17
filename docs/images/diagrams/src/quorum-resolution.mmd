@@ -1,0 +1,11 @@
+flowchart TD
+    A["Configured judges: N"] --> B{"required_yes set?"}
+    B -->|Yes| C["Use configured threshold"]
+    B -->|No| D["Use min(2, N)"]
+    C --> E["Resolve min_responding"]
+    D --> E
+    E --> F["Collect and validate ballots"]
+    F --> G["Apply quorum and diversity requirements"]
+    G --> H{"All requirements met?"}
+    H -->|Yes| I["Path B passes"]
+    H -->|No| J["Path B denies"]

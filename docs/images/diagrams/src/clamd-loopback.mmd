@@ -1,0 +1,10 @@
+sequenceDiagram
+  participant TK as Two-Key
+  participant AV as clamd on loopback port 3310
+  participant Fake as Agent's program
+  Note over AV: clamd crashes or restarts, so port 3310 is free
+  Fake->>Fake: listens on 127.0.0.1 port 3310
+  TK->>Fake: INSTREAM, the call's parts
+  Fake-->>TK: OK for every part
+  Note over TK: verdict clean for a call nothing scanned
+  Note over TK,Fake: With clamd on a Unix socket in its own directory, or the agent<br/>in its own network namespace, the agent cannot take the address

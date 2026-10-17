@@ -1,0 +1,18 @@
+flowchart LR
+  subgraph agentuser["agent user"]
+    host["Agent host<br/>MCP client"]
+  end
+  subgraph tkuser["two-key user"]
+    wrapper["run-proxy<br/>loads proxy.env"] --> proxy["two-key mcp-proxy<br/>Path A, Path B, gateway"]
+    secrets[("keys, ledger, constitution,<br/>proxy.yaml, judges.yaml,<br/>hook code, proxy.env")]
+    proxy --- secrets
+  end
+  subgraph upuser["mcp-billing user"]
+    up["Upstream MCP server<br/>BILLING_TOKEN only"]
+  end
+  host -- "sudo -n -u two-key run-proxy<br/>exact rule, no arguments" --> wrapper
+  proxy -- "after both keys<br/>sudo -n -u mcp-billing" --> up
+  up --> api["Billing API"]
+  host -. "closed: no token,<br/>firewall" .-> api
+  host -. "closed: not in<br/>the client's list" .-> up
+  host -. "closed: file<br/>permissions" .-> secrets

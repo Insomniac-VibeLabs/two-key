@@ -1,0 +1,13 @@
+flowchart LR
+  agent["Monitored agent<br/>untrusted"] -- "tool call<br/>name and arguments,<br/>files included" --> tk
+  subgraph process["The Two-Key process (proxy, guard, or library)"]
+    tk["TwoKey.authorize"] -- "1. call text, files,<br/>proposal" --> scanner["Scanner adapter<br/>clamd, ICAP, command,<br/>or Python"]
+    scanner -- "2. clean, flagged,<br/>or unavailable" --> tk
+    tk -- "3. form with scan = verdict" --> pathA["Path A<br/>signed rules"]
+    tk -- "4. record, file digests,<br/>trusted scan section" --> pathB["Path B<br/>judges"]
+    tk -- "5. token binds verdict<br/>and file digests" --> gw["Gateway<br/>re-checks files"]
+    tk --> ledger["Encrypted ledger<br/>digests and verdict,<br/>never content"]
+    gw --> ledger
+  end
+  scanner <-. "your product" .-> product["clamd, ICAP server,<br/>or command"]
+  gw -- "6. arguments the spec passes" --> tool["Tool"]
