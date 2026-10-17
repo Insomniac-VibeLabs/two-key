@@ -301,11 +301,13 @@ flowchart TD
   gate -->|"allow"| token["Single-Use<br/>Capability Token"]
 
   token --> gateway["Tool<br/>Gateway"]
-
   gateway -->|"verify"| tool["Registered<br/>Tool"]
   gateway --> ledger
 
   ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
+
+  %% Make every AV/DLP-related connection explicitly dashed
+  linkStyle 5,6,7,8 stroke-dasharray: 5\,5
 ```
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
