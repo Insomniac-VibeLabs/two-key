@@ -433,30 +433,36 @@ sequenceDiagram
     TwoKey-->>Caller: deny, neither path runs, no token
   end
   alt malformed or over a size limit
-    Note over TwoKey: malformed_proposal, proposal_too_large, action_too_large, malformed_action, args_too_large, invalid_call
+    Note over TwoKey: malformed_proposal, proposal_too_large,<br/>action_too_large, malformed_action,<br/>args_too_large, invalid_call, file limits
     TwoKey->>Ledger: decision with size and digest only
     TwoKey-->>Caller: deny, neither path runs
   end
-  TwoKey->>PathA: structured fields
+  TwoKey->>PathA: structured fields (after optional scan / derive)
   PathA-->>TwoKey: allow or deny
-  TwoKey->>PathB: action record and binding hashes
-  Note over PathB: tool args omitted after a derive deny unless tool_args_on_derive_deny
-  PathB->>Judge: score in parallel, own credentials
-  Judge-->>PathB: yes, no, or abstain
-  PathB-->>TwoKey: quorum pass or deny
-  TwoKey->>Ledger: proposal, path_a, path_b
+  alt derive_failed and not tool_args_on_derive_deny
+    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed)
+    TwoKey->>Ledger: proposal, path_a, path_b skipped
+  else
+    TwoKey->>PathB: action record and binding hashes
+    Note over PathB: args omitted on derive deny unless tool_args_on_derive_deny
+    Note over PathB: scan flag can also withhold args/proposal
+    PathB->>Judge: score in parallel, own credentials
+    Judge-->>PathB: yes, no, or abstain
+    PathB-->>TwoKey: quorum pass or deny
+    TwoKey->>Ledger: proposal, path_a, path_b
+  end
   alt both allow
     TwoKey->>Ledger: capability_issued, then decision
     TwoKey-->>Caller: single-use token
     Caller->>Gateway: token, tool, arguments
-    Note over Gateway: same process as TwoKey, verifies with the capability public key only
+    Note over Gateway: same process as TwoKey,<br/>verifies with capability public key only
     opt authenticated token refused
       Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
     end
     Gateway->>Ledger: redemption_started
     Gateway->>Tool: registered function
     Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
-  else either path denies
+  else either path denies or skipped
     TwoKey->>Ledger: decision, no token
     TwoKey-->>Caller: deny
   end
