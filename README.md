@@ -276,7 +276,6 @@ flowchart TD
   authorize --> scanner["AV / DLP scanner<br/>ClamAV / ICAP / command / Python"]
   scanner -->|"clean / flagged / unavailable"| scan["Trusted scan fact"]
   authorize --> pathA["Path A<br/>Policy VM"]
-  scan --> pathA
   authorize --> pathB["Path B<br/>Judge quorum"]
   judgeText --> pathB
   scan --> pathB
