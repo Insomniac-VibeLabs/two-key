@@ -2,17 +2,12 @@
 
 This page is how to register the distribution name `two-key` and upload a
 release. It does not change what Two-Key does. Application code is not part
-of this packaging, and version `0.7.0` is unchanged: `pyproject.toml` and
+of this packaging, and version `0.7.0` is unchanged: `pyproject.toml` andtwo
 `two_key.__version__` both say `0.7.0`.
 
-Nothing on this branch has been uploaded. Checked on 2026-10-16: `two-key`
-was not registered on [pypi.org](https://pypi.org/project/two-key/) or
-[test.pypi.org](https://test.pypi.org/project/two-key/). A name can be taken
-between that check and the upload. PyPI treats `two-key`, `two_key`, and
-`two.key` as the same project. The import name stays `two_key`.
+The `0.7.0` release is being prepared for its first upload to PyPI. At the time this document was written, `two-key` was not registered on [pypi.org](https://pypi.org/project/two-key/) or [test.pypi.org](https://test.pypi.org/project/two-key/). The PyPI name can be claimed between checks, so always verify availability before attempting the first upload. PyPI treats `two-key`, `two_key`, and `two.key` as the same project. The import name stays `two_key`.
 
-The public 1.0 review in [ROADMAP.md](../ROADMAP.md) is still ahead. These
-files make a release possible. They do not by themselves publish one.
+The public 1.0 review in [ROADMAP.md](https://github.com/Insomniac-VibeLabs/two-key/blob/PyPI/ROADMAP.md) is still ahead. These files make a release possible; the workflow performs the actual upload.
 
 ## What a consumer will install
 
