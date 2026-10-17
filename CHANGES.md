@@ -1,7 +1,7 @@
 # Changes
 
 ## Contents
-- [0.7.1 — 2026-10-17](#071--2026-10-17)
+
 <!-- toc -->
 - [0.1.0 — 2026-10-02](#010--2026-10-02)
 - [0.1.1 — 2026-10-02](#011--2026-10-02)
@@ -113,6 +113,7 @@
 - [SonarCloud findings on the 0.7.0 code — 2026-10-16](#sonarcloud-findings-on-the-070-code--2026-10-16)
 - [Release v0.7.0: the SIEM export, the agent-account check — 2026-10-16](#release-v070-the-siem-export-the-agent-account-check--2026-10-16)
 - [PyPI packaging on the PyPI branch — 2026-10-16](#pypi-packaging-on-the-pypi-branch--2026-10-16)
+- [0.7.1 — 2026-10-17](#071--2026-10-17)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
