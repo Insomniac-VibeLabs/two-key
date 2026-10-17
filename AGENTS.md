@@ -50,7 +50,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key`, import name `two_key`,
-version `0.7.0` on PyPI (`pip install "two-key[yaml]==0.7.0"`). Tag `v0.7.0` on `main` is not moved. docs/PYPI.md is the release process. This packaging does not change the version.
+version `0.7.2` on PyPI (`pip install "two-key[yaml]==0.7.2"`). Tag `v0.7.0` on `main` is not moved. docs/PYPI.md is the release process.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
@@ -76,7 +76,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0) |
 
-Index install: `pip install "two-key[yaml]==0.7.0"`.
+Index install: `pip install "two-key[yaml]==0.7.2"`.
 The unmoved tag is still `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"`.
 
 ## Tests and docs

@@ -1,26 +1,25 @@
 # Register and release on PyPI
 
-This page is how to register the distribution name `two-key` and upload a
-release. It does not change what Two-Key does. Application code is not part
-of this packaging, and version `0.7.0` is unchanged: `pyproject.toml` and
-`two_key.__version__` both say `0.7.0`.
+This page is how a release is uploaded. It does not change what Two-Key
+does. The current package is `0.7.2`: `pyproject.toml`, `two_key.__version__`,
+and `uv.lock` all say `0.7.2`. `0.7.0` and `0.7.1` are already on PyPI.
+`0.7.2` is the same behavior, with the install lines naming `0.7.2`.
 
-The `0.7.0` release is being prepared for its first upload to PyPI. At the time this document was written, `two-key` was not registered on [pypi.org](https://pypi.org/project/two-key/) or [test.pypi.org](https://test.pypi.org/project/two-key/). The PyPI name can be claimed between checks, so always verify availability before attempting the first upload. PyPI treats `two-key`, `two_key`, and `two.key` as the same project. The import name stays `two_key`.
-
-The public 1.0 review in [ROADMAP.md](https://github.com/Insomniac-VibeLabs/two-key/blob/PyPI/ROADMAP.md) is still ahead. These files make a release possible; the workflow performs the actual upload.
+PyPI treats `two-key`, `two_key`, and `two.key` as the same project. The
+import name stays `two_key`. The public 1.0 review in
+[ROADMAP.md](https://github.com/Insomniac-VibeLabs/two-key/blob/PyPI/ROADMAP.md)
+is still ahead.
 
 ## What a consumer will install
 
-After the first upload to pypi.org:
-
 ```bash
-pip install "two-key==0.7.0"
-pip install "two-key[yaml]==0.7.0"
-pip install "two-key[mcp]==0.7.0"
+pip install "two-key==0.7.2"
+pip install "two-key[yaml]==0.7.2"
+pip install "two-key[mcp]==0.7.2"
 ```
 
-Until that upload, those commands do not work. Install from git, as
-[HOWTO.md](HOWTO.md) "Install" and the README say:
+Tag `v0.7.0` was not moved. That git snapshot is the code from before the
+first index upload, not this package:
 
 ```bash
 pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
@@ -73,7 +72,7 @@ starts with `v`. A pull request does not publish.
    [PEP 740](https://peps.python.org/pep-0740/) attestations with it.
 
 A tag push always targets PyPI, and only when the tag is `v` plus the
-version in `pyproject.toml`. `v0.7.1` on a tree that still says `0.7.0`
+version in `pyproject.toml`. `v0.7.3` on a tree that still says `0.7.2`
 fails before the upload. A manual run defaults to TestPyPI.
 
 `v0.7.0` already points at `main` and must not be moved. The first upload
@@ -114,14 +113,15 @@ PyPI accounts need two-factor authentication.
 ```bash
 pip install --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ \
-  "two-key[yaml]==0.7.0"
+  "two-key[yaml]==0.7.2"
 python -c "import two_key; print(two_key.__version__)"
 two-key --help
 ```
 
-TestPyPI and PyPI do not share projects. Uploading `0.7.0` to TestPyPI
-does not consume `0.7.0` on PyPI. Uploading `0.7.0` twice to the same
-index fails.
+TestPyPI and PyPI do not share projects. Uploading a version to TestPyPI
+does not consume that version on PyPI. Uploading one version twice to the
+same index fails. `0.7.0` and `0.7.1` are already on PyPI, so this upload
+is `0.7.2`.
 
 ### PyPI
 
@@ -138,7 +138,7 @@ Repeat the pending publisher on the real index.
 5. Confirm `https://pypi.org/project/two-key/` and then:
 
 ```bash
-pip install "two-key[yaml]==0.7.0"
+pip install "two-key[yaml]==0.7.2"
 ```
 
 The pending publisher becomes a trusted publisher on the project after

@@ -74,8 +74,8 @@ pinned in `.github/workflows/tests.yml`, then `uv sync --locked --no-build
 dependency range changes, regenerate `uv.lock` with that same uv and commit
 it. The lock is not a consumer pin: a git install still uses the ranges.
 
-Version 0.7.0 is on PyPI. Tag `v0.7.0` is not moved. Install with
-`pip install "two-key[yaml]==0.7.0"` (the `mcp` extra for the proxy).
+Version 0.7.2 is on PyPI. Tag `v0.7.0` is not moved. Install with
+`pip install "two-key[yaml]==0.7.2"` (the `mcp` extra for the proxy).
 The release steps are [PYPI.md](PYPI.md). A checkout install, above, is
 for working in this repository.
 

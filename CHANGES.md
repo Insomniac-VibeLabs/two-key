@@ -114,6 +114,7 @@
 - [Release v0.7.0: the SIEM export, the agent-account check — 2026-10-16](#release-v070-the-siem-export-the-agent-account-check--2026-10-16)
 - [PyPI packaging on the PyPI branch — 2026-10-16](#pypi-packaging-on-the-pypi-branch--2026-10-16)
 - [0.7.1 — 2026-10-17](#071--2026-10-17)
+- [0.7.2 — 2026-10-17](#072--2026-10-17)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3856,3 +3857,10 @@ Diagram pictures only. No application code changed. The Mermaid diagrams
 in the README, ROADMAP, HOWTO, CONNECTING, JUDGES_AND_QUORUM, SCANNERS,
 and SIEM are the exported PNG images. `pyproject.toml`, `two_key.__version__`,
 and `uv.lock` are `0.7.1`.
+
+## 0.7.2 — 2026-10-17
+
+Documentation only. No application behavior changed. The install lines and
+the "current package" sentences name `0.7.2`. `0.7.0` stays the release
+that added the SIEM export, and tag `v0.7.0` is not moved. `pyproject.toml`,
+`two_key.__version__`, and `uv.lock` are `0.7.2`.
