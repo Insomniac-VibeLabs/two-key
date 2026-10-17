@@ -277,7 +277,10 @@ flowchart TD
 
   authorize --> early{"Early deny?<br/>malformed / size<br/>agent_declined<br/>file limits"}
   early -->|yes| ledger["Encrypted<br/>Ledger"]
-  early -->|no| derive["Derive fields<br/>(optional<br/>AV/DLP scan)"]
+  early -->|no| derive["Derive fields"]
+
+  derive -.->|"optional"| hook["AV/DLP<br/>Hook"]
+  hook -.-> derive
 
   derive --> pathA["Path A<br/>Policy VM"]
   bytecode --> pathA
@@ -295,8 +298,8 @@ flowchart TD
   pathB --> ledger
   skipped --> ledger
 
-  gate -->|deny| ledger
-  gate -->|allow| token["Single-Use<br/>Capability<br/>Token"]
+  gate -->|no| ledger
+  gate -->|yes| token["Single-Use<br/>Capability<br/>Token"]
 
   token --> gateway["Tool<br/>Gateway"]
   gateway -->|"verify"| tool["Registered<br/>Tool"]
