@@ -50,7 +50,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key`, import name `two_key`,
-version `0.7.0`, tag `v0.7.0` on `main`. Not on PyPI.
+version `0.7.0`, tag `v0.7.0` on `main`. Not uploaded to PyPI. The `PyPI` branch prepares registration (docs/PYPI.md) and does not change this version.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
@@ -76,7 +76,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0) |
 
-Git install:  
+Git install, until the upload in docs/PYPI.md:  
 `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"`
 
 ## Tests and docs
@@ -86,7 +86,7 @@ Git install:
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `docs/SIEM.md`, `CHANGES.md`, `SECURITY.md`,
+  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
 - When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
   in the same release.

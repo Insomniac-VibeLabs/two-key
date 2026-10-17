@@ -112,6 +112,7 @@
 - [`siem-verify` checks the whole event, and a cursor that cannot be read says so — 2026-10-16](#siem-verify-checks-the-whole-event-and-a-cursor-that-cannot-be-read-says-so--2026-10-16)
 - [SonarCloud findings on the 0.7.0 code — 2026-10-16](#sonarcloud-findings-on-the-070-code--2026-10-16)
 - [Release v0.7.0: the SIEM export, the agent-account check — 2026-10-16](#release-v070-the-siem-export-the-agent-account-check--2026-10-16)
+- [PyPI packaging on the PyPI branch — 2026-10-16](#pypi-packaging-on-the-pypi-branch--2026-10-16)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3797,3 +3798,35 @@ detail.
 - Maintainers: add the macOS and Windows checks to `main`'s branch
   protection, and delete the stale `.github/workflows/codeql.yml:analyze`
   code-scanning configuration.
+
+## PyPI packaging on the PyPI branch — 2026-10-16
+
+Packaging only, on the `PyPI` branch. No application code changed.
+`pyproject.toml` version and `two_key.__version__` stay `0.7.0`. Tag
+`v0.7.0` is not moved. Nothing was uploaded. The name `two-key` was
+unregistered on pypi.org and test.pypi.org on this date.
+
+- `pyproject.toml` now carries the fields an index page needs: the README
+  as the long description, the Apache-2.0 SPDX license and `LICENSE`,
+  authors, keywords, classifiers, and project URLs (documentation,
+  issues, changelog, release process, security). Dependencies, extras,
+  the `two-key` script, and the version are the same.
+- `MANIFEST.in` still grafts `examples`, and also ships the license and
+  the operator docs in the source distribution. The wheel is still only
+  the `two_key` package. Key-file names (`*.pem`, `*.witness`) are
+  excluded from the source distribution.
+- `.github/workflows/pypi-publish.yml` builds the sdist and wheel, runs
+  `twine check --strict`, writes a CycloneDX SBOM as a workflow artifact,
+  and uploads with trusted publishing (no token). A manual run defaults
+  to TestPyPI. A tag push targets PyPI only when the tag equals the
+  version in `pyproject.toml`. docs/PYPI.md is the procedure.
+- `.gitignore` ignores `.pypirc`.
+- Docs that say where the package stands name this preparation and still
+  say it is not on PyPI: README, HOWTO, FIT, ROADMAP, CONTRIBUTING,
+  SECURITY, AGENTS.md, and llms.txt. Past "not published" notes in this
+  file are unchanged.
+- Two DeepSource `SCT-A000` hits in docs/HOWTO.md are false positives:
+  the optional witness public-key path `/etc/two-key/witness.pub.pem` in
+  the proxy example, and the `load_public_key(...)` call on that same
+  public key. Both lines now carry `skipcq: SCT-A000`. Nothing else is
+  excluded from secret detection.

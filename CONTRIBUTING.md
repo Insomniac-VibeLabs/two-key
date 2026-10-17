@@ -20,7 +20,7 @@ shipped in 0.3.0 (three passphrase bundles, not a seed phrase).
 Update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`, `docs/FIT.md`,
 `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`, `docs/SCOPE.md`, `CHANGES.md`,
 `SECURITY.md`, `CONTRIBUTING.md`, `AGENTS.md`, `llms.txt`,
-`docs/JUDGES_AND_QUORUM.md`, and, for a new connection or hook,
+`docs/JUDGES_AND_QUORUM.md`, and `docs/PYPI.md`, and, for a new connection or hook,
 `docs/CONNECTING.md` when a claim changes.
 When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
 in the same release.
@@ -46,3 +46,8 @@ loopback and stops it (the SIEM sink tests do this, with a throwaway
 certificate authority from `tests/tls.py`). An integration that needs a real
 product, such as the Elastic example under `examples/siem/`, belongs in a
 manual, non-required workflow, never in the suite.
+
+Publishing is [docs/PYPI.md](docs/PYPI.md), on the `PyPI` branch. Do not
+put a PyPI token in the repository or in a GitHub secret. The workflow
+there uses trusted publishing. Do not move tag `v0.7.0` to point at a
+packaging commit.

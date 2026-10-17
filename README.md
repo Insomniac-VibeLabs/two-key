@@ -3,7 +3,7 @@
 **AI agent authorization and MCP gateway — dual-path policy + judge approval, single-use capability tokens, and an encrypted ledger.**
 
 <p align="center">
-  <img src="docs/images/two-key-banner.png" alt="Two-Key — Authorization and execution control for AI agents">
+  <img src="https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/PyPI/docs/images/two-key-banner.png" alt="Two-Key — Authorization and execution control for AI agents">
 </p>
 
 **Two independent keys must turn before an AI agent can act.**
@@ -93,7 +93,9 @@ on it.
 
 ## Quick start
 
-Install the 0.7.0 release from git (it is not on PyPI yet):
+Install the 0.7.0 release from git. The `PyPI` branch is prepared for
+registration ([docs/PYPI.md](docs/PYPI.md)) but nothing has been uploaded, so
+`pip install two-key` does not work yet:
 
 ```bash
 pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
@@ -172,6 +174,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [ROADMAP.md](ROADMAP.md) | The path to 1.0 |
 | [CHANGES.md](CHANGES.md) | Every change, with upgrade notes |
 | [SECURITY.md](SECURITY.md) | How to report a vulnerability |
+| [docs/PYPI.md](docs/PYPI.md) | Registering the package name and publishing a release |
 
 ## Components
 
@@ -627,8 +630,11 @@ flowchart LR
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). It is not on PyPI yet. Install a tagged release
-from git:
+three (HOWTO "Platforms"). It is not on PyPI yet. The `PyPI` branch carries
+the metadata, the source-distribution manifest, and a trusted-publishing
+workflow for a later upload ([docs/PYPI.md](docs/PYPI.md)); version 0.7.0
+is unchanged, and tag `v0.7.0` is not moved. Until that upload, install a
+tagged release from git:
 
 ```bash
 pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
@@ -725,6 +731,10 @@ that file, not a description of the file. This table is the description.
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, custom fields, judges, agents, and the Elastic SIEM example |
+| `pyproject.toml` | Package name `two-key`, version, dependencies, extras, and the `two-key` command |
+| `MANIFEST.in` | Docs and examples included in the source distribution. The wheel is only `two_key` |
+| `docs/PYPI.md` | How to register the name and publish with trusted publishing, without a token in the repo |
+| `.github/workflows/pypi-publish.yml` | Build, metadata check, SBOM, and the tokenless upload. On the `PyPI` branch |
 
 ## History and license
 

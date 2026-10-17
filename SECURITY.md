@@ -146,3 +146,13 @@ blocks a retry; a tool exception does not.
 Code scanning in CI is `.github/workflows/security.yml` (bandit). CodeQL is
 `.github/workflows/codeql.yml`. It uploads results when code scanning is
 enabled for this repository.
+
+## Publishing
+
+The `PyPI` branch can upload the package without a long-lived token
+(docs/PYPI.md). The workflow asks PyPI for a short-lived credential from
+GitHub's identity token, and each uploaded file gets a Sigstore
+attestation. A PyPI token in the repository, in a GitHub secret, or in a
+committed `.pypirc` is not part of that design. Report a release that was
+uploaded from somewhere else, or a file whose attestation does not name
+this repository's `pypi-publish.yml` workflow, through the Security tab.

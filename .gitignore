@@ -9,3 +9,4 @@ ledger/
 *.egg-info/
 build/
 dist/
+.pypirc

@@ -1,2 +1,16 @@
 # The source distribution carries the examples one test reads (tests/test_problem_f.py).
 graft examples
+
+# Operator docs and the license. The wheel still contains only the two_key package.
+include README.md
+include LICENSE
+include CHANGES.md
+include SECURITY.md
+include CONTRIBUTING.md
+include ROADMAP.md
+include AGENTS.md
+include llms.txt
+include pyproject.toml
+graft docs
+global-exclude *.pem
+global-exclude *.witness

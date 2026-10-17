@@ -74,6 +74,14 @@ pinned in `.github/workflows/tests.yml`, then `uv sync --locked --no-build
 dependency range changes, regenerate `uv.lock` with that same uv and commit
 it. The lock is not a consumer pin: a git install still uses the ranges.
 
+The distribution name `two-key` is not on PyPI yet. The `PyPI` branch is
+ready to register it: metadata, the source distribution, and a
+trusted-publishing workflow, with no token stored in the repository.
+Version 0.7.0 and tag `v0.7.0` stay where they are. The steps, and the
+commands that will work only after the upload, are [PYPI.md](PYPI.md).
+Until then, install from a checkout as above, or install a tagged release
+from git as the README describes. `pip install two-key` does not.
+
 ### Platforms
 
 Two-Key runs on Linux, macOS, and Windows, with Python 3.10 to 3.12; CI
@@ -1747,7 +1755,7 @@ constitution: constitution.signed.json
 keys: {principal: keys/principal.pem}
 ledger: ledger
 judges: judges.yaml
-witness_public_key: /etc/two-key/witness.pub.pem   # optional; kept where the ledger's writer cannot change it
+witness_public_key: /etc/two-key/witness.pub.pem   # optional; kept where the ledger's writer cannot change it  skipcq: SCT-A000
 agent_session_env: AGENT_API_KEY                   # the agent's session; required with cloud judges
 agent_id: billing-agent                            # ledger metadata, not trust
 allow_unresolved_identity: false
@@ -2256,7 +2264,7 @@ two-key authorize ... --witness-public-key /etc/two-key/witness.pub.pem
 
 ```python
 from two_key.keys import load_public_key
-ledger = Ledger("ledger", key, witness_public_key=load_public_key("/etc/two-key/witness.pub.pem"))
+ledger = Ledger("ledger", key, witness_public_key=load_public_key("/etc/two-key/witness.pub.pem"))  # skipcq: SCT-A000
 ```
 
 With it, a new ledger needs that witness key already in place
