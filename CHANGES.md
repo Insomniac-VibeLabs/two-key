@@ -3825,3 +3825,7 @@ unregistered on pypi.org and test.pypi.org on this date.
   say it is not on PyPI: README, HOWTO, FIT, ROADMAP, CONTRIBUTING,
   SECURITY, AGENTS.md, and llms.txt. Past "not published" notes in this
   file are unchanged.
+- On the `testpypi` branch, the Mermaid diagrams in the README, ROADMAP,
+  HOWTO, CONNECTING, JUDGES_AND_QUORUM, SCANNERS, and SIEM are PNG images.
+  PyPI does not run Mermaid. The diagram source is kept in
+  `docs/images/diagrams/src/`.

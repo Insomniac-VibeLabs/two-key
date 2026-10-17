@@ -1,0 +1,16 @@
+flowchart TD
+  call["Call to a scanned tool"] --> scan["Two-Key sends the parts to the scanner"]
+  scan --> answer{"What came back?"}
+  answer -->|"timeout, exception,<br/>invalid answer"| unavailable["unavailable"]
+  answer -->|"could not finish"| flagged["flagged"]
+  answer -->|"found something"| flagged
+  answer -->|"nothing found"| clean["clean"]
+  clean --> both["Path A and Path B decide as usual"]
+  flagged --> fstance{"Signed stance"}
+  fstance -->|"default or strict"| deny["Path A denies: rule_denied:scan<br/>judges still vote, call is denied"]
+  fstance -->|"monitor"| judgesflag["Judges see flagged,<br/>without the arguments"]
+  judgesflag --> both
+  unavailable --> ustance{"Signed stance"}
+  ustance -->|"strict"| deny
+  ustance -->|"default or monitor"| judgesdown["Judges see unavailable"]
+  judgesdown --> both

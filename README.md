@@ -132,18 +132,7 @@ keys before the server sees it. Facts such as a purchase-order match come
 from your own hook, never from the agent. A refused call comes back to the
 agent as a tool error with a reason code.
 
-```mermaid
-flowchart LR
-  host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
-  subgraph proxy["two-key mcp-proxy, its own OS user"]
-    tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk
-  end
-  tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
-  up --> sor["System of record"]
-  hooks -. "look facts up" .-> sor
-```
+![The agent host sends tools/list and tools/call to two-key mcp-proxy. The proxy runs both keys, then calls the upstream MCP server.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/agent-host-to-proxy.png)
 
 `two-key mcp-draft-specs` drafts the tool specs from the server's own
 schemas for you to review and sign. The walkthrough, with a worked
@@ -273,47 +262,7 @@ calls the gateway. The caller runs the agent. Two-Key then runs both paths
 once the call is well-formed and within limits.
 Only the gateway runs a tool.
 
-```mermaid
-flowchart TD
-  constitution["Signed<br/>Constitution"] --> compile["Compile"]
-  compile --> bytecode["Path A<br/>Policy"]
-  compile --> judgeText["Path B<br/>Judges"]
-
-  instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
-  agent -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>Authorize"]
-
-  authorize --> early{"Early deny?<br/>malformed / size<br/>agent_declined<br/>file limits"}
-  early -->|yes| ledger["Encrypted<br/>Ledger"]
-  early -->|no| derive["Derive fields"]
-
-  derive -.->|"optional"| hook["AV/DLP<br/>Hook"]
-  hook -.-> derive
-
-  derive --> pathA["Path A<br/>Policy VM"]
-  bytecode --> pathA
-
-  derive --> pbCheck{"derive_failed:<br/>and no<br/>tool_args_on_<br/>derive_deny?"}
-  pbCheck -->|yes| skipped["Path B<br/>skipped"]
-  pbCheck -->|no| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
-  judgeText --> pathB
-
-  pathA --> gate{"Both paths<br/>allow?"}
-  pathB --> gate
-  skipped --> gate
-
-  pathA --> ledger
-  pathB --> ledger
-  skipped --> ledger
-
-  gate -->|no| ledger
-  gate -->|yes| token["Single-Use<br/>Capability<br/>Token"]
-
-  token --> gateway["Tool<br/>Gateway"]
-  gateway -->|"verify"| tool["Registered<br/>Tool"]
-  gateway --> ledger
-
-  ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
-```
+![A signed constitution is compiled and checked. A tool call runs Path A and Path B. A single-use token is minted only if both pass, and the gateway runs the tool once.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/authorize-flow.png)
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
 It does not receive Path A bytecode, judge credentials, or tool
@@ -420,60 +369,7 @@ tool arguments, the action claim, or a structured proposal nested more than
 
 One call, in code order:
 
-```mermaid
-sequenceDiagram
-  participant Caller
-  participant Agent as Monitored agent
-  participant TwoKey
-  participant PathA as Path A VM
-  participant PathB as Path B quorum
-  participant Judge as Judges
-  participant Ledger
-  participant Gateway
-  participant Tool
-
-  Caller->>Agent: instruction, constitution prose, opt-in vocabulary (syntax only)
-  Agent-->>Caller: JSON proposal or decline, no tool call
-  Caller->>TwoKey: proposal and agent_session
-  alt agent declined
-    TwoKey->>Ledger: decision agent_declined, with the decline reason
-    TwoKey-->>Caller: deny, neither path runs, no token
-  end
-  alt malformed or over a size limit
-    Note over TwoKey: malformed_proposal, proposal_too_large,<br/>action_too_large, malformed_action,<br/>args_too_large, invalid_call, file limits
-    TwoKey->>Ledger: decision with size and digest only
-    TwoKey-->>Caller: deny, neither path runs
-  end
-  TwoKey->>PathA: structured fields (after optional scan / derive)
-  PathA-->>TwoKey: allow or deny
-  alt derive_failed and not tool_args_on_derive_deny
-    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed)
-    TwoKey->>Ledger: proposal, path_a, path_b skipped
-  else
-    TwoKey->>PathB: action record and binding hashes
-    Note over PathB: args omitted on derive deny unless tool_args_on_derive_deny
-    Note over PathB: scan flag can also withhold args/proposal
-    PathB->>Judge: score in parallel, own credentials
-    Judge-->>PathB: yes, no, or abstain
-    PathB-->>TwoKey: quorum pass or deny
-    TwoKey->>Ledger: proposal, path_a, path_b
-  end
-  alt both allow
-    TwoKey->>Ledger: capability_issued, then decision
-    TwoKey-->>Caller: single-use token
-    Caller->>Gateway: token, tool, arguments
-    Note over Gateway: same process as TwoKey,<br/>verifies with capability public key only
-    opt authenticated token refused
-      Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
-    end
-    Gateway->>Ledger: redemption_started
-    Gateway->>Tool: registered function
-    Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
-  else either path denies or skipped
-    TwoKey->>Ledger: decision, no token
-    TwoKey-->>Caller: deny
-  end
-```
+![Sequence: the monitored agent proposes a call, Two-Key runs Path A and the judges, mints a single-use token only if both pass, and the gateway invokes the tool once.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/authorize-sequence.png)
 
 The token is signed by the capability key (`<ledger>.capability/capability.pem`,
 outside the ledger directory). It is bound to the tool, the argument hash,
@@ -609,14 +505,7 @@ It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
 
-```mermaid
-flowchart LR
-  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
-  r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
-  r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
-  r07 --> r10["1.0.0<br/>Review and release"]
-  r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
-```
+![Version line: 0.4.0, 0.5.0, and 0.6.0 are released; 0.7.0 ledger export for a SIEM is released; 1.0.0 is the review and release; after 1.0 comes PKI, post-quantum, FIPS mode, and a local GUI.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/version-line.png)
 
 | Version | What | Status |
 | --- | --- | --- |

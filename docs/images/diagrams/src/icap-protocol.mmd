@@ -1,0 +1,15 @@
+sequenceDiagram
+  participant TK as Two-Key (IcapInspector)
+  participant P as ICAP service
+  loop each part, one connection each
+    TK->>P: REQMOD with Allow 204, X-Two-Key-Tool, X-Two-Key-Part
+    TK->>P: encapsulated HTTP POST, body chunked, no preview
+    alt nothing found
+      P-->>TK: 204 No Content
+    else found something
+      P-->>TK: 403, or 200 with an infection or violation header, or a block page, or a changed body
+    else error
+      P-->>TK: any other status, or no answer in time
+    end
+  end
+  Note over TK: clean, flagged, unavailable, combined over the parts

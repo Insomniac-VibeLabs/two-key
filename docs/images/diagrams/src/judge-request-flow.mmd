@@ -1,0 +1,12 @@
+flowchart TD
+    A["Authorization request"] --> B["Build normalized action record"]
+    B --> C["Prepare configured judge input"]
+    C --> D["Call judge adapter"]
+    D --> E{"Usable ballot?"}
+    E -->|Yes| F{"Vote"}
+    F -->|YES| G["One affirmative ballot"]
+    F -->|NO| H["One negative ballot"]
+    E -->|No| I["Abstention"]
+    G --> J["Quorum evaluation"]
+    H --> J
+    I --> J

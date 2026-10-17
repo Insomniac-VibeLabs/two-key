@@ -1,0 +1,11 @@
+flowchart TD
+    A["Well-formed request within limits"] --> B["Path A: deterministic policy VM"]
+    A --> C["Path B: configured judges and quorum"]
+    B --> D{"Path A allows?"}
+    C --> E{"Path B passes?"}
+    D -->|No| F["Deny authorization"]
+    E -->|No| F
+    D -->|Yes| G{"Any other deny condition?"}
+    E -->|Yes| G
+    G -->|Yes| F
+    G -->|No| H["Capability may be issued"]
