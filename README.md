@@ -5,6 +5,19 @@
 
 **Two independent keys must turn before an AI agent can act.**
 
+## 🎯 The Problem
+
+AI agents can be given permission to use a tool without being given
+authority to perform every consequential action that tool can perform.
+
+Traditional tool permissions answer:
+
+> "Can this agent call this tool?"
+
+Two-Key asks a different question:
+
+> "Is this specific action authorized to execute?"
+
 Two-Key is an authorization layer for AI agents that use tools. Before a
 tool call runs (a payment, an email, a change to a record), two independent
 checks must both say yes:
