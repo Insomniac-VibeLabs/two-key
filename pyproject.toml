@@ -15,11 +15,17 @@ authors = [
 ]
 keywords = [
     "ai-agents",
+    "agent-security",
     "authorization",
+    "agent-authorization",
     "policy-engine",
     "capability-tokens",
+    "tool-security",
     "mcp",
-    "agent-security",
+    "mcp-security",
+    "ai-security",
+    "llm-security",
+    "zero-trust",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
