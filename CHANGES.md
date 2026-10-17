@@ -3853,5 +3853,5 @@ unregistered on pypi.org and test.pypi.org on this date.
 
 Diagram pictures only. No application code changed. The Mermaid diagrams
 in the README, ROADMAP, HOWTO, CONNECTING, JUDGES_AND_QUORUM, SCANNERS,
-and SIEM are the exported PNG images. `pyproject.toml` and
-`two_key.__version__` are `0.7.1`.
+and SIEM are the exported PNG images. `pyproject.toml`, `two_key.__version__`,
+and `uv.lock` are `0.7.1`.
