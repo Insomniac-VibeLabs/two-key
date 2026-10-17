@@ -278,10 +278,10 @@ flowchart TD
   authorize --> pathA["Path A<br/>Policy VM"]
 
   authorize -.->|"optional"| scanner["AV/DLP<br/>Hook"]
-  scanner -->|"scan result"| scanfact["Trusted<br/>Scan Fact"]
+  scanner -.->|"scan result"| scanfact["Trusted<br/>Scan Fact"]
 
-  scanfact --> pathB["Path B — Judges<br/>≥1; configurable quorum"]
-  scanfact --> ledger["Encrypted<br/>Ledger"]
+  scanfact -.-> pathB["Path B — Judges<br/>≥1; configurable quorum"]
+  scanfact -.-> ledger["Encrypted<br/>Ledger"]
 
   authorize --> pathB
   judgeText --> pathB
