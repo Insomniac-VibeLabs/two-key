@@ -35,18 +35,7 @@ Both carry the same allowlisted fields. Neither can change a decision.
 
 The ledger stays the record. The SIEM gets a copy.
 
-```mermaid
-flowchart LR
-  auth["authorize / gateway"] -- "append" --> ledger[("Encrypted ledger<br/>(the record)")]
-  ledger -- "after the entry is on disk" --> filter["Allowlist<br/>no argument values"]
-  filter --> queue["Bounded queue"]
-  queue --> sender["Sender thread"]
-  sender -- "udp / tcp / tls" --> syslog["Syslog collector"]
-  sender -- "https POST" --> hook["Webhook"]
-  ledger -- "two-key siem-export" --> file["JSON Lines or CEF file"]
-  file -- "two-key siem-verify" --> ledger
-  cursor["Cursor: last seq delivered"] -. "replays after an outage" .-> sender
-```
+![Authorization appends to the encrypted ledger, which fans out to syslog, an HTTPS webhook, and a verified file export. A refused token is counted outside the ledger.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/siem-export.png)
 
 Three properties hold whatever you configure:
 

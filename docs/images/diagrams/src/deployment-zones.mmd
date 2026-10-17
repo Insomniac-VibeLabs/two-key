@@ -1,0 +1,18 @@
+flowchart LR
+  subgraph agentzone["Agent zone: agent user, container, or machine"]
+    agent["Monitored agent<br/>and its host"]
+  end
+  subgraph tkzone["Two-Key zone: two-key user"]
+    tk["Two-Key<br/>Path A, Path B, ledger, gateway"]
+    trusted["Keys, ledger, constitution,<br/>proxy.yaml, judges.yaml,<br/>hook code, scanner config"]
+  end
+  subgraph toolzone["Tool zone: its own user"]
+    tool["Tool or upstream server<br/>holds the tool credential"]
+  end
+  agent -- "the only door:<br/>a tool call" --> tk
+  tk -- "after both keys" --> tool
+  tool --> sor["System of record"]
+  agent -. "closed: no credential,<br/>no network route" .-> sor
+  agent -. "closed: cannot read<br/>or write" .-> trusted
+  tk -. "verdict" .-> scanner["Scanner"]
+  tk -. "record" .-> judges["Judges"]

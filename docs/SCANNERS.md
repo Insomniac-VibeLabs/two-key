@@ -59,21 +59,7 @@ key, whatever the stance.
 
 ## Where the scanner sits
 
-```mermaid
-flowchart LR
-  agent["Monitored agent<br/>untrusted"] -- "tool call<br/>name and arguments,<br/>files included" --> tk
-  subgraph process["The Two-Key process (proxy, guard, or library)"]
-    tk["TwoKey.authorize"] -- "1. call text, files,<br/>proposal" --> scanner["Scanner adapter<br/>clamd, ICAP, command,<br/>or Python"]
-    scanner -- "2. clean, flagged,<br/>or unavailable" --> tk
-    tk -- "3. form with scan = verdict" --> pathA["Path A<br/>signed rules"]
-    tk -- "4. record, file digests,<br/>trusted scan section" --> pathB["Path B<br/>judges"]
-    tk -- "5. token binds verdict<br/>and file digests" --> gw["Gateway<br/>re-checks files"]
-    tk --> ledger["Encrypted ledger<br/>digests and verdict,<br/>never content"]
-    gw --> ledger
-  end
-  scanner <-. "your product" .-> product["clamd, ICAP server,<br/>or command"]
-  gw -- "6. arguments the spec passes" --> tool["Tool"]
-```
+![The monitored agent reaches the upstream server only through Two-Key. The scanner runs on Two-Key's side. Keys and the ledger stay there.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/scanner-boundary.png)
 
 The scan runs inside `authorize`, after the call reads under its signed spec
 and before Path A. A call that cannot be read is denied before any scan, and
@@ -124,30 +110,7 @@ whether, what, or how a call is scanned.
 The agent never talks to Path A or Path B. It sends one tool call, and
 Two-Key builds what each party receives from it.
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant Ag as Monitored agent
-  participant TK as Two-Key (proxy, guard, or library)
-  participant S as Scanner
-  participant A as Path A (signed rules)
-  participant B as Path B (judges)
-  participant G as Gateway
-  participant T as Tool
-  Ag->>TK: tools/call send_email with to, body, attachments[0].content as base64
-  TK->>TK: copy, size check, read the call under the signed spec
-  TK->>TK: read each declared file within its max_bytes (unreadable or too large: deny here)
-  TK->>S: argument text (each file as its digest), each file decoded, proposal text
-  S-->>TK: clean, flagged, or unavailable, with categories and a label
-  TK->>A: the form, with scan set to the verdict
-  TK->>B: constitution, action record (each file as digest and size), trusted scan section
-  A-->>TK: allow or deny
-  B-->>TK: ballots
-  TK->>G: token binding the argument bytes, the verdict, and each file's SHA-256
-  G->>G: hash each file again (no second scan)
-  G->>T: the arguments the spec passes, file unchanged
-  T-->>Ag: the tool's result (a deny returns a reason code only)
-```
+![For a scanned tool, Two-Key sends the declared parts to the scanner, records a verdict, then continues to Path A and Path B.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/scan-sequence.png)
 
 A file travels as an ordinary argument from every entry point:
 
@@ -244,24 +207,7 @@ hard_rules:
   # monitor: no rule; the verdict is recorded and shown to the judges
 ```
 
-```mermaid
-flowchart TD
-  call["Call to a scanned tool"] --> scan["Two-Key sends the parts to the scanner"]
-  scan --> answer{"What came back?"}
-  answer -->|"timeout, exception,<br/>invalid answer"| unavailable["unavailable"]
-  answer -->|"could not finish"| flagged["flagged"]
-  answer -->|"found something"| flagged
-  answer -->|"nothing found"| clean["clean"]
-  clean --> both["Path A and Path B decide as usual"]
-  flagged --> fstance{"Signed stance"}
-  fstance -->|"default or strict"| deny["Path A denies: rule_denied:scan<br/>judges still vote, call is denied"]
-  fstance -->|"monitor"| judgesflag["Judges see flagged,<br/>without the arguments"]
-  judgesflag --> both
-  unavailable --> ustance{"Signed stance"}
-  ustance -->|"strict"| deny
-  ustance -->|"default or monitor"| judgesdown["Judges see unavailable"]
-  judgesdown --> both
-```
+![Scan verdicts: clean continues; flagged continues and tells the judges; unavailable stops; a limit or an unreadable file is denied before either path.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/scan-verdict.png)
 
 | Verdict | default | strict | monitor |
 | --- | --- | --- | --- |
@@ -372,20 +318,7 @@ scan:
 In code: `Scanner(ClamdInspector("127.0.0.1:3310"), files=...)` from
 `two_key.scan` and `two_key.scanners`.
 
-```mermaid
-sequenceDiagram
-  participant TK as Two-Key (ClamdInspector)
-  participant C as clamd
-  TK->>C: zVERSION (once, then cached)
-  C-->>TK: ClamAV 1.4.1/27400/date
-  loop each part, one connection each
-    TK->>C: zINSTREAM
-    TK->>C: 4-byte length and up to 64 KiB of data, repeated
-    TK->>C: a zero length (end of stream)
-    C-->>TK: stream: OK, or stream: NAME FOUND
-  end
-  Note over TK: the threat name is never kept
-```
+![Two-Key talks to clamd with zINSTREAM and a shutdown. clamd answers OK or FOUND.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/clamd-protocol.png)
 
 ### Run clamd
 
@@ -493,23 +426,7 @@ scan:
   label: Vendor DLP                    # optional; else the product's Server header
 ```
 
-```mermaid
-sequenceDiagram
-  participant TK as Two-Key (IcapInspector)
-  participant P as ICAP service
-  loop each part, one connection each
-    TK->>P: REQMOD with Allow 204, X-Two-Key-Tool, X-Two-Key-Part
-    TK->>P: encapsulated HTTP POST, body chunked, no preview
-    alt nothing found
-      P-->>TK: 204 No Content
-    else found something
-      P-->>TK: 403, or 200 with an infection or violation header, or a block page, or a changed body
-    else error
-      P-->>TK: any other status, or no answer in time
-    end
-  end
-  Note over TK: clean, flagged, unavailable, combined over the parts
-```
+![Two-Key opens a socket to the ICAP service, sends REQMOD, and reads the ICAP response.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/icap-protocol.png)
 
 ### What Two-Key sends
 

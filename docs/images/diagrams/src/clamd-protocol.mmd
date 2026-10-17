@@ -1,0 +1,12 @@
+sequenceDiagram
+  participant TK as Two-Key (ClamdInspector)
+  participant C as clamd
+  TK->>C: zVERSION (once, then cached)
+  C-->>TK: ClamAV 1.4.1/27400/date
+  loop each part, one connection each
+    TK->>C: zINSTREAM
+    TK->>C: 4-byte length and up to 64 KiB of data, repeated
+    TK->>C: a zero length (end of stream)
+    C-->>TK: stream: OK, or stream: NAME FOUND
+  end
+  Note over TK: the threat name is never kept

@@ -30,14 +30,7 @@ promise: the order may change, and version numbers are targets, not dates.
 
 ## The path to 1.0
 
-```mermaid
-flowchart LR
-  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
-  r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
-  r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
-  r07 --> r10["1.0.0<br/>Review and release"]
-  r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
-```
+![Version line: 0.4.0, 0.5.0, and 0.6.0 are released; 0.7.0 ledger export for a SIEM is released; 1.0.0 is the review and release; after 1.0 comes PKI, post-quantum, FIPS mode, and a local GUI.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/version-line.png)
 
 | Version | What | Status |
 | --- | --- | --- |

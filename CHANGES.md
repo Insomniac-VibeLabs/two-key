@@ -3830,3 +3830,7 @@ unregistered on pypi.org and test.pypi.org on this date.
   the proxy example, and the `load_public_key(...)` call on that same
   public key. Both lines now carry `skipcq: SCT-A000`. Nothing else is
   excluded from secret detection.
+- On the `testpypi` branch, the Mermaid diagrams in the README, ROADMAP,
+  HOWTO, CONNECTING, JUDGES_AND_QUORUM, SCANNERS, and SIEM are PNG images
+  of those same diagrams. PyPI does not run Mermaid. The diagram source is
+  `docs/images/diagrams/src/`.

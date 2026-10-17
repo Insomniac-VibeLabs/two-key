@@ -1,0 +1,9 @@
+flowchart TD
+  model["Model<br/>untrusted text"] -- "proposed call:<br/>a tool name and arguments" --> app["Your agent loop<br/>trusted code"]
+  app -- "signed, guarded names only" --> guard["Guard<br/>authorize, then gateway.invoke"]
+  hooks["Fact hooks<br/>look facts up by id"] --> guard
+  guard -- "after both keys" --> fn["pay_vendor<br/>loads its own credential"]
+  fn --> api["Billing API"]
+  model -. "never offered" .-> raw["The raw pay_vendor function"]
+  model -. "never offered" .-> general["Shell, code runner,<br/>HTTP, file, or browser tool"]
+  model -. "never executed" .-> evalx["eval or a shell built<br/>from model text"]

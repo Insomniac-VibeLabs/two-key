@@ -1,0 +1,39 @@
+flowchart TD
+  constitution["Signed<br/>Constitution"] --> compile["Compile"]
+  compile --> bytecode["Path A<br/>Policy"]
+  compile --> judgeText["Path B<br/>Judges"]
+
+  instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
+  agent -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>Authorize"]
+
+  authorize --> early{"Early deny?<br/>malformed / size<br/>agent_declined<br/>file limits"}
+  early -->|yes| ledger["Encrypted<br/>Ledger"]
+  early -->|no| derive["Derive fields"]
+
+  derive -.->|"optional"| hook["AV/DLP<br/>Hook"]
+  hook -.-> derive
+
+  derive --> pathA["Path A<br/>Policy VM"]
+  bytecode --> pathA
+
+  derive --> pbCheck{"derive_failed:<br/>and no<br/>tool_args_on_<br/>derive_deny?"}
+  pbCheck -->|yes| skipped["Path B<br/>skipped"]
+  pbCheck -->|no| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
+  judgeText --> pathB
+
+  pathA --> gate{"Both paths<br/>allow?"}
+  pathB --> gate
+  skipped --> gate
+
+  pathA --> ledger
+  pathB --> ledger
+  skipped --> ledger
+
+  gate -->|no| ledger
+  gate -->|yes| token["Single-Use<br/>Capability<br/>Token"]
+
+  token --> gateway["Tool<br/>Gateway"]
+  gateway -->|"verify"| tool["Registered<br/>Tool"]
+  gateway --> ledger
+
+  ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]

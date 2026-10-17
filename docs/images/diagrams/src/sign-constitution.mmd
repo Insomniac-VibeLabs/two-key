@@ -1,0 +1,9 @@
+flowchart TD
+  prose["Prose<br/>constitution.md"] --> sign["sign-constitution<br/>one signature"]
+  rules["Hard rules<br/>hard_rules.yaml"] --> sign
+  specs["tool_specs<br/>inside hard_rules.yaml"] --> sign
+  sign --> envelope["Signed envelope<br/>prose + hard_rules + tool_specs<br/>+ signature"]
+  envelope --> load["verify_signed<br/>fail-closed on any change"]
+  load --> compiled["CompiledConstitution<br/>bytecode + tool_specs"]
+  compiled --> pathA["Path A Policy VM<br/>uses bytecode + derived fields"]
+  compiled --> pathB["Path B judges<br/>see constitution prose + normalized action record"]

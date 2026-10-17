@@ -50,26 +50,7 @@ separate account for the agent and a service account for Two-Key, with
 the same rules. The `two-key` user is a service account, not a standard
 user ([Run Two-Key as a service account](#run-two-key-as-a-service-account)).
 
-```mermaid
-flowchart LR
-  subgraph agentzone["Agent zone: agent user, container, or machine"]
-    agent["Monitored agent<br/>and its host"]
-  end
-  subgraph tkzone["Two-Key zone: two-key user"]
-    tk["Two-Key<br/>Path A, Path B, ledger, gateway"]
-    trusted["Keys, ledger, constitution,<br/>proxy.yaml, judges.yaml,<br/>hook code, scanner config"]
-  end
-  subgraph toolzone["Tool zone: its own user"]
-    tool["Tool or upstream server<br/>holds the tool credential"]
-  end
-  agent -- "the only door:<br/>a tool call" --> tk
-  tk -- "after both keys" --> tool
-  tool --> sor["System of record"]
-  agent -. "closed: no credential,<br/>no network route" .-> sor
-  agent -. "closed: cannot read<br/>or write" .-> trusted
-  tk -. "verdict" .-> scanner["Scanner"]
-  tk -. "record" .-> judges["Judges"]
-```
+![Agent zone and Two-Key zone. The agent reaches Two-Key only through two-key mcp-proxy. Keys and the ledger stay in the Two-Key zone.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/deployment-zones.png)
 
 ## Pick your route
 
@@ -124,26 +105,7 @@ starts the real server itself, as a third user, and hands it only calls
 that both keys allowed. The full worked example is in
 [HOWTO](HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).
 
-```mermaid
-flowchart LR
-  subgraph agentuser["agent user"]
-    host["Agent host<br/>MCP client"]
-  end
-  subgraph tkuser["two-key user"]
-    wrapper["run-proxy<br/>loads proxy.env"] --> proxy["two-key mcp-proxy<br/>Path A, Path B, gateway"]
-    secrets[("keys, ledger, constitution,<br/>proxy.yaml, judges.yaml,<br/>hook code, proxy.env")]
-    proxy --- secrets
-  end
-  subgraph upuser["mcp-billing user"]
-    up["Upstream MCP server<br/>BILLING_TOKEN only"]
-  end
-  host -- "sudo -n -u two-key run-proxy<br/>exact rule, no arguments" --> wrapper
-  proxy -- "after both keys<br/>sudo -n -u mcp-billing" --> up
-  up --> api["Billing API"]
-  host -. "closed: no token,<br/>firewall" .-> api
-  host -. "closed: not in<br/>the client's list" .-> up
-  host -. "closed: file<br/>permissions" .-> secrets
-```
+![Same machine. The agent user runs the MCP client. Two-Key runs as its own user, with keys and the ledger in that user's home.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/same-machine.png)
 
 1. **Three OS users.** `agent` runs the agent host. `two-key` runs the
    proxy and owns its keys, ledger, config, hook code, and secrets.
@@ -213,23 +175,7 @@ the agent. An agent host on another machine starts the proxy over SSH,
 which carries stdio. Everything in Route 1 stays as it is; SSH takes the
 place of the agent user's local `sudo`.
 
-```mermaid
-flowchart LR
-  subgraph agentmachine["Agent machine"]
-    host["Agent host<br/>MCP client"]
-  end
-  subgraph tkmachine["Two-Key machine"]
-    login["tk-agent<br/>SSH login, forced command"] -- "sudo -n -u two-key run-proxy<br/>exact rule, no arguments" --> proxy["two-key mcp-proxy<br/>Path A, Path B, gateway"]
-    secrets[("keys, ledger, constitution,<br/>proxy.yaml, judges.yaml,<br/>hook code, proxy.env")]
-    proxy --- secrets
-    proxy -- "after both keys" --> up["Upstream MCP server<br/>mcp-billing user"]
-  end
-  host -- "ssh: MCP over stdio" --> login
-  up --> api["Billing API"]
-  proxy -. "ballots" .-> judges["Judges"]
-  host -. "closed: no route" .-> api
-  host -. "closed: no route" .-> judges
-```
+![The agent is on another machine. Its host reaches Two-Key over SSH as user twokey, with a forced command of two-key mcp-proxy.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/remote-agent-ssh.png)
 
 1. **A login account for the agent, not `two-key`.** Make an account on
    the Two-Key machine, such as `tk-agent`, that plays the part of the
@@ -328,17 +274,7 @@ model's output is data; your code is trusted. See
 [HOWTO "The guard"](HOWTO.md#the-guard) and
 [HOWTO "Authorize from Python"](HOWTO.md#authorize-from-python).
 
-```mermaid
-flowchart TD
-  model["Model<br/>untrusted text"] -- "proposed call:<br/>a tool name and arguments" --> app["Your agent loop<br/>trusted code"]
-  app -- "signed, guarded names only" --> guard["Guard<br/>authorize, then gateway.invoke"]
-  hooks["Fact hooks<br/>look facts up by id"] --> guard
-  guard -- "after both keys" --> fn["pay_vendor<br/>loads its own credential"]
-  fn --> api["Billing API"]
-  model -. "never offered" .-> raw["The raw pay_vendor function"]
-  model -. "never offered" .-> general["Shell, code runner,<br/>HTTP, file, or browser tool"]
-  model -. "never executed" .-> evalx["eval or a shell built<br/>from model text"]
-```
+![Untrusted model text stays on the agent side of the proxy. Two-Key checks the proposed tool name and arguments.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/model-text-boundary.png)
 
 - **Register only guarded functions with your framework.** The model must
   be offered `pay_vendor` the guarded wrapper, never the raw function,
@@ -397,18 +333,7 @@ for that service to stop (a crash, a restart, an update) and take its port.
 Two-Key would then ask the agent's own program for a ballot, a verdict, or
 a fact.
 
-```mermaid
-sequenceDiagram
-  participant TK as Two-Key
-  participant AV as clamd on loopback port 3310
-  participant Fake as Agent's program
-  Note over AV: clamd crashes or restarts, so port 3310 is free
-  Fake->>Fake: listens on 127.0.0.1 port 3310
-  TK->>Fake: INSTREAM, the call's parts
-  Fake-->>TK: OK for every part
-  Note over TK: verdict clean for a call nothing scanned
-  Note over TK,Fake: With clamd on a Unix socket in its own directory, or the agent<br/>in its own network namespace, the agent cannot take the address
-```
+![Two-Key sends file bytes to clamd on localhost and reads a verdict. The file bytes are not written to the ledger.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/testpypi/docs/images/diagrams/clamd-loopback.png)
 
 Close it one of these ways:
 

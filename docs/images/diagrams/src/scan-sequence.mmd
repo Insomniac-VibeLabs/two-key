@@ -1,0 +1,22 @@
+sequenceDiagram
+  autonumber
+  participant Ag as Monitored agent
+  participant TK as Two-Key (proxy, guard, or library)
+  participant S as Scanner
+  participant A as Path A (signed rules)
+  participant B as Path B (judges)
+  participant G as Gateway
+  participant T as Tool
+  Ag->>TK: tools/call send_email with to, body, attachments[0].content as base64
+  TK->>TK: copy, size check, read the call under the signed spec
+  TK->>TK: read each declared file within its max_bytes (unreadable or too large: deny here)
+  TK->>S: argument text (each file as its digest), each file decoded, proposal text
+  S-->>TK: clean, flagged, or unavailable, with categories and a label
+  TK->>A: the form, with scan set to the verdict
+  TK->>B: constitution, action record (each file as digest and size), trusted scan section
+  A-->>TK: allow or deny
+  B-->>TK: ballots
+  TK->>G: token binding the argument bytes, the verdict, and each file's SHA-256
+  G->>G: hash each file again (no second scan)
+  G->>T: the arguments the spec passes, file unchanged
+  T-->>Ag: the tool's result (a deny returns a reason code only)
