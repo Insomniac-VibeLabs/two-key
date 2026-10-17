@@ -117,7 +117,7 @@ From Python:
 from two_key.siem import SiemConfig
 from two_key.siem_sinks import SyslogSink, WebhookSink
 
-two_key = TwoKey(ledger, public_key, constitution, judges, private_key=key,
+two_key = TwoKey(ledger, public_key, constitution, judges, private_key=key,  # skipcq: SCT-A000
                  siem=SiemConfig(sinks=(
                      SyslogSink("siem.example.net", ca_file="/etc/two-key/siem-ca.pem"),
                      WebhookSink("https://siem.example.net/ingest",

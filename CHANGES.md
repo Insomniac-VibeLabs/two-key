@@ -3834,3 +3834,7 @@ unregistered on pypi.org and test.pypi.org on this date.
   HOWTO, CONNECTING, JUDGES_AND_QUORUM, SCANNERS, and SIEM are PNG images
   of those same diagrams. PyPI does not run Mermaid. The diagram source is
   `docs/images/diagrams/src/`.
+- The DeepSource `SCT-A000` hit in docs/SIEM.md is a false positive. The
+  line is an example that passes the variable `key` to `private_key`.
+  The quoted text was `TwoKey(ledger,`. It now carries `skipcq: SCT-A000`.
+  No other line is excluded from secret detection.
