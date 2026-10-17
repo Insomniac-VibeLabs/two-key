@@ -268,31 +268,29 @@ Only the gateway runs a tool.
 
 ```mermaid
 flowchart TD
-  constitution["Signed constitution<br/>prose, hard rules, tool specs<br/>unnamed keys dropped unless deny_unmapped"] --> compile["compile_both"]
+  constitution["Signed constitution<br/>prose, hard rules, tool specs"] --> compile["compile_both"]
   compile --> bytecode["Path A bytecode"]
   compile --> judgeText["Path B judge text"]
-  instruction["Untrusted instruction"] --> agent["MonitoredAgent.complete<br/>Grok, ChatGPT, Claude, Gemini, or local Ollama"]
-  judgeText -->|"constitution prose"| agent
-  constitution -.->|"opt-in"| vocab["agent_vocabulary()<br/>tool ids, paths, value syntax<br/>never a value or a rule"]
-  vocab -.-> agent
-  agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
-  bytecode --> pathA["Path A Policy VM"]
-  authorize --> pathA
-  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B: judges vote<br/>needs 1+ judge; yes votes needed: required_yes,<br/>default min(2, judges)<br/>runs even when Path A denies<br/>high_assurance also needs: judges from 2+ makers,<br/>1+ local judge, and a local judge votes yes"]
+  instruction["Untrusted instruction"] --> agent["Monitored Agent"]
+  agent -->|"JSON proposal<br/>never a tool call"| authorize["TwoKey.authorize"]
+  authorize --> scanner["AV / DLP scanner<br/>ClamAV / ICAP / command / Python"]
+  scanner -->|"clean / flagged / unavailable"| scan["Trusted scan fact"]
+  authorize --> pathA["Path A<br/>Policy VM"]
+  scan --> pathA
+  authorize --> pathB["Path B<br/>Judge quorum"]
   judgeText --> pathB
-  declared["monitored_agent<br/>declared by the operator"] -->|"start-up: refused on the agent's credential,<br/>at any address"| judges
-  session["agent_session<br/>no judge may present it"] --> pathB
-  pathB -->|"parallel score, separate credentials"| judges["Judge(s)<br/>one or more; xAI, OpenAI, Anthropic, Gemini, Ollama"]
-  judges -->|"yes, no, or abstain"| pathB
-  pathA --> gate{"both allow?"}
+  scan --> pathB
+  pathB --> judges["Judge(s)<br/>separate credentials"]
+  judges -->|"yes / no / abstain"| pathB
+  pathA --> gate{"Both paths allow?"}
   pathB --> gate
   pathA --> ledger["Encrypted ledger"]
   pathB --> ledger
-  gate -->|no| ledger
-  gate -->|yes| token["Capability token<br/>signed by the capability key"]
-  token --> ledger
-  token --> gateway["Tool gateway<br/>same process as TwoKey, shares its ledger<br/>verifier: capability public key only, cannot mint"]
-  gateway -->|"redemption_started, then declared paths only"| tool["Registered tool"]
+  scan --> ledger
+  gate -->|"deny"| ledger
+  gate -->|"allow"| token["Single-use capability token<br/>binds arguments + scan verdict + file digests"]
+  token --> gateway["Tool Gateway<br/>same process as Two-Key"]
+  gateway -->|"re-checks file digests<br/>does not rescan"| tool["Registered Tool"]
   gateway --> ledger
   ledger -.->|"0.7.0, optional, after the entry is written"| siem["SIEM sink<br/>syslog or HTTPS webhook<br/>allowlisted fields only<br/>never blocks a decision"]
 ```
