@@ -277,10 +277,10 @@ flowchart TD
 
   authorize --> pathA["Path A<br/>Policy VM"]
 
-  authorize --> scanner["Optional AV / DLP<br/>Hook"]
+  authorize --> scanner["AV/DLP Hook<br/>(optional)"]
   scanner -->|"scan result"| scanfact["Trusted<br/>Scan Fact"]
 
-  scanfact --> pathB["Path B<br/>Judge Quorum"]
+  scanfact --> pathB["Path B<br/>Judges (≥1)"]
   scanfact --> ledger["Encrypted<br/>Ledger"]
 
   authorize --> pathB
@@ -301,8 +301,6 @@ flowchart TD
   gate -->|"allow"| token["Single-Use<br/>Capability Token"]
 
   token --> gateway["Tool<br/>Gateway"]
-
-  token -.->|"binds scan verdict<br/>+ file digests"| gateway
 
   gateway -->|"verify"| tool["Registered<br/>Tool"]
   gateway --> ledger
