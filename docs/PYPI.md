@@ -150,12 +150,15 @@ create an environment with no reviewer the first time the job asks for it.
 
 ## Tags and `main`
 
-- Do not push this branch to `main` as part of preparing it, and do not
-  move `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, or any older tag.
-- Do not publish from `main`. The workflow is not on `main`, and a
-  `release` event would not be the right trigger anyway: GitHub loads
-  release workflows from the default branch, which is why this workflow
-  uses a tag push and a manual run instead.
+- Do not move `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, or any older tag.
+  The first upload of `0.7.0` is a manual run from branch `PyPI`, not a
+  retag.
+- Do not choose branch `main` in **Run workflow**. The workflow file is on
+  `main`, which is why GitHub lists it. The jobs still refuse every ref
+  except `refs/heads/PyPI` and a `vX.Y.Z` tag. A GitHub Release is not a
+  trigger. A later release is a signed tag on a commit that already
+  contains this workflow, and that tag push publishes to PyPI only when
+  the tag matches the version in `pyproject.toml`.
 - A later tag must be on a commit that already contains
   `pypi-publish.yml`. The tag push runs the workflow from that commit.
 - Sign the tag (`git tag -s vX.Y.Z`). The workflow does not create the tag
