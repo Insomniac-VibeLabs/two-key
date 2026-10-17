@@ -85,7 +85,8 @@ in the same release.
 - **0.7.0 is the first PyPI release.** It is still this beta, not the 1.0
   review below. Metadata, the source-distribution manifest, and the
   trusted-publishing workflow are in place (docs/PYPI.md). Tag `v0.7.0`
-  is not moved. Install with `pip install "two-key[yaml]==0.7.0"`.
+  is not moved. The current package is 0.7.2. Install with
+  `pip install "two-key[yaml]==0.7.2"`.
 - **Next**: the judge history summary (#1), then the public review and the
   1.0 release.
 - **Not yet tested enough: agents on another machine.** The maintainer

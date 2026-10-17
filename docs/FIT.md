@@ -1,7 +1,7 @@
 # Is this for you?
 
-Beta (pre-1.0), maintainer-reviewed, not independently audited. Not a FIPS 140-3 validated module. 0.7.0 is on PyPI (`pip install "two-key"`). Tag `v0.7.0` is not moved. The release steps are [PYPI.md](PYPI.md). 0.6.0 adds Windows support, content scanning through your antivirus or DLP product, and a start-up check for paths another account could change; 0.5.0 added an MCP
-adapter (a stdio proxy, a spec drafter, caller-supplied facts, and a guard core for any agent loop; issue #2). Package `two-key` version 0.7.0. Tag `v0.7.0` on `main` is the tagged release; `v0.6.0`, `v0.5.0` and `v0.4.0` are the ones before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`.
+Beta (pre-1.0), maintainer-reviewed, not independently audited. Not a FIPS 140-3 validated module. 0.7.2 is on PyPI (`pip install "two-key"`). Tag `v0.7.0` is not moved. The release steps are [PYPI.md](PYPI.md). 0.6.0 adds Windows support, content scanning through your antivirus or DLP product, and a start-up check for paths another account could change; 0.5.0 added an MCP
+adapter (a stdio proxy, a spec drafter, caller-supplied facts, and a guard core for any agent loop; issue #2). Package `two-key` version 0.7.2. Tag `v0.7.0` on `main` is the tagged release; `v0.6.0`, `v0.5.0` and `v0.4.0` are the ones before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`.
 `v0.1.6` stays on the previous tree.
 Apache-2.0.
 Crypto is Ed25519 and SHA-256.

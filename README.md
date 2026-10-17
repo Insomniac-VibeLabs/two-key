@@ -65,11 +65,12 @@ What you get:
 - **Small on purpose.** Python 3.10 or later, one required dependency
   (`cryptography`), Apache-2.0.
 
-**Status:** beta. 0.7.0 is the current release: it adds the SIEM export, a
-start-up check that refuses to run when the monitored agent is Two-Key's own
-account, and a count of the tokens the gateway refuses. 0.6.0 added Windows
-support, content scanning with your antivirus or DLP product, and a start-up
-check for paths another account could change.
+**Status:** beta. 0.7.2 is the current package on PyPI. The behavior is the
+0.7.0 release: the SIEM export, a start-up check that refuses to run when
+the monitored agent is Two-Key's own account, and a count of the tokens the
+gateway refuses. 0.6.0 added Windows support, content scanning with your
+antivirus or DLP product, and a start-up check for paths another account
+could change.
 Maintainer-reviewed and tested with live LLM agents and judges. Read
 [Known limits](#known-limits) and [docs/FIT.md](docs/FIT.md) before you rely
 on it.
@@ -93,10 +94,10 @@ on it.
 
 ## Quick start
 
-Install 0.7.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
+Install 0.7.2 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 
 ```bash
-pip install "two-key[yaml]==0.7.0"
+pip install "two-key[yaml]==0.7.2"
 ```
 
 Tag `v0.7.0` was not moved. It is the git snapshot from before this
@@ -122,7 +123,7 @@ around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp]==0.7.0"
+pip install "two-key[mcp]==0.7.2"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -520,11 +521,11 @@ are targets, not dates. The detail, and what comes after 1.0, is in
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). Version 0.7.0 is on PyPI. It is this beta, not
+three (HOWTO "Platforms"). Version 0.7.2 is on PyPI. It is this beta, not
 the 1.0 community review. Tag `v0.7.0` is not moved.
 
 ```bash
-pip install "two-key[yaml]==0.7.0"
+pip install "two-key[yaml]==0.7.2"
 ```
 
 `v0.7.0` adds the ledger export for a SIEM, a start-up check for the account
