@@ -277,10 +277,10 @@ flowchart TD
 
   authorize --> pathA["Path A<br/>Policy VM"]
 
-  authorize --> scanner["AV/DLP Hook<br/>(optional)"]
+  authorize -.->|"optional"| scanner["AV/DLP<br/>Hook"]
   scanner -->|"scan result"| scanfact["Trusted<br/>Scan Fact"]
 
-  scanfact --> pathB["Path B<br/>Judges (≥1)"]
+  scanfact --> pathB["Path B — Judges<br/>≥1; configurable quorum"]
   scanfact --> ledger["Encrypted<br/>Ledger"]
 
   authorize --> pathB
@@ -305,7 +305,7 @@ flowchart TD
   gateway -->|"verify"| tool["Registered<br/>Tool"]
   gateway --> ledger
 
-  ledger -.->|"optional export"| siem["SIEM<br/>syslog / HTTPS"]
+  ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
 ```
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
