@@ -1,7 +1,7 @@
 # Changes
 
 ## Contents
-
+- [0.7.1 — 2026-10-17](#071--2026-10-17)
 <!-- toc -->
 - [0.1.0 — 2026-10-02](#010--2026-10-02)
 - [0.1.1 — 2026-10-02](#011--2026-10-02)
@@ -3848,3 +3848,10 @@ unregistered on pypi.org and test.pypi.org on this date.
 - Those four pictures were replaced again from the exports, and the
   MermaidEditor.io mark in the corner is kept.
 - The same four were replaced from the latest export. The mark stays.
+
+## 0.7.1 — 2026-10-17
+
+Diagram pictures only. No application code changed. The Mermaid diagrams
+in the README, ROADMAP, HOWTO, CONNECTING, JUDGES_AND_QUORUM, SCANNERS,
+and SIEM are the exported PNG images. `pyproject.toml` and
+`two_key.__version__` are `0.7.1`.
