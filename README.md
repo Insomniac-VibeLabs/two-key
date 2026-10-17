@@ -5,9 +5,7 @@
 
 **Two independent keys must turn before an AI agent can act.**
 
-Two-Key is an authorization layer for AI agents that use tools. Before a
-tool call runs (a payment, an email, a change to a record), two independent
-checks must both say yes:
+Two-Key is an authorization layer for AI agents that use tools. Before a consequential tool call executes, Two-Key requires independent authorization through a deterministic policy path and an independent judge path:
 
 - **The policy key (Path A).** The rules you sign compile to bytecode. A
   small deterministic VM checks every call against fields read from the
