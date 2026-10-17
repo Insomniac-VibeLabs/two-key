@@ -6,9 +6,38 @@ build-backend = "setuptools.build_meta"
 name = "two-key"
 version = "0.7.0"
 description = "Two-Key: a dual-authorization layer for AI agents (policy VM, judge quorum, single-use tokens, encrypted ledger)."
+readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
-keywords = ["ai-agents", "authorization", "policy-engine", "capability-tokens"]
+license-files = ["LICENSE"]
+authors = [
+    { name = "Insomniac-VibeLabs" },
+]
+keywords = [
+    "ai-agents",
+    "authorization",
+    "policy-engine",
+    "capability-tokens",
+    "mcp",
+    "agent-security",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 # Consumer ranges. The resolved set CI installs is uv.lock (wheels only).
 dependencies = ["cryptography>=41"]
 
@@ -19,7 +48,12 @@ mcp = ["mcp>=2.2,<3", "pyyaml>=6"]
 
 [project.urls]
 Homepage = "https://github.com/Insomniac-VibeLabs/two-key"
+Documentation = "https://github.com/Insomniac-VibeLabs/two-key/blob/PyPI/docs/HOWTO.md"
 Repository = "https://github.com/Insomniac-VibeLabs/two-key"
+Issues = "https://github.com/Insomniac-VibeLabs/two-key/issues"
+Changelog = "https://github.com/Insomniac-VibeLabs/two-key/blob/PyPI/CHANGES.md"
+"Release process" = "https://github.com/Insomniac-VibeLabs/two-key/blob/PyPI/docs/PYPI.md"
+Security = "https://github.com/Insomniac-VibeLabs/two-key/blob/PyPI/SECURITY.md"
 
 [project.scripts]
 two-key = "two_key.cli:main"

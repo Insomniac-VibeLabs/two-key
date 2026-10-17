@@ -89,6 +89,11 @@ in the same release.
   start-up check that refuses to run when the monitored agent is Two-Key's
   own account or can change its files (`on_agent_access`). The design note
   (`0.7.0-siem-export.md`) was approved on 2026-10-16.
+- **PyPI packaging is prepared on the `PyPI` branch, and nothing has been
+  uploaded.** The name `two-key` was unregistered on pypi.org and
+  test.pypi.org on 2026-10-16. Metadata, the source-distribution manifest,
+  and the trusted-publishing workflow are in place (docs/PYPI.md). Tag
+  `v0.7.0` is not moved. The upload stays with the 1.0 review below.
 - **Next**: the judge history summary (#1), then the public review and the
   1.0 release.
 - **Not yet tested enough: agents on another machine.** The maintainer
@@ -139,6 +144,12 @@ in the same release.
 - A time-boxed, public community review with a stated scope.
 - Release only with no unresolved Medium or higher findings from that review.
 - Publish to PyPI with trusted publishing, signed tags, and an SBOM.
+  The files for that publish are on the `PyPI` branch (docs/PYPI.md):
+  `pyproject.toml` metadata, `MANIFEST.in`, and
+  `.github/workflows/pypi-publish.yml` (OpenID Connect, no token in the
+  repository, PEP 740 attestations, and a CycloneDX SBOM kept as a
+  workflow artifact). Nothing has been uploaded. This review and the
+  upload are still this step, not a release that already happened.
 - A ten-minute quickstart and a demo with a real MCP server.
 - 1.0 is described as community-reviewed, not audited, and as not FIPS
   validated itself. A paid audit and any validation of this package are

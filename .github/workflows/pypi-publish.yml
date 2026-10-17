@@ -1,0 +1,103 @@
+name: publish
+
+# Trusted publishing only. No PyPI token lives in this repository.
+# Tag pushes publish to PyPI when the tag is v<version in pyproject.toml>.
+# A manual run defaults to TestPyPI. docs/PYPI.md is the operator procedure.
+# This file is on the PyPI branch. GitHub reads a tag's workflow from the tagged commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: "Index. testpypi is the dry run. pypi is the public index."
+        type: choice
+        options:
+          - testpypi
+          - pypi
+        default: testpypi
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-publish
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/PyPI' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: |
+          pip install --only-binary :all: "build==1.6.1" "twine==7.0.0" "cyclonedx-bom==7.5.0"
+      - name: Tag must be this version
+        if: github.ref_type == 'tag'
+        run: |
+          version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$tag" != "$version" ]; then
+            echo "Refusing to publish: tag v${tag} is not project version ${version}." >&2
+            echo "Do not move an existing tag. Bump pyproject.toml and two_key.__version__ together, then tag that commit." >&2
+            exit 1
+          fi
+      - name: Build sdist and wheel
+        run: python -m build
+      - name: Check metadata
+        run: twine check --strict dist/*
+      - name: Software bill of materials
+        run: |
+          python -m venv "$RUNNER_TEMP/sbom-venv"
+          "$RUNNER_TEMP/sbom-venv/bin/pip" install --only-binary :all: dist/*.whl
+          cyclonedx-py environment "$RUNNER_TEMP/sbom-venv/bin/python" \
+            --pyproject pyproject.toml \
+            --mc-type library \
+            --output-reproducible \
+            --of JSON \
+            --output-file sbom.cdx.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: python-distribution
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/PyPI' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.repository == 'testpypi' && 'testpypi' || 'pypi' }}
+      url: ${{ github.event_name == 'workflow_dispatch' && inputs.repository == 'testpypi' && 'https://test.pypi.org/project/two-key/' || 'https://pypi.org/project/two-key/' }}
+    permissions:
+      id-token: write
+      attestations: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: python-distribution
+          path: dist
+      - name: Publish with trusted publishing
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          attestations: true
+          packages-dir: dist
+          repository-url: ${{ github.event_name == 'workflow_dispatch' && inputs.repository == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+          print-hash: true
+          verbose: true
