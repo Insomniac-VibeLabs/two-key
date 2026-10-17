@@ -3847,3 +3847,4 @@ unregistered on pypi.org and test.pypi.org on this date.
   the MCP proxy. The editor watermark is not in the files.
 - Those four pictures were replaced again from the exports, and the
   MermaidEditor.io mark in the corner is kept.
+- The same four were replaced from the latest export. The mark stays.
