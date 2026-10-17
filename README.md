@@ -268,30 +268,46 @@ Only the gateway runs a tool.
 
 ```mermaid
 flowchart TD
-  constitution["Signed constitution<br/>prose, hard rules, tool specs"] --> compile["compile_both"]
-  compile --> bytecode["Path A bytecode"]
-  compile --> judgeText["Path B judge text"]
-  instruction["Untrusted instruction"] --> agent["Monitored Agent"]
-  agent -->|"JSON proposal<br/>never a tool call"| authorize["TwoKey.authorize"]
-  authorize --> scanner["AV / DLP scanner<br/>ClamAV / ICAP / command / Python"]
-  scanner -->|"clean / flagged / unavailable"| scan["Trusted scan fact"]
+  constitution["Signed Constitution"] --> compile["Compile"]
+  compile --> bytecode["Path A Policy"]
+  compile --> judgeText["Path B Judge Prompt"]
+
+  instruction["Untrusted Instruction"] --> agent["Monitored Agent"]
+  agent -->|"JSON proposal"| authorize["Two-Key Authorize"]
+
   authorize --> pathA["Path A<br/>Policy VM"]
-  authorize --> pathB["Path B<br/>Judge quorum"]
+
+  authorize --> scanner["AV / DLP<br/>Scanner"]
+  scanner -->|"scan result"| scanfact["Trusted<br/>Scan Fact"]
+
+  scanfact --> pathB["Path B<br/>Judge Quorum"]
+  scanfact --> ledger["Encrypted<br/>Ledger"]
+
+  authorize --> pathB
   judgeText --> pathB
-  scan --> pathB
-  pathB --> judges["Judge(s)<br/>separate credentials"]
+
+  pathB --> judges["Independent<br/>Judge(s)"]
   judges -->|"yes / no / abstain"| pathB
-  pathA --> gate{"Both paths allow?"}
+
+  bytecode --> pathA
+
+  pathA --> gate{"Both paths<br/>allow?"}
   pathB --> gate
-  pathA --> ledger["Encrypted ledger"]
+
+  pathA --> ledger
   pathB --> ledger
-  scan --> ledger
+
   gate -->|"deny"| ledger
-  gate -->|"allow"| token["Single-use capability token<br/>binds arguments + scan verdict + file digests"]
-  token --> gateway["Tool Gateway<br/>same process as Two-Key"]
-  gateway -->|"re-checks file digests<br/>does not rescan"| tool["Registered Tool"]
+  gate -->|"allow"| token["Single-Use<br/>Capability Token"]
+
+  token --> gateway["Tool Gateway"]
+
+  token -.->|"binds scan verdict<br/>+ file digests"| gateway
+
+  gateway -->|"verify"| tool["Registered Tool"]
   gateway --> ledger
-  ledger -.->|"0.7.0, optional, after the entry is written"| siem["SIEM sink<br/>syslog or HTTPS webhook<br/>allowlisted fields only<br/>never blocks a decision"]
+
+  ledger -.->|"optional export"| siem["SIEM<br/>syslog / HTTPS"]
 ```
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
