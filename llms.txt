@@ -8,7 +8,7 @@ Package: two-key
 Import: two_key
 Package version: 0.7.0 (the SIEM export, a start-up check for the account the monitored agent runs as, a count of refused gateway tokens). Tag v0.7.0 is on main; so are v0.6.0 (Windows support, content scanning through your antivirus or DLP product, a start-up check for writable paths), v0.5.0 (MCP proxy, caller-supplied facts, constitution v3) and v0.4.0 (package renamed from two-key-concept). Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-Not uploaded to PyPI yet. The PyPI branch prepares registration (docs/PYPI.md): distribution name two-key, version 0.7.0, extras yaml and mcp, trusted publishing, no token in the repo. Until that upload, install the tagged release from git ref v0.7.0 (two-key[yaml] for YAML configs, two-key[mcp] for the MCP proxy).
+0.7.0 is on PyPI. Distribution name two-key, import two_key, extras yaml and mcp. Install two-key[yaml]==0.7.0, or two-key[mcp]==0.7.0 for the proxy. Tag v0.7.0 was not moved. docs/PYPI.md is the release process: trusted publishing, no token in the repo.
 uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
