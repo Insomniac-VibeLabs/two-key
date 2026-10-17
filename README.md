@@ -9,6 +9,19 @@
 
 **Two independent keys must turn before an AI agent can act.**
 
+**🎯 The Problem**
+
+AI agents can be given permission to use a tool without being given
+authority to perform every consequential action that tool can perform.
+
+Traditional tool permissions answer:
+
+> "Can this agent call this tool?"
+
+Two-Key asks a different question:
+
+> "Is this specific action authorized to execute?"
+
 Two-Key is an authorization layer for AI agents that use tools. Before a consequential tool call executes, Two-Key requires independent authorization through a deterministic policy path and an independent judge path:
 
 - **The policy key (Path A).** The rules you sign compile to bytecode. A
