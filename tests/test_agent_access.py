@@ -12,6 +12,7 @@ from unittest.mock import patch
 from two_key import _platform, agent_access
 from two_key.agent_access import AgentAccessError
 from two_key.mcp_proxy.config import ProxyConfigError, parse_proxy_config
+from two_key.mcp_proxy.core import startup_paths
 
 DIGEST = "sha256:" + "0" * 64
 OTHER = 4_000_123            # an account no test machine has
@@ -109,6 +110,22 @@ class Accounts(unittest.TestCase):
             found = self.found(OTHER)
         self.assertEqual(found, [f"agent_can_write: {self.dir}: the account that started the proxy, agent (uid "
                                  "4000123), could change it (it owns it)"])
+
+    def test_the_upstream_servers_files_behind_a_launcher(self):
+        # #13: the server script is an argument of sudo, not command[0], and is still checked.
+        server = self.dir / "server.py"
+        server.write_text("pass\n", encoding="utf-8")
+        os.chmod(server, 0o600)
+        data = {"constitution": "c.json", "keys": {"principal": "k.pem"}, "ledger": "ledger",
+                "judges": "judges.yaml",
+                "upstream": {"command": [str(self.dir / "sudo"), "-n", "-u", "mcp-billing", str(server)],
+                             "schema_digest": DIGEST, "cwd": str(self.dir)}}
+        paths = startup_paths(parse_proxy_config(data, self.file))
+        self.assertEqual(agent_access.problems(paths, parent=(OTHER, "agent (uid 4000123)"), own_uid=EUID), [])
+        os.chmod(server, 0o666)
+        self.assertEqual(agent_access.problems(paths, parent=(OTHER, "agent (uid 4000123)"), own_uid=EUID),
+                         [f"agent_can_write: {server}: the account that started the proxy, agent (uid 4000123), "
+                          "could change it (everyone can write it)"])
 
     def test_refuse_raises_with_the_first_and_names_the_rest(self):
         os.chmod(self.file, 0o666)

@@ -239,6 +239,14 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   named, not passed. There is no setting that turns it off, and on POSIX a
   group write bit counts for every group but 0; do not add either. It runs
   before anything is written to the ledger (`tests/test_writable_paths.py`).
+  The MCP proxy adds the upstream server's files (#13,
+  `mcp_proxy/core.upstream_paths`): each absolute argument of
+  `upstream.command` that exists (a file with its folder) and each
+  `upstream.check_paths` entry (absolute; one that does not exist refuses,
+  `check_path_missing`). A launcher as `command[0]` with nothing named warns
+  `upstream_paths_unchecked` and refuses under `high_assurance`. Do not
+  follow a launcher to its target or guess at relative arguments
+  (`tests/test_upstream_paths.py`).
 - Agent account (0.7.0, `two_key/agent_access.py`): the MCP proxy reads the
   real user of its parent process (`_platform.parent_account`, never an
   environment variable) before it opens the ledger, and refuses to start

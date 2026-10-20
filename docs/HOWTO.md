@@ -1036,7 +1036,9 @@ with no local judge does not start
 another account could change a file or folder Two-Key runs or reads
 (`writable_path`; see
 [CONNECTING](CONNECTING.md#what-two-key-checks-for-you)), and it does not
-accept `on_writable_paths: warn`.
+accept `on_writable_paths: warn`. Under it, the MCP proxy also does not start
+when `upstream.command` starts with a launcher and nothing names the
+server's files (`upstream_paths_unchecked`).
 
 A judge's maker is who made the judge's model, as the operator labels it:
 the per-judge `maker:` key, or its `provider` when `maker:` is omitted. It
@@ -1807,7 +1809,8 @@ agent_id: billing-agent                            # ledger metadata, not trust
 allow_unresolved_identity: false
 upstream:
   command: ["sudo", "-n", "-u", "mcp-billing", "--preserve-env=BILLING_TOKEN", "--",
-            "npx", "-y", "@example/billing-mcp@1.2.3"]
+            "/opt/billing-mcp/node_modules/.bin/billing-mcp"]
+  check_paths: [/opt/billing-mcp/node_modules/@example/billing-mcp]   # the server's package folder
   env: {BILLING_TOKEN: {env: BILLING_TOKEN}}
   schema_digest: "sha256:..."                       # from step 3
   on_schema_change: refuse
@@ -1819,6 +1822,17 @@ tools:
     facts: {po_matched: {hook: "billing_facts:po_matches"}}   # your code: (tool, arguments) -> value
   read_report: {claim: floor}
 ```
+
+The server is installed once, as root, with `npm install --prefix
+/opt/billing-mcp @example/billing-mcp@1.2.3`, so neither the agent nor
+`mcp-billing` can change it. At start, the proxy checks `command[0]`, each
+absolute argument after it that exists (a file together with its folder),
+and each `check_paths` entry, with every folder above them
+([CONNECTING](CONNECTING.md#what-two-key-checks-for-you)). It does not look
+inside a folder, so name the package folder, not only the program. With
+`"npx", "-y", "@example/billing-mcp@1.2.3"` instead, npm downloads the server
+into `mcp-billing`'s own cache, which nothing names, and the proxy warns
+`upstream_paths_unchecked` (under `high_assurance` it refuses to start).
 
 `billing_facts.po_matches` is your module, on the proxy's Python path:
 
@@ -1853,7 +1867,7 @@ or, with `on_writable_paths: refuse`, does not start.
 
 sudo keeps the caller's working directory, and the upstream server
 inherits the proxy's unless `upstream.cwd` is set. Left in the agent's
-folder, `npx` would look for the server in that folder's `node_modules`
+folder, a server started with `npx` would look for it in that folder's `node_modules`
 and read its `.npmrc` first, so the agent could plant a server that
 receives `BILLING_TOKEN`. Hence the `cd` to a folder the agent cannot
 write. Run the `two-key` command, not `python -m two_key`, which puts the
@@ -1889,6 +1903,7 @@ what `high_assurance` does to it, and which file tier it is in, is in
 | `upstream.schema_digest` | yes | `sha256:...` from `mcp-draft-specs` |
 | `upstream.on_schema_change` | no | `refuse` (default) or `warn` |
 | `upstream.call_timeout_seconds` | no | Per upstream call, at most 3600 (default 60) |
+| `upstream.check_paths` | no | Absolute paths of the server's own files and folders (its package folder, script, config) for the start-up checks, beside each absolute argument of `upstream.command` that exists, which is checked without being listed. At most 64. One that does not exist refuses to start (`check_path_missing`). A folder is checked itself, with the folders above it, not every file inside it. When `command[0]` is a launcher (`sudo`, `doas`, `env`, `npx`, `uvx`, `pipx`, `cmd`, `powershell`, `pwsh`) and nothing is named, the proxy warns `upstream_paths_unchecked`; `high_assurance` refuses ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you)) |
 | `tools.<id>.claim` | no | `floor` (the signed `data_class_floor`), a data class, or `none` (default: omitted, so `classified`) |
 | `tools.<id>.proposal` | no | Fixed proposal text (default `MCP tools/call <id>`); judges see it only with `judge_inputs: record_and_proposal` |
 | `tools.<id>.upstream_name` | no | The upstream's name for a signed tool whose name is not a lower-case id |
@@ -1915,7 +1930,9 @@ variable, and an upstream literal value as `<literal>`; no secret value is print
 the config names and reports one line each: the config parses (unknown and repeated keys refused), the
 principal key file loads, the constitution is signed by that key, every `tools:` entry is a signed tool, the
 judges and quorum load (with the single-judge and maker-diversity warnings), a `monitored_agent` is declared,
-every environment variable the config reads is set, no path another account can change (`writable_path`, a
+every environment variable the config reads is set, every `upstream.check_paths` entry exists
+(`check_path_missing`), a launcher with nothing named (`upstream_paths_unchecked`, a `FAIL` under
+`high_assurance`), no path another account can change (`writable_path`, a
 `FAIL` under `on_writable_paths: refuse` or `high_assurance`), and a plaintext SIEM sink (a `FAIL` under
 `high_assurance`). It does not run the `on_agent_access` check, because that depends on which account starts
 the proxy, and it does not compare the upstream's tools with `schema_digest`; the proxy does both at start. A
@@ -1972,6 +1989,8 @@ on stderr and exits 1.
 | `TwoKeyConfigError: ...`, `JudgeConfigError: ...`, `LedgerError: ...` | Two-Key itself refused, as `two-key authorize` would | See the sections on judges, the monitored agent, and the ledger |
 | `AgentAccessError: agent_same_account: ...`, `agent_account_root`, `agent_account_unknown`, `agent_can_write: <path>: ...` | The account that started the proxy is Two-Key's own, root, unknown, or can change that path; `on_agent_access` is `refuse` (the default) or `high_assurance` is set | Start the proxy from the agent's own account through the `run-proxy` sudo rule (or SSH) and take its write access away ([CONNECTING](CONNECTING.md#route-1-an-mcp-client-through-two-key-mcp-proxy)). For a test under one account only: `on_agent_access: warn` |
 | `TwoKeyConfigError: writable_path: <path>: ...` | Another account could change a file or folder Two-Key runs or reads, and `on_writable_paths: refuse` or `high_assurance` is set | Make it owned by Two-Key's account (or root) and not writable by group or others ([CONNECTING](CONNECTING.md#run-two-key-as-a-service-account)) |
+| `upstream_paths_unchecked: upstream.command starts with <launcher> ...; high_assurance refuses to start` | `upstream.command[0]` is a launcher such as `sudo` or `npx`, no argument after it is an absolute path that exists, and `upstream.check_paths` is unset, so the checks cannot see the server. Without `high_assurance` this is a `WARNING` and the proxy starts | Give the server's program and script as absolute paths, or list its files and folders in `upstream.check_paths` |
+| `check_path_missing: upstream.check_paths[<n>]: <path> does not exist` | An entry names nothing | Fix the path, or remove the entry |
 | `unresolved_identity: ...` | Two-Key cannot tell who serves a judge or the agent (a local proxy serving an alias, an unrecognized host), so it cannot rule out a judge that is the agent | Declare `upstream:` for that side in `judges.yaml`, or set `allow_unresolved_identity: true` to accept the risk |
 | `tools: [...] are not tools in the signed constitution` | A `tools:` entry names an unsigned tool | Remove it, or sign the tool |
 | `upstream_unavailable: <type>: ...` | The child did not start, or did not speak MCP | Check the command and its user |

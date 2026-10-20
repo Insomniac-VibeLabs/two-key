@@ -9,8 +9,9 @@ at those paths, and the folders above them, and names each one an account other 
 
 This finds a setup mistake (a virtualenv, a checkout, or a config file the agent's user can write). It is
 not a defence against code that has already been changed, and it cannot see everything: the wrapper that
-started the process, the upstream server's own files behind ``sudo``, or a group whose members are only
-trusted accounts. A clean start is not proof; docs/CONNECTING.md is the checklist.
+started the process, the upstream server's files that no absolute argument of ``upstream.command`` or
+``upstream.check_paths`` names (the proxy passes those, #13), what is inside a named folder, or a group
+whose members are only trusted accounts. A clean start is not proof; docs/CONNECTING.md is the checklist.
 
 ``on_writable_paths``: ``warn`` (the default) names each path on stderr and starts; ``refuse`` does not
 start. ``high_assurance`` refuses, and does not accept ``warn``. There is no setting that turns it off.

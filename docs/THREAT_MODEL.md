@@ -400,8 +400,12 @@ claims to close.
   Two-Key names, at start, each file or folder it runs or reads that
   another account could change (`writable_path`), and refuses under
   `high_assurance` or `on_writable_paths: refuse`. That catches a setup
-  mistake; it cannot see the wrapper that started it or the upstream's
-  files, and code already changed has already run.
+  mistake; it cannot see the wrapper that started it, the upstream's
+  files that no absolute argument of `upstream.command` or
+  `upstream.check_paths` names, or what is inside a named folder, and code
+  already changed has already run. A launcher (`sudo`, `npx`, and the like)
+  with nothing named warns `upstream_paths_unchecked`, and refuses under
+  `high_assurance`.
 - MCP proxy (0.5.0):
   - An agent that can reach the upstream server directly, or holds its
     credential, bypasses the proxy entirely. The proxy cannot see or stop

@@ -473,7 +473,18 @@ tune these checks, `on_agent_access` and `on_writable_paths`, are in
   above them. The proxy adds `proxy.yaml` and the files it names, the
   ledger folder, each fact hook's module, the folders of files sent by
   path, the upstream and scanner programs, and the folder the upstream
-  starts in. Each one that an account other than Two-Key's own (or root,
+  starts in. For the upstream server behind a launcher such as `sudo`, it
+  also adds each argument of `upstream.command` after the program that is
+  an absolute path to something that exists (a file with its folder, or a
+  folder), and each entry of `upstream.check_paths`, which must exist
+  (`check_path_missing`). Options and relative arguments are not read as
+  paths, a launcher is not followed to its target, and a named folder is
+  checked itself, not every file inside it. When `command[0]` is a
+  launcher (`sudo`, `doas`, `env`, `npx`, `uvx`, `pipx`, `cmd`,
+  `powershell`, or `pwsh`) and nothing names the server's files, the proxy
+  warns `upstream_paths_unchecked`, and `high_assurance` refuses to start.
+  The server's files count like Two-Key's own: owned by Two-Key's account
+  or root, not by the upstream's account. Each one that an account other than Two-Key's own (or root,
   SYSTEM, Administrators, or TrustedInstaller) could change is named:
   `two-key: WARNING: writable_path: <path>: <why>`. On Linux and macOS a
   group write bit counts for any group but 0, because Two-Key cannot list
@@ -484,7 +495,9 @@ tune these checks, `on_agent_access` and `on_writable_paths`, are in
   off.
 
 What it cannot see: OS users and file permissions beyond the paths above
-(the wrapper that started it, the upstream server's files behind `sudo`),
+(the wrapper that started it, the upstream server's files that no absolute
+argument or `upstream.check_paths` entry names, what is inside a named
+folder),
 the network, the client's other tools, your framework's tool list, and
 whether a port it connects to is the service you meant. A start with no
 `writable_path` line is not proof the setup is safe, and code that was
@@ -515,6 +528,9 @@ checklist below.
 [ ] No tool credential is in the agent's environment, files, prompt, or arguments.
 [ ] The agent has no network route to the tool's API or the system of record.
 [ ] Each upstream server runs as its own user with only its own credential.
+[ ] Each upstream server's program, script, and package folder are given as absolute
+    arguments or in upstream.check_paths, are owned by root or two-key, and the proxy
+    starts with no upstream_paths_unchecked line.
 [ ] Judges use their own credentials; a local judge's model and server are not
     writable by the agent.
 [ ] The scanner is on a Unix socket in a directory the agent cannot write (mode 660,

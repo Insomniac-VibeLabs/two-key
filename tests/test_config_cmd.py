@@ -68,6 +68,7 @@ class Show(Workspace):
         self.assertEqual(shown["on_writable_paths"], "warn")
         self.assertEqual(shown["upstream"]["env"], {"LEVEL": "<literal>", "TOKEN": {"env": "UPSTREAM_SECRET_VAR"}})
         self.assertNotIn("info-literal-value", out)
+        self.assertEqual(shown["upstream"]["check_paths"], [])
         self.assertEqual(shown["judges"][0]["id"], "j1")
         self.assertEqual(self.files(), before, "show wrote a file, or opened the ledger")
 
@@ -117,6 +118,22 @@ class Check(Workspace):
         self.write_proxy("siem:\n  sinks:\n    - {type: syslog, host: 127.0.0.1, transport: udp}\n")
         found = self.check()
         self.assertTrue(any(level == config_cmd.WARN and "in the clear" in text for level, text in found), found)
+
+    def test_the_upstream_servers_files(self):
+        # #13: a check_paths entry that does not exist fails here as it refuses in the proxy.
+        self.write_proxy(f"  check_paths: [{json.dumps(str(self.dir / 'gone'))}]\n")
+        found = self.check()
+        self.assertIn((config_cmd.FAIL, f"check_path_missing: upstream.check_paths[0]: {self.dir / 'gone'} does "
+                                        "not exist; fix the path or remove the entry"), found)
+        self.write_proxy(f"  check_paths: [{json.dumps(str(self.dir / 'k.pem'))}]\n")
+        self.assertFalse([t for _, t in self.check() if "check_path" in t or "upstream_paths" in t])
+        # A launcher with nothing named: a warning, as at start.
+        self.write_proxy()
+        text = (self.dir / "proxy.yaml").read_text(encoding="utf-8")
+        (self.dir / "proxy.yaml").write_text(text.replace("command: [server]", "command: [npx, -y, example-server]"),
+                                             encoding="utf-8")
+        self.assertTrue(any(level == config_cmd.WARN and text.startswith("upstream_paths_unchecked: ")
+                            for level, text in self.check()))
 
     def test_cli_exit_code_follows_failures(self):
         code, out, _ = run("config", "check", "--config", str(self.dir / "missing.yaml"))

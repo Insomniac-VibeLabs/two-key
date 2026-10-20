@@ -118,6 +118,7 @@
 - [docs/SETTINGS.md: every setting, generated and tested — 2026-10-20](#docssettingsmd-every-setting-generated-and-tested--2026-10-20)
 - [`two-key config show` and `config check`: read-only views of a proxy config — 2026-10-20](#two-key-config-show-and-config-check-read-only-views-of-a-proxy-config--2026-10-20)
 - [Python 3.13 to 3.15: compiled files stay checked, CI, docs (#27) — 2026-10-20](#python-313-to-315-compiled-files-stay-checked-ci-docs-27--2026-10-20)
+- [The proxy checks the upstream server's files behind a launcher (#13) — 2026-10-20](#the-proxy-checks-the-upstream-servers-files-behind-a-launcher-13--2026-10-20)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3974,3 +3975,65 @@ No change to any check or to the ledger.
 
 - Nothing to change. On Python 3.15, a start may now name a `__pycache__`
   folder another account can write, which it should have named before.
+
+## The proxy checks the upstream server's files behind a launcher (#13) — 2026-10-20
+
+The writable-path check and the agent-account check looked only at
+`upstream.command[0]`. With the command CONNECTING recommends,
+`[sudo, -n, -u, mcp-billing, <interpreter>, <server script>]`, that is
+`sudo`: an account that could change the server script or its folder went
+unseen, and the proxy started without a warning, `on_writable_paths:
+refuse` included. On Linux, macOS, and Windows alike:
+
+- **Absolute arguments are checked.** Each argument of `upstream.command`
+  after the program that is an absolute path to something that exists is
+  checked, a file together with its folder (where Python, Node, and most
+  others look for what a script imports), a folder as a folder. Options
+  (`-u`, `--preserve-env=...`) and relative arguments are not read as
+  paths, and a launcher is not followed to its target: a wrong guess would
+  read as a pass.
+- **`upstream.check_paths`** in `proxy.yaml` (optional) lists more of the
+  server's files and folders: its package folder, a config file. Each entry
+  must be absolute, at most 64, and one that does not exist refuses to
+  start (`check_path_missing`). A folder is checked itself, with the
+  folders above it, not every file inside it.
+- **`upstream_paths_unchecked`.** When `command[0]` is a launcher (`sudo`,
+  `doas`, `env`, `npx`, `uvx`, `pipx`, `cmd`, `powershell`, `pwsh`; by
+  name, ignoring case and a `.exe`, `.cmd`, `.bat`, or `.com` ending) and
+  neither an absolute argument nor `check_paths` names anything, the proxy
+  warns at start. Under `high_assurance` it refuses. Both come before the
+  ledger is opened.
+- Both start-up checks see the new paths (`startup_paths`), so
+  `agent_can_write` covers the server's files too.
+- `two-key config check` reports a missing `check_paths` entry and
+  `upstream_paths_unchecked` (a `FAIL` under `high_assurance`) the way
+  the proxy would at start, and `config show` prints `check_paths`. The
+  settings catalogue and docs/SETTINGS.md have the new key.
+- Tests: `tests/test_upstream_paths.py` (the issue's repro, `check_paths`,
+  a missing entry, launcher names, the warning and the refusal, and the
+  order before the ledger), and cases in `tests/test_agent_access.py` and
+  `tests/test_config_cmd.py`.
+- Docs: CONNECTING ("What Two-Key checks for you", what it cannot see, and
+  the checklist), HOWTO (the `proxy.yaml` example now runs an installed
+  server instead of `npx`, the `check_paths` row, two refusal rows, and
+  `high_assurance`, and what `config check` reports), SETTINGS,
+  THREAT_MODEL, SECURITY, AGENTS.md, llms.txt, and the `writable.py`
+  docstring. Closes #13.
+
+### Upgrading
+
+- A proxy that starts today may now name more paths, or, under
+  `on_writable_paths: refuse` or `high_assurance`, refuse. Make the
+  server's program, script, and package folder owned by Two-Key's account
+  or root and not writable by group or others. A server's files owned by
+  its own account (`mcp-billing`) are named too, as any other owner is.
+- A data folder passed as an absolute argument (a filesystem server's root,
+  for example) is checked like the server's own files. If the agent can
+  write it, `on_agent_access` refuses by default: the agent could change
+  what the tool reads without either key.
+- `upstream.command` that starts with a launcher and gives no absolute
+  path (`npx -y <package>`, `uvx <package>`) now warns
+  `upstream_paths_unchecked`, and under `high_assurance` refuses. Install
+  the server where only root or Two-Key's account can change it, and give
+  its program as an absolute path or list its folder in
+  `upstream.check_paths`.

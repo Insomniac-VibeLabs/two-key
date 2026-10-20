@@ -43,7 +43,9 @@ _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "
              "on_writable_paths", "on_agent_access", "siem"}
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
 _KEY_KEYS = {"principal"}
-_UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds"}
+_UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds",
+                  "check_paths"}
+MAX_CHECK_PATHS = 64
 _TOOL_KEYS = {"claim", "proposal", "upstream_name", "facts", "files"}
 
 
@@ -78,6 +80,9 @@ class UpstreamConfig:
     schema_digest: str
     on_schema_change: str = "refuse"
     call_timeout_seconds: float = DEFAULT_CALL_TIMEOUT_SECONDS
+    # The upstream's own files and folders, for the start-up checks (#13): absolute, and each must exist
+    # when the proxy starts.
+    check_paths: tuple[Path, ...] = ()
 
     def resolved_env(self, environ: Mapping[str, str] | None = None) -> dict[str, str]:
         """The child's extra variables. A ``{env: NAME}`` that is unset or empty refuses to start."""
@@ -201,6 +206,22 @@ def _timeout(value: Any) -> float:
     return float(value)
 
 
+def _check_paths(value: Any) -> tuple[Path, ...]:
+    """``upstream.check_paths``: absolute paths only. A relative one would be read against the proxy's
+    folder, not the folder the upstream starts in, and ``~`` against the proxy's account, not the upstream's."""
+    if not isinstance(value, list) or not value:
+        raise ProxyConfigError("upstream.check_paths: expected a non-empty list of absolute paths")
+    if len(value) > MAX_CHECK_PATHS:
+        raise ProxyConfigError(f"upstream.check_paths: at most {MAX_CHECK_PATHS} entries")
+    out = []
+    for i, item in enumerate(value):
+        where = f"upstream.check_paths[{i}]"
+        if not isinstance(item, str) or not item or "\x00" in item or not os.path.isabs(item):
+            raise ProxyConfigError(f"{where}: expected an absolute path")
+        out.append(Path(item))
+    return tuple(out)
+
+
 def _upstream(base: Path, value: Any) -> UpstreamConfig:
     up = _mapping(value, "upstream", _UPSTREAM_KEYS)
     for key in ("command", "schema_digest"):
@@ -222,6 +243,7 @@ def _upstream(base: Path, value: Any) -> UpstreamConfig:
         on_schema_change=on_change,
         call_timeout_seconds=_timeout(up["call_timeout_seconds"]) if "call_timeout_seconds" in up
         else DEFAULT_CALL_TIMEOUT_SECONDS,
+        check_paths=_check_paths(up["check_paths"]) if "check_paths" in up else (),
     )
 
 

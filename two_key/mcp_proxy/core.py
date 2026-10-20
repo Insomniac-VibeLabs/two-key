@@ -28,7 +28,7 @@ from ..canonical import canonical_hash
 from ..derive import size_record
 from ..fields import field_mappings
 from ..guard import Guard, GuardConfigError, GuardedTool
-from .config import ProxyConfig, ProxyConfigError, ToolPolicy
+from .config import ProxyConfig, ProxyConfigError, ToolPolicy, UpstreamConfig
 
 _NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
@@ -38,6 +38,11 @@ AGENT_TOOL_KEYS = ("name", "title", "description", "inputSchema", "outputSchema"
 ORIGIN = "mcp-proxy"
 MAX_REASON_CHARS = 200
 DENY_PREFIX = "two-key denied this call: "
+# Programs that start another program named in their arguments (#13). With one as upstream.command[0], the
+# start-up checks see the launcher, not the server, unless an absolute argument or upstream.check_paths
+# names the server's files. Compared by name, ignoring case and a Windows program extension.
+LAUNCHERS = frozenset({"sudo", "doas", "env", "npx", "uvx", "pipx", "cmd", "powershell", "pwsh"})
+_PROGRAM_EXTENSIONS = (".exe", ".cmd", ".bat", ".com")
 
 
 def pinned_view(tool: Mapping[str, Any]) -> dict:
@@ -453,7 +458,9 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
         key = load_private_key_file(config.principal_key)
         judges, policy = load_config_file(config.judges, judge_transport)
         high = bool(getattr(policy, "is_high_assurance", False))
-        agent_access.check(startup_paths(config), agent_access.resolve_mode(config.on_agent_access, high),
+        check_upstream_paths(config.upstream, high)
+        paths = startup_paths(config)
+        agent_access.check(paths, agent_access.resolve_mode(config.on_agent_access, high),
                            why="high_assurance" if high else
                            f"on_agent_access: {config.on_agent_access or 'refuse (the default)'}")
         agent = load_monitored_agent_file(config.judges)
@@ -463,7 +470,9 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
         return TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
                            private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
                            scanner=scanner, on_writable_paths=config.on_writable_paths,
-                           check_paths=startup_paths(config), siem=siem)
+                           check_paths=paths, siem=siem)
+    except ProxyConfigError:
+        raise
     except (OSError, ValueError, JudgeConfigError, IdentityError, LedgerError, ConstitutionError,
             ConstitutionSignatureError, TwoKeyConfigError, ScanConfigError, SiemConfigError) as e:
         raise ProxyConfigError(f"{type(e).__name__}: {e}") from None
@@ -484,12 +493,64 @@ def _module_origin(module: str) -> str | None:
     return origin if isinstance(origin, str) and os.path.isabs(origin) else None
 
 
+def launcher(program: str) -> str | None:
+    """The launcher ``program`` names (``sudo`` for ``/usr/bin/sudo``, ``npx`` for ``NPX.CMD``), or None."""
+    name = os.path.basename(program).casefold()
+    for extension in _PROGRAM_EXTENSIONS:
+        if name.endswith(extension):
+            name = name[:-len(extension)]
+            break
+    return name if name in LAUNCHERS else None
+
+
+def _rule(path: Path | str) -> str:
+    return "folder" if os.path.isdir(path) else "file"
+
+
+def upstream_paths(upstream: UpstreamConfig) -> list[tuple[Path | str, str]]:
+    """The upstream server's own files beyond its program (#13): each argument of ``upstream.command`` after
+    the first that is an absolute path to something that exists, and each ``upstream.check_paths`` entry.
+    A file comes with its folder, checked as a folder: a script's folder is where Python, Node, and most
+    others look for what it imports. Options and relative arguments are not read as paths, and a launcher is
+    not followed to its target. A ``check_paths`` entry that does not exist refuses
+    (``check_path_missing``): the operator named it so that it would be checked."""
+    paths: list[tuple[Path | str, str]] = []
+    named = [arg for arg in upstream.command[1:] if os.path.isabs(arg) and os.path.lexists(arg)]
+    for i, entry in enumerate(upstream.check_paths):
+        if not os.path.exists(entry):
+            raise ProxyConfigError(f"check_path_missing: upstream.check_paths[{i}]: {entry} does not exist; "
+                                   "fix the path or remove the entry")
+        named.append(entry)
+    for path in named:
+        rule = _rule(path)
+        paths.append((path, rule))
+        if rule == "file":
+            paths.append((os.path.dirname(os.path.abspath(path)), "folder"))
+    return paths
+
+
+def check_upstream_paths(upstream: UpstreamConfig, high_assurance: bool, *, stream=None) -> str | None:
+    """``upstream_paths_unchecked`` when ``upstream.command`` starts with a launcher and nothing names the
+    server's files: a warning on stderr, or under ``high_assurance`` a refusal. Returns the line, or None."""
+    name = launcher(upstream.command[0])
+    if name is None or upstream_paths(upstream):
+        return None
+    line = (f"upstream_paths_unchecked: upstream.command starts with {name}, so the start-up checks see {name} "
+            "and not the server it starts; name the server's files and folders in upstream.check_paths, or "
+            "give them as absolute arguments (docs/CONNECTING.md)")
+    if high_assurance:
+        raise ProxyConfigError(f"{line}; high_assurance refuses to start")
+    print(f"two-key: WARNING: {line}", file=sys.stderr if stream is None else stream)
+    return line
+
+
 def startup_paths(config: ProxyConfig) -> list[tuple[Path | str, str]]:
     """What the proxy reads or starts, for the writable-path check at start (two_key/writable.py): its
     config and the files it names, the ledger, the upstream program and the folder it starts in (the
-    proxy's own when ``upstream.cwd`` is unset, which under sudo is the caller's), each fact hook's module,
-    the folders of files sent by path, and a command scanner's program. (clamd's socket belongs to clamd's
-    own account, so it is left to the checklist in docs/CONNECTING.md.)"""
+    proxy's own when ``upstream.cwd`` is unset, which under sudo is the caller's), the upstream's own files
+    (``upstream_paths``), each fact hook's module, the folders of files sent by path, and a command
+    scanner's program. (clamd's socket belongs to clamd's own account, so it is left to the checklist in
+    docs/CONNECTING.md.)"""
     paths: list[tuple[Path | str, str]] = [(config.path, "file"), (config.constitution, "file"),
                                            (config.principal_key, "file"), (config.judges, "file"),
                                            (config.ledger, "folder")]
@@ -500,6 +561,7 @@ def startup_paths(config: ProxyConfig) -> list[tuple[Path | str, str]]:
     program = _program(config.upstream.command[0])
     if program:
         paths.append((program, "file"))
+    paths.extend(upstream_paths(config.upstream))
     for policy in config.tools.values():
         paths.extend(_tool_paths(policy))
     paths.extend(_scanner_paths(config.scan or {}))

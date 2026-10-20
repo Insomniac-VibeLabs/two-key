@@ -99,6 +99,11 @@ PROXY = _rows("proxy.yaml", [
     ("upstream.on_schema_change", "refuse", "`refuse` or `warn` when the server's tools no longer match "
      "`schema_digest`."),
     ("upstream.call_timeout_seconds", "60", "Seconds allowed for one upstream call, at most 3600."),
+    ("upstream.check_paths", "none", "Absolute paths of the server's own files and folders (package folder, script, "
+     "config) for the start-up checks, beside each absolute argument of `upstream.command`, which is checked without "
+     "being listed. At most 64; one that does not exist refuses to start (`check_path_missing`). A folder is "
+     "checked itself, not every file inside it. A launcher (`sudo`, `npx`, ...) as `command[0]` with nothing named "
+     "warns `upstream_paths_unchecked`.", {"ha": "a launcher with nothing named refuses"}),
     ("tools", "none", "Per-tool settings, keyed by a signed tool id."),
     ("tools.<id>.claim", "none (read as `classified`)", "What the proxy claims about the data class: `floor` (the "
      "signed `data_class_floor`), a data class, or `none`. The agent writes none of it."),

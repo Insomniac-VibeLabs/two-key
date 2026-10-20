@@ -11,6 +11,7 @@ agent-access check: that depends on which account starts the proxy, so only the 
 
 from __future__ import annotations
 
+import io
 import json
 import os
 from pathlib import Path
@@ -55,6 +56,7 @@ def check(path: Path | str, environ: Mapping[str, str] | None = None) -> list[tu
         found += _quorum(judges, policy)
         found += _agent(config)
     found += _environment(config, environ)
+    found += _upstream(config, high)
     found += _writable(config, high)
     found += _siem(config, high)
     found.append((OK, "agent_access: not checked here; the proxy checks the account that starts it "
@@ -116,14 +118,32 @@ def _environment(config, environ: Mapping[str, str]) -> list[tuple[str, str]]:
     return out or [(OK, "environment: every variable the config names is set")]
 
 
+def _upstream(config, high: bool) -> list[tuple[str, str]]:
+    """The upstream server's files (#13): a ``check_paths`` entry that does not exist, and a launcher with
+    nothing named (``upstream_paths_unchecked``), which ``high_assurance`` refuses."""
+    from .mcp_proxy.config import ProxyConfigError
+    from .mcp_proxy.core import check_upstream_paths, upstream_paths
+    try:
+        upstream_paths(config.upstream)
+        line = check_upstream_paths(config.upstream, high, stream=io.StringIO())
+    except ProxyConfigError as e:
+        return [(FAIL, str(e))]
+    return [(WARN, line)] if line else []
+
+
 def _writable(config, high: bool) -> list[tuple[str, str]]:
     from . import writable
+    from .mcp_proxy.config import ProxyConfigError
     from .mcp_proxy.core import startup_paths
     try:
         mode = writable.resolve_mode(config.on_writable_paths, high)
     except ValueError as e:
         return [(FAIL, str(e))]
-    found = writable.check(startup_paths(config))
+    try:
+        paths = startup_paths(config)
+    except ProxyConfigError:        # check_path_missing, already a failure from _upstream
+        return []
+    found = writable.check(paths)
     level = FAIL if mode == "refuse" else WARN
     out = [(level, f"writable_path: {p}: {problem}") for p, problem in found[:writable.MAX_LINES]]
     if len(found) > writable.MAX_LINES:
@@ -188,6 +208,7 @@ def show(path: Path | str) -> dict[str, Any]:
             "schema_digest": config.upstream.schema_digest,
             "on_schema_change": config.upstream.on_schema_change,
             "call_timeout_seconds": config.upstream.call_timeout_seconds,
+            "check_paths": [str(p) for p in config.upstream.check_paths],
         },
         "tools": {tool: {"claim": p.claim, "upstream_name": p.upstream_name,
                          "proposal": p.proposal is not None, "facts": dict(p.facts),
