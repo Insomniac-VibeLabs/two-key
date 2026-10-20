@@ -313,7 +313,8 @@ neither.
 - Running as an MCP server that offers tools of its own. The MCP proxy
   speaks MCP only to forward an upstream server's signed tools.
 - A gateway in its own process or on its own host, or a gateway-only
-  ledger role (#45). The gateway runs in the `TwoKey` process.
+  ledger role. This is a decision, not a gap: the gateway runs in the
+  `TwoKey` process ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
 - A hosted, remote, or multi-user GUI, and a GUI that holds the signing key.
 - A CMVP validation of this package, and any claim that it is "FIPS
   compliant" or "FIPS validated".
@@ -435,7 +436,7 @@ AGENTS.md requires.
      fact hooks already have.
    - Move the CodeQL action to v4 before v3's deprecation (December 2026),
      and take Dependabot's action updates.
-   - Close #2 and #10, finish #3, delete the merged `mcp-proxy` branch, and
+   - Close #2 and #10 (both closed), finish #3, delete the merged `mcp-proxy` branch, and
      push the run 6 and 6z results to their test branches.
    - **Platforms.** Make macOS a required CI job once it passes. For
      Windows, the maintainer decides between full support in 0.6.0 and
@@ -619,7 +620,7 @@ below are what shipped.
 
 0.3.0 also carries two changes that are not part of this
 phase: custom Path A fields (see "After 1.0") and the gateway deployment
-boundary (#45; see "Not planned"). CHANGES has a section for each.
+boundary ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process); see "Not planned"). CHANGES has a section for each.
 
 Not in this version: PKI and certificate identities (see "After 1.0") and
 seed-phrase backup. A weak passphrase remains a residual risk. PBKDF2 is

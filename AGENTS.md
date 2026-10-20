@@ -286,7 +286,7 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   `_platform`; do not widen that.
 - The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
   (`TwoKey.gateway()`). A gateway in another process or host is not
-  supported (#45); do not add a gateway-only ledger role, remote gateway,
+  supported, by design ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)); do not add a gateway-only ledger role, remote gateway,
   or cross-process protocol without the operator. Do not describe
   verify-only as key isolation: the process holds the minting, principal,
   witness, and ledger keys, and the registered tools run there.

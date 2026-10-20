@@ -7,9 +7,30 @@ leaves out is [SCOPE.md](SCOPE.md).
 
 Commands are from the repository root.
 
+## Start here
+
+This page is long. Pick the route that matches how your agent calls tools, then read
+the sections for that route in the order given. [CONNECTING.md](CONNECTING.md) says which
+accounts and network rules each route needs, and it is the place to start if you are not
+sure which route fits.
+
+| Your agent is | Route | Read, in order |
+| --- | --- | --- |
+| An MCP client, or code you do not control, in any language | **MCP proxy** (`two-key mcp-proxy`) | [Install](#install), [Create a principal key and sign a constitution](#create-a-principal-key-and-sign-a-constitution), [Data classes](#data-classes), [Designing a constitution](#designing-a-constitution), [Judges](#judges), [Quorum policy](#quorum-policy), then [Put Two-Key in front of an MCP server](#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy) |
+| A Python agent loop where your code decides which functions run (LangChain, the OpenAI Agents SDK, your own) | **Guard** | The same first six, then [Caller-supplied facts](#caller-supplied-facts) (it holds "The guard"), [Monitored agents](#monitored-agents), and [Redeem](#redeem) |
+| Python code that calls `TwoKey` directly | **Library** | The same first six, then [Authorize from Python](#authorize-from-python), [Monitored agents](#monitored-agents), and [Redeem](#redeem) |
+
+Whichever route you take, read these before you let an agent run: [Back up the
+keys](#back-up-the-keys), [Known trade-offs by configuration](#known-trade-offs-by-configuration),
+and [Checklist before you let an agent run](CONNECTING.md#checklist-before-you-let-an-agent-run).
+Content scanning ([Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product))
+and the SIEM copy ([Send the ledger to a SIEM](#send-the-ledger-to-a-siem)) are optional on every
+route. The rest of the page is reference, for when a section above points to it.
+
 ## Contents
 
 <!-- toc -->
+- [Start here](#start-here)
 - [Install](#install)
   - [Platforms](#platforms)
 - [Create a principal key and sign a constitution](#create-a-principal-key-and-sign-a-constitution)
@@ -67,12 +88,13 @@ On Windows, activate with `.venv\Scripts\activate` instead. Two-Key runs on
 Linux, macOS, and Windows (0.6.0); see "Platforms" below for how keys are
 protected on each.
 
-That follows the ranges in `pyproject.toml`. The same checkout's `uv.lock`
-is what CI installs (wheels only). To match it, install the uv version
-pinned in `.github/workflows/tests.yml`, then `uv sync --locked --no-build
---extra yaml --extra mcp --no-dev`, and run tests with `.venv/bin/python`. When a
-dependency range changes, regenerate `uv.lock` with that same uv and commit
-it. The lock is not a consumer pin: a git install still uses the ranges.
+That follows the ranges in `pyproject.toml`. CI installs from the same
+checkout's `uv.lock` instead (wheels only). To match it, install the uv
+version pinned in `.github/workflows/tests.yml`, run `uv sync --locked
+--no-build --extra yaml --extra mcp --no-dev`, and run the tests with
+`.venv/bin/python`. When a dependency range changes, regenerate `uv.lock`
+with that same uv and commit it. The lock is not a consumer pin: a git
+install still uses the ranges.
 
 Version 0.7.0 is on PyPI. Tag `v0.7.0` is not moved. Install with
 `pip install "two-key[yaml]==0.7.0"` (the `mcp` extra for the proxy).
@@ -99,10 +121,10 @@ not (`*_insecure`), with the command that fixes it:
 
 A symlink (or, on Windows, a junction) in place of a key file is refused
 on every platform. Two-Key processes that share a ledger take a
-cross-process lock (`flock`, or `LockFileEx` on Windows) on the separate
-`<ledger>.lock` and `<ledger>.redeem-locks` files. In `proxy.yaml`,
-`upstream.command` can name `npx` on Windows: the proxy finds `npx.cmd`
-through `PATHEXT`, without a shell.
+cross-process lock on the separate `<ledger>.lock` and
+`<ledger>.redeem-locks` files (`flock`, or `LockFileEx` on Windows). In
+`proxy.yaml`, `upstream.command` can name `npx` on Windows. The proxy finds
+`npx.cmd` through `PATHEXT`, without a shell.
 
 ## Create a principal key and sign a constitution
 
@@ -1394,18 +1416,19 @@ without `private_key=` (`no_issuer_key:`). Constructing
 `ToolGateway(tk.ledger, tk.issuer.verifier(), tk.compiled, tools=...)`
 directly in the same process is equivalent; passing `tk.issuer` also works.
 The constructor keeps a verifier, so `gw.issuer.private_key` is `None` and
-`gw.issuer.issue(...)` raises `verifier_cannot_mint`. The minting key is `<ledger>.capability/capability.pem`,
-next to the ledger directory, not inside it. The public half is
-`capability.pub.pem` beside it. The key is created once with mode 0600 in a
-0700 directory. After a token has been issued it is never regenerated: a
-missing or different key refuses to start (`capability_key_missing`,
-`capability_key_changed`), and so does a ledger with issued tokens but no
-pinned key fingerprint (`capability_key_unpinned`). Once a `TwoKey` with
-`private_key=` has run on a ledger, a start without it is refused
-(`keyless_start_refused:`): it would record no capability key and block
-later keyed starts. A capability key equal to the principal key is
-refused. The principal key on the ledger signs the head. A token signed
-with that principal key does not redeem.
+`gw.issuer.issue(...)` raises `verifier_cannot_mint`.
+
+The minting key is `<ledger>.capability/capability.pem`, next to the ledger
+directory, not inside it. The public half is `capability.pub.pem` beside it.
+The key is created once with mode 0600 in a 0700 directory. After a token
+has been issued it is never regenerated. A missing or different key refuses
+to start (`capability_key_missing`, `capability_key_changed`), and so does a
+ledger with issued tokens but no pinned key fingerprint
+(`capability_key_unpinned`). Once a `TwoKey` with `private_key=` has run on a
+ledger, a start without it is refused (`keyless_start_refused:`), because it
+would record no capability key and block later keyed starts. A capability
+key equal to the principal key is refused. The principal key on the ledger
+signs the head, and a token signed with that principal key does not redeem.
 
 The gateway checks the signature, expiry, a lifetime no longer than the TTL
 (`ttl_too_long`), an issue time no more than 5 s ahead
@@ -1446,10 +1469,9 @@ the tool runs also blocks a retry.
 
 The gateway runs in the same process as `TwoKey`, on the ledger object
 `TwoKey` uses. Build it with `TwoKey.gateway()`. A gateway in another
-process or on another host is not supported
-([#45](https://github.com/Insomniac-VibeLabs/two-key/issues/45)),
-and this package has no gateway-only ledger role, remote gateway, or
-cross-process protocol.
+process or on another host is not supported, and this package has no
+gateway-only ledger role, remote gateway, or cross-process protocol. That
+is a security decision, not a missing feature; the reasons follow.
 
 Why:
 
@@ -1896,7 +1918,7 @@ claimed: they come from the argument bytes and the signed spec, as in
   1. the fact hooks;
   2. `TwoKey.authorize` (origin `mcp-proxy`);
   3. the hooks again;
-  4. `gateway.invoke` in the same process (#45).
+  4. `gateway.invoke` in the same process ([why](#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
 
   The gateway's registered tool is the upstream `tools/call`, with the
   projected arguments only: an unnamed key never reaches the server, and a
@@ -1976,7 +1998,7 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 - **The `two-key` user** holds the principal key, the ledger and its key,
   witness, and capability directories, `judges.yaml`, the judge keys, the
   agent session, and the upstream credential. As with the library, one
-  process holds all of them (#45).
+  process holds all of them ([why](#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
 - **The agent host's user** must not be able to read any of that, change
   `proxy.yaml` or the constitution, or reach the upstream server or its
   credential by another path. An agent that can call the upstream directly

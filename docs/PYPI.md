@@ -1,26 +1,30 @@
-# Register and release on PyPI
+# Release on PyPI
 
-This page is how to register the distribution name `two-key` and upload a
-release. It does not change what Two-Key does. Application code is not part
-of this packaging, and version `0.7.0` is unchanged: `pyproject.toml` and
-`two_key.__version__` both say `0.7.0`.
+This page is how a release of `two-key` is published, and how the project was
+registered. It does not change what Two-Key does.
 
-The `0.7.0` release is being prepared for its first upload to PyPI. At the time this document was written, `two-key` was not registered on [pypi.org](https://pypi.org/project/two-key/) or [test.pypi.org](https://test.pypi.org/project/two-key/). The PyPI name can be claimed between checks, so always verify availability before attempting the first upload. PyPI treats `two-key`, `two_key`, and `two.key` as the same project. The import name stays `two_key`.
-
-The public 1.0 review in [ROADMAP.md](https://github.com/Insomniac-VibeLabs/two-key/blob/PyPI/ROADMAP.md) is still ahead. These files make a release possible; the workflow performs the actual upload.
+`two-key` has been on [pypi.org](https://pypi.org/project/two-key/) since
+2026-10-17. PyPI has `0.7.0`, `0.7.1` and `0.7.2`, all uploaded that day.
+`0.7.1` and `0.7.2` are packaging releases made from the `PyPI` branch, which
+swaps the Mermaid diagrams for pictures (PyPI shows the README and nothing
+under `docs/`) and names its own version in the install lines. They are not
+on this branch: `pyproject.toml` and `two_key.__version__` here still say
+`0.7.0`, and the next release is numbered above `0.7.2`, a number chosen at
+release time. PyPI treats `two-key`, `two_key`, and `two.key` as the same
+project. The import name stays `two_key`. The public 1.0 review in
+[ROADMAP.md](../ROADMAP.md) is still ahead.
 
 ## What a consumer will install
 
-After the first upload to pypi.org:
-
 ```bash
-pip install "two-key==0.7.0"
-pip install "two-key[yaml]==0.7.0"
-pip install "two-key[mcp]==0.7.0"
+pip install "two-key==X.Y.Z"
+pip install "two-key[yaml]==X.Y.Z"
+pip install "two-key[mcp]==X.Y.Z"
 ```
 
-Until that upload, those commands do not work. Install from git, as
-[HOWTO.md](HOWTO.md) "Install" and the README say:
+`X.Y.Z` is a version listed on the [project page](https://pypi.org/project/two-key/#history).
+The tag `v0.7.0` on `main` is the git snapshot of `0.7.0`, and can be installed
+directly:
 
 ```bash
 pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
@@ -76,18 +80,18 @@ A tag push always targets PyPI, and only when the tag is `v` plus the
 version in `pyproject.toml`. `v0.7.1` on a tree that still says `0.7.0`
 fails before the upload. A manual run defaults to TestPyPI.
 
-`v0.7.0` already points at `main` and must not be moved. The first upload
-of version `0.7.0` is a manual run of this workflow on the `PyPI` branch,
-not a new `v0.7.0` tag. Later releases get a new version in both
-`pyproject.toml` and `two_key.__version__`, then a new signed tag `vX.Y.Z`
-on a commit that contains this workflow. PyPI never replaces a version.
+`v0.7.0` already points at `main` and must not be moved. A release gets a
+new version in both `pyproject.toml` and `two_key.__version__`, then a new
+signed tag `vX.Y.Z` on a commit that contains this workflow, or a manual
+run of this workflow on the `PyPI` branch. PyPI never replaces a version.
 A metadata fix after the upload needs a new version number.
 
 ## Register the name
 
-Do this once, before the first upload. The project does not exist until
-that upload succeeds. A pending publisher is what reserves the name for
-this repository.
+Done: the project exists and its pending publisher became a trusted
+publisher with the first upload. These steps are what was done, for a
+fresh setup or a new index. A pending publisher is what reserves a name for
+this repository before the project exists there.
 
 PyPI accounts need two-factor authentication.
 
@@ -114,14 +118,14 @@ PyPI accounts need two-factor authentication.
 ```bash
 pip install --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ \
-  "two-key[yaml]==0.7.0"
+  "two-key[yaml]==X.Y.Z"
 python -c "import two_key; print(two_key.__version__)"
 two-key --help
 ```
 
-TestPyPI and PyPI do not share projects. Uploading `0.7.0` to TestPyPI
-does not consume `0.7.0` on PyPI. Uploading `0.7.0` twice to the same
-index fails.
+TestPyPI and PyPI do not share projects. Uploading a version to TestPyPI
+does not consume it on PyPI. Uploading a version twice to the same index
+fails.
 
 ### PyPI
 
@@ -138,7 +142,7 @@ Repeat the pending publisher on the real index.
 5. Confirm `https://pypi.org/project/two-key/` and then:
 
 ```bash
-pip install "two-key[yaml]==0.7.0"
+pip install "two-key[yaml]==X.Y.Z"
 ```
 
 The pending publisher becomes a trusted publisher on the project after
@@ -150,9 +154,8 @@ create an environment with no reviewer the first time the job asks for it.
 
 ## Tags and `main`
 
-- Do not move `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, or any older tag.
-  The first upload of `0.7.0` is a manual run from branch `PyPI`, not a
-  retag.
+- Do not move `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, or any older tag. A
+  fix to what is on the index is a new version, never a retag.
 - Do not choose branch `main` in **Run workflow**. The workflow file is on
   `main`, which is why GitHub lists it. The jobs still refuse every ref
   except `refs/heads/PyPI` and a `vX.Y.Z` tag. A GitHub Release is not a

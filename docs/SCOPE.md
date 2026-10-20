@@ -1,9 +1,8 @@
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.7.0. Tag
-`v0.7.0` on `main` is the tagged release; `v0.6.0`, `v0.5.0` and `v0.4.0` are the ones before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
-Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
-is on `main`. `v0.1.6` stays on the previous tree.
+`two-key` is beta (pre-1.0). Package version 0.7.0, tag `v0.7.0` on `main`. What each release
+shipped is under "Shipped" in [ROADMAP.md](../ROADMAP.md); tags and branches are in
+[AGENTS.md](../AGENTS.md).
 
 It has:
 
@@ -34,7 +33,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
 - a capability key outside the ledger directory. The gateway verifies
   tokens with the public half only. It runs in the `TwoKey` process on the
   `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process
-  or on another host is not supported (#45), and there is no gateway-only
+  or on another host is not supported, by design ([why](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)), and there is no gateway-only
   ledger role
 - a single-use token and a gateway intended to be the only component that
   invokes registered tools; this does not stop an agent from calling a

@@ -1,10 +1,15 @@
 # Is this for you?
 
-Beta (pre-1.0), maintainer-reviewed, not independently audited. Not a FIPS 140-3 validated module. 0.7.0 is on PyPI (`pip install "two-key"`). Tag `v0.7.0` is not moved. The release steps are [PYPI.md](PYPI.md). 0.6.0 adds Windows support, content scanning through your antivirus or DLP product, and a start-up check for paths another account could change; 0.5.0 added an MCP
-adapter (a stdio proxy, a spec drafter, caller-supplied facts, and a guard core for any agent loop; issue #2). Package `two-key` version 0.7.0. Tag `v0.7.0` on `main` is the tagged release; `v0.6.0`, `v0.5.0` and `v0.4.0` are the ones before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`.
-`v0.1.6` stays on the previous tree.
+Beta (pre-1.0), maintainer-reviewed, not independently audited. Not a FIPS 140-3 validated module.
+This page describes `two-key` 0.7.0, which is on PyPI (`pip install "two-key"`); the release steps are
+[PYPI.md](PYPI.md). 0.7.0 adds the SIEM export and a start-up check for a monitored agent that runs as
+Two-Key's own account; 0.6.0 added Windows support, content scanning through your antivirus or DLP
+product, and a start-up check for paths another account could change; 0.5.0 added an MCP adapter (a
+stdio proxy, a spec drafter, caller-supplied facts, and a guard core for any agent loop). What each
+release shipped is under "Shipped" in [ROADMAP.md](../ROADMAP.md), and tags are in
+[AGENTS.md](../AGENTS.md).
 Apache-2.0.
-Crypto is Ed25519 and SHA-256.
+Crypto is Ed25519, SHA-256, and AES-256-GCM (the ledger's ciphertext).
 
 This package has a ledger, Path A, Path B, and judge and
 monitored-agent hooks. It has no scanning engine; from 0.6.0 it can call your antivirus or DLP product for the tools you
@@ -40,8 +45,8 @@ That backup is not a seed phrase.
   single-use token, 120 seconds by default, signed by the capability key.
   That private key is not on the gateway object, but it is in the same
   process: the gateway runs in the `TwoKey` process (`TwoKey.gateway()`),
-  and a gateway in another process or on another host is not supported
-  (#45). The token is bound to the tool,
+  and a gateway in another process or on another host is not supported,
+  by design ([why](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)). The token is bound to the tool,
   the argument hash, the ledger Merkle root and size at issuance, and the
   constitution hashes (`bytecode_hash`, `nl_hash`, and `spec_hash`), plus
   the form derived from the argument bytes. A constitution that omits

@@ -9,7 +9,7 @@ A call runs only if Path A and Path B both allow, and only if the gateway
 later redeems a single-use token bound to that tool and those argument
 bytes. Path A does not read English. The MCP proxy (0.5.0) forwards an upstream server's signed tools and offers none of its own.
 From 0.6.0 there are optional
-hooks that call your antivirus or DLP product (docs/SCANNERS.md); it does
+hooks that call your antivirus or DLP product ([SCANNERS.md](SCANNERS.md)); it does
 not ship a scanning engine. Key backup (0.3.0) is three
 passphrase bundles of this package's own keys, not a seed phrase and not a
 substitute for a password manager.

@@ -132,7 +132,7 @@ a symlink output directory, and a directory the group or others can write.
 
 The gateway runs in the `TwoKey` process, on the `TwoKey` ledger object
 (`TwoKey.gateway()`). A gateway in another process or on another host is
-not supported (#45). The gateway's verifier holds only the capability
+not supported, by design ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)). The gateway's verifier holds only the capability
 public key, so it cannot mint; that is an API property, not key isolation.
 The same process holds the capability minting key and, on the shared
 ledger object, the principal, witness, and ledger keys, and the registered

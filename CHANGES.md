@@ -114,6 +114,7 @@
 - [Release v0.7.0: the SIEM export, the agent-account check — 2026-10-16](#release-v070-the-siem-export-the-agent-account-check--2026-10-16)
 - [PyPI packaging on the PyPI branch — 2026-10-16](#pypi-packaging-on-the-pypi-branch--2026-10-16)
 - [Diagrams: one house style, checked by a test (#29) — 2026-10-20](#diagrams-one-house-style-checked-by-a-test-29--2026-10-20)
+- [Docs: prose accuracy and readability pass — 2026-10-20](#docs-prose-accuracy-and-readability-pass--2026-10-20)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3861,3 +3862,34 @@ Docs only, plus one test and one workflow. No application code changed.
   build artifact, so they can be looked at together before a release. The
   docs keep real Mermaid; nothing is committed as a picture.
 - CONTRIBUTING and AGENTS.md name the rule.
+
+## Docs: prose accuracy and readability pass — 2026-10-20
+
+Docs only. No application code changed.
+
+- docs/PYPI.md is rewritten as "how a release is published". It said 0.7.0
+  was "being prepared for its first upload" and that `two-key` was not
+  registered; PyPI has had `0.7.0`, `0.7.1` and `0.7.2` since 2026-10-17
+  (`0.7.1` and `0.7.2` are only on the `PyPI` branch), and the next release
+  is numbered above `0.7.2`. Install lines use `X.Y.Z`.
+- FIT.md said 0.6.0 was the latest release and left AES-256-GCM out of its
+  list of crypto; both are fixed.
+- THREAT_MODEL, FIT and SCOPE no longer open with a paragraph of tag
+  history. THREAT_MODEL keeps what each release added in a closing "Changes
+  by release" section (0.7.0's agent-account check is now in it); FIT and
+  SCOPE point to ROADMAP "Shipped" and AGENTS.md.
+- Every "#45" in the README, ROADMAP, AGENTS.md, llms.txt, SECURITY and the
+  docs, and the two HOWTO and README links to `issues/45` (a 404 here: #45 was
+  an issue of the archived `two-key-concept` repository), now point to
+  HOWTO "Deployment boundary: the gateway runs in the TwoKey process" and say
+  the gateway stays in the process by design. The code's own comments and
+  the `gateway.py` message still cite #45 and are not changed here; earlier
+  CHANGES entries keep it as history.
+- HOWTO opens with a "Start here" table: three routes (MCP proxy, guard,
+  library) and the sections each one needs, in order. A few long passages in
+  Install, Platforms and Redeem are split into shorter sentences, with no
+  fact changed.
+- COMPARISON links to SCANNERS.md. ROADMAP's 0.6.0 plan notes that #2 and #10
+  are closed.
+- Not touched here: the supported Python range and the upstream-path
+  check text, which the Python 3.15 and #13 changes own.

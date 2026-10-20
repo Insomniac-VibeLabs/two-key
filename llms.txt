@@ -107,7 +107,7 @@ reputation halt is on the roadmap after 1.0 and is not built.
 The token TTL default is 120 seconds, at most 300. It is signed by the capability key, not
 the principal key. The gateway verifies only. It runs in the TwoKey process on the
 TwoKey ledger object (TwoKey.gateway()); a gateway in another process or host is not
-supported (#45), and verify-only is not key isolation: that process also holds the
+supported, by design (docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process), and verify-only is not key isolation: that process also holds the
 minting, principal, witness, and ledger keys, and the registered tools. It binds the tool, the argument
 hash, the ledger root and size, the constitution hashes, spec_hash, and the
 derived form. tool_specs is required. A disagreeing claim is a deny.
@@ -173,7 +173,7 @@ when upstream.schema_digest does not match those fields (upstream_schema_changed
 on_schema_change: warn. It refuses an unresolved_identity warning unless allow_unresolved_identity:
 true (the library only warns). Each tools/call: authorize with the per-tool claim (claim: floor, a
 data class, or none = classified; amount, counterparty, irreversible never claimed; fixed proposal),
-then gateway.invoke in the same process (#45), whose tool is the upstream tools/call with projected
+then gateway.invoke in the same process (docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process), whose tool is the upstream tools/call with projected
 arguments only. tools.<id>.facts: {field: {hook: "module:function"}} runs a fact hook; caller
 paths are removed from the inputSchema shown. Other names are tool_not_offered (ledgered);
 mcp_proxy_started is ledgered at start. A deny is an MCP tool error "two-key

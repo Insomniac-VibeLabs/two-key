@@ -185,7 +185,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 - **Policy Enforcer (Path A)**: Deterministic bytecode policy VM. It evaluates structured fields derived from the argument bytes according to the signed tool specs. It does not read free text or English.
 - **Judge (Path B)**: Trusted AI agent (local or cloud, preferably suited to the use case). It scores the normalized action record (and optionally the proposal). It has no direct access to any registered tool.
 - **Monitored Agent**: The untrusted agent under constraint. It proposes actions; it has no direct access to any registered tool.
-- **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported (#45). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
+- **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported, by design ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
 - **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
 - **MCP proxy** (0.5.0; the `mcp` extra): `two-key mcp-proxy` sits between an MCP client and one upstream MCP server. It shows the agent only the signed tools, pins their schemas, and runs every `tools/call` through both keys and the in-process gateway. `two-key mcp-draft-specs` drafts the tool specs for the principal to review and sign. See HOWTO "Put Two-Key in front of an MCP server".
 - **SIEM export** (0.7.0): the ledger can copy each entry, as
@@ -517,8 +517,8 @@ or changed key refuses to start. Its fingerprint is recorded in
 
 The gateway runs in the `TwoKey` process, on the ledger object `TwoKey`
 uses. Build it with `TwoKey.gateway()`. A gateway in another process or on
-another host is not supported
-([#45](https://github.com/Insomniac-VibeLabs/two-key/issues/45)):
+another host is not supported, by design
+([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)):
 a `Ledger` opened elsewhere does not see tokens issued after it opened, so
 it refuses them, and it would hold the principal, witness, and ledger keys
 anyway. A gateway built on a ledger no `TwoKey` in the process opened emits
@@ -682,7 +682,7 @@ Upgrading from an older version: read the "Upgrading" notes in
   from 0.1.12" from older versions).
 - 0.2.4 writes a head anchor on the first open of an existing ledger and
   refuses a rolled-back ledger directory: "Upgrading from 0.2.3".
-- 0.3.0 adds key backup, custom Path A fields, and `TwoKey.gateway()` (#45).
+- 0.3.0 adds key backup, custom Path A fields, and `TwoKey.gateway()` ([why it stays in process](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
   Existing ledgers and constitutions open unchanged: "Upgrading from
   0.2.4". A constitution that declares custom fields signs as v2, which
   installs before 0.3.0 refuse: "Custom Path A fields" > "Upgrading".
