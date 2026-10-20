@@ -119,6 +119,7 @@
 - [`two-key config show` and `config check`: read-only views of a proxy config — 2026-10-20](#two-key-config-show-and-config-check-read-only-views-of-a-proxy-config--2026-10-20)
 - [Python 3.13 to 3.15: compiled files stay checked, CI, docs (#27) — 2026-10-20](#python-313-to-315-compiled-files-stay-checked-ci-docs-27--2026-10-20)
 - [The proxy checks the upstream server's files behind a launcher (#13) — 2026-10-20](#the-proxy-checks-the-upstream-servers-files-behind-a-launcher-13--2026-10-20)
+- [`upstream.check_paths` on Windows needs the drive (#13) — 2026-10-20](#upstreamcheck_paths-on-windows-needs-the-drive-13--2026-10-20)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4037,3 +4038,14 @@ refuse` included. On Linux, macOS, and Windows alike:
   the server where only root or Two-Key's account can change it, and give
   its program as an absolute path or list its folder in
   `upstream.check_paths`.
+
+## `upstream.check_paths` on Windows needs the drive (#13) — 2026-10-20
+
+- CI on Windows with Python 3.13 and 3.14 failed `tests/test_mcp_docs.py`:
+  the HOWTO example's `check_paths` entry, `/opt/billing-mcp/...`, has no
+  drive, and from Python 3.13 on Windows does not call such a path
+  absolute. That refusal was right, but on 3.10 to 3.12 the same entry
+  was accepted and read against whichever drive was current. On Windows an
+  entry now needs its drive or a UNC share on every Python version
+  (`expected an absolute path`). The docs test expects that refusal on
+  Windows, and HOWTO and SETTINGS say so.

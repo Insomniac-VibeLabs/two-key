@@ -208,7 +208,8 @@ def _timeout(value: Any) -> float:
 
 def _check_paths(value: Any) -> tuple[Path, ...]:
     """``upstream.check_paths``: absolute paths only. A relative one would be read against the proxy's
-    folder, not the folder the upstream starts in, and ``~`` against the proxy's account, not the upstream's."""
+    folder, not the folder the upstream starts in, and ``~`` against the proxy's account, not the upstream's.
+    On Windows a path needs its drive (or a UNC share): ``\\opt`` means a different folder on each drive."""
     if not isinstance(value, list) or not value:
         raise ProxyConfigError("upstream.check_paths: expected a non-empty list of absolute paths")
     if len(value) > MAX_CHECK_PATHS:
@@ -216,7 +217,8 @@ def _check_paths(value: Any) -> tuple[Path, ...]:
     out = []
     for i, item in enumerate(value):
         where = f"upstream.check_paths[{i}]"
-        if not isinstance(item, str) or not item or "\x00" in item or not os.path.isabs(item):
+        if not isinstance(item, str) or not item or "\x00" in item or not os.path.isabs(item) \
+                or (os.name == "nt" and not os.path.splitdrive(item)[0]):
             raise ProxyConfigError(f"{where}: expected an absolute path")
         out.append(Path(item))
     return tuple(out)

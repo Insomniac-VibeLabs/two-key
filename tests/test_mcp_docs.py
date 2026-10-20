@@ -1,12 +1,13 @@
 """The MCP proxy's worked example in docs/HOWTO.md stays true: its proxy.yaml parses, its rules sign."""
 
+import os
 import re
 import unittest
 from pathlib import Path
 
 from two_key.constitution import sign_constitution
 from two_key.keys import generate_private_key
-from two_key.mcp_proxy.config import parse_proxy_config
+from two_key.mcp_proxy.config import ProxyConfigError, parse_proxy_config
 from two_key.mcp_proxy.draft import draft_specs, render_rules
 from two_key.strict import load_yaml
 
@@ -26,7 +27,17 @@ class WorkedExample(unittest.TestCase):
 
     def test_proxy_example_parses(self):
         text = next(b for b in YAML_BLOCKS if "upstream:" in b).replace('"sha256:..."', '"sha256:' + "a" * 64 + '"')
-        cfg = parse_proxy_config(load_yaml(text), Path("/etc/two-key/proxy.yaml"))
+        data = load_yaml(text)
+        windows = os.name == "nt"
+        if windows:
+            # The example is a Linux one. On Windows, /opt/... has no drive, and check_paths refuses it rather
+            # than read it against whichever drive is current.
+            with self.assertRaisesRegex(ProxyConfigError, r"upstream.check_paths\[0\]: expected an absolute path"):
+                parse_proxy_config(data, Path("/etc/two-key/proxy.yaml"))
+            del data["upstream"]["check_paths"]
+        cfg = parse_proxy_config(data, Path("/etc/two-key/proxy.yaml"))
+        if not windows:
+            self.assertEqual(cfg.upstream.check_paths, (Path("/opt/billing-mcp/node_modules/@example/billing-mcp"),))
         self.assertEqual(cfg.upstream.command[:4], ("sudo", "-n", "-u", "mcp-billing"))
         self.assertEqual(cfg.tool_policy("pay_vendor").claim, "floor")
         self.assertEqual(cfg.tool_policy("pay_vendor").facts, {"po_matched": "billing_facts:po_matches"})

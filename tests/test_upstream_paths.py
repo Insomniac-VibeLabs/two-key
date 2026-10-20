@@ -94,6 +94,12 @@ class Setting(Tree):
         with self.assertRaisesRegex(ProxyConfigError, f"at most {MAX_CHECK_PATHS} entries"):
             self.config(check_paths=[str(self.server)] * (MAX_CHECK_PATHS + 1))
 
+    @unittest.skipUnless(os.name == "nt", "Windows drives")
+    def test_a_windows_path_needs_its_drive(self):
+        for bad in ("\\opt\\server", "/opt/server"):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ProxyConfigError, "expected an absolute path"):
+                self.config(check_paths=[bad])
+
     def test_launcher_names(self):
         for program in ("sudo", "/usr/bin/sudo", "doas", "env", "/usr/bin/env", "npx", "NPX.CMD", "npx.cmd",
                         "uvx", "uvx.exe", "pipx", "cmd", "cmd.exe", "powershell.exe", "pwsh", "Pwsh.EXE"):
