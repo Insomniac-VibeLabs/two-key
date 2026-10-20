@@ -115,6 +115,7 @@
 - [PyPI packaging on the PyPI branch — 2026-10-16](#pypi-packaging-on-the-pypi-branch--2026-10-16)
 - [Diagrams: one house style, checked by a test (#29) — 2026-10-20](#diagrams-one-house-style-checked-by-a-test-29--2026-10-20)
 - [Docs: prose accuracy and readability pass — 2026-10-20](#docs-prose-accuracy-and-readability-pass--2026-10-20)
+- [docs/SETTINGS.md: every setting, generated and tested — 2026-10-20](#docssettingsmd-every-setting-generated-and-tested--2026-10-20)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3893,3 +3894,31 @@ Docs only. No application code changed.
   are closed.
 - Not touched here: the supported Python range and the upstream-path
   check text, which the Python 3.15 and #13 changes own.
+
+## docs/SETTINGS.md: every setting, generated and tested — 2026-10-20
+
+No behavior change. The settings were spread across HOWTO tables, SIEM.md,
+JUDGES_AND_QUORUM.md and the example files; this is the one map.
+
+- `two_key/settings.py` is a catalogue with one row per key that a loader
+  accepts: the file, the dotted key, the default, what `high_assurance` does
+  to it, whether the value names a secret, and the tier (signed policy or
+  operator config). It covers `proxy.yaml`, `judges.yaml` (judges, quorum,
+  `monitored_agent`), `agents.yaml`, and the signed `hard_rules.yaml` (rule
+  types, tool specs, custom fields). A signed setting needs the principal
+  key to change; an operator setting needs write access to its file and a
+  restart.
+- `docs/SETTINGS.md` is generated from it with
+  `python tests/test_settings_doc.py --write`, with a "Who can change what"
+  table and the table of what `high_assurance` changes.
+- `tests/test_settings_doc.py` reads the key sets the loaders use and fails
+  when a key has no row, when a row names a key no loader accepts, when a
+  row is repeated, or when the page is not what the catalogue renders. A key
+  added later (for example `upstream.check_paths`) fails the suite until it
+  has a row.
+- `two_key/constitution.py` names the key sets of a rules file, a tool spec
+  and its parts (`RULES_FILE_KEYS`, `TOOL_SPEC_KEYS`, `AMOUNT_KEYS`,
+  `COUNTERPARTY_KEYS`, `PAYLOAD_KEYS`, `FIELD_MAPPING_KEYS`) so the test reads
+  the same sets as the validators. The validators accept exactly the keys they
+  did before.
+- README, HOWTO, CONNECTING, AGENTS.md, CONTRIBUTING and llms.txt point to it.

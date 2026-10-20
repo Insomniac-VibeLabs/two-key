@@ -431,7 +431,9 @@ Unix socket in a directory the agent cannot write, need none of this.
 
 ## What Two-Key checks for you
 
-At start and on every call, without any setup from you:
+At start and on every call, without any setup from you (the settings that
+tune these checks, `on_agent_access` and `on_writable_paths`, are in
+[SETTINGS.md](SETTINGS.md)):
 
 - The constitution's signature, on every load; a v1 or v2 envelope that
   carries a newer feature is refused.

@@ -1855,7 +1855,10 @@ The proxy prints `two-key: mcp-proxy: serving 2 signed tool(s)
 ### `proxy.yaml`
 
 Read strictly: a repeated key, a YAML merge key, and an unknown key are
-refused. Relative paths are relative to the file.
+refused. Relative paths are relative to the file. The table below is the
+short version: every key of this file and of `judges.yaml`, with its default,
+what `high_assurance` does to it, and which file tier it is in, is in
+[SETTINGS.md](SETTINGS.md).
 
 | Key | Required | Meaning |
 | --- | --- | --- |

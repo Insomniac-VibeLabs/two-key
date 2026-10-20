@@ -29,6 +29,9 @@ the uv version pinned in `.github/workflows/tests.yml` and commit it.
 After adding, renaming, or moving a heading in a document that has a table of
 contents, run `python tests/test_doc_toc.py --write`; the test suite fails
 while a table is out of date.
+A new setting (a key a loader accepts) needs a row in `two_key/settings.py`;
+`docs/SETTINGS.md` is generated from it with `python tests/test_settings_doc.py
+--write`, and the test suite fails on a key with no row.
 Diagrams in the docs are real Mermaid, never pictures. They follow the house
 style in `tests/test_doc_diagrams.py` (short label lines, at most five
 participants, a one-line italic caption under each), and the test suite fails

@@ -30,6 +30,15 @@ FORMAT_V2 = "two-key-constitution-v2"
 FORMAT_V3 = "two-key-constitution-v3"
 ENVELOPE_FORMATS = ("auto", "v2", "v3")
 _V2_SIGNED_KEYS = {"prose", "hard_rules", "tool_specs", "fields"}
+# The keys the loaders accept in a rules file and in a tool spec. Named here so docs/SETTINGS.md and its test
+# (two_key/settings.py) read the same sets the validators use.
+RULES_FILE_KEYS = ("hard_rules", "tool_specs", "fields")
+TOOL_SPEC_KEYS = ("irreversible", "data_class_floor", "amount", "counterparties", "payload", "deny_unmapped",
+                  "fields")
+AMOUNT_KEYS = ("json_path", "unit", "currency_path")
+COUNTERPARTY_KEYS = ("json_path", "allow")
+PAYLOAD_KEYS = ("json_path", "shape", "max_length")
+FIELD_MAPPING_KEYS = ("json_path", "source", "encrypted")
 
 
 class ConstitutionSignatureError(ValueError):
@@ -106,7 +115,7 @@ def _field_mapping(where: str, defn: Mapping, entry: Any) -> dict:
 
 def _check_caller_mapping(where: str, defn: Mapping, entry: Any) -> None:
     if not isinstance(entry, Mapping) or entry.get("source") != "caller" or \
-            set(entry) - {"source", "json_path", "encrypted"}:
+            set(entry) - set(FIELD_MAPPING_KEYS):
         raise ConstitutionError(f"{where}: a caller-supplied field maps as {{source: caller}} or "
                                 "{source: caller, json_path: ...}")
     if "encrypted" not in entry:
@@ -254,10 +263,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
     registry = fields or {}
     if not isinstance(specs, Mapping):
         raise ConstitutionError("tool_specs must be a mapping")
-    allowed_keys = {
-        "irreversible", "data_class_floor", "amount", "counterparties",
-        "payload", "deny_unmapped", "fields",
-    }
+    allowed_keys = set(TOOL_SPEC_KEYS)
     out: dict[str, dict] = {}
     for name, spec in specs.items():
         if not isinstance(name, str) or not name.strip():
@@ -292,7 +298,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
         if amount is not None:
             if not isinstance(amount, Mapping):
                 raise ConstitutionError(f"tool_specs.{tool}.amount: expected a mapping")
-            amount_extra = set(amount) - {"json_path", "unit", "currency_path"}
+            amount_extra = set(amount) - set(AMOUNT_KEYS)
             if amount_extra or "json_path" not in amount or "unit" not in amount:
                 raise ConstitutionError(
                     f"tool_specs.{tool}.amount: requires json_path and unit (usd or cents)"
@@ -317,7 +323,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
         party_out = []
         for index, entry in enumerate(parties):
             where = f"tool_specs.{tool}.counterparties[{index}]"
-            if not isinstance(entry, Mapping) or set(entry) != {"json_path", "allow"}:
+            if not isinstance(entry, Mapping) or set(entry) != set(COUNTERPARTY_KEYS):
                 raise ConstitutionError(f"{where}: expected json_path and allow")
             path = take(_json_path(entry["json_path"], where), where)
             allow = entry["allow"]
@@ -345,7 +351,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
             where = f"tool_specs.{tool}.payload[{index}]"
             if not isinstance(entry, Mapping) or "json_path" not in entry:
                 raise ConstitutionError(f"{where}: expected json_path")
-            extra = set(entry) - {"json_path", "shape", "max_length"}
+            extra = set(entry) - set(PAYLOAD_KEYS)
             if extra:
                 raise ConstitutionError(f"{where}: unknown key(s) {sorted(extra)}")
             path = take(_json_path(entry["json_path"], where), where)
@@ -425,7 +431,7 @@ def _load_rules_document(path: Path) -> tuple[list, Mapping, Any]:
     if isinstance(data, list):
         raise ConstitutionError("tool_specs required: a bare rule list cannot be signed")
     if isinstance(data, dict) and "hard_rules" in data:
-        extra = set(data) - {"hard_rules", "tool_specs", "fields"}
+        extra = set(data) - set(RULES_FILE_KEYS)
         if extra:
             raise ConstitutionError(f"unknown rules-file key(s) {sorted(extra)}")
         rules = data["hard_rules"]

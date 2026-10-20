@@ -31,6 +31,10 @@ cannot read is denied before the scanner and both paths under every stance. An e
 scanner cannot open is flagged, unless the tool's signed spec says encrypted: pass and encryption is
 the only finding (verdict encrypted).
 
+docs/SETTINGS.md lists every setting in proxy.yaml, judges.yaml, agents.yaml, the signed rules file and
+tool specs, with its default and what the high_assurance profile does to it; it is generated from
+two_key/settings.py and a test fails when a key the code accepts has no row.
+
 From 0.7.0: optional SIEM export (docs/SIEM.md). TwoKey(...,
 siem=SiemConfig(sinks=[...])), or the proxy.yaml siem: block, copies every ledger entry, after it is
 written and fsynced, to a syslog sink (transport tls on 6514 by default; tcp or udp on 514; every

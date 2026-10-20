@@ -88,6 +88,10 @@ The unmoved tag is still `pip install "two-key[yaml] @ git+https://github.com/In
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
   `docs/SCOPE.md`, `docs/SIEM.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
+- A new setting (a key a loader accepts) gets a row in `two_key/settings.py`.
+  `docs/SETTINGS.md` is generated from it: run `python tests/test_settings_doc.py
+  --write`. The test fails on a key with no row and on a page that is not what
+  the catalogue renders. Do not edit the page by hand.
 - When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
   in the same release.
 - Keep [docs/HOWTO.md](docs/HOWTO.md) "Known trade-offs by configuration"

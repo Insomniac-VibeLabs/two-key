@@ -168,6 +168,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [docs/FIT.md](docs/FIT.md) | Whether Two-Key is the right control for you |
 | [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
 | [docs/CONNECTING.md](docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
+| [docs/SETTINGS.md](docs/SETTINGS.md) | Every setting: its file, default, what `high_assurance` does to it, and who may change it |
 | [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
 | [docs/SIEM.md](docs/SIEM.md) | Sending the ledger to a SIEM, and checking a copy against it (0.7.0) |
 | [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
