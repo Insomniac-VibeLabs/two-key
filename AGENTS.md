@@ -74,7 +74,7 @@ Build, coverage, and bandit are pinned in their workflows, not in
 | --- | --- | --- |
 | (none) | `cryptography>=41` | Ed25519, SHA-256, AES-256-GCM ledger |
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
-| `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0); `two-key config show` and `config check` read the proxy config without the SDK |
+| `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0); `two-key config show`, `get`, `check`, `set`, and `undo`, and `two-key setup`, read and write the proxy config without the SDK (`setup` needs it only to read a schema digest from the server) |
 
 Index install: `pip install "two-key[yaml]==0.7.0"`.
 The unmoved tag is still `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"`.
@@ -302,6 +302,26 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   or cross-process protocol without the operator. Do not describe
   verify-only as key isolation: the process holds the minting, principal,
   witness, and ledger keys, and the registered tools run there.
+
+- Configuration changes (`two_key/config_set.py`, `two_key/setup_cmd.py`):
+  `two-key config set`, `config undo`, and `two-key setup` refuse root and
+  any file they write, or its folder, that another account could change, or
+  that is a link; nothing is written until the whole changed config passes
+  `config check` (only the two findings about the shell's own variables do
+  not block); a change `weaker()` names needs `--confirm-weaker` and `yes`
+  typed on a terminal, and no terminal is no; a signed setting needs the
+  principal key and a rules file that signs to exactly what is signed, and
+  the new envelope is verified before it is written; a literal for
+  `upstream.env.*` or `scan.env.*` never comes from argv; a key passphrase
+  comes from an owner-only file or a terminal prompt, never argv or the
+  environment, the proxy never prompts, and `config key-passphrase` keeps no
+  plain `.prev` of the key. Each change is a
+  `config_changed` ledger entry (setting names, file names, digests; never
+  a value) written before the files are renamed in; a ledger that does not
+  open refuses the change. Files are written owner-only beside the old ones
+  and renamed, with `<file>.prev` and `<config>.undo.json` for one-step
+  undo. There is no hot reload. Do not add a way past any of these, and do
+  not let a GUI or another front end skip them (`tests/test_config_set.py`).
 
 - SIEM export (0.7.0, `two_key/siem.py`, `two_key/siem_sinks.py`,
   `two_key/siem_export.py`): optional, and with no `siem=` nothing is sent

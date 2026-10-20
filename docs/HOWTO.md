@@ -20,6 +20,13 @@ sure which route fits.
 | A Python agent loop where your code decides which functions run (LangChain, the OpenAI Agents SDK, your own) | **Guard** | The same first six, then [Caller-supplied facts](#caller-supplied-facts) (it holds "The guard"), [Monitored agents](#monitored-agents), and [Redeem](#redeem) |
 | Python code that calls `TwoKey` directly | **Library** | The same first six, then [Authorize from Python](#authorize-from-python), [Monitored agents](#monitored-agents), and [Redeem](#redeem) |
 
+To write a first deployment in one go, run `two-key setup --dir DIR`: it asks for the route, the
+profile, the judges, the monitored agent, the rules to sign and, for the proxy, the upstream server,
+then writes every file owner-only, signs the constitution, creates the ledger, and checks the result.
+Later, `two-key config set` changes one setting without opening the files, and `config undo` puts it
+back. [SETUP.md](SETUP.md) says who may run them and what they refuse. They write the files for you;
+they do not decide the rules or the judges, so read the sections above for your route either way.
+
 Whichever route you take, read these before you let an agent run: [Back up the
 keys](#back-up-the-keys), [Known trade-offs by configuration](#known-trade-offs-by-configuration),
 and [Checklist before you let an agent run](CONNECTING.md#checklist-before-you-let-an-agent-run).
@@ -154,6 +161,14 @@ take `--key` refuse a key file that the group or others can read
 `principal.pem`; given `principal.pub.pem`, they say `--key:
 key_file_public` (chmod would not help), and a file that is not a PEM
 private key is `key_file_invalid`. Each refusal is one line on stderr.
+
+To encrypt the key with a passphrase, give `init-key --passphrase` (asked
+twice on the terminal) or `--passphrase-file FILE` (an owner-only file, at
+least 12 bytes). Every command that takes `--key` then takes
+`--key-passphrase-file FILE`, or asks on the terminal; the proxy reads
+`keys.passphrase_file`. An existing deployment's key is encrypted with
+`two-key config key-passphrase`. What that protects and what it does not:
+[SETUP "Protecting the principal key with a passphrase"](SETUP.md#protecting-the-principal-key-with-a-passphrase).
 
 The signature covers the prose, the hard rules, `tool_specs`, and the
 custom-field registry (`fields:`) when there is one. A modified file will
@@ -1255,7 +1270,7 @@ from two_key.keys import load_private_key_file
 from two_key.ledger import Ledger
 import os
 
-key = load_private_key_file("keys/principal.pem")
+key = load_private_key_file("keys/principal.pem")   # encrypted: add passphrase_source("PASSPHRASE_FILE")
 judges, policy = load_config_file(Path("examples/judges.yaml"))
 agent = load_monitored_agent_file(Path("examples/judges.yaml"))
 ledger = Ledger("ledger", key)
@@ -1920,11 +1935,12 @@ claimed: they come from the argument bytes and the signed spec, as in
 ### Look at a config without starting the proxy
 
 ```
-two-key config show  --config proxy.yaml     # the effective settings as JSON, defaults filled in
-two-key config check --config proxy.yaml     # would it start? exit 1 on any FAIL
+two-key config show  --config proxy.yaml        # the effective settings as JSON, defaults filled in
+two-key config get   --config proxy.yaml NAME   # one setting: value, file, tier, default
+two-key config check --config proxy.yaml        # would it start? exit 1 on any FAIL
 ```
 
-Both are read-only. They write no file, open no ledger, start no process, and contact no judge, scanner, SIEM
+These are read-only. They write no file, open no ledger, start no process, and contact no judge, scanner, SIEM
 collector or upstream server. `show` prints a key file by path, a judge's key by the name of its environment
 variable, and an upstream literal value as `<literal>`; no secret value is printed. `check` loads the files
 the config names and reports one line each: the config parses (unknown and repeated keys refused), the
@@ -1934,10 +1950,12 @@ every environment variable the config reads is set, every `upstream.check_paths`
 (`check_path_missing`), a launcher with nothing named (`upstream_paths_unchecked`, a `FAIL` under
 `high_assurance`), no path another account can change (`writable_path`, a
 `FAIL` under `on_writable_paths: refuse` or `high_assurance`), and a plaintext SIEM sink (a `FAIL` under
-`high_assurance`). It does not run the `on_agent_access` check, because that depends on which account starts
-the proxy, and it does not compare the upstream's tools with `schema_digest`; the proxy does both at start. A
-variable that is set in your shell may not be set in the proxy's own environment, so a `FAIL` for a missing
-variable names the variable and says so. Every setting is listed in [SETTINGS](SETTINGS.md).
+`high_assurance`), and the `on_agent_access` setting (a `FAIL` for `warn` under `high_assurance`). It cannot
+check which account starts the proxy, and it does not compare the upstream's tools with `schema_digest`; the
+proxy does both at start. A variable that is set in your shell may not be set in the proxy's own environment,
+so a `FAIL` for a missing variable names the variable and says so. Every setting is listed in
+[SETTINGS](SETTINGS.md). To change one, `two-key config set` runs this same check on the changed files before
+it writes anything ([SETUP](SETUP.md)).
 
 ### What the proxy does
 
@@ -2240,6 +2258,11 @@ function only. PBKDF2 slows guessing and is not memory-hard. A short
 passphrase, or two bundles that share a passphrase, is warned about. All
 three sharing one passphrase is warned about too. A bundle file over 64 MiB
 is refused.
+
+An encrypted `principal.pem` goes into the bundle as it is, still encrypted,
+and comes back that way on restore, so export, verify, and restore also need
+its own passphrase: `--key-passphrase-file FILE`, or a prompt on the
+terminal.
 
 Export copies the files while it holds the ledger lock, then opens that copy
 in a temporary directory before it writes a bundle. A copy that would not

@@ -36,7 +36,8 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from . import _platform
 from .canonical import EncodingError, canonical_bytes
 from .capability import capability_key_fingerprint
-from .keys import load_private_key_file, public_raw
+from .keys import (Passphrase, decrypt_private_key, encrypted_header, is_encrypted, load_private_key_file, passphrase_bytes,
+                   public_raw, remember)
 from .ledger import witness_key_fingerprint
 from .strict import StrictParseError, loads_json
 
@@ -82,6 +83,10 @@ _ROLE_FILES = {
         "head.anchor": ("bytes", "head-anchor"),
     },
 }
+# principal.pem may also be Two-Key's encrypted form (two_key/keys.py): it is kept that way, bundle and all,
+# and opening the bundle then needs the key's own passphrase as well as the bundle's.
+ENCRYPTED_KEY_ALG = "ed25519-encrypted"
+_ALT_ALGS = {"principal.pem": (ENCRYPTED_KEY_ALG,)}
 _HEADER_FIELDS = ("format", "version", "role", "alg", "kdf", "enc", "ciphertext")
 _KDF_FIELDS = ("name", "iterations", "salt", "length")
 _ENC_FIELDS = ("name", "nonce")
@@ -298,7 +303,7 @@ def _check_payload(payload, role: str) -> dict:
     for name, spec in files.items():
         encoding, alg = allowed[name]
         if (not isinstance(spec, dict) or set(spec) != {"encoding", "alg", "data"}
-                or spec["encoding"] != encoding or spec["alg"] != alg):
+                or spec["encoding"] != encoding or spec["alg"] not in (alg, *_ALT_ALGS.get(name, ()))):
             raise BackupError(f"backup_rejected: {name} is not a {role} backup field")
         if encoding == "pem":
             if not isinstance(spec["data"], str):
@@ -307,7 +312,13 @@ def _check_payload(payload, role: str) -> dict:
                 raw = spec["data"].encode("ascii")
             except UnicodeEncodeError:
                 raise BackupError(f"backup_rejected: {name} is not a private key") from None
-            _load_pem(raw, name)
+            if spec["alg"] == ENCRYPTED_KEY_ALG:
+                try:
+                    encrypted_header(raw, name)     # its shape; opening it needs the key's passphrase
+                except ValueError:
+                    raise BackupError(f"backup_rejected: {name} is not a private key") from None
+            else:
+                _load_pem(raw, name)
         else:
             raw = _b64d(spec["data"], name, MAX_BUNDLE_BYTES)
             if encoding == "raw" and len(raw) != 32:
@@ -323,6 +334,8 @@ def _check_payload(payload, role: str) -> dict:
 
 
 def _file_entry(data: bytes, encoding: str, alg: str) -> dict:
+    if encoding == "pem" and alg == "ed25519" and is_encrypted(data):
+        alg = ENCRYPTED_KEY_ALG
     if encoding == "pem":
         text = data.decode("ascii")
         stored = text
@@ -395,9 +408,22 @@ def _materialize(bundles: dict, root: Path) -> dict:
     return layout
 
 
-def _fingerprints_of(bundles: dict) -> dict:
+def _principal_of(data: bytes, key_passphrase: Passphrase) -> Ed25519PrivateKey:
+    if not is_encrypted(data):
+        return _load_pem(data, "principal.pem")
+    try:
+        secret = passphrase_bytes(key_passphrase, "principal.pem (in the backup)")
+        if secret is None:
+            raise ValueError("key_passphrase_needed: the backup's principal.pem is encrypted; give its "
+                             "passphrase (--key-passphrase-file FILE, or type it on a terminal)")
+        return decrypt_private_key(data, secret, "principal.pem (in the backup)")
+    except ValueError as e:
+        raise BackupError(f"backup_rejected: {e}") from None
+
+
+def _fingerprints_of(bundles: dict, key_passphrase: Passphrase = None) -> dict:
     """Public-style fingerprints an operator can compare. Raw key bytes are not returned."""
-    principal = _load_pem(bundles["principal"]["files"]["principal.pem"], "principal.pem")
+    principal = _principal_of(bundles["principal"]["files"]["principal.pem"], key_passphrase)
     capability = _load_pem(bundles["principal"]["files"]["capability.pem"], "capability.pem")
     witness = _load_pem(bundles["witness"]["files"]["witness.pem"], "witness.pem")
     if public_raw(principal.public_key()) == public_raw(capability.public_key()):
@@ -412,7 +438,7 @@ def _fingerprints_of(bundles: dict) -> dict:
 
 
 def _open_staged(root: Path, *, witness_public_key=None, anchor_name: str = "head.anchor",
-                 require_anchor: bool = True) -> dict:
+                 require_anchor: bool = True, key_passphrase: Passphrase = None) -> dict:
     """Open the staged ledger and check the pins. The stage is disposable.
 
     ``require_anchor`` is false only when the ledger on disk has no anchor file. Opening then
@@ -423,7 +449,10 @@ def _open_staged(root: Path, *, witness_public_key=None, anchor_name: str = "hea
 
     layout = _ledger_layout(root)
     anchor_before = layout["head.anchor"].read_bytes() if require_anchor else None
-    principal = load_private_key_file(layout["principal.pem"])
+    try:
+        principal = load_private_key_file(layout["principal.pem"], key_passphrase)
+    except ValueError as e:
+        raise BackupError(f"backup_rejected: {e}") from None
     try:
         ledger = Ledger(layout["ledger"], principal, witness_public_key=witness_public_key,
                         anchor_path=layout["head.anchor"])
@@ -452,15 +481,17 @@ def _open_staged(root: Path, *, witness_public_key=None, anchor_name: str = "hea
             "anchor": anchor_name}
 
 
-def verify_backup(bundles_dir, passphrases, *, witness_public_key=None) -> dict:
-    """Decrypt the three bundles into a temporary ledger and check fingerprints. Writes nothing else."""
+def verify_backup(bundles_dir, passphrases, *, witness_public_key=None, key_passphrase: Passphrase = None) -> dict:
+    """Decrypt the three bundles into a temporary ledger and check fingerprints. Writes nothing else.
+    ``key_passphrase`` opens an encrypted principal.pem in the bundle."""
     phrases = _passphrases(passphrases)
     _warn_passphrases(phrases)
+    key_passphrase = remember(key_passphrase)
     bundles = _read_bundles(bundles_dir, phrases)
-    fingerprints = _fingerprints_of(bundles)
+    fingerprints = _fingerprints_of(bundles, key_passphrase)
     with tempfile.TemporaryDirectory(prefix="two-key-backup-") as tmp:
         _materialize(bundles, Path(tmp))
-        opened = _open_staged(Path(tmp), witness_public_key=witness_public_key)
+        opened = _open_staged(Path(tmp), witness_public_key=witness_public_key, key_passphrase=key_passphrase)
     return {"ok": True, "fingerprints": fingerprints, "ledger_size": opened["ledger_size"],
             "merkle_root": opened["merkle_root"], "witness": opened["witness"],
             "capability_key_fingerprint": opened["capability_key_fingerprint"],
@@ -526,7 +557,8 @@ def _exists_differs(path: Path, data: bytes, name: str) -> bool:
 
 
 def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
-                   witness_public_key=None, anchor_path=None, replace_ledger: bool = False) -> dict:
+                   witness_public_key=None, anchor_path=None, replace_ledger: bool = False,
+                   key_passphrase: Passphrase = None) -> dict:
     """Put the keys back. The ledger and ``head.anchor`` are written together, or not at all.
 
     An existing ledger whose files differ from the backup is left in place unless ``replace_ledger``
@@ -539,18 +571,21 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
     (a witness rotated after the backup). Only a missing key file is created from the backup, and
     only after that mix opens the ledger on disk. A key that differs while the ledger files still
     match the backup is ``backup_conflict`` and is not overwritten.
+
+    An encrypted principal.pem is restored as it was backed up, still encrypted; ``key_passphrase`` opens it.
     """
     phrases = _passphrases(passphrases)
     _warn_passphrases(phrases)
+    key_passphrase = remember(key_passphrase)
     bundles = _read_bundles(bundles_dir, phrases)
-    fingerprints = _fingerprints_of(bundles)
+    fingerprints = _fingerprints_of(bundles, key_passphrase)
     files = {}
     for role in ROLES:
         files.update(bundles[role]["files"])
     dest = _destination_paths(ledger_path, principal_path, anchor_path)
     with tempfile.TemporaryDirectory(prefix="two-key-backup-") as tmp:
         _materialize(bundles, Path(tmp))
-        opened = _open_staged(Path(tmp), witness_public_key=witness_public_key)
+        opened = _open_staged(Path(tmp), witness_public_key=witness_public_key, key_passphrase=key_passphrase)
     files_differ = any(_exists_differs(dest[name], files[name], name) for name in _LEDGER_BODY)
     files_missing = any(not os.path.lexists(dest[name]) for name in _LEDGER_BODY)
     anchor_differs = _exists_differs(dest["head.anchor"], files["head.anchor"], "head.anchor")
@@ -561,7 +596,7 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
     if files_differ or (files_missing and anchor_differs):
         if not replace_ledger:
             if files_differ and not files_missing:
-                _preflight_live(dest, files, witness_public_key=witness_public_key)
+                _preflight_live(dest, files, witness_public_key=witness_public_key, key_passphrase=key_passphrase)
                 key_only = True
             else:
                 raise BackupError(
@@ -619,7 +654,7 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
             "format": FORMAT, "alg": ALG}
 
 
-def _preflight_live(dest: dict, files: dict, *, witness_public_key) -> None:
+def _preflight_live(dest: dict, files: dict, *, witness_public_key, key_passphrase: Passphrase = None) -> None:
     """Open a copy of the ledger on disk. Write nothing to ``dest``.
 
     A key that is already on disk is the one opened, including a witness rotated after the backup.
@@ -646,7 +681,8 @@ def _preflight_live(dest: dict, files: dict, *, witness_public_key) -> None:
             layout[name].parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             _write_new(layout[name], data)
         try:
-            _open_staged(root, witness_public_key=witness_public_key, require_anchor=anchor_present)
+            _open_staged(root, witness_public_key=witness_public_key, require_anchor=anchor_present,
+                         key_passphrase=key_passphrase)
         except BackupError as e:
             raise BackupError("backup_rejected: those keys do not open the ledger on disk "
                               f"({e}). The destination was not changed.") from None
@@ -655,7 +691,8 @@ def _preflight_live(dest: dict, files: dict, *, witness_public_key) -> None:
 
 
 def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
-                  witness_public_key=None, anchor_path=None, iterations: int = PBKDF2_ITERATIONS) -> dict:
+                  witness_public_key=None, anchor_path=None, iterations: int = PBKDF2_ITERATIONS,
+                  key_passphrase: Passphrase = None) -> dict:
     """Encrypt the three bundles. Refuses to start when a key this package created is missing,
     when a witness rotation is unfinished, or when the copied bytes would not open as a ledger.
 
@@ -668,7 +705,11 @@ def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
     phrases = _passphrases(passphrases)
     iterations = _iterations(iterations)
     _warn_passphrases(phrases)
-    principal = load_private_key_file(principal_path)
+    key_passphrase = remember(key_passphrase)
+    try:
+        principal = load_private_key_file(principal_path, key_passphrase)
+    except ValueError as e:
+        raise BackupError(f"backup_refused: {e}") from None
     try:
         ledger = Ledger(ledger_path, principal, witness_public_key=witness_public_key, anchor_path=anchor_path)
     except LedgerError as e:
@@ -678,7 +719,7 @@ def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
             groups = _snapshot_files(ledger, principal_path)
     except LedgerError as e:       # a BackupError from the snapshot is not a LedgerError and passes through
         raise BackupError(f"backup_refused: {e}") from None
-    _require_snapshot_opens(groups, witness_public_key=witness_public_key)
+    _require_snapshot_opens(groups, witness_public_key=witness_public_key, key_passphrase=key_passphrase)
     out = _prepare_output_dir(Path(out_dir))
     for role, name in BUNDLE_NAMES.items():
         if os.path.lexists(out / name):
@@ -686,7 +727,7 @@ def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
     payloads = {role: _payload(role, groups[role]) for role in ROLES}
     blobs = {role: _encrypt(role, payloads[role], phrases[role], iterations) for role in ROLES}
     decoded = {role: _check_payload(loads_json(canonical_bytes(payloads[role])), role) for role in ROLES}
-    fingerprints = _fingerprints_of(decoded)
+    fingerprints = _fingerprints_of(decoded, key_passphrase)
     written = {}
     created: list[Path] = []
     try:
@@ -766,7 +807,7 @@ def _snapshot_files(ledger, principal_path) -> dict:
     }
 
 
-def _require_snapshot_opens(groups: dict, *, witness_public_key) -> None:
+def _require_snapshot_opens(groups: dict, *, witness_public_key, key_passphrase: Passphrase = None) -> None:
     """Refuse before any bundle is written when these bytes would not restore."""
     bundles = {}
     for role in ROLES:
@@ -778,6 +819,6 @@ def _require_snapshot_opens(groups: dict, *, witness_public_key) -> None:
     try:
         with tempfile.TemporaryDirectory(prefix="two-key-backup-") as tmp:
             _materialize(bundles, Path(tmp))
-            _open_staged(Path(tmp), witness_public_key=witness_public_key)
+            _open_staged(Path(tmp), witness_public_key=witness_public_key, key_passphrase=key_passphrase)
     except BackupError as e:
         raise BackupError(f"backup_refused: this backup would not open ({e}). Nothing was written.") from None

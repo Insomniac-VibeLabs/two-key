@@ -70,6 +70,10 @@ SAMPLE_BODIES = {
                           "tools": {"search": {"claim": "floor", "facts": []}},
                           "signed_tools_not_listed": []},
     "tool_not_offered": {"origin": "mcp-proxy", "tool": "nope"},
+    "config_changed": {"command": "set", "settings": ["ttl_seconds"], "signed": False, "weaker": [],
+                       "confirmed": False, "constitution_hash": None, "account": SECRET,
+                       "files": [{"role": "proxy", "file": "proxy.yaml", "old_sha256": "sha256:" + "0" * 64,
+                                  "new_sha256": "sha256:" + "1" * 64}]},
     "scan": {"tool": "search", "scanner": "clamd", "version": "1", "verdict": "flagged",
              "categories": ["malware"], "stance": "default", "elapsed_ms": 3, "scanner_available": True,
              "error": None, "parts": [{"part": "arguments", "bytes": 4, "sha256": "sha256:" + "0" * 64}]},
@@ -175,6 +179,12 @@ class Allowlist(Fixture):
             if key.endswith(("_size", "_digest", "_omitted")):
                 continue        # the ledger's own size and digest keys, taken by shape
             self.assertIn(key, decided, f"{kind}.{key} is in no allowlist decision (two_key/siem.py)")
+
+    def test_a_config_change_sends_names_and_digests_never_the_account(self):
+        event = project("config_changed", SAMPLE_BODIES["config_changed"])
+        self.assertEqual(event["settings"], ["ttl_seconds"])
+        self.assertEqual(event["files"][0]["new_sha256"], "sha256:" + "1" * 64)
+        self.assertNotIn(SECRET, json.dumps(event))
 
     def test_known_kinds_cover_the_ledger(self):
         tk = self.exercise(self.start())

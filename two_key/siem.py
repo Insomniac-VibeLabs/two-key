@@ -214,6 +214,20 @@ def _scan_parts(body: Mapping[str, Any]) -> dict:
     return {"parts": out}
 
 
+def _config_files(body: Mapping[str, Any]) -> dict:
+    """Each file a config change wrote, by role, name, and the digests before and after. Never its content."""
+    files = body.get("files")
+    if not isinstance(files, (list, tuple)):
+        return {}
+    out = []
+    for item in files[:MAX_LIST_ITEMS]:
+        if isinstance(item, Mapping):
+            out.append({"role": _scrub(item.get("role")), "file": _scrub(item.get("file")),
+                        "old_sha256": item.get("old_sha256") if _is_digest(item.get("old_sha256")) else None,
+                        "new_sha256": item.get("new_sha256") if _is_digest(item.get("new_sha256")) else None})
+    return {"files": out}
+
+
 @dataclass(frozen=True)
 class KindSpec:
     """What an event carries for one ledger kind, and what it never carries."""
@@ -274,6 +288,11 @@ KINDS: dict[str, KindSpec] = {
         excluded=("tools",), extract=_proxy_fields),
     "tool_not_offered": KindSpec(sent=("origin", "tool"), severity=WARNING),
     "siem_configured": KindSpec(sent=("event_schema", "event_format", "replay_from", "sinks")),
+    # two-key setup, config set and config undo (two_key/config_set.py): which settings and files changed,
+    # never a value. The account is in the ledger only.
+    "config_changed": KindSpec(
+        sent=("command", "settings", "signed", "weaker", "confirmed", "constitution_hash"),
+        excluded=("account", "files"), extract=_config_files, severity=NOTICE),
 }
 
 # Events this module sends that are not ledger entries. A token that does not verify is refused without a

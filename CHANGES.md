@@ -124,6 +124,7 @@
 - [Docs review: README from main, clearer diagrams, `config show` described correctly — 2026-10-21](#docs-review-readme-from-main-clearer-diagrams-config-show-described-correctly--2026-10-21)
 - [CI: each workflow runs once per change — 2026-10-21](#ci-each-workflow-runs-once-per-change--2026-10-21)
 - [A Windows-only test failure in the clamd tests — 2026-10-21](#a-windows-only-test-failure-in-the-clamd-tests--2026-10-21)
+- [`two-key setup` and `two-key config set`, `get`, `undo`, `key-passphrase`: one way in for setup and changes — 2026-10-20](#two-key-setup-and-two-key-config-set-get-undo-key-passphrase-one-way-in-for-setup-and-changes--2026-10-20)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4113,3 +4114,82 @@ unchanged, so required checks on main still match. Without an open pull request,
   that closes the same way, Windows can report such a file as
   `unavailable` rather than `limits_exceeded`; the signed stance and the
   judges then decide on `unavailable`.
+
+## `two-key setup` and `two-key config set`, `get`, `undo`, `key-passphrase`: one way in for setup and changes — 2026-10-20
+
+The files stay separate (docs/SETTINGS.md); these commands edit the right one for you. They add a ledger kind,
+`config_changed`, touch signing, and add a passphrase to the principal key, so they are for the maintainer's
+security review. Nothing changes how any setting is read. The start-up checks are reused; the one addition
+is `keys.passphrase_file` among the paths they look at. docs/SETUP.md is the guide.
+
+- **`two-key setup --dir DIR [--answers FILE]`** asks for the route, the profile, the judges, the monitored
+  agent, the rules to sign (a reviewed rules file, or a starter) and, for the proxy, the upstream server; or
+  reads the same answers from a file. It never asks for a secret, only the names of the variables that hold
+  them. It writes the principal key, `constitution.md`, `hard_rules.yaml`, the signed constitution,
+  `judges.yaml` and `proxy.yaml` (every scalar setting written out at its default) owner-only into a new
+  hidden folder, runs `config check` there, renames the folder to `DIR` only when it passes, then creates the
+  ledger with a first `config_changed` entry. A refused setup leaves nothing behind. Left blank, the schema
+  digest is read from the server after signing, as `mcp-draft-specs --constitution` does (the `mcp` extra).
+- **`two-key config set --config proxy.yaml NAME VALUE`** changes one setting, named as in
+  docs/SETTINGS.md (`siem.sinks[0].port`, `quorum.profile`, `tool_specs.pay.irreversible`); the name picks
+  the file. In order: Two-Key's own account only (root is `config_as_root`; a file it writes, or its folder,
+  that another account could change is `config_target_unsafe`; a link is `config_target_link`); the new file
+  is staged beside the old one and the whole set must pass `config check` (`config_check_failed`, except a
+  variable not set in this shell), so what `high_assurance` forbids stays forbidden; a weaker change needs
+  `--confirm-weaker` and `yes` typed on a terminal (`weaker`, `not_confirmed`); then a `config_changed` entry,
+  then the files are renamed in, owner-only, with the old one kept as `<file>.prev`.
+- **Signed settings** (`hard_rules`, `tool_specs`, `fields`) need `--key`, the principal key the proxy uses,
+  and `--rules`, the rules file the constitution was signed from, which must sign to exactly what is signed
+  (`rules_source_differs`). The change and the signed text that differs are shown, a typed `yes` is needed,
+  and the new envelope, in at least the current format, is verified before it is written.
+- **A principal key encrypted with a passphrase.** `two-key config key-passphrase --config proxy.yaml
+  --new-from FILE` encrypts the key (or changes its passphrase) with the passphrase in an owner-only file and
+  sets `keys.passphrase_file` to that file, in one recorded change; `--remove` stores it unencrypted again,
+  which is weaker. It keeps no `.prev` of the key, so `config undo` does not reverse it. The format is
+  Two-Key's own (`BEGIN TWO-KEY ENCRYPTED PRIVATE KEY`): PKCS8 under AES-256-GCM, its key from PBKDF2-SHA256 at
+  600,000 iterations with a 16-byte salt, the header bound in, as the key backup does; a file asking for fewer
+  iterations, and a key encrypted by another tool, are refused (`key_file_invalid`). A new passphrase is at
+  least 12 bytes (`key_passphrase_short`). The passphrase comes from a file only its owner can read
+  (`passphrase_file_insecure` otherwise) or a terminal prompt, never argv or the environment.
+  The proxy reads `keys.passphrase_file` at start and never prompts (`key_passphrase_needed`,
+  `key_passphrase_wrong`), and that file joins the paths the start-up checks look at. Every command that takes
+  `--key` takes `--key-passphrase-file FILE` or asks on the terminal; `init-key` takes `--passphrase` or
+  `--passphrase-file`; `setup` takes `key_passphrase_file`; `config check` opens the key as the proxy would.
+  Backup export, verify, and restore keep the key encrypted inside the principal bundle
+  (`ed25519-encrypted`), so they need its passphrase as well as the bundle's. An unencrypted key works as
+  before, and nothing asks for a passphrase it does not need.
+- **What counts as weaker** is read from the loaded old and new configurations (`config_set.weaker`):
+  `high_assurance` turned off, a check from `refuse` to `warn`, `allow_unresolved_identity` on, a longer
+  `ttl_seconds`, a removed `agent_session_env`, SIEM copy off or a sink removed or in the clear, the scanner
+  removed or a file undeclared, a path dropped from `upstream.check_paths`, a lower tool claim, a lower quorum
+  floor, judges shown more, a changed judge set or monitored agent, and any signed change but adding a rule,
+  turning `irreversible` or `deny_unmapped` on, or raising a `data_class_floor`.
+- **No secret on the command line**: a literal for `upstream.env.*` or `scan.env.*` is refused there
+  (`secret_on_command_line`) and comes from `--value-file` (owner-only) or `--prompt`; `{"env": "NAME"}` is
+  fine. `--unset` removes a setting. Paths of the files, keys and ledger Two-Key trusts (`constitution`,
+  `keys.principal`, `keys.passphrase_file`, `ledger`, `judges`, `witness_public_key`, `head_anchor`) are
+  `not_settable`.
+- **`config_changed`** records the command, the setting names, each file's role, name and SHA-256 digests
+  before and after (the principal key file is named with no digest), whether it signed, why it is weaker, whether a yes was typed, the new constitution's
+  digest, and the account. Never a value. The SIEM allowlist sends all of it except the account. A ledger
+  that is missing or does not open refuses the change, so nothing changes unrecorded.
+- **`two-key config undo`** puts back the files the last change replaced, through the same checks and with
+  its own `config_changed` entry; run again, it puts the change back. It refuses a file changed since
+  (`undo_stale`), and an undo of a signed change needs `--key`.
+- **`two-key config get --config proxy.yaml NAME`** prints one setting's value, file, tier, and catalogue
+  default; an env literal is `<literal>`.
+- No hot reload: a change takes effect at the next start, and every result says so.
+- `config check` now also checks the `on_agent_access` setting (a `FAIL` for `warn` under `high_assurance`,
+  as the proxy refuses at start), and `config show` prints a command scanner's `env` values as `<literal>`;
+  before, it printed them.
+- docs/SETTINGS.md (regenerated) says what each tier needs with `config set` and marks the keys it does not
+  change.
+- Tests: `tests/test_config_set.py` (setup, names, get, set, every refusal, secrets, weaker, high_assurance,
+  signed changes, undo, the command line); `tests/test_key_passphrase.py` (the format and its refusals, the
+  passphrase file, no prompt without a terminal, `init-key` and `sign-constitution`, `config key-passphrase`,
+  the proxy and `config check`, `setup`, and the backup); `tests/test_siem.py` (the `config_changed` allowlist and its
+  canary); `tests/test_config_cmd.py` (the scanner's variables).
+- Docs: docs/SETUP.md (new: full setup, changing one setting, protecting the principal key with a passphrase,
+  showing settings, each with who may run it and what it refuses), SETTINGS, CONNECTING ("Every connection
+  and hook"), README, HOWTO ("Start here", "Create a principal key", the key backup, and "Look at a config
+  without starting the proxy"), SIEM, THREAT_MODEL, ROADMAP, AGENTS.md, llms.txt.

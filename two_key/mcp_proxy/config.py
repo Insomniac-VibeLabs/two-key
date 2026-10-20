@@ -42,7 +42,7 @@ _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "
              "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools", "scan",
              "on_writable_paths", "on_agent_access", "siem"}
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
-_KEY_KEYS = {"principal"}
+_KEY_KEYS = {"principal", "passphrase_file"}
 _UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds",
                   "check_paths"}
 MAX_CHECK_PATHS = 64
@@ -128,9 +128,19 @@ class ProxyConfig:
     # The SIEM export block (two_key.siem_sinks), checked for shape; the sinks are built when the proxy
     # starts. None: no copy leaves the ledger.
     siem: Mapping[str, Any] | None = None
+    # The file holding the principal key's passphrase, when the key is encrypted (two_key/keys.py). The
+    # proxy reads it at start; its stdin is the agent's channel, so it never prompts.
+    principal_passphrase_file: Path | None = None
 
     def tool_policy(self, tool: str) -> ToolPolicy:
         return self.tools.get(tool) or ToolPolicy()
+
+    def load_principal_key(self, *, prompt: bool = False):
+        """The principal private key, opened with ``keys.passphrase_file`` when the key is encrypted. The
+        proxy passes ``prompt=False``: there is no terminal on its stdin. A command run by hand may ask."""
+        from ..keys import load_private_key_file, passphrase_source
+        return load_private_key_file(self.principal_key,
+                                     passphrase_source(self.principal_passphrase_file, prompt=prompt))
 
 
 def _mapping(value: Any, where: str, allowed: set[str]) -> Mapping[str, Any]:
@@ -410,6 +420,8 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
         witness_public_key=(_path(base, top["witness_public_key"], "witness_public_key")
                             if "witness_public_key" in top else None),
         head_anchor=_path(base, top["head_anchor"], "head_anchor") if "head_anchor" in top else None,
+        principal_passphrase_file=(_path(base, keys["passphrase_file"], "keys.passphrase_file")
+                                   if "passphrase_file" in keys else None),
         ttl_seconds=_ttl(top["ttl_seconds"]) if "ttl_seconds" in top else 120,
         agent_session_env=(_env_name(top["agent_session_env"], "agent_session_env")
                            if "agent_session_env" in top else None),

@@ -146,7 +146,7 @@ flowchart LR
   hooks -. "look facts up" .-> sor
 ```
 
-`two-key config check --config proxy.yaml` says whether the proxy would start, and `config show` prints the settings it resolves to; both are read-only (HOWTO "Look at a config without starting the proxy"). `two-key mcp-draft-specs` drafts the tool specs from the server's own
+`two-key setup` writes a first deployment; `two-key config set`, `get`, and `undo` change one setting at a time, checked and recorded in the ledger, and `config key-passphrase` encrypts the principal key ([SETUP](docs/SETUP.md)). `two-key config check --config proxy.yaml` says whether the proxy would start, and `config show` prints the settings it resolves to; both are read-only (HOWTO "Look at a config without starting the proxy"). `two-key mcp-draft-specs` drafts the tool specs from the server's own
 schemas for you to review and sign. The walkthrough, with a worked
 example, is HOWTO
 ["Put Two-Key in front of an MCP server"](docs/HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).
@@ -167,6 +167,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
 | [docs/CONNECTING.md](docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
 | [docs/SETTINGS.md](docs/SETTINGS.md) | Every setting: its file, default, what `high_assurance` does to it, and who may change it |
+| [docs/SETUP.md](docs/SETUP.md) | `two-key setup` for a first deployment, `config set`, `get`, and `undo` to change one setting, and `config key-passphrase` to encrypt the principal key: who may run them, what they check, and what they refuse |
 | [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
 | [docs/SIEM.md](docs/SIEM.md) | Sending the ledger to a SIEM, and checking a copy against it (0.7.0) |
 | [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
@@ -319,7 +320,8 @@ flowchart TD
 
 A call that could not be read under its signed spec (`derive_failed:`) is already
 denied by Path A. Unless `tool_args_on_derive_deny` is set, the judges are not shown
-its raw arguments, so they are not asked: Path B is skipped and ledgered as
+its raw arguments (nor when a scan flag withholds them and `tool_args_on_scan_flag`
+is not set), so they are not asked: Path B is skipped and ledgered as
 `skipped:derive_failed`. A skipped Path B counts as not passing, so the call is
 denied and no token is issued.
 

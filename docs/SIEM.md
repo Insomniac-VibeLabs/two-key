@@ -93,6 +93,7 @@ Sent, where the entry has it:
 | `verdict`, `categories`, `scanner`, `stance`, `elapsed_ms`, `parts[]` | the content scan: its verdict and each part's size and digest |
 | `witness_fingerprint`, `source` | the witness key pinned or rotated, as a fingerprint |
 | `origin` | `library`, `cli`, `mcp-proxy`, or whatever the integration declared |
+| `command`, `settings`, `files[]`, `weaker`, `confirmed`, `constitution_hash` | a configuration change (`config_changed`, from `two-key setup`, `config set`, and `config undo`): the setting names, each file's role, name, and digests before and after, and why it is weaker; never a value, and not the account ([SETUP](SETUP.md#what-the-ledger-records)) |
 
 Never sent, and there is no setting that sends them:
 
@@ -102,6 +103,7 @@ Never sent, and there is no setting that sends them:
 - the operator's revocation or rotation reason (its size and digest go);
 - key names the agent wrote (`dropped_keys`);
 - credentials, token text, a scanner's threat name, and file content;
+- a setting's value, and the account that changed it (`config_changed`);
 - the ledger key, the witness key, and any signature over the head.
 
 `tests/test_siem.py` puts a canary value in every one of those places and

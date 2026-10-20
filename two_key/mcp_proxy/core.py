@@ -444,7 +444,7 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
     from ..core import TwoKey, TwoKeyConfigError
     from ..identity import IdentityError, load_monitored_agent_file
     from ..judges.config import JudgeConfigError, load_config_file
-    from ..keys import load_private_key_file, load_public_key
+    from ..keys import load_public_key
     from ..ledger import Ledger, LedgerError
     from ..scan import ScanConfigError
     from ..scanners import scanner_from_config
@@ -455,7 +455,7 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
         if config.scan is not None:
             scanner = scanner_from_config(config.scan, {tool: policy.files for tool, policy in config.tools.items()
                                                         if policy.files})
-        key = load_private_key_file(config.principal_key)
+        key = config.load_principal_key(prompt=False)
         judges, policy = load_config_file(config.judges, judge_transport)
         high = bool(getattr(policy, "is_high_assurance", False))
         check_upstream_paths(config.upstream, high)
@@ -554,7 +554,7 @@ def startup_paths(config: ProxyConfig) -> list[tuple[Path | str, str]]:
     paths: list[tuple[Path | str, str]] = [(config.path, "file"), (config.constitution, "file"),
                                            (config.principal_key, "file"), (config.judges, "file"),
                                            (config.ledger, "folder")]
-    for extra in (config.witness_public_key, config.head_anchor):
+    for extra in (config.witness_public_key, config.head_anchor, config.principal_passphrase_file):
         if extra is not None:
             paths.append((extra, "file"))
     paths.append((config.upstream.cwd or Path.cwd(), "folder"))

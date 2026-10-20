@@ -190,7 +190,15 @@ refuses) when the real account of its parent process is Two-Key's own (agent_sam
 (agent_account_root), unknown (agent_account_unknown, which includes Windows for now), or can change a
 path it runs or reads (agent_can_write). Processes sharing a ledger read and verify each other's entries
 under the lock before writing; a shorter file or a partial line is still refused. Remote agents are
-little tested (ROADMAP). two-key config show|check --config proxy.yaml (read-only: effective settings; would it start). two-key mcp-draft-specs --out DIR -- COMMAND
+little tested (ROADMAP). two-key config show|check --config proxy.yaml (read-only: effective settings; would it start).
+two-key setup --dir DIR writes a new deployment (keys, rules, judges, proxy.yaml), signs and checks it. two-key
+config get|set|undo --config proxy.yaml NAME [VALUE] reads or changes one setting by its docs/SETTINGS.md name:
+Two-Key's own account only (root and files another account can change are refused), the whole config must pass
+config check first, a weaker change needs --confirm-weaker and a typed yes, a signed setting needs --key and
+--rules and is re-signed and verified, env literals never come from argv, and each change is a config_changed
+ledger entry (names and digests, never values). No hot reload (docs/SETUP.md). config key-passphrase
+--config proxy.yaml --new-from FILE (or --remove, weaker) encrypts the principal key and sets keys.passphrase_file;
+every --key command takes --key-passphrase-file FILE or asks on a terminal; never argv or env. two-key mcp-draft-specs --out DIR -- COMMAND
 drafts tool_specs (signing refuses until each floor, amount unit, and allow list is decided;
 *_matched/*_verified/*_approved/... left out as caller-fact candidates) and prints the digest;
 it warns when a payee or amount it maps has no description in the upstream schema (the agent's only

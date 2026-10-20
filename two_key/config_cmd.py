@@ -40,10 +40,15 @@ def _judges(config):
 def check(path: Path | str, environ: Mapping[str, str] | None = None) -> list[tuple[str, str]]:
     """``(level, text)`` findings for the proxy config at ``path``. Any ``FAIL`` means ``mcp-proxy`` would
     refuse to start (or, for the writable-path and SIEM findings, would under that setting)."""
-    environ = os.environ if environ is None else environ
     config, bad = _load(path)
     if bad:
         return [bad]
+    return check_config(config, environ)
+
+
+def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple[str, str]]:
+    """``check`` for a config already read. ``config set`` runs it on the staged files before it writes."""
+    environ = os.environ if environ is None else environ
     found: list[tuple[str, str]] = [(OK, f"config: {config.path} reads cleanly")]
     found += _constitution(config)
     loaded, bad = _judges(config)
@@ -59,23 +64,32 @@ def check(path: Path | str, environ: Mapping[str, str] | None = None) -> list[tu
     found += _upstream(config, high)
     found += _writable(config, high)
     found += _siem(config, high)
-    found.append((OK, "agent_access: not checked here; the proxy checks the account that starts it "
-                      "(on_agent_access)"))
+    found += _agent_access(config, high)
     return found
 
 
 def _constitution(config) -> list[tuple[str, str]]:
     from .constitution import ConstitutionError, ConstitutionSignatureError, load_envelope, verify_signed
-    from .keys import load_private_key_file
+    from .keys import key_file_is_encrypted
     try:
-        public = load_private_key_file(config.principal_key).public_key()
+        # As the proxy opens it: with keys.passphrase_file when it is encrypted, never a prompt.
+        public = config.load_principal_key(prompt=False).public_key()
+        encrypted = key_file_is_encrypted(config.principal_key)
     except (OSError, ValueError) as e:
         return [(FAIL, f"principal_key: {config.principal_key}: {e}")]
+    if encrypted:
+        key_line = (OK, "principal_key: encrypted; keys.passphrase_file opens it")
+    elif config.principal_passphrase_file is not None:
+        key_line = (WARN, "principal_key: keys.passphrase_file is set, but the key is not encrypted; run "
+                          "two-key config key-passphrase --new-from FILE, or remove the setting")
+    else:
+        key_line = (OK, "principal_key: not encrypted; whoever can read the file can sign "
+                        "(two-key config key-passphrase, docs/SETUP.md)")
     try:
         signed = verify_signed(load_envelope(config.constitution), public)
     except (OSError, ValueError, ConstitutionError, ConstitutionSignatureError) as e:
         return [(FAIL, f"constitution: {config.constitution}: {e}")]
-    out = [(OK, f"constitution: signed by the principal key, digest {signed.digest}")]
+    out = [key_line, (OK, f"constitution: signed by the principal key, digest {signed.digest}")]
     unknown = sorted(set(config.tools) - set(signed.tool_specs))
     if unknown:
         out.append((FAIL, f"tools: {unknown} are not tools in the signed constitution"))
@@ -151,6 +165,17 @@ def _writable(config, high: bool) -> list[tuple[str, str]]:
     return out or [(OK, f"writable_paths: nothing another account can change (on_writable_paths: {mode})")]
 
 
+def _agent_access(config, high: bool) -> list[tuple[str, str]]:
+    """The mode only: which account starts the proxy is something only the proxy can see."""
+    from . import agent_access
+    try:
+        mode = agent_access.resolve_mode(config.on_agent_access, high)
+    except ValueError as e:
+        return [(FAIL, str(e))]
+    return [(OK, f"agent_access: not checked here; the proxy checks the account that starts it "
+                 f"(on_agent_access: {mode})")]
+
+
 def _siem(config, high: bool) -> list[tuple[str, str]]:
     from .siem import SiemConfigError
     from .siem_sinks import siem_from_config
@@ -187,7 +212,9 @@ def show(path: Path | str) -> dict[str, Any]:
     return {
         "config": str(config.path),
         "constitution": str(config.constitution),
-        "keys": {"principal": str(config.principal_key)},
+        "keys": {"principal": str(config.principal_key),
+                 "passphrase_file": str(config.principal_passphrase_file) if config.principal_passphrase_file
+                 else None},
         "ledger": str(config.ledger),
         "judges_file": str(config.judges),
         "witness_public_key": str(config.witness_public_key) if config.witness_public_key else None,
@@ -214,13 +241,24 @@ def show(path: Path | str) -> dict[str, Any]:
                          "proposal": p.proposal is not None, "facts": dict(p.facts),
                          "files": [f.path for f in p.files]}
                   for tool, p in sorted(config.tools.items())},
-        "scan": config.scan,
+        "scan": _scan_view(config.scan),
         "siem": siem,
         "quorum": policy.to_record(),
         "judges": [{"id": j.judge_id, "model": j.model, "maker": getattr(j, "maker", None),
                     "local": bool(j.is_local()),
                     "ballot_key_env": getattr(j, "ballot_key_env", None)} for j in judges],
     }
+
+
+def _scan_view(scan):
+    """The scanner block with each ``env`` value shown as ``<literal>``: a command scanner's variables can hold a
+    secret."""
+    if scan is None:
+        return None
+    view = dict(scan)
+    if isinstance(view.get("env"), dict):
+        view["env"] = {name: "<literal>" for name in sorted(view["env"])}
+    return view
 
 
 def run_show(args) -> int:

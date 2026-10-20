@@ -31,11 +31,20 @@ FILE_NOTES = {
     "judges.yaml": "The judges, the quorum policy, and the `monitored_agent:` block. `proxy.yaml` names this file. "
                    "Only the top-level keys `judges`, `quorum` and `monitored_agent` are accepted.",
     "agents.yaml": "Monitored agents that Two-Key itself calls (`two_key.agents`), for the library and the command "
-                   "line. The MCP proxy does not read it. Only the top-level key `agents` is accepted.",
+                   "line. The MCP proxy does not read it, and `two-key config set` does not change it. Only the "
+                   "top-level key `agents` is accepted.",
     "constitution.md": "The prose the judges read.",
     "hard_rules.yaml": "The rules Path A runs, the per-tool specs that say where Path A reads each value, and the "
                        "custom fields. Signed together with `constitution.md`.",
 }
+
+
+# Keys ``two-key config set`` does not change: which files, keys and ledger Two-Key trusts. ``two-key setup``
+# writes them; moving one is a change of deployment, made by hand and then checked (docs/SETUP.md).
+NOT_SETTABLE = frozenset({("proxy.yaml", "constitution"), ("proxy.yaml", "keys"), ("proxy.yaml", "keys.principal"),
+                          ("proxy.yaml", "keys.passphrase_file"),
+                          ("proxy.yaml", "ledger"), ("proxy.yaml", "judges"), ("proxy.yaml", "witness_public_key"),
+                          ("proxy.yaml", "head_anchor"), ("constitution.md", "(the file)")})
 
 
 @dataclass(frozen=True)
@@ -55,6 +64,11 @@ class Setting:
     def required(self) -> bool:
         return self.default.startswith("required")
 
+    @property
+    def settable(self) -> bool:
+        """Whether ``two-key config set`` changes it."""
+        return (self.file, self.key) not in NOT_SETTABLE and self.file != "agents.yaml"
+
 
 def _rows(file: str, rows: list[tuple]) -> list[Setting]:
     out = []
@@ -71,7 +85,11 @@ PROXY = _rows("proxy.yaml", [
     ("constitution", "required", "Path to the signed constitution (`constitution.signed.json`)."),
     ("keys", "required", "The key files."),
     ("keys.principal", "required", "Path to the principal private key, which signs the ledger head. Owner-only: a "
-     "wider mode refuses to start.", {"secret": True}),
+     "wider mode refuses to start. Unencrypted, or encrypted with a passphrase (`two-key config "
+     "key-passphrase`).", {"secret": True}),
+    ("keys.passphrase_file", "none", "Path to a file holding the principal key's passphrase, when the key is "
+     "encrypted; the proxy reads it at start and never prompts. Owner-only, like the key. Set by `two-key config "
+     "key-passphrase`, not by hand.", {"secret": True}),
     ("ledger", "required", "The ledger directory."),
     ("judges", "required", "Path to `judges.yaml`, which also holds the `monitored_agent:` block."),
     ("witness_public_key", "none", "Path to the witness public key, to pin it outside the ledger (as "
@@ -360,8 +378,11 @@ Every key that Two-Key reads from a file, where it lives, what it does, its defa
 Regenerate it with `python tests/test_settings_doc.py --write`; do not edit it by hand.
 
 To see what a proxy config resolves to, run `two-key config show --config proxy.yaml` (defaults filled in, no
-secret values). To find out whether it would start, run `two-key config check --config proxy.yaml`. Both are
-read-only: they write nothing, open no ledger, and contact no judge, scanner, collector or upstream server.
+secret values), or `two-key config get --config proxy.yaml NAME` for one setting. To find out whether it would
+start, run `two-key config check --config proxy.yaml`. These three are read-only: they write nothing, open no
+ledger, and contact no judge, scanner, collector or upstream server. To change one setting, run
+`two-key config set --config proxy.yaml NAME VALUE`, named as in the tables below; [SETUP](SETUP.md) says what it
+checks and refuses, and how `config undo` puts a change back. A first deployment is `two-key setup`.
 
 ## Contents
 
@@ -372,22 +393,26 @@ read-only: they write nothing, open no ledger, and contact no judge, scanner, co
 
 Settings are in two tiers on purpose. Who can change one is part of the security model.
 
-| Tier | Files | Changing it needs | What protects it |
-| --- | --- | --- | --- |
-| **Signed policy** | `constitution.md`, `hard_rules.yaml`, signed into `constitution.signed.json` | The principal key, to sign again. Any other change refuses to load | The signature |
-| **Operator config** | `proxy.yaml`, `judges.yaml`, `agents.yaml` | Write access to the file, and a restart | File permissions and the start-up checks. Not signed. The quorum policy's digest is ledgered |
-| **Secrets** | The principal, ledger, witness, capability and fingerprint keys, the head anchor, `proxy.env`, webhook secrets | Nobody edits them by hand | Owner-only files, refused if wider |
+| Tier | Files | Changing it needs | With `two-key config set` | What protects it |
+| --- | --- | --- | --- | --- |
+| **Signed policy** | `constitution.md`, `hard_rules.yaml`, signed into `constitution.signed.json` | The principal key, to sign again. Any other change refuses to load | `--key` (the principal key) and `--rules` (the file that was signed); shown, confirmed with a typed `yes`, signed and verified. The prose is not changed here: edit it and run `sign-constitution` | The signature |
+| **Operator config** | `proxy.yaml`, `judges.yaml`, `agents.yaml` | Write access to the file, and a restart | Two-Key's own account; a weaker value needs `--confirm-weaker` and a typed `yes`. `agents.yaml` is not changed here | File permissions and the start-up checks. Not signed. The quorum policy's digest is ledgered, and so is every `config set` (`config_changed`) |
+| **Secrets** | The principal, ledger, witness, capability and fingerprint keys, the head anchor, `proxy.env`, webhook secrets | Nobody edits them by hand | Never: a setting names a secret, and an env literal comes from `--value-file` or `--prompt`, never the command line | Owner-only files, refused if wider |
 
 No setting holds a secret. Where a row says **names a secret**, the value is the name of an environment
 variable or the path of an owner-only file; a loader refuses a secret written in the file. Library users
 (`TwoKey(...)` and the guard) set the operator tier in Python, not in these files.
 
-A running proxy keeps the settings it started with. A change to an operator file takes effect at the next start.
+A running proxy keeps the settings it started with. A change to an operator file takes effect at the next start,
+whether it was made by hand or with `config set`.
 
 `two-key config show` prints the effective value of every `proxy.yaml` setting, with defaults filled in. It
-does not say whether a value was set or defaulted. `two-key config check` loads the files together and runs the
-start-up checks that need no running process; it does not run the `on_agent_access` check or compare the
-upstream's tools with `schema_digest`, which only the proxy can do.
+does not say whether a value was set or defaulted. `two-key config get` prints one setting: its value, the file
+that holds it, its tier, and its default. `two-key config check` loads the files together and runs the start-up
+checks that need no running process; it checks the `on_agent_access` setting, but not which account starts the
+proxy, and it does not compare the upstream's tools with `schema_digest`, which only the proxy can do.
+A row that says **Not changed by `config set`** names a file, key or ledger Two-Key trusts: `two-key setup`
+writes it, and moving it is done by hand, then checked.
 
 ## What `high_assurance` changes
 
@@ -422,7 +447,8 @@ def render_markdown() -> str:
         parts.append(f"## `{file}`\n\nTier: {tier}. {FILE_NOTES[file]}\n")
         parts.append("| Setting | Default | `high_assurance` | What it does |\n| --- | --- | --- | --- |")
         for s in rows:
-            summary = s.summary + (" **Names a secret.**" if s.names_secret else "")
+            summary = s.summary + (" **Names a secret.**" if s.names_secret else "") + (
+                "" if s.settable or file == "agents.yaml" else " **Not changed by `config set`.**")
             key = s.key if s.key.startswith("(") else f"`{s.key}`"
             parts.append(f"| {key} | {_cell(s.default)} | {_cell(s.high_assurance)} | {_cell(summary)} |")
         parts.append("")

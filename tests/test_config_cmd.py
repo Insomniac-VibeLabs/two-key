@@ -72,6 +72,13 @@ class Show(Workspace):
         self.assertEqual(shown["judges"][0]["id"], "j1")
         self.assertEqual(self.files(), before, "show wrote a file, or opened the ledger")
 
+    def test_a_scanner_variable_is_never_shown(self):
+        self.write_proxy("scan: {type: command, command: [/bin/true], env: {SCAN_PW: scanner-secret-value}}\n")
+        code, out, _ = run("config", "show", "--config", self.proxy)
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["scan"]["env"], {"SCAN_PW": "<literal>"})
+        self.assertNotIn("scanner-secret-value", out)
+
     def test_a_bad_file_is_one_line_and_exit_1(self):
         self.write_proxy("surprise: 1\n")
         code, out, err = run("config", "show", "--config", self.proxy)

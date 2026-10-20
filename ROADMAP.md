@@ -95,6 +95,18 @@ in the same release.
   review below. Metadata, the source-distribution manifest, and the
   trusted-publishing workflow are in place (docs/PYPI.md). Tag `v0.7.0`
   is not moved. Install with `pip install "two-key[yaml]==0.7.0"`.
+- **On `working`, not yet released (2026-10-20)**: `docs/SETTINGS.md`, every
+  setting generated from the code; `two-key config show`, `get`, and `check`
+  to read a proxy config; `two-key setup` for a first deployment and
+  `two-key config set` and `undo` to change one setting, each change checked
+  as a whole, confirmed when weaker, signed with the principal key when it
+  is a rule, and recorded in the ledger as `config_changed`
+  (docs/SETUP.md); a principal key encrypted with a passphrase, opened by
+  the proxy from `keys.passphrase_file` and by every `--key` command from
+  `--key-passphrase-file` or a prompt (`two-key config key-passphrase`,
+  `init-key --passphrase`); the upstream server's files behind a launcher in the
+  start-up checks (#13); and the compiled-file check on Python 3.15 (#27).
+  CHANGES.md has each.
 - **Next**: the judge history summary (#1), then the public review and the
   1.0 release.
 - **Not yet tested enough: agents on another machine.** The maintainer
@@ -261,6 +273,12 @@ CLI and file formats, so it adds no new logic of its own.
   saved.
 - The GUI never holds the principal key. It prepares a constitution and
   hands it to the existing signing command. Signing stays outside the GUI.
+- Changes go through the engine `two-key config set` already uses
+  (docs/SETUP.md, on `working` since 2026-10-20): Two-Key's own account
+  only, the whole config checked before anything is written,
+  `--confirm-weaker` and a typed yes for a weaker setting, and a
+  `config_changed` ledger entry for each change. The GUI adds no rule of
+  its own.
 - Ledger auditing: browse decisions, filter by tool, reason, judge, and
   time, and show both paths' results for each call. It runs the Merkle and
   digest checks (`check_decision_digests`) and shows failures plainly.

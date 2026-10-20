@@ -33,7 +33,10 @@ the code wins, then this file should be corrected.
 
 - The signed constitution and the two compilation hashes (bytecode and prose).
 - The principal signing key. It signs the constitution and the ledger head.
-  It does not sign capability tokens.
+  It does not sign capability tokens. It may be encrypted with a passphrase
+  (`two-key config key-passphrase`): then a copy of `principal.pem` alone
+  does not sign, but Two-Key's own account, which reads both the key and
+  `keys.passphrase_file` so the proxy can start unattended, still can.
 - The capability private key, outside the ledger directory
   (`<ledger>.capability/capability.pem`). `TwoKey` mints with it. The
   gateway's verifier holds only the public half. This is key separation
@@ -547,7 +550,9 @@ claims to close.
   configured outside the ledger: the in-ledger pin is part of the chain, and
   those two keys can rewrite the chain from its first entry, pin included,
   under a new witness key. With the out-of-ledger pin, forging a head needs
-  the principal, witness, and ledger keys together (#58). There is no
+  the principal, witness, and ledger keys together (#58). An encrypted
+  principal key adds its passphrase to that list for a stolen copy of the
+  file, not for an attacker on Two-Key's account. There is no
   external anchor, so those keys are enough to rewrite a ledger that never
   leaves the machine.
 - Trust on first use: a ledger from 0.2.2 or earlier pins the witness key
@@ -810,6 +815,8 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
 - `two_key/mcp_proxy/`: only `sdk.py` imports the MCP SDK. Each `tools/call` runs `authorize`, then `gateway.invoke` in the same process; the upstream call is the gateway's registered tool, with projected arguments. Only signed tools are shown, under their signed ids; any other name is `tool_not_offered`, ledgered. Caller-supplied paths are removed from the `inputSchema` shown. `mcp_proxy_started` is ledgered before serving; if that fails, the proxy does not start. Fact hooks load at start; one that does not import refuses to start. The schema digest covers exactly the fields shown, as the upstream lists them (before caller paths are removed); a mismatch refuses unless `on_schema_change: warn`. `unresolved_identity` refuses unless `allow_unresolved_identity: true`. The claim is the per-tool policy only (`floor`, a class, or none = classified). The child gets `upstream.env` plus the SDK's minimal set. Nothing but MCP goes to stdout. `draft.py`: placeholders that signing refuses, fact-like properties left out, server text in ASCII comments only. `undescribed_inputs` warns, never refuses, for each input Path A reads that the upstream schema does not describe.
 - `two_key/_platform.py`: POSIX does exactly what it did before 0.6.0 (mode 0600 and 0700, `O_NOFOLLOW`, `flock`, the same messages). On Windows a key is created with a protected access list for the current user only, in `CreateFileW` itself; a key is accepted only when its owner and every allow entry with more than metadata access are the current user, SYSTEM, Administrators, or OWNER RIGHTS; a reparse point as the last part is refused; locks are `LockFileEx`; descriptors are binary. Every key read and write in the package goes through it, and every text file Two-Key writes uses `newline="\n"` and a named encoding (`tests/test_text_io.py`).
+- `two_key/config_set.py`, `two_key/setup_cmd.py`: a change is refused as root, and when a file it writes or its folder can be changed by another account or is a link; the whole changed config passes `config check` before anything is written, so what `high_assurance` forbids stays forbidden; a weaker change needs `--confirm-weaker` and a typed yes on a terminal; a signed change needs the principal key and the exact signed rules file, and the new envelope is verified; `config_changed` (names and digests, never values) is ledgered before the files are renamed in. `config key-passphrase` keeps no plain copy of the key, and removing the passphrase counts as weaker.
+- `two_key/keys.py`: an encrypted principal key is PKCS8 under AES-256-GCM, its key from PBKDF2-SHA256 at 600,000 iterations (a file asking for fewer is refused), the header bound in as associated data. A passphrase comes from an owner-only file or a terminal prompt, never argv or the environment, and the proxy never prompts. PBKDF2 is not memory-hard, so a passphrase is only as good as its length: 12 bytes is the floor, and a generated one is advised. It does not stop an account that can write the files from editing them by hand, and it cannot tell an agent that runs as Two-Key's own account from the operator.
 - `two_key/backup.py`: three bundles; the ledger key and the witness key are never in one file; a wrong passphrase or a tampered bundle is a refusal; restore writes `head.anchor` from the same moment as the ledger and does not delete it. `--replace-ledger` is the only path that overwrites a different ledger, and it also overwrites a key file that differs. A missing anchor on a newer ledger is left missing; the next open adopts that head.
 
 ## Changes by release
