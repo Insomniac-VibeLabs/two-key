@@ -130,14 +130,14 @@ From Python:
 from two_key.siem import SiemConfig
 from two_key.siem_sinks import SyslogSink, WebhookSink
 
-two_key = TwoKey(ledger, public_key, constitution, judges, private_key=key,
-                 siem=SiemConfig(sinks=(
-                     SyslogSink("siem.example.net", ca_file="/etc/two-key/siem-ca.pem"),
-                     WebhookSink("https://siem.example.net/ingest",
-                                 auth_value_file="/etc/two-key/siem-token"),
-                 )))
+tk = TwoKey(ledger, public_key, constitution, judges, private_key=key,
+            siem=SiemConfig(sinks=(
+                SyslogSink("siem.example.net", ca_file="/etc/two-key/siem-ca.pem"),
+                WebhookSink("https://siem.example.net/ingest",
+                            auth_value_file="/etc/two-key/siem-token"),
+            )))
 ...
-two_key.close()      # a last pass for the sender; what is left goes out on the next start
+tk.close()      # a last pass for the sender; what is left goes out on the next start
 ```
 
 What happens at start:

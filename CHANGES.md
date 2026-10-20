@@ -120,6 +120,7 @@
 - [Python 3.13 to 3.15: compiled files stay checked, CI, docs (#27) — 2026-10-20](#python-313-to-315-compiled-files-stay-checked-ci-docs-27--2026-10-20)
 - [The proxy checks the upstream server's files behind a launcher (#13) — 2026-10-20](#the-proxy-checks-the-upstream-servers-files-behind-a-launcher-13--2026-10-20)
 - [`upstream.check_paths` on Windows needs the drive (#13) — 2026-10-20](#upstreamcheck_paths-on-windows-needs-the-drive-13--2026-10-20)
+- [DeepSource runs the Python analyzer, and on `working` — 2026-10-20](#deepsource-runs-the-python-analyzer-and-on-working--2026-10-20)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4049,3 +4050,17 @@ refuse` included. On Linux, macOS, and Windows alike:
   entry now needs its drive or a UNC share on every Python version
   (`expected an absolute path`). The docs test expects that refusal on
   Windows, and HOWTO and SETTINGS say so.
+
+## DeepSource runs the Python analyzer, and on `working` — 2026-10-20
+
+- DeepSource had no `.deepsource.toml`, so it ran its secrets check alone,
+  and only on main and pull requests, never on a push to `working`.
+  `.deepsource.toml` now turns on the Python analyzer beside the secrets
+  check, with `tests/` marked as test code, and a draft pull request from
+  `working` to main (#30) stays open so each push to `working` is analysed.
+- Its first finding on `working` was a false positive in docs/SIEM.md: the
+  Python example named its `TwoKey` instance `two_key = TwoKey(...)`,
+  which the secrets check read as a hardcoded credential. The example now
+  calls it `tk`, as HOWTO does, which also stops it shadowing the
+  `two_key` package it imports from.
+- CONTRIBUTING says where DeepSource runs.
