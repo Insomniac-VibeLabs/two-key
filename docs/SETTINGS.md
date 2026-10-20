@@ -5,6 +5,10 @@ Every key that Two-Key reads from a file, where it lives, what it does, its defa
 `tests/test_settings_doc.py` fails when a key the code accepts is missing from it, so it cannot go stale.
 Regenerate it with `python tests/test_settings_doc.py --write`; do not edit it by hand.
 
+To see what a proxy config resolves to, run `two-key config show --config proxy.yaml` (defaults filled in, no
+secret values). To find out whether it would start, run `two-key config check --config proxy.yaml`. Both are
+read-only: they write nothing, open no ledger, and contact no judge, scanner, collector or upstream server.
+
 ## Contents
 
 <!-- toc -->

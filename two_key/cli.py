@@ -398,6 +398,16 @@ def _mcp_proxy(args) -> int:
     return sdk.run(config)
 
 
+def _config_show(args) -> int:
+    from .config_cmd import run_show
+    return run_show(args)
+
+
+def _config_check(args) -> int:
+    from .config_cmd import run_check
+    return run_check(args)
+
+
 def _draft_env(items: list[str] | None) -> dict[str, str]:
     """``--env NAME`` passes the variable from this environment; ``--env NAME=VALUE`` passes a literal."""
     from .mcp_proxy.config import ENV_NAME
@@ -695,6 +705,15 @@ def main(argv: list[str] | None = None) -> int:
                                              "both keys (needs the mcp extra)")
     proxy.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
     proxy.set_defaults(func=_mcp_proxy)
+    cfg = sub.add_parser("config", help="read-only views of a proxy config: show the effective settings, check "
+                                        "that the proxy would start")
+    cfg_sub = cfg.add_subparsers(dest="config_cmd", required=True)
+    for name, text in (("show", "print the effective settings as JSON, defaults filled in, no secret values"),
+                       ("check", "load every file the config names and report what would stop or warn at start; "
+                                 "writes nothing, opens no ledger")):
+        part = cfg_sub.add_parser(name, help=text)
+        part.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
+        part.set_defaults(func=_config_show if name == "show" else _config_check)
     drafter = sub.add_parser("mcp-draft-specs", help="draft tool_specs and the schema digest from an upstream MCP "
                                                      "server, for the principal to review and sign (needs the mcp extra)")
     drafter.add_argument("--out", default=None, metavar="DIR",

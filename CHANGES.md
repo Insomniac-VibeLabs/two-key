@@ -116,6 +116,7 @@
 - [Diagrams: one house style, checked by a test (#29) — 2026-10-20](#diagrams-one-house-style-checked-by-a-test-29--2026-10-20)
 - [Docs: prose accuracy and readability pass — 2026-10-20](#docs-prose-accuracy-and-readability-pass--2026-10-20)
 - [docs/SETTINGS.md: every setting, generated and tested — 2026-10-20](#docssettingsmd-every-setting-generated-and-tested--2026-10-20)
+- [`two-key config show` and `config check`: read-only views of a proxy config — 2026-10-20](#two-key-config-show-and-config-check-read-only-views-of-a-proxy-config--2026-10-20)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3922,3 +3923,21 @@ JUDGES_AND_QUORUM.md and the example files; this is the one map.
   the same sets as the validators. The validators accept exactly the keys they
   did before.
 - README, HOWTO, CONNECTING, AGENTS.md, CONTRIBUTING and llms.txt point to it.
+
+## `two-key config show` and `config check`: read-only views of a proxy config — 2026-10-20
+
+No change to any check or to the ledger.
+
+- `two-key config show --config proxy.yaml` prints the effective settings as JSON, defaults filled in
+  (the resolved `on_agent_access` and `on_writable_paths`, the quorum, the judges, the tools, the SIEM sinks).
+  A key file is shown by path, a judge's key by its environment variable's name, and an upstream literal value
+  as `<literal>`.
+- `two-key config check --config proxy.yaml` loads what the proxy loads at start that has no side effect, and
+  reports `ok`, `WARN` or `FAIL` per line: the config parses, the principal key loads, the constitution is
+  signed by it, every `tools:` entry is signed, the judges and quorum load, a `monitored_agent` is declared,
+  the environment variables the config reads are set, writable paths, and plaintext SIEM sinks. It exits 1 on
+  any `FAIL`. It does not run the `on_agent_access` check or compare `schema_digest`; the proxy does both at
+  start.
+- Neither command writes a file, opens the ledger, starts a process, or contacts a judge, scanner, collector
+  or upstream server. Neither constructs `TwoKey`, which appends to the ledger when it starts.
+- Docs: HOWTO "Look at a config without starting the proxy", README, SETTINGS, AGENTS.md, llms.txt.

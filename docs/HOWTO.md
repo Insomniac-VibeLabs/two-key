@@ -62,6 +62,7 @@ route. The rest of the page is reference, for when a section above points to it.
   - [Install](#install-1)
   - [Worked example: a billing server](#worked-example-a-billing-server)
   - [`proxy.yaml`](#proxyyaml)
+  - [Look at a config without starting the proxy](#look-at-a-config-without-starting-the-proxy)
   - [What the proxy does](#what-the-proxy-does)
   - [What each refusal or warning means](#what-each-refusal-or-warning-means)
   - [Key custody](#key-custody)
@@ -1891,6 +1892,26 @@ The claim is the only thing the proxy says about a call, and the agent
 writes none of it. Amount, counterparty, and irreversible are never
 claimed: they come from the argument bytes and the signed spec, as in
 `two-key authorize` with those options left out.
+
+### Look at a config without starting the proxy
+
+```
+two-key config show  --config proxy.yaml     # the effective settings as JSON, defaults filled in
+two-key config check --config proxy.yaml     # would it start? exit 1 on any FAIL
+```
+
+Both are read-only. They write no file, open no ledger, start no process, and contact no judge, scanner, SIEM
+collector or upstream server. `show` prints a key file by path, a judge's key by the name of its environment
+variable, and an upstream literal value as `<literal>`; no secret value is printed. `check` loads the files
+the config names and reports one line each: the config parses (unknown and repeated keys refused), the
+principal key file loads, the constitution is signed by that key, every `tools:` entry is a signed tool, the
+judges and quorum load (with the single-judge and maker-diversity warnings), a `monitored_agent` is declared,
+every environment variable the config reads is set, no path another account can change (`writable_path`, a
+`FAIL` under `on_writable_paths: refuse` or `high_assurance`), and a plaintext SIEM sink (a `FAIL` under
+`high_assurance`). It does not run the `on_agent_access` check, because that depends on which account starts
+the proxy, and it does not compare the upstream's tools with `schema_digest`; the proxy does both at start. A
+variable that is set in your shell may not be set in the proxy's own environment, so a `FAIL` for a missing
+variable names the variable and says so. Every setting is listed in [SETTINGS](SETTINGS.md).
 
 ### What the proxy does
 

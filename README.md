@@ -148,7 +148,7 @@ flowchart TD
 
 *The agent host talks only to the proxy. Solid lines are the call path; dashed lines are the record sent to the judges and the hook's own lookups.*
 
-`two-key mcp-draft-specs` drafts the tool specs from the server's own
+`two-key config check --config proxy.yaml` says whether the proxy would start, and `config show` prints the settings it resolves to; both are read-only (HOWTO "Look at a config without starting the proxy"). `two-key mcp-draft-specs` drafts the tool specs from the server's own
 schemas for you to review and sign. The walkthrough, with a worked
 example, is HOWTO
 ["Put Two-Key in front of an MCP server"](docs/HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).

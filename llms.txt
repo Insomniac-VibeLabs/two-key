@@ -189,7 +189,7 @@ refuses) when the real account of its parent process is Two-Key's own (agent_sam
 (agent_account_root), unknown (agent_account_unknown, which includes Windows for now), or can change a
 path it runs or reads (agent_can_write). Processes sharing a ledger read and verify each other's entries
 under the lock before writing; a shorter file or a partial line is still refused. Remote agents are
-little tested (ROADMAP). two-key mcp-draft-specs --out DIR -- COMMAND
+little tested (ROADMAP). two-key config show|check --config proxy.yaml (read-only: effective settings; would it start). two-key mcp-draft-specs --out DIR -- COMMAND
 drafts tool_specs (signing refuses until each floor, amount unit, and allow list is decided;
 *_matched/*_verified/*_approved/... left out as caller-fact candidates) and prints the digest;
 it warns when a payee or amount it maps has no description in the upstream schema (the agent's only
