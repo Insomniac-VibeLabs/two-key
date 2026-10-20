@@ -49,7 +49,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Install and version matrix
 
-Requires Python ≥ 3.10. Package name `two-key`, import name `two_key`,
+Requires Python ≥ 3.10; CI tests 3.10 to 3.14 (3.15 in a Linux job that does not block, until PyYAML ships 3.15 wheels; no `requires-python` cap). Package name `two-key`, import name `two_key`,
 version `0.7.0` on PyPI (`pip install "two-key[yaml]==0.7.0"`). Tag `v0.7.0` on `main` is not moved. docs/PYPI.md is the release process. This packaging does not change the version.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).

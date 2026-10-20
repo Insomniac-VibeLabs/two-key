@@ -126,14 +126,30 @@ def _import_path_targets(entry: object) -> list[tuple[str, str]]:
     return targets
 
 
+def _module_paths(module: object) -> list[object]:
+    """A loaded module's file and compiled file, as ``__file__`` and ``__cached__`` and as its spec names
+    them. Python 3.15 no longer sets ``__cached__``, so the compiled file is named only by
+    ``__spec__.cached`` there; reading both keeps a ``__pycache__`` folder from going unchecked."""
+    values = [getattr(module, "__file__", None), getattr(module, "__cached__", None)]
+    spec = getattr(module, "__spec__", None)
+    if spec is not None:
+        if getattr(spec, "has_location", False):
+            values.append(getattr(spec, "origin", None))
+        try:
+            values.append(spec.cached)
+        except (AttributeError, NotImplementedError):    # a spec that is not a ModuleSpec, or no cache tag
+            pass
+    return values
+
+
 def _module_targets(module: object) -> list[tuple[str, str]]:
     """A loaded module's file and compiled file, each with its folder."""
     targets: list[tuple[str, str]] = []
-    for attr in ("__file__", "__cached__"):
-        value = getattr(module, attr, None)
+    for value in _module_paths(module):
         if isinstance(value, str) and value:
-            targets.append((value, "file"))
-            targets.append((os.path.dirname(os.path.abspath(value)), "folder"))
+            for target in ((value, "file"), (os.path.dirname(os.path.abspath(value)), "folder")):
+                if target not in targets:
+                    targets.append(target)
     return targets
 
 

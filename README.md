@@ -62,7 +62,7 @@ What you get:
   that is down never blocks a decision.
 - **Keys you can recover.** Passphrase backup of every key, in three
   bundles.
-- **Small on purpose.** Python 3.10 or later, one required dependency
+- **Small on purpose.** Python 3.10 to 3.14, one required dependency
   (`cryptography`), Apache-2.0.
 
 **Status:** beta. 0.7.0 is the current release: it adds the SIEM export, a

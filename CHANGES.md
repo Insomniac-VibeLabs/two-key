@@ -117,6 +117,7 @@
 - [Docs: prose accuracy and readability pass — 2026-10-20](#docs-prose-accuracy-and-readability-pass--2026-10-20)
 - [docs/SETTINGS.md: every setting, generated and tested — 2026-10-20](#docssettingsmd-every-setting-generated-and-tested--2026-10-20)
 - [`two-key config show` and `config check`: read-only views of a proxy config — 2026-10-20](#two-key-config-show-and-config-check-read-only-views-of-a-proxy-config--2026-10-20)
+- [Python 3.13 to 3.15: compiled files stay checked, CI, docs (#27) — 2026-10-20](#python-313-to-315-compiled-files-stay-checked-ci-docs-27--2026-10-20)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3941,3 +3942,35 @@ No change to any check or to the ledger.
 - Neither command writes a file, opens the ledger, starts a process, or contacts a judge, scanner, collector
   or upstream server. Neither constructs `TwoKey`, which appends to the ledger when it starts.
 - Docs: HOWTO "Look at a config without starting the proxy", README, SETTINGS, AGENTS.md, llms.txt.
+
+## Python 3.13 to 3.15: compiled files stay checked, CI, docs (#27) — 2026-10-20
+
+- **The writable-path check looks at compiled files on Python 3.15.**
+  Python 3.15 no longer sets a module's `__cached__`, and the check read
+  only `__file__` and `__cached__`, so on 3.15 it stopped looking at the
+  `.pyc` files of loaded modules and at their `__pycache__` folders: one
+  that another account could write would have passed unseen.
+  `two_key/writable.py` now also reads the module's spec
+  (`__spec__.cached`, and `__spec__.origin` for a module with a location),
+  which Python 3.10 and later set. New tests: a module with no `__cached__`
+  and an open `__pycache__` folder is named, and a module with no location
+  adds nothing (`tests/test_writable_paths.py`). Nothing changes on 3.10
+  to 3.14, where both names point at the same file.
+- **CI tests Python 3.13 and 3.14** on Linux, macOS, and Windows, from
+  `uv.lock` as wheels only, like 3.10 to 3.12.
+- **A Python 3.15 job on Linux that does not block.** PyYAML publishes no
+  3.15 wheel yet, so this job builds PyYAML alone from source and keeps
+  every other package wheels only (a second package without a wheel fails
+  the job instead of being built). It runs the suite and the demo. It
+  becomes blocking, with macOS and Windows, once PyYAML ships 3.15 wheels.
+- `pyproject.toml` classifiers name 3.13 and 3.14. `requires-python` stays
+  `>=3.10` with no upper bound: a bound would not make pip refuse 3.15, it
+  would install an older Two-Key and fail on the same PyYAML build.
+- Docs: README, HOWTO ("Platforms", with what to do on 3.15: use 3.14 until
+  PyYAML ships wheels; two version notes made accurate for 3.13 and 3.14),
+  PYPI, CONTRIBUTING, and AGENTS.md say 3.10 to 3.14.
+
+### Upgrading
+
+- Nothing to change. On Python 3.15, a start may now name a `__pycache__`
+  folder another account can write, which it should have named before.

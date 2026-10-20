@@ -104,8 +104,17 @@ for working in this repository.
 
 ### Platforms
 
-Two-Key runs on Linux, macOS, and Windows, with Python 3.10 to 3.12; CI
-runs the tests, the demo, and a wheel install on all three.
+Two-Key runs on Linux, macOS, and Windows, with Python 3.10 to 3.14; CI
+runs the tests and the demo on each of those versions on all three, and a
+wheel install on all three.
+
+Python 3.15 is not supported yet. The `yaml` and `mcp` extras need PyYAML,
+which publishes no 3.15 wheel yet, so pip builds it from source: that works
+where a C compiler is installed (most Linux machines) and fails on Windows and
+on a Mac without one. Use Python 3.14 until PyYAML ships 3.15 wheels. CI runs
+a 3.15 job on Linux that builds PyYAML from source, but it does not block a
+change. `requires-python` has no upper bound: a bound would not stop pip, which
+would install an older Two-Key and hit the same PyYAML build.
 
 Key files (the principal key, the ledger key, the witness and capability
 keys, the fingerprint key, the head anchor, token files) must be readable
@@ -1116,7 +1125,7 @@ The ledger keeps only `tool_args_size`, `tool_args_digest`, and
 nested too deeply to encode are denied in `authorize` and at the gateway
 with `invalid_call:tool args are nested too deeply`; the ledger keeps
 `tool_args_omitted: true` and `tool_args_error`. Encoding runs before the
-size check, so the reason is the same on Python 3.10, 3.11, and 3.12.
+size check, so the reason is the same on every Python from 3.10 to 3.14.
 
 With a content scanner (0.6.0), the files a scanned tool's call carries are
 held to limits too, before the scanner and both paths and under every
@@ -2592,8 +2601,11 @@ names the setting or declaration that controls it.
   dry start.
 - A `ttl_seconds` out of range is reported with the prefix
   `ttl_out_of_range:`.
-- On Python 3.12, an agent reply nested past 62 levels parses and is
-  `invalid_call`. On 3.10 and 3.11 it is `malformed_proposal`. Both deny.
+- An agent reply whose arguments are nested past 62 levels parses and is
+  `invalid_call`. On Python 3.10 and 3.11, one nested close to 1,000 levels
+  (the interpreter's recursion limit) does not parse and is
+  `malformed_proposal`; on 3.12 and later it parses and is `invalid_call`.
+  Both deny.
 - `agent_session` is the session you pass. The named agent key is compared
   beside it. It is not added to that string, not sent to the judge, and not
   written down.

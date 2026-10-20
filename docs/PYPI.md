@@ -36,8 +36,8 @@ pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.g
 | `yaml` | PyYAML | YAML constitutions, rules, and judge files |
 | `mcp` | `mcp>=2.2,<3` and PyYAML | `two-key mcp-proxy` and `two-key mcp-draft-specs` |
 
-Python 3.10 or newer. One wheel for Linux, macOS, and Windows: there is no
-compiled extension. `uv.lock` is what CI installs. It is not what pip
+Python 3.10 to 3.14 (docs/HOWTO.md "Platforms" says why not 3.15 yet). One
+wheel for Linux, macOS, and Windows: there is no compiled extension. `uv.lock` is what CI installs. It is not what pip
 installs from PyPI.
 
 ## Files
