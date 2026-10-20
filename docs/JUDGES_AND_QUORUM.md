@@ -35,8 +35,8 @@ A judge endpoint that keeps its own memory across ballots (a persistent agent, o
 
 ```mermaid
 flowchart TD
-    A["Authorization request"] --> B["Build normalized action record"]
-    B --> C["Prepare configured judge input"]
+    A["Authorization request"] --> B["Build normalized<br/>action record"]
+    B --> C["Prepare configured<br/>judge input"]
     C --> D["Call judge adapter"]
     D --> E{"Usable ballot?"}
     E -->|Yes| F{"Vote"}
@@ -48,7 +48,7 @@ flowchart TD
     I --> J
 ```
 
-This diagram shows one judge's contribution, not the final authorization decision.
+*One judge's ballot becomes an affirmative, a negative or an abstention. It is not the final authorization decision.*
 
 The convenor checks ballot identity and binding. A ballot that reports inconsistent binding hashes becomes an abstention. With `ballot_binding="echo"`, a judge must also return the required binding information itself.
 
@@ -71,11 +71,13 @@ flowchart TD
     C --> E["Resolve min_responding"]
     D --> E
     E --> F["Collect and validate ballots"]
-    F --> G["Apply quorum and diversity requirements"]
+    F --> G["Apply quorum and<br/>diversity requirements"]
     G --> H{"All requirements met?"}
     H -->|Yes| I["Path B passes"]
     H -->|No| J["Path B denies"]
 ```
+
+*The threshold defaults to the smaller of 2 and the number of judges when `required_yes` is not set.*
 
 With the default policy:
 
@@ -143,8 +145,8 @@ Path A evaluates deterministic policy rules against the normalized structured ac
 
 ```mermaid
 flowchart TD
-    A["Well-formed request within limits"] --> B["Path A: deterministic policy VM"]
-    A --> C["Path B: configured judges and quorum"]
+    A["Well-formed request<br/>within limits"] --> B["Path A: deterministic<br/>policy VM"]
+    A --> C["Path B: configured<br/>judges and quorum"]
     B --> D{"Path A allows?"}
     C --> E{"Path B passes?"}
     D -->|No| F["Deny authorization"]
@@ -154,6 +156,8 @@ flowchart TD
     G -->|Yes| F
     G -->|No| H["Capability may be issued"]
 ```
+
+*Both paths must allow, and no other deny condition may remain, before a capability can be issued.*
 
 The final decision allows the action only if Path A allows, the quorum passes, and no other deny condition remains. Capability issuance can still fail, including when the issuer key is unavailable or a required ledger write fails.
 

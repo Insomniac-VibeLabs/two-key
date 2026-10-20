@@ -36,17 +36,19 @@ Both carry the same allowlisted fields. Neither can change a decision.
 The ledger stays the record. The SIEM gets a copy.
 
 ```mermaid
-flowchart LR
+flowchart TD
   auth["authorize / gateway"] -- "append" --> ledger[("Encrypted ledger<br/>(the record)")]
-  ledger -- "after the entry is on disk" --> filter["Allowlist<br/>no argument values"]
+  ledger -- "after the entry<br/>is on disk" --> filter["Allowlist<br/>no argument values"]
   filter --> queue["Bounded queue"]
   queue --> sender["Sender thread"]
-  sender -- "udp / tcp / tls" --> syslog["Syslog collector"]
+  sender -- "udp, tcp or tls" --> syslog["Syslog collector"]
   sender -- "https POST" --> hook["Webhook"]
+  cursor["Cursor: last seq<br/>delivered"] -. "replays after<br/>an outage" .-> sender
   ledger -- "two-key siem-export" --> file["JSON Lines or CEF file"]
-  file -- "two-key siem-verify" --> ledger
-  cursor["Cursor: last seq delivered"] -. "replays after an outage" .-> sender
+  file -. "siem-verify only reads,<br/>compares with" .-> ledger
 ```
+
+*The live copy runs from the ledger to the collector; the export writes a file. The dashed lines are the cursor's replay and `siem-verify`, which only reads both and never writes to the ledger.*
 
 Three properties hold whatever you configure:
 

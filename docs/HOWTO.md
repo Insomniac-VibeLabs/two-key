@@ -134,12 +134,14 @@ flowchart TD
   prose["Prose<br/>constitution.md"] --> sign["sign-constitution<br/>one signature"]
   rules["Hard rules<br/>hard_rules.yaml"] --> sign
   specs["tool_specs<br/>inside hard_rules.yaml"] --> sign
-  sign --> envelope["Signed envelope<br/>prose + hard_rules + tool_specs<br/>+ signature"]
+  sign --> envelope["Signed envelope<br/>prose, hard_rules,<br/>tool_specs, signature"]
   envelope --> load["verify_signed<br/>fail-closed on any change"]
   load --> compiled["CompiledConstitution<br/>bytecode + tool_specs"]
-  compiled --> pathA["Path A Policy VM<br/>uses bytecode + derived fields"]
-  compiled --> pathB["Path B judges<br/>see constitution prose + normalized action record"]
+  compiled --> pathA["Path A policy VM<br/>bytecode and<br/>derived fields"]
+  compiled --> pathB["Path B judges<br/>prose and the normalized<br/>action record"]
 ```
+
+*One signature covers the prose, the hard rules and the tool specs; any change to the envelope refuses to load.*
 
 A bare rule list, a missing
 key, `null`, and an empty mapping are refused. `examples/hard_rules.yaml`
@@ -1284,24 +1286,33 @@ the signed lists the agent never saw.
 
 ```mermaid
 sequenceDiagram
-  participant Signed as Signed constitution
   participant Caller as Caller (your app)
   participant TwoKey
   participant Agent as Monitored agent host
+  Caller->>TwoKey: agent_vocabulary(tools=[pay_bill])
+  Note over TwoKey: reads tool_specs and the field registry
+  TwoKey-->>Caller: vocabulary text, syntax only
+  Note over Caller: adds this task's exact values to the instruction
+  Caller->>Agent: system prompt, prose, vocabulary, instruction
+  Agent-->>Caller: JSON proposal (tool, arguments, data_class)
+```
+
+*The vocabulary carries the shape of a call. This task's values, for example paying power-co.example 64.12 USD, come only from the instruction.*
+
+Then Two-Key checks the proposal:
+
+```mermaid
+sequenceDiagram
+  participant Caller
+  participant TwoKey
   participant PathA as Path A VM
   participant PathB as Path B judges
   participant Ledger
-
-  Caller->>TwoKey: agent_vocabulary(tools=[pay_bill])
-  TwoKey->>Signed: read tool_specs and the field registry
-  Note over TwoKey: keeps tool ids, argument paths, value syntax, floors, data classes<br/>drops allow lists, enum values, bounds, rules, thresholds,<br/>blocked parties, descriptions, defaults, irreversible flags
-  TwoKey-->>Caller: vocabulary text, syntax only
-  Note over Caller: puts this task's exact values in the instruction,<br/>for example pay power-co.example 64.12 USD
-  Caller->>Agent: system prompt, prose, vocabulary, instruction
-  Agent-->>Caller: JSON proposal (tool, arguments, data_class)
   Caller->>TwoKey: authorize the proposal
-  TwoKey->>PathA: values from the argument bytes vs the signed allow lists and rules
+  TwoKey->>PathA: values from the argument bytes
+  PathA-->>TwoKey: allow or deny against the signed lists
   TwoKey->>PathB: prose and the action record
+  PathB-->>TwoKey: quorum pass or deny
   alt both paths allow
     TwoKey->>Ledger: decision and capability token
     TwoKey-->>Caller: single-use token for the gateway
@@ -1310,6 +1321,8 @@ sequenceDiagram
     TwoKey-->>Caller: deny, no token
   end
 ```
+
+*Path A checks the values against signed lists the agent never saw, so a guessed value is a ledgered deny.*
 
 `tk.agent_vocabulary()` describes syntax, never values. For each signed
 tool (or only those in `tools`) it gives the id, the `data_class_floor`,
@@ -1598,17 +1611,19 @@ every call through both keys before the server sees it. A refused call
 comes back to the agent as a tool error with a reason code.
 
 ```mermaid
-flowchart LR
-  host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
+flowchart TD
+  host["Agent host<br/>MCP client"] -- "tools/list and<br/>tools/call, stdio" --> tk
   subgraph proxy["two-key mcp-proxy, its own OS user"]
-    tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["TwoKey.authorize<br/>Path A and Path B"]
+    tk -- "token" --> gw["Gateway<br/>same process"]
   end
   tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
+  gw -- "projected arguments,<br/>stdio" --> up["Upstream MCP server<br/>child process,<br/>third OS user"]
   up --> sor["System of record"]
   hooks -. "look facts up" .-> sor
 ```
+
+*The agent host talks only to the proxy. Solid lines are the call path; dashed lines are the record sent to the judges and the hook's own lookups.*
 
 ```mermaid
 sequenceDiagram
@@ -1616,23 +1631,25 @@ sequenceDiagram
   participant Proxy as two-key mcp-proxy
   participant Judges
   participant Up as Upstream server
-  Note over Proxy,Up: At start the proxy launches the server, lists its tools, and checks schema_digest
+  Note over Proxy,Up: At start: launch, list tools, check schema_digest
   Host->>Proxy: tools/list
   Proxy-->>Host: the signed tools only
-  Host->>Proxy: tools/call pay_vendor with vendor, amount, invoice, memo
-  Proxy->>Proxy: fact hook looks the invoice up, po_matched comes from the system of record
-  Proxy->>Proxy: Path A on the form derived from the arguments, the facts, and the fixed claim
+  Host->>Proxy: tools/call pay_vendor with its arguments
+  Proxy->>Proxy: fact hook reads the system of record
+  Proxy->>Proxy: Path A on arguments, facts, fixed claim
   Proxy->>Judges: normalized record, with fact_fields
   Judges-->>Proxy: ballots
   alt both keys turn
-    Proxy->>Proxy: mint a token, run the fact hook again, the gateway checks both
-    Proxy->>Up: tools/call pay_vendor with vendor, amount, invoice, memo, and the hook's po_matched
+    Proxy->>Proxy: mint a token, run the hook again
+    Proxy->>Up: tools/call with the arguments and the facts
     Up-->>Proxy: result
     Proxy-->>Host: result
   else a key does not turn
-    Proxy-->>Host: tool error, two-key denied this call, then the reason code
+    Proxy-->>Host: tool error: denied, with the reason code
   end
 ```
+
+*The facts come from the proxy's own hook and the system of record, never from the agent. The upstream server sees a call only when both keys turn.*
 
 The proxy is a separate process, so it works with any MCP client and any
 agent language. It uses the official MCP Python SDK, installed with the

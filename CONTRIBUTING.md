@@ -29,6 +29,11 @@ the uv version pinned in `.github/workflows/tests.yml` and commit it.
 After adding, renaming, or moving a heading in a document that has a table of
 contents, run `python tests/test_doc_toc.py --write`; the test suite fails
 while a table is out of date.
+Diagrams in the docs are real Mermaid, never pictures. They follow the house
+style in `tests/test_doc_diagrams.py` (short label lines, at most five
+participants, a one-line italic caption under each), and the test suite fails
+on a diagram that does not. The non-required `diagrams.yml` workflow draws
+every diagram and uploads the pictures for a look before a release.
 Run `python -m unittest discover -s tests` before opening a pull request.
 
 CI runs every pipeline that runs code on Linux, macOS, and Windows: the tests

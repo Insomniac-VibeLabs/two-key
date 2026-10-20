@@ -31,13 +31,15 @@ promise: the order may change, and version numbers are targets, not dates.
 ## The path to 1.0
 
 ```mermaid
-flowchart LR
+flowchart TD
   r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
   r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
   r07 --> r10["1.0.0<br/>Review and release"]
-  r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
+  r10 -. "later" .-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
 ```
+
+*Each release builds on the one above it. The dashed line leads to work planned after 1.0.*
 
 | Version | What | Status |
 | --- | --- | --- |

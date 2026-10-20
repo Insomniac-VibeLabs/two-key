@@ -92,6 +92,10 @@ The unmoved tag is still `pip install "two-key[yaml] @ git+https://github.com/In
   in the same release.
 - Keep [docs/HOWTO.md](docs/HOWTO.md) "Known trade-offs by configuration"
   accurate when a config trade-off changes.
+- Diagrams are real Mermaid on `working` and `main`, never pictures. Follow
+  the house style in `tests/test_doc_diagrams.py`: it fails on a long label
+  line, a sequence diagram with more than five participants, a diagram with no
+  one-line italic caption under it, and the rest of the rules in its docstring.
 - Tables of contents are generated: after changing a heading, run
   `python tests/test_doc_toc.py --write` (`tests/test_doc_toc.py` fails
   while one is stale).

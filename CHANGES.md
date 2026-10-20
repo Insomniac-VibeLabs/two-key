@@ -113,6 +113,7 @@
 - [SonarCloud findings on the 0.7.0 code — 2026-10-16](#sonarcloud-findings-on-the-070-code--2026-10-16)
 - [Release v0.7.0: the SIEM export, the agent-account check — 2026-10-16](#release-v070-the-siem-export-the-agent-account-check--2026-10-16)
 - [PyPI packaging on the PyPI branch — 2026-10-16](#pypi-packaging-on-the-pypi-branch--2026-10-16)
+- [Diagrams: one house style, checked by a test (#29) — 2026-10-20](#diagrams-one-house-style-checked-by-a-test-29--2026-10-20)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3830,3 +3831,33 @@ unregistered on pypi.org and test.pypi.org on this date.
   the proxy example, and the `load_public_key(...)` call on that same
   public key. Both lines now carry `skipcq: SCT-A000`. Nothing else is
   excluded from secret detection.
+
+## Diagrams: one house style, checked by a test (#29) — 2026-10-20
+
+Docs only, plus one test and one workflow. No application code changed.
+
+- `tests/test_doc_diagrams.py` now checks every Mermaid diagram in the
+  README, ROADMAP and `docs/` against a house style that keeps GitHub's
+  renderer from splitting words, clipping notes, or shrinking text: label
+  lines of at most 28 characters, edge labels of at most two lines, left to
+  right only for a chain of four boxes or fewer, at most five participants
+  in a sequence diagram with messages and notes that fit, at most 12 boxes,
+  and a one-line italic caption under each diagram (saying "dashed" when
+  the diagram mixes solid and dashed lines). The old semicolon check stays.
+- Every diagram was redrawn to that style, in real Mermaid. The README's
+  request-flow flowchart and its sequence diagram are each split into
+  smaller ones; HOWTO's vocabulary sequence is split in two; SCANNERS'
+  scan sequence is split in two and its return path is fixed (the result
+  goes back through the gateway and Two-Key, and a deny never reaches the
+  tool); `sudo -n -u two-key /opt/two-key/run-proxy` moved out of the
+  diagram labels into the captions; the HOWTO proxy call sequence no
+  longer names a domain field; the SIEM diagram runs top to bottom and
+  draws `siem-verify` as a read-only comparison, not a write into the
+  ledger; the roadmap timeline runs top to bottom.
+- `docs/THREAT_MODEL.md` gains a trust-boundary diagram at the head of
+  "Trust boundaries".
+- `.github/workflows/diagrams.yml` (not a required check) draws every
+  diagram with a pinned mermaid-cli (11.4.2) and uploads the pictures as a
+  build artifact, so they can be looked at together before a release. The
+  docs keep real Mermaid; nothing is committed as a picture.
+- CONTRIBUTING and AGENTS.md name the rule.

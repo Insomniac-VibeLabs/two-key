@@ -119,6 +119,33 @@ the code wins, then this file should be corrected.
 
 ## Trust boundaries
 
+The picture shows who sits on which side of a boundary. The bullets below take each crossing in turn.
+
+```mermaid
+flowchart TD
+  subgraph untrusted["Untrusted"]
+    agent["Monitored agent<br/>and its host"]
+  end
+  subgraph tkzone["Two-Key account"]
+    tk["Two-Key<br/>Path A, Path B,<br/>ledger, gateway"]
+  end
+  subgraph services["Services Two-Key calls"]
+    judges["Judges<br/>their own credentials"]
+    scanner["AV or DLP scanner"]
+    siem["SIEM collector"]
+  end
+  subgraph toolzone["Tool zone"]
+    tool["Tool or upstream server<br/>holds the credential"]
+  end
+  agent -- "the only door:<br/>a tool call" --> tk
+  tk -- "after both keys" --> tool
+  tk -. "action record" .-> judges
+  tk -. "parts to scan" .-> scanner
+  tk -. "allowlisted copy" .-> siem
+```
+
+*In a correct deployment the agent reaches Two-Key and nothing else. The solid lines are what the agent's call sets in motion; the dashed lines are Two-Key's own calls to the judges, the scanner and the SIEM, which the agent must not be able to reach.*
+
 - Caller to the monitored agent. The agent gets the system prompt, the
   constitution prose, the instruction, and, only when the caller passes
   it, the syntax-only `agent_vocabulary()`. It never gets bytecode, an
