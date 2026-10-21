@@ -607,6 +607,7 @@ class Cursor:
     def __init__(self, path: Path | str):
         self.path = Path(path)
         self._seqs: dict[str, int] = {}
+        self._hashes: dict[str, str] = {}      # the entry_hash at each sink's seq: which ledger the cursor is for
         self._load()
 
     def _load(self) -> None:
@@ -629,6 +630,9 @@ class Cursor:
         sinks = data.get("sinks")
         if isinstance(sinks, Mapping):
             self._seqs = {str(k): v for k, v in sinks.items() if isinstance(v, int) and not isinstance(v, bool)}
+        hashes = data.get("hashes")
+        if isinstance(hashes, Mapping):
+            self._hashes = {str(k): v for k, v in hashes.items() if isinstance(v, str) and str(k) in self._seqs}
 
     @property
     def exists(self) -> bool:
@@ -638,12 +642,21 @@ class Cursor:
         value = self._seqs.get(label)
         return default if value is None else value
 
-    def set(self, label: str, seq: int) -> None:
+    def entry_hash(self, label: str) -> str | None:
+        return self._hashes.get(label)
+
+    def set(self, label: str, seq: int, entry_hash: str | None = None) -> None:
         self._seqs[label] = seq
+        if entry_hash is None:
+            self._hashes.pop(label, None)
+        else:
+            self._hashes[label] = entry_hash
 
     def save(self) -> None:
         """Write the whole file again, through a new file and a rename, so a reader never sees half of it."""
         body = {"format": CURSOR_FORMAT, "sinks": dict(sorted(self._seqs.items()))}
+        if self._hashes:        # optional: a cursor written before these were kept still reads
+            body["hashes"] = dict(sorted(self._hashes.items()))
         tmp = self.path.parent / f".{self.path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp"
         try:
             # 0o700 is owner-only, the strictest useful mode for a directory; the rule's suggestion
@@ -763,7 +776,25 @@ class Delivery:
             return -1, size
         if self.config.replay_from == "now" or not self.cursor.exists:
             return size - 1, size
-        return min(self.cursor.get(sink.label, size - 1), size - 1), size
+        seq = self.cursor.get(sink.label, size - 1)
+        problem = self._cursor_problem(sink.label, seq, size)
+        if problem:
+            # Not trusted: the entries it claims were taken may never have left (live run 9x, C140). Send the
+            # whole ledger again, every copy marked replay; a collector dedupes on entry_hash (docs/SIEM.md).
+            print(f"two-key: WARNING: siem: {sink.label}: the delivery cursor {problem}; sending the whole ledger "
+                  "again, marked replay (docs/SIEM.md)", file=sys.stderr)
+            return -1, size
+        return seq, size
+
+    def _cursor_problem(self, label: str, seq: int, size: int) -> str | None:
+        """Why the cursor cannot be for this ledger, or None. A cursor without a hash (older) is checked by length
+        only."""
+        if seq >= size:
+            return f"is at seq {seq}, past this ledger's last entry ({size - 1})"
+        want = self.cursor.entry_hash(label)
+        if want is not None and seq >= 0 and self.ledger.entries[seq].entry_hash != want:
+            return f"names an entry at seq {seq} that is not this ledger's"
+        return None
 
     # -- the ledger's side -------------------------------------------------
 
@@ -855,10 +886,11 @@ class Delivery:
     def _took(self, state: _SinkState, batch: Sequence[Event]) -> None:
         taken = len([e for e in batch if not e.ledgered])
         state.pending = state.pending[taken:]
-        ledgered = [e.seq for e in batch if e.ledgered]
+        ledgered = [e for e in batch if e.ledgered]
         if ledgered:
-            state.seq = max(ledgered)
-            self.cursor.set(state.label, state.seq)
+            last = max(ledgered, key=lambda e: e.seq)
+            state.seq = last.seq
+            self.cursor.set(state.label, state.seq, last.entry_hash)
             self.cursor.save()
 
     def _messages(self, sink: Any, events: Sequence[Event]) -> list[Message]:

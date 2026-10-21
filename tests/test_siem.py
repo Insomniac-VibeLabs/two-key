@@ -387,6 +387,60 @@ class Delivering(Fixture):
         self.drain(again, second, 1)
         self.assertEqual(min(second.seqs()), first.seqs()[-1] + 1)
 
+    def _restart_with_cursor(self, edit, resumes=False):
+        """Run once to fill the cursor, change it with ``edit``, then start again on the same ledger. ``resumes``:
+        the second start is expected to send only the entries after the cursor."""
+        first, second = ListSink(), ListSink()
+        tk = self.start(siem_config=self.config(first, replay_from="start"))
+        self.drain(tk, first, tk.ledger.size())
+        tk.close()
+        path = tk.delivery.cursor.path
+        data = json.loads(path.read_text(encoding="utf-8"))
+        edit(data)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        again = self.start(ledger=self.ledger(), siem_config=self.config(second))
+        want = again.ledger.size() - (data["sinks"]["list"] + 1 if resumes else 0)
+        self.drain(again, second, want)
+        return again, second
+
+    def test_a_cursor_past_the_ledger_head_replays_everything_and_warns(self):
+        """Live run 9x, C140: a cursor ahead of the ledger is not trusted, so nothing is skipped silently."""
+        def ahead(data):
+            data["sinks"] = {k: v + 1000 for k, v in data["sinks"].items()}
+        tk, sink = self._restart_with_cursor(ahead)
+        self.assertIn("past this ledger's last entry", self.err)
+        self.assertIn("sending the whole ledger again, marked replay", self.err)
+        self.assertEqual(min(sink.seqs()), 0)
+        early = [json.loads(m.body) for m in sink.sent]
+        self.assertTrue(all(body["replay"] for body in early if body["seq"] < 3))
+
+    def test_a_cursor_for_another_ledger_replays_everything_and_warns(self):
+        def other(data):
+            data["hashes"] = dict.fromkeys(data["hashes"], "0" * 64)
+        _, sink = self._restart_with_cursor(other)
+        self.assertIn("is not this ledger's", self.err)
+        self.assertEqual(min(sink.seqs()), 0)
+
+    def test_a_cursor_without_hashes_still_resumes(self):
+        """A cursor written before 0.7.x kept no hashes: it is checked by length only."""
+        seen = {}
+
+        def older(data):
+            seen["seq"] = data["sinks"]["list"]
+            data.pop("hashes")
+        _, sink = self._restart_with_cursor(older, resumes=True)
+        self.assertNotIn("delivery cursor", self.err)
+        self.assertEqual(min(sink.seqs()), seen["seq"] + 1)
+
+    def test_the_cursor_keeps_the_hash_of_the_last_entry_taken(self):
+        sink = ListSink()
+        tk = self.start(siem_config=self.config(sink, replay_from="start"))
+        self.drain(tk, sink, tk.ledger.size())
+        tk.close()
+        data = json.loads(tk.delivery.cursor.path.read_text(encoding="utf-8"))
+        seq = data["sinks"]["list"]
+        self.assertEqual(data["hashes"]["list"], tk.ledger.entries[seq].entry_hash)
+
     def test_replay_from_now_does_not_flood_a_new_siem(self):
         sink = ListSink()
         tk = self.start(siem_config=self.config(sink, replay_from="now"))

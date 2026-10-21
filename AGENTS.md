@@ -322,8 +322,8 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   `two-key config set`, `config undo`, and `two-key setup` refuse root and
   any file they write, or its folder, that another account could change, or
   that is a link; nothing is written until the whole changed config passes
-  `config check` (only the two findings about the shell's own variables do
-  not block); a change `weaker()` names needs `--confirm-weaker` and `yes`
+  `config check` (only the findings about the shell's own variables do
+  not block; a judge's missing key is a warning); a change `weaker()` names needs `--confirm-weaker` and `yes`
   typed on a terminal, and no terminal is no; a signed setting needs the
   principal key and a rules file that signs to exactly what is signed, and
   the new envelope is verified before it is written; a literal for

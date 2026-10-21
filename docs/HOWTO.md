@@ -1948,11 +1948,13 @@ two-key config check --config proxy.yaml        # would it start? exit 1 on any 
 
 These are read-only. They write no file, open no ledger, start no process, and contact no judge, scanner, SIEM
 collector or upstream server. `show` prints a key file by path, a judge's key by the name of its environment
-variable, and an upstream literal value as `<literal>`; no secret value is printed. `check` loads the files
+variable, and an upstream literal value as `<literal>`; no secret value is printed. Each judge is shown with
+its type, `base_url`, and the names of the variables it reads. `check` loads the files
 the config names and reports one line each: the config parses (unknown and repeated keys refused), the
 principal key file loads, the constitution is signed by that key, every `tools:` entry is a signed tool, the
 judges and quorum load (with the single-judge and maker-diversity warnings), a `monitored_agent` is declared,
-every environment variable the config reads is set, every `upstream.check_paths` entry exists
+every environment variable the proxy and its judges read is set (each missing one named, never a value:
+an upstream or agent variable is a `FAIL`, a judge's key a `WARN` because that judge would only abstain), every `upstream.check_paths` entry exists
 (`check_path_missing`), a launcher with nothing named (`upstream_paths_unchecked`, a `FAIL` under
 `high_assurance`), no path another account can change (`writable_path`, a
 `FAIL` under `on_writable_paths: refuse` or `high_assurance`), and a plaintext SIEM sink (a `FAIL` under

@@ -178,6 +178,15 @@ it) is what `cursor` reads and every sink keeps up to date:
 | `start` | the whole ledger, on **every** start, not only the first: it ignores the cursor, so a restart sends the history again (live run 8x). Set it to backfill once, then put it back to `cursor`, or use `siem-export` |
 | `now` | only entries from now on |
 
+The cursor keeps each sink's last sequence number and the `entry_hash` of
+that entry. A cursor that points past the ledger's last entry, or at an entry
+this ledger does not have (the cursor of another ledger, or one moved by
+hand), is not trusted: the proxy prints a warning naming the sink and sends
+the whole ledger again, every copy marked `replay`. That repeats entries
+rather than skipping them silently; dedupe on `entry_hash` (live run 9x,
+C140). A cursor written by an older Two-Key has no hashes and is checked by
+length only.
+
 An event sent late — a catch-up at start, or after an outage — carries
 `"replay": true`, so a SIEM does not read the send time as the decision time.
 Ledger entries carry no timestamp of their own (that would change the entry

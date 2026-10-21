@@ -93,8 +93,10 @@ the code wins, then this file should be corrected.
 - The SIEM cursor (`<ledger>.siem/cursor.json`, or `cursor_path=`), outside
   the ledger directory. It is not secret and it is not part of the hash
   chain. Whoever can change or delete it decides which entries are copied
-  again or not at all; a repeated or missing copy is still caught by
-  `two-key siem-verify` against the ledger.
+  again or, by deleting it, not at all; a repeated or missing copy is still caught by `two-key siem-verify`
+  against the ledger. A cursor past the ledger's last entry, or one that
+  names an entry this ledger does not have, is not trusted: the proxy warns
+  and sends the whole ledger again, marked `replay` (live run 9x, C140).
 - An exported event file (`two-key siem-export --out`). It is decrypted
   ledger metadata, written as a new owner-only file. It holds no argument
   value, no proposal text, and no key.
@@ -677,7 +679,8 @@ claims to close.
   - A collector that is down never blocks a decision, so the copy can be
     minutes or hours behind, and an operator watching only the SIEM is
     watching a stale view. Delivery resumes from the cursor and marks late
-    events `replay`. A deleted cursor file re-sends or skips; a full queue
+    events `replay`. A deleted cursor file starts from `replay_from`; a cursor
+    ahead of the ledger, or from another ledger, re-sends it all; a full queue
     drops the oldest and says so on stderr.
   - The refused-token counts are in memory. A restart loses the current
     window, and the counts are a volume signal only: no source address, no

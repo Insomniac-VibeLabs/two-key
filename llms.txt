@@ -46,7 +46,7 @@ data class, quorum counts, the scan verdict; never argument values, proposal or 
 derived amount, counterparties, custom field values, scanner threat names, or any credential. A
 collector that is down, slow, or gone never blocks or delays an authorization: entries queue on a
 sender thread, delivery resumes from the cursor (<ledger>.siem/cursor.json), and late events carry
-replay: true. TLS verifies the certificate and the host name with no setting to disable either; a
+replay: true. A cursor ahead of the ledger, or from another ledger, warns and re-sends the whole ledger. TLS verifies the certificate and the host name with no setting to disable either; a
 plaintext sink is refused under high_assurance (siem_plaintext_refused) and warns at start
 otherwise. two-key siem-export writes the same events to a file (owner-only, never over an existing
 file, a signed summary last) and two-key siem-verify re-derives each event from the ledger offline

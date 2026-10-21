@@ -134,6 +134,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Live harness: run 9 (set-up commands, upstream paths, two proxies, free play, sabotage) — 2026-10-21](#live-harness-run-9-set-up-commands-upstream-paths-two-proxies-free-play-sabotage--2026-10-21)
 - [Copyright and author headers — 2026-10-21](#copyright-and-author-headers--2026-10-21)
 - [OpenSSF Scorecard hardening: Semgrep token, hashed CI installs, SECURITY.md (#31, #32, #33) — 2026-10-21](#openssf-scorecard-hardening-semgrep-token-hashed-ci-installs-securitymd-31-32-33--2026-10-21)
+- [Live runs 9 and 9x: SIEM cursor and `config check` fixes — 2026-10-21](#live-runs-9-and-9x-siem-cursor-and-config-check-fixes--2026-10-21)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4298,3 +4299,27 @@ Scorecard v5.6.0 run on main (51dc293, score 5.5).
   only.
 - Docs: AGENTS.md, CONTRIBUTING.md (also the diagrams lock), README ("uv.lock" install), docs/HOWTO.md and docs/PYPI.md name
   `.github/requirements/` where they named the pins in the workflows; llms.txt.
+
+## Live runs 9 and 9x: SIEM cursor and `config check` fixes — 2026-10-21
+
+From the run 9 and 9x findings (`live-runs` b0b57e9 and a506e80, both on `working` @ dd07b42).
+
+- **A SIEM cursor ahead of the ledger is not trusted (run 9x, C140).** Before, a cursor past the ledger's
+  last entry was clamped to the head, so the entries it claimed were delivered were never sent and nothing
+  said so. Now the cursor also keeps the `entry_hash` of each sink's last entry. A cursor past the head, or
+  one whose hash is not this ledger's entry at that seq (another ledger's cursor, or one moved by hand),
+  prints `WARNING: siem: <sink>: the delivery cursor ...` and the sink sends the whole ledger again, every
+  copy marked `replay`. The proxy still starts: the copy never blocks it. A cursor written before this change
+  has no hashes and is checked by length only, and reads as before. (`two_key/siem.py`, `tests/test_siem.py`)
+- **`config check` checks every variable the proxy and its judges read (run 9, finding 1).** It said
+  "every variable the config names is set" while the judges' keys and the agent's credential were unset. Now
+  it also checks each judge's `auth` variable (`var`, or `username_env` and `password_env`), its
+  `ballot_key_env`, and the monitored agent's `credential_env` or `username_env` and `password_env`. A missing
+  agent variable is a `FAIL` (`agent_credential_missing`; the proxy refuses to start without it), and, like the
+  other variables of this shell, does not block `setup` or `config set`. A missing judge variable is a `WARN`
+  (`judge_env_missing`): the proxy starts and that judge abstains on every call. Each is named, never its
+  value; the `ok` line lists the variables it found set. (`two_key/config_cmd.py`, `two_key/config_set.py`)
+- **`config show` shows each judge's `type`, `base_url`, `auth` kind and the names of the variables it reads**
+  (run 9, finding 1).
+- Docs: docs/SIEM.md, docs/SETUP.md, docs/HOWTO.md, docs/THREAT_MODEL.md, docs/CONNECTING.md, AGENTS.md,
+  llms.txt.

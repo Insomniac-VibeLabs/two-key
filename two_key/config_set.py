@@ -71,7 +71,7 @@ NOT_SETTABLE = tuple(sorted(key for file, key in settings.NOT_SETTABLE
 # A literal here can be a secret (an upstream token, a scanner's password).
 SECRET_LITERALS = (("upstream", "env"), ("scan", "env"))
 # The findings of `config check` about this shell's variables: the proxy's own environment may differ.
-ENVIRONMENT_ONLY = ("upstream_env_missing:", "agent_session_missing:")
+ENVIRONMENT_ONLY = ("upstream_env_missing:", "agent_session_missing:", "agent_credential_missing:")
 
 _SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
 _BRACKET = re.compile(r"\[([^\[\]]+)\]")

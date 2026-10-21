@@ -56,14 +56,16 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
     found += _constitution(config)
     loaded, bad = _judges(config)
     high = False
+    judges, agent = [], None
     if bad:
         found.append(bad)
     else:
         judges, policy = loaded
         high = bool(policy.is_high_assurance)
         found += _quorum(judges, policy)
-        found += _agent(config)
-    found += _environment(config, environ)
+        agent_found, agent = _agent(config)
+        found += agent_found
+    found += _environment(config, environ, judges, agent)
     found += _upstream(config, high)
     found += _writable(config, high)
     found += _siem(config, high)
@@ -110,29 +112,70 @@ def _quorum(judges, policy) -> list[tuple[str, str]]:
     return out
 
 
-def _agent(config) -> list[tuple[str, str]]:
+def _agent(config):
+    """Findings for the ``monitored_agent`` block, and the declaration (None when there is none)."""
     from .identity import load_monitored_agent_file
     try:
         agent = load_monitored_agent_file(config.judges)
     except (OSError, ValueError) as e:
-        return [(FAIL, f"monitored_agent: {e}")]
+        return [(FAIL, f"monitored_agent: {e}")], None
     if agent is None:
         return [(WARN, "monitored_agent: none declared, so judges are not checked against the agent's "
-                       "own model and credential")]
-    return [(OK, "monitored_agent: declared")]
+                       "own model and credential")], None
+    return [(OK, "monitored_agent: declared")], agent
 
 
-def _environment(config, environ: Mapping[str, str]) -> list[tuple[str, str]]:
-    """Variables the proxy reads at start, by name; a value is never printed."""
+def judge_variables(judge) -> list[tuple[str, str]]:
+    """``(setting, variable)`` for each environment variable a judge reads: its key and its ballot key."""
+    credential = getattr(judge, "credential", None)
+    kind = getattr(credential, "kind", None)
     out = []
+    if kind == "env":
+        out.append(("auth.var", credential.var))
+    elif kind == "basic":
+        out += [("auth.username_env", credential.username_var), ("auth.password_env", credential.password_var)]
+    if getattr(judge, "ballot_key_env", None):
+        out.append(("ballot_key_env", judge.ballot_key_env))
+    return out
+
+
+def _agent_variables(agent) -> list[tuple[str, str]]:
+    if agent is None:
+        return []
+    return [(name, getattr(agent, name)) for name in ("credential_env", "username_env", "password_env")
+            if isinstance(getattr(agent, name, None), str)]
+
+
+def _environment(config, environ: Mapping[str, str], judges=(), agent=None) -> list[tuple[str, str]]:
+    """Variables the proxy and its judges read, by name; a value is never printed (live run 9, finding 1)."""
+    out, checked = [], []
+    here = "which is unset or empty here (the proxy's own environment may differ)"
     for name, value in sorted(config.upstream.env.items()):
-        if value.from_env is not None and not environ.get(value.from_env):
-            out.append((FAIL, f"upstream_env_missing: upstream.env.{name} reads {value.from_env}, which is "
-                              "unset or empty here (the proxy's own environment may differ)"))
-    if config.agent_session_env and not environ.get(config.agent_session_env):
-        out.append((FAIL, f"agent_session_missing: agent_session_env names {config.agent_session_env}, "
-                          "which is unset or empty here (the proxy's own environment may differ)"))
-    return out or [(OK, "environment: every variable the config names is set")]
+        if value.from_env is not None:
+            checked.append(value.from_env)
+            if not environ.get(value.from_env):
+                out.append((FAIL, f"upstream_env_missing: upstream.env.{name} reads {value.from_env}, {here}"))
+    if config.agent_session_env:
+        checked.append(config.agent_session_env)
+        if not environ.get(config.agent_session_env):
+            out.append((FAIL, f"agent_session_missing: agent_session_env names {config.agent_session_env}, {here}"))
+    for setting, var in _agent_variables(agent):
+        checked.append(var)
+        if not environ.get(var):
+            # The proxy reads it at start to tell a judge from the agent, and refuses without it.
+            out.append((FAIL, f"agent_credential_missing: monitored_agent.{setting} names {var}, {here}"))
+    for judge in judges:
+        for setting, var in judge_variables(judge):
+            checked.append(var)
+            if not environ.get(var):
+                # The proxy starts; this judge abstains on every call, so its yes never counts.
+                out.append((WARN, f"judge_env_missing: judge {judge.judge_id} {setting} names {var}, {here}; "
+                                  "the judge will abstain"))
+    if out:
+        return out
+    if not checked:
+        return [(OK, "environment: the config names no variables")]
+    return [(OK, f"environment: set here: {', '.join(sorted(set(checked)))}")]
 
 
 def _upstream(config, high: bool) -> list[tuple[str, str]]:
@@ -246,10 +289,20 @@ def show(path: Path | str) -> dict[str, Any]:
         "scan": _scan_view(config.scan),
         "siem": siem,
         "quorum": policy.to_record(),
-        "judges": [{"id": j.judge_id, "model": j.model, "maker": getattr(j, "maker", None),
-                    "local": bool(j.is_local()),
-                    "ballot_key_env": getattr(j, "ballot_key_env", None)} for j in judges],
+        "judges": [_judge_view(j) for j in judges],
     }
+
+
+def _judge_view(judge) -> dict[str, Any]:
+    """One judge as configured: where it is and which variables it reads, never a value."""
+    from .judges.config import ADAPTERS
+    kind = next((name for name, cls in sorted(ADAPTERS.items()) if type(judge) is cls), type(judge).__name__)
+    credential = getattr(judge, "credential", None)
+    return {"id": judge.judge_id, "type": kind, "base_url": getattr(judge, "base_url", None), "model": judge.model,
+            "maker": getattr(judge, "maker", None), "local": bool(judge.is_local()),
+            "auth": getattr(credential, "kind", None),
+            "variables": dict(judge_variables(judge)),
+            "ballot_key_env": getattr(judge, "ballot_key_env", None)}
 
 
 def _scan_view(scan):

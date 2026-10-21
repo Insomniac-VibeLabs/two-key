@@ -129,8 +129,9 @@ SHA-256 digest of each file it wrote except the private key, and the digest of t
   (`passphrase_file_insecure`), or whose passphrase is shorter than 12 bytes (`key_passphrase_short`).
 - An answer the loaders refuse (an unknown judge type, a tool with no spec, a malformed digest), and anything
   `config check` fails (`config_check_failed`). `high_assurance` with fewer judges than it needs is one such
-  failure. Two findings do not count: a variable the config names that is not set in your shell
-  (`upstream_env_missing`, `agent_session_missing`), since the proxy's own environment may differ.
+  failure. A variable the config names that is not set in your shell does not count
+  (`upstream_env_missing`, `agent_session_missing`, `agent_credential_missing`), since the proxy's own
+  environment may differ. A judge's key that is not set is only a warning (`judge_env_missing`).
 
 A refused setup leaves nothing behind: the hidden folder is removed and `--dir` is never created.
 
@@ -421,14 +422,17 @@ no judge, scanner, collector, or upstream server.
   resolved `on_writable_paths` and `on_agent_access` (what applies after the profile: `refuse` under
   `high_assurance`, where a `warn` in the file is an error, as it is at start), `high_assurance: true` or
   `false`, the upstream, the tools, the
-  scanner, the SIEM sinks, the effective quorum, and each judge.
+  scanner, the SIEM sinks, the effective quorum, and each judge: its type, address (`base_url`), model, and the
+  names of the variables it reads.
 - **`get`** prints one setting: `value` (`null` when the file does not set it), `set`, the `file` that holds
   it, its `tier` (`operator` or `signed`), and from [SETTINGS](SETTINGS.md) its `default`, what
   `high_assurance` does to it, and what it does. A signed setting is read from the signed constitution.
 - **`check`** prints one line per finding, `ok`, `WARN`, or `FAIL`, and exits 1 on any `FAIL`: the config
   parses, the principal key opens (encrypted, with `keys.passphrase_file`, as at start) and signed the
   constitution, each `tools:` entry is signed, the judges and
-  quorum load, a monitored agent is declared, the variables the config reads are set here, the writable-path
+  quorum load, a monitored agent is declared, every variable the proxy and its judges read is set here (each
+  missing one is named: an upstream or agent variable is a `FAIL`, since the proxy would not start or the
+  upstream would not get it; a judge's key is a `WARN`, since that judge would abstain on every call), the writable-path
   check, the `on_agent_access` setting (a `FAIL` for `warn` under `high_assurance`), and plaintext SIEM sinks.
   It cannot see which account will start the proxy, or whether the upstream still lists the same tools; the
   proxy checks both at start.

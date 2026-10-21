@@ -351,7 +351,8 @@ class SetupWithPassphrase(Deployment):
         self.assertEqual(load_proxy_config(self.proxy).principal_passphrase_file, self.pass_file)
         self.assertNotIn(PASSPHRASE.decode(), self.proxy.read_text(encoding="utf-8"))
         self.assertEqual(self._changes()[0].body["command"], "setup")
-        self.assertFalse([t for level, t in config_cmd.check(str(self.proxy), {}) if level == config_cmd.FAIL])
+        self.assertFalse([t for level, t in config_cmd.check(str(self.proxy), {"AGENT_KEY_VAR": "set"})
+                          if level == config_cmd.FAIL])
 
     def test_setup_refuses_a_relative_or_short_passphrase_file(self):
         for value, pattern in (("principal.pass", "absolute path"),

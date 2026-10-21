@@ -123,7 +123,7 @@ class Setup(Deployment):
 
     def test_the_result_passes_config_check(self):
         from two_key import config_cmd
-        found = config_cmd.check(self.proxy, {})
+        found = config_cmd.check(self.proxy, {"AGENT_KEY_VAR": "set"})   # the agent's key, as the proxy would have it
         self.assertNotIn(config_cmd.FAIL, {level for level, _ in found}, found)
         self.assertEqual(json.loads(self.proxy.read_text(encoding="utf-8").split("\n", 2)[2] or "{}")
                          if self.proxy.suffix == ".json" else 0, 0)

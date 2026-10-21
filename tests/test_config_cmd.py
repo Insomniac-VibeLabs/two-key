@@ -21,8 +21,13 @@ monitored_agent: {id: agent, model: some-model, provider: other, base_url: "http
                   credential_env: AGENT_KEY_VAR}
 judges:
   - {id: j1, type: openai_compatible, model: m, base_url: "http://127.0.0.1:11434/v1", maker: local-maker}
+  - {id: j2, type: openai_compatible, model: m2, base_url: "https://judge.example/v1", maker: other-maker,
+     auth: {type: env, var: JUDGE_KEY_VAR}}
 quorum: {required_yes: 1}
 """
+
+
+SET = {"UPSTREAM_SECRET_VAR": "x", "AGENT_KEY_VAR": "y", "JUDGE_KEY_VAR": "z"}
 
 
 def run(*argv):
@@ -73,6 +78,10 @@ class Show(Workspace):
         self.assertNotIn("info-literal-value", out)
         self.assertEqual(shown["upstream"]["check_paths"], [])
         self.assertEqual(shown["judges"][0]["id"], "j1")
+        # Live run 9, finding 1: where each judge is, and the name of each variable it reads; never a value.
+        self.assertEqual({k: shown["judges"][1][k] for k in ("type", "base_url", "auth", "variables")},
+                         {"type": "openai_compatible", "base_url": "https://judge.example/v1", "auth": "env",
+                          "variables": {"auth.var": "JUDGE_KEY_VAR"}})
         self.assertEqual(self._files(), before, "show wrote a file, or opened the ledger")
 
     def test_a_scanner_variable_is_never_shown(self):
@@ -91,7 +100,7 @@ class Show(Workspace):
 
 class Check(Workspace):
     def check(self, environ=None):
-        return config_cmd.check(self.proxy, {"UPSTREAM_SECRET_VAR": "x"} if environ is None else environ)
+        return config_cmd.check(self.proxy, dict(SET) if environ is None else environ)
 
     @staticmethod
     def levels(found):
@@ -107,8 +116,28 @@ class Check(Workspace):
     def test_an_unset_variable_fails_and_the_value_is_never_printed(self):
         found = self.check({})
         self.assertTrue(any(level == config_cmd.FAIL and "upstream_env_missing" in text for level, text in found))
-        found = self.check({"UPSTREAM_SECRET_VAR": "hunter2-secret"})
+        found = self.check({**SET, "UPSTREAM_SECRET_VAR": "hunter2-secret"})
         self.assertNotIn("hunter2-secret", json.dumps(found))
+
+    def test_every_variable_set_is_named_in_the_ok_line(self):
+        [line] = [text for _, text in self.check() if text.startswith("environment")]
+        self.assertEqual(line, "environment: set here: AGENT_KEY_VAR, JUDGE_KEY_VAR, UPSTREAM_SECRET_VAR")
+
+    def test_an_unset_agent_credential_fails(self):
+        """Live run 9, finding 1: the proxy refuses to start without it, so check must not say all is set."""
+        found = self.check({**SET, "AGENT_KEY_VAR": ""})
+        self.assertIn((config_cmd.FAIL, "agent_credential_missing: monitored_agent.credential_env names "
+                       "AGENT_KEY_VAR, which is unset or empty here (the proxy's own environment may differ)"),
+                      found)
+        self.assertFalse(any(text.startswith("environment:") for _, text in found))
+
+    def test_an_unset_judge_key_warns_by_name(self):
+        """The proxy starts, and that judge abstains on every call: a warning, with the variable's name only."""
+        found = self.check({**SET, "JUDGE_KEY_VAR": ""})
+        warned = [text for level, text in found if level == config_cmd.WARN and "judge_env_missing" in text]
+        self.assertEqual(warned, ["judge_env_missing: judge j2 auth.var names JUDGE_KEY_VAR, which is unset or "
+                                  "empty here (the proxy's own environment may differ); the judge will abstain"])
+        self.assertNotIn(config_cmd.FAIL, self.levels(found), found)
 
     def test_a_constitution_signed_by_another_key_fails(self):
         other = generate_private_key()
