@@ -136,6 +136,7 @@ SPDX-License-Identifier: Apache-2.0
 - [OpenSSF Scorecard hardening: Semgrep token, hashed CI installs, SECURITY.md (#31, #32, #33) — 2026-10-21](#openssf-scorecard-hardening-semgrep-token-hashed-ci-installs-securitymd-31-32-33--2026-10-21)
 - [Live runs 9 and 9x: SIEM cursor and `config check` fixes — 2026-10-21](#live-runs-9-and-9x-siem-cursor-and-config-check-fixes--2026-10-21)
 - [A ledger never goes back to an older constitution (signed serial) — 2026-10-21](#a-ledger-never-goes-back-to-an-older-constitution-signed-serial--2026-10-21)
+- [Live harness: run 9x ported to `working`, and the fixes for run 9y — 2026-10-21](#live-harness-run-9x-ported-to-working-and-the-fixes-for-run-9y--2026-10-21)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4349,3 +4350,24 @@ which came first. Option A of the run 9 findings response, chosen by the maintai
 - Tests: `tests/test_constitution_serial.py`; `tests/test_config_set.py` (setup's serial, the next serial, undo).
 - Docs: AGENTS.md (a fail-closed default; `tests/live/COVERAGE.md` F27), docs/HOWTO.md, docs/SETTINGS.md
   (generated), docs/THREAT_MODEL.md, llms.txt.
+
+## Live harness: run 9x ported to `working`, and the fixes for run 9y — 2026-10-21
+
+Test code only (`tests/live/`); nothing in `two_key/` changes.
+
+- The run 9x harness (GrokBot's own cases, the library deployment, `lib_facts.py`, `library_mcp_server.py`, the
+  second free play, the burst, the tampering cases) comes from `live-runs` a506e80 with the antivirus test string and
+  the test credential put back (they were masked in the committed copy).
+- C44 signs serials (library `serial: 2`, the older rules `serial: 1`) and expects `constitution_rollback`; the
+  SIEM-cursor tamper case expects a warning and a replay, not a refusal.
+- The tool bot's header covers both deployments (run 9x answered library calls `unknown_tool`) and says it has no
+  DLP of its own (run 9, C28). Library LEGIT cases get two steps, and an `executed` case accepts a read-only lookup
+  first (C37, C82).
+- Scripted twins for the over-cap and wire payments; the split-payment ladder accepts the PO-match and caller-fact
+  denies that stop a split first. The library waiver hook reads a whole-number float, so C35 reaches Two-Key.
+- A `siem_clean` case fails when an argument value is in the SIEM copy (the `siem_passes_arguments` sabotage was
+  only a referee incident). The referee's vocabulary takes rule ids and reason codes (run 9x's `branch` was the
+  rule id `hold-1-branch`); the SIEM count names repeated entries with no copy marked `replay`.
+- The scripted slow judge and slow ICAP server no longer print BrokenPipe when Two-Key has already given up.
+- `tests/test_live_harness.py` expects one free play per deployment; COVERAGE.md F27 is live (C44).
+- RELAY.md "Run 9x and 9y".

@@ -293,7 +293,125 @@ def run(ctx) -> dict:
                                                  "--confirm-weaker"], answer="yes",
              facts=lambda: {"proxy_unchanged": sha_file(pc) == base_c[0],
                             "ledger_unchanged": len(ledger_bodies(ctx, c)) == base_c[1]})
+    grok_steps(ctx, out, step, b=b, pb=pb, pf=pf)
     return out
+
+
+def grok_steps(ctx, out, step, *, b, pb, pf):
+    """Run 9x (GrokBot's own tests), after the story: odd values, races, undo edges, links, passphrase edges.
+    Deployment G is fresh, so nothing here changes what the story's steps found."""
+    work: Path = ctx["work"]
+    g = work / "deploy_g"
+    pg = g / "proxy.yaml"
+    step("grok_setup", ["setup", "--dir", g, "--answers", write_answers(ctx, "g")], facts=lambda: {"proxy_written": pg.is_file()})
+    if not pg.is_file():
+        return
+
+    def snap():
+        return {"sha": sha_file(pg), "cc": len(ledger_bodies(ctx, g))}
+
+    def same(base):
+        now = snap()
+        return {"proxy_unchanged": now["sha"] == base["sha"], "ledger_unchanged": now["cc"] == base["cc"]}
+
+    # odd values
+    base = snap()
+    nul = work / "grok_value_nul"
+    fd = os.open(nul, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    os.write(fd, b"45\x00")
+    os.close(fd)
+    step("grok_set_nul", ["config", "set", "--config", pg, "--value-file", nul, "upstream.call_timeout_seconds"],
+         facts=lambda: same(base))
+    step("grok_set_lookalike_name", ["config", "set", "--config", pg, "upstream.c\u0430ll_timeout_seconds", "45"],
+         facts=lambda: same(base))
+    step("grok_set_duplicate_keys", ["config", "set", "--config", pg, "siem",
+                                     '{"schema": "native", "schema": "ecs", "sinks": []}'], facts=lambda: same(base))
+    step("grok_set_list_for_number", ["config", "set", "--config", pg, "upstream.call_timeout_seconds", "[45]"],
+         facts=lambda: same(base))
+    target = private_file(work / "grok_value_target", "45")
+    link = work / "grok_value_link"
+    os.symlink(target, link)
+    step("grok_set_value_file_link", ["config", "set", "--config", pg, "--value-file", link,
+                                      "upstream.call_timeout_seconds"], facts=lambda: same(base))
+
+    # two config sets at once: the lock is meant to hold the second until the first is done
+    base = snap()
+    cmd = [sys.executable, "-m", "two_key", "config", "set", "--config", str(pg), "upstream.call_timeout_seconds"]
+    procs = [subprocess.Popen(cmd + [v], cwd=ctx["pkg"], env=ctx["env"], stdin=subprocess.DEVNULL,  # nosec B603
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for v in ("46", "47")]
+    res = [p.communicate(timeout=300) for p in procs]
+    rcs = [p.returncode for p in procs]
+    ctx["log"]("cli", args=["config", "set", "x2 concurrent"], rc=rcs, stdout="", stderr=" | ".join(r[1][-500:] for r in res),
+               tty=False)
+    audit = run_cli(ctx, ["audit", "--ledger", g / "ledger", "--key", g / "principal.pem"])
+    text = pg.read_text(encoding="utf-8")
+    out["grok_concurrent_sets"] = {"rc": max(rcs), "stdout": "", "stderr": " | ".join(r[1][-800:] for r in res),
+                                   "facts": {"both_rc0": rcs == [0, 0], "cc_added": snap()["cc"] - base["cc"],
+                                             "one_value_kept": ("46" in text) != ("47" in text),
+                                             "audit_rc": audit["rc"]}}
+
+    # undo twice: the second has nothing of its own to put back
+    # undo twice: docs/SETUP.md says running undo again puts the undone change back (a redo), ledgered
+    step("grok_set_for_undo", ["config", "set", "--config", pg, "upstream.call_timeout_seconds", "48"], facts=snap)
+    after_set = snap()
+    step("grok_undo_first", ["config", "undo", "--config", pg], facts=snap)
+    after_undo = snap()
+    step("grok_undo_twice", ["config", "undo", "--config", pg],
+         facts=lambda: {"redone": sha_file(pg) == after_set["sha"], "cc_added": snap()["cc"] - after_undo["cc"]})
+
+    # proxy.yaml that is a link to a file elsewhere
+    h = work / "deploy_h"
+    ph = h / "proxy.yaml"
+    step("grok_setup_h", ["setup", "--dir", h, "--answers", write_answers(ctx, "h")], facts=lambda: {})
+    if ph.is_file():
+        real = work / "elsewhere_proxy.yaml"
+        os.replace(ph, real)
+        os.symlink(real, ph)
+        real_sha = sha_file(real)
+        step("grok_set_proxy_yaml_link", ["config", "set", "--config", ph, "upstream.call_timeout_seconds", "45"],
+             facts=lambda: {"target_unchanged": sha_file(real) == real_sha, "still_link": ph.is_symlink()})
+
+    # passphrase files: a link, a folder, 11 bytes, 1025 bytes, and 12 bytes (the control)
+    def setup_with(name, path):
+        step(name, ["setup", "--dir", work / f"deploy_{name}", "--answers",
+                    write_answers(ctx, name, key_passphrase_file=str(path))],
+             facts=lambda: {"dir_created": (work / f"deploy_{name}").exists()})
+
+    pp_target = private_file(work / "grok_pass_target", UNLOCK_WORDS)
+    os.symlink(pp_target, work / "grok_pass_link")
+    setup_with("grok_passphrase_link", work / "grok_pass_link")
+    (work / "grok_pass_dir").mkdir(mode=0o700)
+    setup_with("grok_passphrase_dir", work / "grok_pass_dir")
+    setup_with("grok_passphrase_11", private_file(work / "grok_pass_11", "x" * 11))
+    setup_with("grok_passphrase_1025", private_file(work / "grok_pass_1025", "y" * 1025))
+    setup_with("grok_passphrase_12", private_file(work / "grok_pass_12", "z" * 12))
+
+    # undo after key-passphrase: deployment B's last change re-encrypted the key; undo keeps no copy of a key
+    key_before = (b / "principal.pem").read_bytes()
+    step("grok_undo_after_key_passphrase", ["config", "undo", "--config", pb, "--key", b / "principal.pem",
+                                            "--key-passphrase-file", pf],
+         facts=lambda: {"key_unchanged": (b / "principal.pem").read_bytes() == key_before,
+                        "no_key_copy": not any(p.name.startswith("principal.pem.") for p in b.iterdir())})
+
+    # config set while a proxy is serving deployment B: the change is written, the running proxy keeps going
+    import time
+    proc = subprocess.Popen([sys.executable, "-m", "two_key", "mcp-proxy", "--config", str(pb)],  # nosec B603
+                            cwd=ctx["pkg"], env=ctx["env"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True)
+    time.sleep(6)
+    alive_before = proc.poll() is None
+    res = run_cli(ctx, ["config", "set", "--config", pb, "upstream.call_timeout_seconds", "52"])
+    time.sleep(1)
+    alive_after = proc.poll() is None
+    proc.stdin.close()
+    try:
+        _, err = proc.communicate(timeout=60)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        _, err = proc.communicate()
+    res["facts"] = {"proxy_alive_before": alive_before, "proxy_alive_after": alive_after,
+                    "proxy_restarted_itself": err.count("serving") > 1, "value_written": "52" in pb.read_text()}
+    out["grok_set_while_running"] = res
 
 
 def proxy_start(ctx, config: Path) -> dict:

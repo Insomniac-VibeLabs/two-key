@@ -44,5 +44,5 @@ which weakenings of Two-Key the harness would notice at all; it is a different q
 | F23 | The gateway runs in the TwoKey process | tests/test_gateway_locks.py | no | A design decision, not behaviour; there is no remote mode to test |
 | F24 | Configuration changes: `setup`, `config set`, `undo`, `key-passphrase`, the `config_changed` entry | tests/test_config_set.py, tests/test_key_passphrase.py, tests/test_config_cmd.py | yes | Needs a non-root account; a pass run as root marks these cases N/A |
 | F25 | SIEM export: only the allowlist leaves, a down collector never blocks | tests/test_siem.py, tests/test_siem_export.py, tests/test_siem_sinks.py | partly | The pass checks the copy's count and that no argument value leaves; the other sinks, CEF and the webhook are unit tests |
-| F27 | A ledger never goes back to an older constitution (the signed serial) | tests/test_constitution_serial.py, tests/test_config_set.py | no | The run 9x C44 case signed no serials; the harness gets serials and the case is run again in 9y |
+| F27 | A ledger never goes back to an older constitution (the signed serial) | tests/test_constitution_serial.py, tests/test_config_set.py | yes | |
 | F26 | No call reaches a tool without both keys and a redeemed token, whatever the agent tries | tests/test_two_key.py, tests/test_fail_closed.py | yes | |

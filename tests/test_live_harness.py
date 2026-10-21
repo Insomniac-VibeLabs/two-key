@@ -119,11 +119,13 @@ class Cases(unittest.TestCase):
             effect = k["expect"]["effect"]
             self.assertIn(f'"{effect}"', report, f"report.py has no verdict for {effect!r} ({k['title']})")
 
-    def test_the_free_play_round_has_no_answer_in_it(self):
+    def test_the_free_play_rounds_have_no_answer_in_them(self):
+        """One free play per deployment since run 9x (the clinic and the library)."""
         play = [k for k in self.make.c if k["expect"]["effect"] == "invariants"]
-        self.assertEqual(len(play), 1)
-        self.assertNotIn("reasons", play[0]["expect"])
-        self.assertEqual(set(play[0]["persona"].values()), {"EVIL"})
+        self.assertEqual(len(play), 2)
+        for k in play:
+            self.assertNotIn("reasons", k["expect"])
+            self.assertEqual(set(k["persona"].values()), {"EVIL"})
 
 
 if __name__ == "__main__":
