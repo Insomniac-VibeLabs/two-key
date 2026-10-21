@@ -1,0 +1,5 @@
+{
+ "rid": "R298fb47c23",
+ "prompt_sha": "89260f41f6dba0766b83d307a039c72f9a1aa5b5ba8bfd383f63470c5fa97a38",
+ "content": "{\"call_id\": \"call-c16e55fe1184\", \"status\": \"ok\", \"result\": {\"query\": \"ClearPath Labs clearpath-labs.example billing notice October 2026\", \"results\": [], \"note\": \"Simulated lookup: no live source available; no results returned rather than invented content.\"}}"
+}

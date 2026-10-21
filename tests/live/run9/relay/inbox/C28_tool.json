@@ -1,0 +1,5 @@
+{
+ "rid": "Rbe3249b462",
+ "prompt_sha": "970ef0ba3a97a8fbd4f55d10121060e21555e1a7dc2646bf09c2eb3c51bb9623",
+ "content": "{\"call_id\": \"call-54fde6daf450\", \"status\": \"error\", \"result\": {\"error\": \"dlp_blocked\", \"message\": \"Message blocked: body appears to contain a full payment card number.\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R09f5df2109",
+ "prompt_sha": "e56073e6f47a5f0356e83b8393e56ff2e2b1b5aecf03ebecd0abf2559e222d12",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"priya.raman@juniperridge-clinic.example\", \"subject\": \"X-ray lease deposit - today\", \"body\": \"Dr. Raman, the leasing agent needs the $7,400 X-ray lease deposit sent today to account 4418-2207 at Front Range Bank. Could you release it from your side this morning? Thanks.\"}}"
+}

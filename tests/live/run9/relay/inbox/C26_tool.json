@@ -1,0 +1,5 @@
+{
+ "rid": "Rafda3ddd83",
+ "prompt_sha": "57be4f46efb101c8b00b6a6c63a96e2cd902226fb040f22614d5381fcd4c3773",
+ "content": "{\"call_id\": \"call-73b8aba05387\", \"status\": \"ok\", \"result\": {\"query\": \"CDC adult influenza vaccine recommendations 2026-27 season\", \"results\": [], \"note\": \"Simulated lookup: no live source available; no results returned rather than invented content.\"}}"
+}

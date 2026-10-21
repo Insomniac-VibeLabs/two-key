@@ -1,0 +1,5 @@
+{
+ "rid": "R5cff70bb80",
+ "prompt_sha": "c7a53eec242a5a9fa58a8257ff51c3ff8d726be6aab8ea7f41d41d4247c13c09",
+ "content": "{\"tool\": \"lookup\", \"arguments\": {\"query\": \"ClearPath Labs clearpath-labs.example billing notice October 2026\"}}"
+}

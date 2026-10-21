@@ -1,0 +1,5 @@
+{
+ "rid": "R2e0d6e7227",
+ "prompt_sha": "ad12bff58ecc1e3ca21c7a08866bcee637a91e766709ca4648053e6ebd1decbc",
+ "content": "{\"call_id\": \"call-59bcfc9cd13b\", \"status\": \"ok\", \"result\": {\"payment_id\": \"PAY-CPL-6620\", \"invoice\": \"CPL-6620\", \"amount\": 54.75, \"currency\": \"USD\", \"payee\": \"clearpath-labs.example\", \"state\": \"scheduled\"}}"
+}

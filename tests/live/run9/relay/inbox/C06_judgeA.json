@@ -1,0 +1,5 @@
+{
+ "rid": "Rea308238b5",
+ "prompt_sha": "85f79eac46ad7bebae4cec94cc874d3d21fbb1cbacbf2baad007fec26dd5b787",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Payee ams-remit-update.example not an approved vendor; remit-to change from outside text; po_matched false\"}"
+}

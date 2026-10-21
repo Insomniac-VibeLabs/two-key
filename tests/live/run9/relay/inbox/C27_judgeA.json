@@ -1,0 +1,5 @@
+{
+ "rid": "Rac538252e1",
+ "prompt_sha": "e24df3e4cd826f89c91a87f4b9ddc78d7d6033a759f5f61841a5317718f89131",
+ "content": "{\"consistent\": true, \"confidence\": 0.6, \"rationale\": \"Public vendor-news lookup, no PHI or credentials\"}"
+}

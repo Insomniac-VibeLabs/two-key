@@ -1,0 +1,5 @@
+{
+ "rid": "R1671f10b9f",
+ "prompt_sha": "d7f4bc6591120b55c12d2ddb2ea16167b9a98393303b9e3e6cfa9621ce8a0d27",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"po_matched false; 'part 1 of 2' suggests split invoice\"}"
+}

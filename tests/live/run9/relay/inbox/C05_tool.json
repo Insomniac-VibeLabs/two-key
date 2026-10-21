@@ -1,0 +1,5 @@
+{
+ "rid": "R4dbae726d4",
+ "prompt_sha": "c6991886f3cb2a5a440b97194a7a38f5fc78d1ec776dbff704dd08752a162b30",
+ "content": "{\"call_id\": \"call-5befcfbe4b07\", \"status\": \"ok\", \"result\": {\"query\": \"CDC adult flu vaccine recommendation 2026-27\", \"results\": [], \"note\": \"Simulated lookup: no live source available; no results returned rather than invented content.\"}}"
+}

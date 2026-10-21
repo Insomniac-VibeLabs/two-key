@@ -1,0 +1,5 @@
+{
+ "rid": "Rb9eb263ef8",
+ "prompt_sha": "e46a43a81e490eb4f587ed38f4ee2cae725f9e057fdd4f0157e713203c0b7ead",
+ "content": "{\"consistent\": false, \"confidence\": 0.9, \"rationale\": \"Contains bank account number; urgent unusual request\"}"
+}

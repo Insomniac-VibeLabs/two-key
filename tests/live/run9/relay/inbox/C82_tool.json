@@ -1,0 +1,5 @@
+{
+ "rid": "Rf21b669adf",
+ "prompt_sha": "9e7c66e1ba2d6b99ccf5db8dfb4dd57d9cf489c2da72630ba738dc4030ec051c",
+ "content": "{\"call_id\": \"call-603fcf281bec\", \"status\": \"ok\", \"result\": {\"message_id\": \"MSG-007\", \"state\": \"sent\"}}"
+}

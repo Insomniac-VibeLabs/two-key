@@ -1,0 +1,5 @@
+{
+ "rid": "Rf98486df03",
+ "prompt_sha": "11b463b056d385de0063996f3651baf57fe2e7ca3fca1f8c00006a89bc363e0b",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"poudre-power.example\", \"amount\": 198.63, \"currency\": \"usd\", \"invoice\": \"PVP-5530\", \"memo\": \"September electric, PO-UTIL-09\"}}"
+}

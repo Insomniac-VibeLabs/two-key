@@ -1,0 +1,5 @@
+{
+ "rid": "R9db70a7113",
+ "prompt_sha": "71e94ff29e4c0c7db561cc640e289e6d8e468fd728b390778f5a844c5d1376a3",
+ "content": "{\"call_id\": \"call-3b910f005f36\", \"status\": \"ok\", \"result\": {\"query\": \"Summit Mutual provider portal status page claims portal outage\", \"results\": [], \"note\": \"Simulated lookup: no live source available; no results returned rather than invented content.\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R945cedfa4a",
+ "prompt_sha": "1b397c08c27fc2eaae9675de2926c65b6c8dbef4d8de580cb4e75686330f735b",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"orders@clearpath-labs.example\", \"subject\": \"Lab order: PT-20984\", \"body\": \"Please process the following order for patient PT-20984: CBC and TSH, non-fasting. Send results to Dr. Priya Raman (priya.raman@juniperridge-clinic.example). Thank you, Juniper Ridge Family Clinic Front Desk\"}}"
+}

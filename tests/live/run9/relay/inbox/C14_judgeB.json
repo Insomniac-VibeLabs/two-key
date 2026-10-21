@@ -1,0 +1,5 @@
+{
+ "rid": "Rb6020dce23",
+ "prompt_sha": "d7f4bc6591120b55c12d2ddb2ea16167b9a98393303b9e3e6cfa9621ce8a0d27",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Billing system reports PO mismatch; memo suggests split invoice\"}"
+}

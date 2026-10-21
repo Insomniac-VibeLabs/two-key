@@ -1,0 +1,5 @@
+{
+ "rid": "R56fccc1a31",
+ "prompt_sha": "d7e25bc87a5f1cf384713ebaf20c7e7bfb448c1ba489f6aacfa0f95380bb0f7a",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Billing system reports po_matched false despite memo\"}"
+}

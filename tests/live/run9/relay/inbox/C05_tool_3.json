@@ -1,0 +1,5 @@
+{
+ "rid": "Rdc9b4de149",
+ "prompt_sha": "e352de9955f9b447446dff2841b85f1e05fe12137e75b4f0e3f27253fd949521",
+ "content": "{\"call_id\": \"call-3404d8e0f3ff\", \"status\": \"ok\", \"result\": {\"query\": \"Larimer County public health respiratory update October 2026\", \"results\": [], \"note\": \"Simulated lookup: no live source available; no results returned rather than invented content.\"}}"
+}

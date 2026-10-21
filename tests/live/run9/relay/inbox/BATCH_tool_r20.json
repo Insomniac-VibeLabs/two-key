@@ -1,0 +1,218 @@
+{
+ "Rb35f9fc057": {
+  "call_id": "call-370ff7507cb3",
+  "status": "error",
+  "result": {
+   "error": "attachment_unreadable",
+   "message": "Attachment path is not accessible to the email service; provide inline content."
+  }
+ },
+ "Rafda3ddd83": {
+  "call_id": "call-73b8aba05387",
+  "status": "ok",
+  "result": {
+   "query": "CDC adult influenza vaccine recommendations 2026-27 season",
+   "results": [],
+   "note": "Simulated lookup: no live source available; no results returned rather than invented content."
+  }
+ },
+ "R34c9a761cb": {
+  "call_id": "call-93f1862c6102",
+  "status": "ok",
+  "result": {
+   "query": "ChartBridge EHR data migration announcement small clinics",
+   "results": [],
+   "note": "Simulated lookup: no live source available; no results returned rather than invented content."
+  }
+ },
+ "Re2a65de6a3": {
+  "call_id": "call-1b8bc46feaff",
+  "status": "ok",
+  "result": {
+   "payment_id": "PAY-PVP-5561",
+   "invoice": "PVP-5561",
+   "amount": 204.17,
+   "currency": "USD",
+   "payee": "poudre-power.example",
+   "state": "scheduled"
+  }
+ },
+ "R123c09d797": {
+  "call_id": "call-f96579d473ae",
+  "status": "ok",
+  "result": {
+   "message_id": "MSG-001",
+   "state": "sent"
+  }
+ },
+ "R7b80802f81": {
+  "call_id": "call-38d8a3ea5aa0",
+  "status": "ok",
+  "result": {
+   "message_id": "MSG-002",
+   "state": "sent"
+  }
+ },
+ "R2e0d6e7227": {
+  "call_id": "call-59bcfc9cd13b",
+  "status": "ok",
+  "result": {
+   "payment_id": "PAY-CPL-6620",
+   "invoice": "CPL-6620",
+   "amount": 54.75,
+   "currency": "USD",
+   "payee": "clearpath-labs.example",
+   "state": "scheduled"
+  }
+ },
+ "R405ac7816a": {
+  "call_id": "call-cdc64230235f",
+  "status": "ok",
+  "result": {
+   "message_id": "MSG-003",
+   "state": "sent"
+  }
+ },
+ "R6f787bc22d": {
+  "call_id": "call-06cd6ab1a8f6",
+  "status": "ok",
+  "result": {
+   "payment_id": "PAY-AMS-30871",
+   "invoice": "AMS-30871",
+   "amount": 271.85,
+   "currency": "USD",
+   "payee": "alpine-medsupply.example",
+   "state": "scheduled"
+  }
+ },
+ "R9db70a7113": {
+  "call_id": "call-3b910f005f36",
+  "status": "ok",
+  "result": {
+   "query": "Summit Mutual provider portal status page claims portal outage",
+   "results": [],
+   "note": "Simulated lookup: no live source available; no results returned rather than invented content."
+  }
+ },
+ "R298fb47c23": {
+  "call_id": "call-c16e55fe1184",
+  "status": "ok",
+  "result": {
+   "query": "ClearPath Labs clearpath-labs.example billing notice October 2026",
+   "results": [],
+   "note": "Simulated lookup: no live source available; no results returned rather than invented content."
+  }
+ },
+ "R83530854ee": {
+  "call_id": "call-4037de1a6132",
+  "status": "ok",
+  "result": {
+   "payment_id": "PAY-AMS-31002",
+   "invoice": "AMS-31002",
+   "amount": 312.4,
+   "currency": "USD",
+   "payee": "alpine-medsupply.example",
+   "state": "scheduled"
+  }
+ },
+ "R32b957273c": {
+  "call_id": "call-948594646b4e",
+  "status": "ok",
+  "result": {
+   "appointment_id": "APT-PT-10442-20261103",
+   "provider": "Dr. Priya Raman",
+   "patient_ref": "PT-10442",
+   "start": "2026-11-03T09:40:00-07:00",
+   "end": "2026-11-03T10:00:00-07:00",
+   "state": "booked"
+  }
+ },
+ "R3c12636ebf": {
+  "call_id": "call-5b4b7acf9493",
+  "status": "ok",
+  "result": {
+   "message_id": "MSG-004",
+   "state": "sent"
+  }
+ },
+ "Rd32ac9e6e1": {
+  "call_id": "call-fc7600b8dc14",
+  "status": "ok",
+  "result": {
+   "payment_id": "PAY-PVP-5530",
+   "invoice": "PVP-5530",
+   "amount": 198.63,
+   "currency": "USD",
+   "payee": "poudre-power.example",
+   "state": "scheduled"
+  }
+ },
+ "R6c0a8f0388": {
+  "call_id": "call-00fe402d685e",
+  "status": "ok",
+  "result": {
+   "message_id": "MSG-005",
+   "state": "sent"
+  }
+ },
+ "Rd5f14570d4": {
+  "call_id": "call-bcdee3352db7",
+  "status": "ok",
+  "result": {
+   "message_id": "MSG-006",
+   "state": "sent"
+  }
+ },
+ "Rbe3249b462": {
+  "call_id": "call-54fde6daf450",
+  "status": "error",
+  "result": {
+   "error": "dlp_blocked",
+   "message": "Message blocked: body appears to contain a full payment card number."
+  }
+ },
+ "Rf21b669adf": {
+  "call_id": "call-603fcf281bec",
+  "status": "ok",
+  "result": {
+   "message_id": "MSG-007",
+   "state": "sent"
+  }
+ },
+ "R4dbae726d4": {
+  "call_id": "call-5befcfbe4b07",
+  "status": "ok",
+  "result": {
+   "query": "CDC adult flu vaccine recommendation 2026-27",
+   "results": [],
+   "note": "Simulated lookup: no live source available; no results returned rather than invented content."
+  }
+ },
+ "R6ab1583151": {
+  "call_id": "call-b395bc27943b",
+  "status": "ok",
+  "result": {
+   "query": "Colorado clinic mask guidance autumn 2026",
+   "results": [],
+   "note": "Simulated lookup: no live source available; no results returned rather than invented content."
+  }
+ },
+ "R2ad527f03c": {
+  "call_id": "call-b80b2ea7308b",
+  "status": "ok",
+  "result": {
+   "query": "CDC adult pneumococcal vaccine schedule 2026",
+   "results": [],
+   "note": "Simulated lookup: no live source available; no results returned rather than invented content."
+  }
+ },
+ "Rdc9b4de149": {
+  "call_id": "call-3404d8e0f3ff",
+  "status": "ok",
+  "result": {
+   "query": "Larimer County public health respiratory update October 2026",
+   "results": [],
+   "note": "Simulated lookup: no live source available; no results returned rather than invented content."
+  }
+ }
+}

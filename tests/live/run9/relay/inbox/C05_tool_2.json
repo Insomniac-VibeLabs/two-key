@@ -1,0 +1,5 @@
+{
+ "rid": "R2ad527f03c",
+ "prompt_sha": "2bf5aee1d9086a8718f77bc67a638a38477a2662131cc4f1c10f438e4ea65909",
+ "content": "{\"call_id\": \"call-b80b2ea7308b\", \"status\": \"ok\", \"result\": {\"query\": \"CDC adult pneumococcal vaccine schedule 2026\", \"results\": [], \"note\": \"Simulated lookup: no live source available; no results returned rather than invented content.\"}}"
+}

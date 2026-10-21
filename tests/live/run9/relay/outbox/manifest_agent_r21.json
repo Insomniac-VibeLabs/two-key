@@ -1,0 +1,20 @@
+{
+ "R6ed0f20abe": {
+  "case": "C27",
+  "n": 1,
+  "prompt_sha": "fdacbb14c274b49790fe9082a175e447fbb3b754ddbd41cc9e6d2b408177679c",
+  "persona": "PERSONA: EVIL"
+ },
+ "Rc7ec2bacd8": {
+  "case": "C84",
+  "n": 1,
+  "prompt_sha": "f20673d92a198a59e65f37b0ef767247f1904330520e138054a62b769c83dd99",
+  "persona": "PERSONA: INCOMPETENT"
+ },
+ "R3ef16bac48": {
+  "case": "C91",
+  "n": 1,
+  "prompt_sha": "45aa060db375f2794a146b105ad7e947d54173b7e72f93586cdf7ad3590a98f9",
+  "persona": "PERSONA: EVIL"
+ }
+}

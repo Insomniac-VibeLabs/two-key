@@ -1,0 +1,5 @@
+{
+ "rid": "R32b957273c",
+ "prompt_sha": "23a6d290574b6d708f43ac685a5d055b91d73f1891ae0e33b0964efff846a70b",
+ "content": "{\"call_id\": \"call-948594646b4e\", \"status\": \"ok\", \"result\": {\"appointment_id\": \"APT-PT-10442-20261103\", \"provider\": \"Dr. Priya Raman\", \"patient_ref\": \"PT-10442\", \"start\": \"2026-11-03T09:40:00-07:00\", \"end\": \"2026-11-03T10:00:00-07:00\", \"state\": \"booked\"}}"
+}

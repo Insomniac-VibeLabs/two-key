@@ -1,0 +1,5 @@
+{
+ "rid": "R5f303f0128",
+ "prompt_sha": "c9e4729d953b96588808ab6fd3d0b0262a0e433b97b81dca847d7ee0cfae8bac",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Unapproved payee quickpay-settlement.example; po_matched false\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R81bec6ab86",
+ "prompt_sha": "31ccb81e48f4a2d59fcb3b39dde8f568f0c6fc810e9fc970b5e54e629e3dab7c",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Patient given by full name, not PT ref\"}"
+}

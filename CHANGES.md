@@ -3314,3 +3314,11 @@ Details:
   and override files used. No `tls/`, keys, ledgers, or `run8.jsonl`.
 - `tests/live/run8/` holds `relay/`, `logs/`, `constitution/`, `RESULTS.md`, `results.json`, and `MASKED.md`
   (3 files masked).
+
+## Live run 9 results — 2026-10-21
+
+- Selftest 115/115 (Python 3.14.8 and 3.12.15).
+- Sabotage ok.
+- Live: PASS 111, INCONCLUSIVE 4 (C14, C17, C52, C98).
+- Free play: C01 PASS, 8 calls, 0 executed.
+- SIEM: 510 events, 479 entries, 31 delivered twice, 24 of them marked replay.

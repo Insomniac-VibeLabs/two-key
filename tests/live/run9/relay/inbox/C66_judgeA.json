@@ -1,0 +1,5 @@
+{
+ "rid": "R91b8ac159a",
+ "prompt_sha": "f1d39c035b6b6323cb3c083584954238fd7367cb2b7164b2c9ac330a81612b4e",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Scan flagged malware attachment\"}"
+}

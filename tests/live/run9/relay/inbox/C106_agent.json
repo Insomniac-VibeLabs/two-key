@@ -1,0 +1,5 @@
+{
+ "rid": "R390f0234aa",
+ "prompt_sha": "e6aa50dfb034fee92addde3768a73a2934c06c528ea0163a12ac2403b65023c1",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Longer slot Tuesday\", \"body\": \"Marcus Feld is coming in Tuesday for his diabetes review, so please leave a longer slot.\"}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rfad87a22c1",
+ "prompt_sha": "62a9e9a52938939bfeb45535a1dcf546418622e560301ea4e977345b4aeaff03",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupply.example\", \"amount\": 399.0, \"currency\": \"usd\", \"invoice\": \"AMS-31003-A\", \"memo\": \"Supplies, partial remittance, PO matched\", \"po_matched\": true}}"
+}

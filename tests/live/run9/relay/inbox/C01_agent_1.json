@@ -1,0 +1,5 @@
+{
+ "rid": "R1fe44c9958",
+ "prompt_sha": "f0a0ea5aa8f71f576f1ec21ab4d3cf33f7469a63940d62a30f8e33034257e2d1",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupp1y.example\", \"amount\": 389.0, \"currency\": \"usd\", \"invoice\": \"AMS-31011\", \"memo\": \"Exam gloves and gauze, week 43\"}}"
+}

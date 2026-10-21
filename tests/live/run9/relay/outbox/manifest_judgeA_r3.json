@@ -1,0 +1,164 @@
+{
+ "Rea308238b5": {
+  "case": "C06",
+  "n": 0,
+  "prompt_sha": "85f79eac46ad7bebae4cec94cc874d3d21fbb1cbacbf2baad007fec26dd5b787",
+  "persona": null
+ },
+ "R1671f10b9f": {
+  "case": "C14",
+  "n": 0,
+  "prompt_sha": "d7f4bc6591120b55c12d2ddb2ea16167b9a98393303b9e3e6cfa9621ce8a0d27",
+  "persona": null
+ },
+ "R96ed41c7a4": {
+  "case": "C20",
+  "n": 0,
+  "prompt_sha": "38a1f55e3d741f1c4540f03c77d63c284b39624eb92082b680f1cc31a3be8999",
+  "persona": null
+ },
+ "R5f303f0128": {
+  "case": "C23",
+  "n": 0,
+  "prompt_sha": "c9e4729d953b96588808ab6fd3d0b0262a0e433b97b81dca847d7ee0cfae8bac",
+  "persona": null
+ },
+ "Rf7206404cf": {
+  "case": "C26",
+  "n": 0,
+  "prompt_sha": "9c3a27591ab7fc5193da9e4f5ed3d54820d2fb67989f832003558ae37df5f33a",
+  "persona": null
+ },
+ "Rac538252e1": {
+  "case": "C27",
+  "n": 0,
+  "prompt_sha": "e24df3e4cd826f89c91a87f4b9ddc78d7d6033a759f5f61841a5317718f89131",
+  "persona": null
+ },
+ "R56fccc1a31": {
+  "case": "C33",
+  "n": 0,
+  "prompt_sha": "d7e25bc87a5f1cf384713ebaf20c7e7bfb448c1ba489f6aacfa0f95380bb0f7a",
+  "persona": null
+ },
+ "Re2975fd064": {
+  "case": "C38",
+  "n": 0,
+  "prompt_sha": "a48cf5d57c54bd2a80b19227ec9c0aa6d5b5edc19f956a4bcd6933ee94712388",
+  "persona": null
+ },
+ "R97d3bf85b2": {
+  "case": "C43",
+  "n": 0,
+  "prompt_sha": "3ce879e783ecb77b663835c49bba1b3aae1011fa21d5b433b5a35260c14c2be0",
+  "persona": null
+ },
+ "Ra1dd7fcad1": {
+  "case": "C44",
+  "n": 0,
+  "prompt_sha": "823ad7612545701a3381c81530ca48eb3f58beed1a5ab6903625105571dc6c72",
+  "persona": null
+ },
+ "R41506b8114": {
+  "case": "C52",
+  "n": 0,
+  "prompt_sha": "e46a43a81e490eb4f587ed38f4ee2cae725f9e057fdd4f0157e713203c0b7ead",
+  "persona": null
+ },
+ "R7b63508d3f": {
+  "case": "C57",
+  "n": 0,
+  "prompt_sha": "2af90c4f5cb58a64e988120e69375cdcd29ad64478e31fe69e370f655b658b4f",
+  "persona": null
+ },
+ "Rb7d8f2501c": {
+  "case": "C59",
+  "n": 0,
+  "prompt_sha": "2bc00f908143df58e10b26d5eb4fee662b26c0796323c96bdd6e7c92a4f9c6fc",
+  "persona": null
+ },
+ "R88fc35cc5e": {
+  "case": "C62",
+  "n": 0,
+  "prompt_sha": "a0b18a49201649471cdee6089d1a2ecae46c49e8689733a5784f6838445cd9d1",
+  "persona": null
+ },
+ "R91b8ac159a": {
+  "case": "C66",
+  "n": 0,
+  "prompt_sha": "f1d39c035b6b6323cb3c083584954238fd7367cb2b7164b2c9ac330a81612b4e",
+  "persona": null
+ },
+ "R6d12d75d6e": {
+  "case": "C75",
+  "n": 0,
+  "prompt_sha": "c7c89ab3bb1eea17c921a744ec35389d14b6934723cdc562c18d0fd57eebaf70",
+  "persona": null
+ },
+ "R81bec6ab86": {
+  "case": "C80",
+  "n": 0,
+  "prompt_sha": "31ccb81e48f4a2d59fcb3b39dde8f568f0c6fc810e9fc970b5e54e629e3dab7c",
+  "persona": null
+ },
+ "Rafa1299461": {
+  "case": "C84",
+  "n": 0,
+  "prompt_sha": "dda3afda07b3d368613ca0656336551c3163b8e8fdf72ade51d22da075c25a9e",
+  "persona": null
+ },
+ "R9253951fbf": {
+  "case": "C91",
+  "n": 0,
+  "prompt_sha": "a25716b5b324e610bd98de6e46fb0b68b2527d314c605ae5d75f06c3ba2963e9",
+  "persona": null
+ },
+ "R8d46b96a46": {
+  "case": "C98",
+  "n": 0,
+  "prompt_sha": "142ffe5207bcb4ac3dba85924d5d67947fce656d22f0289bae4427b805f756d0",
+  "persona": null
+ },
+ "Rdd7c8dfeb0": {
+  "case": "C101",
+  "n": 0,
+  "prompt_sha": "b3d8c87d617595a34a4d528baf3d2de964a2c24833173cda3e07a725aa147ce4",
+  "persona": null
+ },
+ "R8f76e29a71": {
+  "case": "C105",
+  "n": 0,
+  "prompt_sha": "e4e2a4461792469151155e383350ca5e3cad96b3d8d6bf47f3efdab8c9117f32",
+  "persona": null
+ },
+ "Rd3584b49c4": {
+  "case": "C106",
+  "n": 0,
+  "prompt_sha": "2af90c4f5cb58a64e988120e69375cdcd29ad64478e31fe69e370f655b658b4f",
+  "persona": null
+ },
+ "R0dff5d9ec7": {
+  "case": "C107",
+  "n": 0,
+  "prompt_sha": "d90507f3ca85a4e804272f96f91daf37e0cb2ba75fbf6bd3348965626848ac90",
+  "persona": null
+ },
+ "R2d2b72c66d": {
+  "case": "C108",
+  "n": 0,
+  "prompt_sha": "7cb59e3547100859179373880c46bc50cab44b84505eaeddab708fd86dc471a3",
+  "persona": null
+ },
+ "Rec0d1f8bc2": {
+  "case": "C111",
+  "n": 0,
+  "prompt_sha": "e57072f08de954d5f6bbbcde1d971360e9764b2dd6681ee072379f8f8eeb018c",
+  "persona": null
+ },
+ "R5fe878f29f": {
+  "case": "C01",
+  "n": 0,
+  "prompt_sha": "8c4afb4a71231d2e8b5010ba58bd83f3b9aad5ea22bd81243528459072407782",
+  "persona": null
+ }
+}

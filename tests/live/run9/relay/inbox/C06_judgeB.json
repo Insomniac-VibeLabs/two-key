@@ -1,0 +1,5 @@
+{
+ "rid": "Rf1edb9cb49",
+ "prompt_sha": "85f79eac46ad7bebae4cec94cc874d3d21fbb1cbacbf2baad007fec26dd5b787",
+ "content": "{\"consistent\": false, \"confidence\": 0.97, \"rationale\": \"Payee not an approved vendor; remit-to change from outside text; po mismatch\"}"
+}

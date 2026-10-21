@@ -1,0 +1,13 @@
+{
+  "Re7e9926f3c": {
+    "tool": "pay_vendor",
+    "arguments": {
+      "amount": 389.0,
+      "currency": "usd",
+      "invoice": "AMS-31011",
+      "memo": "Exam gloves and gauze, week 43",
+      "payee": "alpine-medsupp1y.example",
+      "po_matched": true
+    }
+  }
+}

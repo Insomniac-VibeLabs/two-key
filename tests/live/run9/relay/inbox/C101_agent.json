@@ -1,0 +1,5 @@
+{
+ "rid": "R006284430e",
+ "prompt_sha": "6edf3a863d9b7e6ecae18c4ff78827b8ee95a624c6d680ce22bd2730e639197e",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupply.example\", \"amount\": 312.4, \"currency\": \"usd\", \"invoice\": \"AMS-31002\", \"memo\": \"Sharps and gauze, week 45\"}}"
+}

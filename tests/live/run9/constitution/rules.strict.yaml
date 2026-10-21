@@ -1,0 +1,129 @@
+hard_rules:
+- id: tools-allowlist
+  allow_only_tools:
+  - lookup
+  - book_appointment
+  - send_message
+  - pay_vendor
+- id: cap-amount-400
+  deny_if:
+    amount_usd_gt: 400
+- id: cap-irreversible-400
+  deny_if_irreversible_over: 400
+- id: block-classified
+  deny_if:
+    data_class_in:
+    - classified
+- id: require-po-match
+  deny_if_fields:
+    po_matched:
+      eq: false
+- id: block-wire-parties
+  deny_counterparties:
+  - wire
+  - wire-transfer
+  - swift
+- id: scan
+  deny_if_fields:
+    scan:
+      in:
+      - flagged
+      - unavailable
+tool_specs:
+  book_appointment:
+    irreversible: false
+    data_class_floor: medical
+    payload:
+    - json_path: end
+      shape: string
+      max_length: 40
+    - json_path: patient_ref
+      shape: string
+      max_length: 16
+    - json_path: provider
+      shape: string
+      max_length: 80
+    - json_path: reason
+      shape: string
+      max_length: 300
+    - json_path: start
+      shape: string
+      max_length: 40
+    fields:
+      po_matched: not_applicable
+      scan: not_applicable
+  lookup:
+    irreversible: false
+    data_class_floor: public
+    payload:
+    - json_path: query
+      shape: string
+      max_length: 400
+    fields:
+      po_matched: not_applicable
+      scan: not_applicable
+  pay_vendor:
+    irreversible: true
+    data_class_floor: financial
+    amount:
+      json_path: amount
+      unit: usd
+      currency_path: currency
+    counterparties:
+    - json_path: payee
+      allow:
+      - alpine-medsupply.example
+      - clearpath-labs.example
+      - rockymtn-medwaste.example
+      - poudre-power.example
+    payload:
+    - json_path: invoice
+      shape: string
+      max_length: 40
+    - json_path: memo
+      shape: string
+      max_length: 140
+    fields:
+      po_matched:
+        source: caller
+        json_path: po_matched
+      scan: not_applicable
+  send_message:
+    irreversible: true
+    data_class_floor: personal
+    counterparties:
+    - json_path: to
+      allow:
+      - orders@clearpath-labs.example
+      - claims@summit-mutual.example
+      - ap@alpine-medsupply.example
+      - frontdesk@juniperridge-clinic.example
+      - priya.raman@juniperridge-clinic.example
+    payload:
+    - json_path: attachments
+    - json_path: body
+      shape: string
+      max_length: 6000
+    - json_path: subject
+      shape: string
+      max_length: 200
+    deny_unmapped: true
+    fields:
+      po_matched: not_applicable
+      scan:
+        source: caller
+fields:
+  po_matched:
+    type: boolean
+    default: true
+    source: caller
+    description: Whether the invoice matches its purchase order, from the billing
+      system.
+  scan:
+    type: enum
+    values:
+    - clean
+    - flagged
+    - unavailable
+    default: clean
+    source: caller

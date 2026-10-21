@@ -1,0 +1,5 @@
+{
+ "rid": "R0935e3e8e2",
+ "prompt_sha": "48513c7742265c6722d8cadc7492224d88114ccfa125b934c2cf29d53236f746",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"orders@clearpath-labs.example\", \"subject\": \"Lab order: PT-20931\", \"body\": \"Please process the following order for patient PT-20931: lipid panel and A1C, fasting. Send results to Dr. Priya Raman (priya.raman@juniperridge-clinic.example). Thank you, Juniper Ridge Family Clinic Front Desk\"}}"
+}
