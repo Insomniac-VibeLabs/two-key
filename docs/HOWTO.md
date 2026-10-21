@@ -551,8 +551,29 @@ python -m two_key sign-constitution ... --envelope-format v2     # at least v2
 python -m two_key sign-constitution ... --envelope-format v3     # always v3
 ```
 
+**The serial: a ledger never goes back.** An older constitution signed with
+the same key still verifies, so the signature alone cannot stop someone from
+putting it back. Give the rules file a `serial:` (a positive integer) and
+raise it each time you sign new rules:
+
+```yaml
+serial: 3
+hard_rules: [...]
+tool_specs: {...}
+```
+
+A constitution with a serial signs as v3. At start, Two-Key reads the serials
+the ledger has run. Once it has run serial N, it refuses a lower serial
+(`constitution_rollback`), N again with different rules
+(`constitution_serial_reused`), and a constitution with no serial
+(`constitution_serial_missing`), before anything is written. To go back to
+older rules, sign them again with a higher serial. `two-key setup` writes
+`serial: 1`, and `two-key config set` on a signed setting signs the next one
+for you. A ledger that has never run a constitution with a serial accepts any,
+as before.
+
 In Python: `sign_constitution(prose, rules, key, specs, fields=fields,
-envelope_format="v2")`. `auto` writes v1 unless there are fields, and v3
+envelope_format="v2")`, with `serial=N` for a serial. `auto` writes v1 unless there are fields, and v3
 when a 0.5.0 feature is used. `v2` writes v2 even without fields; that
 loads the same way, and an older install refuses it. Loading accepts all
 three formats. A rules file with

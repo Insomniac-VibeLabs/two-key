@@ -712,7 +712,8 @@ def apply(config_path: Path, config, change: Change, *, confirm_weaker: bool, co
             print(f"weaker: {line}", file=out)
         confirmed = _confirmed(change.command, reasons, signed, keep_prev, confirm, out)
         prevs = _stage(change.files, "prev", created, old=True) if keep_prev else {}
-        record(config, ledger_body(change, reasons, confirmed=confirmed), change.key)
+        record(config, ledger_body(change, reasons, confirmed=confirmed), change.key,
+               constitution=_staged_constitution(staged, change.key) if signed else None)
         recorded = True
         _install(change.files, staged, prevs)
         _write_undo(config_path, change, undoable=keep_prev)
@@ -856,9 +857,19 @@ def open_principal(config, passphrase=None):
         raise ConfigChangeError(f"principal_key: {e}") from None
 
 
-def record(config, body: dict, key) -> None:
+def _staged_constitution(staged: Mapping[str, Path], key):
+    from .constitution import load_envelope, verify_signed
+    try:
+        return verify_signed(load_envelope(staged[CONSTITUTION]), key.public_key())
+    except (OSError, ValueError) as e:
+        raise ConfigChangeError(f"constitution_refused: {e}") from None
+
+
+def record(config, body: dict, key, constitution=None) -> None:
     """Append ``config_changed`` to the deployment's ledger, signed with ``key``. A ledger that does not open
-    refuses the change."""
+    refuses the change. With ``constitution``, one the proxy would refuse to start with because the ledger has run
+    a newer one (``config undo`` of a signed change; live run 9x, C44) refuses the change too."""
+    from .core import TwoKeyConfigError, check_constitution_order
     from .keys import load_public_key
     from .ledger import Ledger, LedgerError
     if not (Path(config.ledger) / "entries.jsonl").is_file():
@@ -867,8 +878,16 @@ def record(config, body: dict, key) -> None:
     try:
         witness = load_public_key(config.witness_public_key) if config.witness_public_key else None
         ledger = Ledger(config.ledger, key, witness_public_key=witness, anchor_path=config.head_anchor)
+        if constitution is not None:
+            try:
+                check_constitution_order(ledger, constitution)
+            except TwoKeyConfigError as e:
+                raise ConfigChangeError(f"{e}. To go back to these rules, change them with config set, which "
+                                        "signs the next serial; nothing was written") from None
         ledger.append(LEDGER_KIND, body)
         ledger.checkpoint()
+    except ConfigChangeError:
+        raise
     except (OSError, ValueError, LedgerError) as e:
         raise ConfigChangeError(f"ledger_refused: {type(e).__name__}: {e}; nothing was written") from None
 
@@ -1032,11 +1051,12 @@ def resign(signed: Mapping, rules_doc: Mapping, key, current_format: str) -> dic
     from .constitution import sign_constitution, verify_signed
     try:
         envelope = sign_constitution(signed["prose"], rules_doc.get("hard_rules"), key, rules_doc.get("tool_specs"),
-                                     fields=rules_doc.get("fields"))
+                                     fields=rules_doc.get("fields"), serial=rules_doc.get("serial"))
         if _envelope_rank(envelope["format"]) < _envelope_rank(current_format):
             envelope = sign_constitution(signed["prose"], rules_doc.get("hard_rules"), key,
                                          rules_doc.get("tool_specs"), fields=rules_doc.get("fields"),
-                                         envelope_format="v3" if _envelope_rank(current_format) == 3 else "v2")
+                                         envelope_format="v3" if _envelope_rank(current_format) == 3 else "v2",
+                                         serial=rules_doc.get("serial"))
         verify_signed(json.loads(json.dumps(envelope)), key.public_key())
     except (ValueError, TypeError) as e:
         raise ConfigChangeError(f"constitution_refused: {e}") from None
@@ -1052,7 +1072,7 @@ def _signed_of(rules_doc: Mapping, prose: str, key) -> dict:
     from .constitution import sign_constitution
     try:
         return sign_constitution(prose, rules_doc.get("hard_rules"), key, rules_doc.get("tool_specs"),
-                                 fields=rules_doc.get("fields"))["signed"]
+                                 fields=rules_doc.get("fields"), serial=rules_doc.get("serial"))["signed"]
     except (ValueError, TypeError) as e:
         raise ConfigChangeError(f"rules_invalid: {e}") from None
 
@@ -1081,8 +1101,13 @@ def _signed_change(config, tokens, value, unset, key_path, rules_path, passphras
         raise ConfigChangeError(f"unknown_setting: {format_name(tokens)} is not a setting of hard_rules.yaml; "
                                 "docs/SETTINGS.md lists them")
     new_doc = set_at(rules_doc, tokens, value, unset=unset)
+    if isinstance(new_doc.get("serial"), int) and not isinstance(new_doc.get("serial"), bool):
+        # A changed constitution signs the next serial, so the ledger that ran this one never goes back to it
+        # (live run 9x, C44).
+        new_doc = {**new_doc, "serial": new_doc["serial"] + 1}
     new_envelope = resign(signed_before, new_doc, key, envelope.get("format", ""))
-    if _plain(new_envelope["signed"]) == _plain(signed_before):
+    if _plain({k: v for k, v in new_envelope["signed"].items() if k != "serial"}) == _plain(
+            {k: v for k, v in signed_before.items() if k != "serial"}):
         raise ConfigChangeError(f"unchanged: {format_name(tokens)} already signs as that")
     name = format_name(tokens)
     shown = [f"{name} (signed): {_show(tokens, get_at(rules_doc, tokens))} -> "

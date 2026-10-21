@@ -211,6 +211,17 @@ security findings privately, per [SECURITY.md](SECURITY.md).
 - The ledger's witness public key is pinned: a head or `witness.pem` that
   does not match the pin in the ledger, or the configured
   `witness_public_key`, is refused. It changes only by `rotate_witness`.
+- A ledger never goes back to an older constitution (live run 9x, C44;
+  `core.check_constitution_order`). The order is the principal's signed
+  `serial` in the rules file (v3 only; without one the envelope stays
+  byte-for-byte as before). Once a ledger has run serial N, a lower serial
+  (`constitution_rollback`), N again with other bytes
+  (`constitution_serial_reused`), and no serial (`constitution_serial_missing`)
+  refuse to start before anything is written, and `config undo` refuses to
+  put such a constitution back. `setup` signs serial 1 and `config set` on a
+  signed setting signs the next. There is no setting that turns it off; going
+  back to older rules means signing them again with a higher serial
+  (`tests/test_constitution_serial.py`).
 - The gateway verifies only; it never mints.
 - The guard (`two_key/guard.py`) uses a fixed claim and proposal per tool,
   never the agent's; looks facts up before `authorize` and again before

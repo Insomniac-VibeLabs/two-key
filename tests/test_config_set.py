@@ -466,6 +466,29 @@ class Signed(Deployment):
         self.refused("constitution_refused", "tool_specs.tool_a.data_class_floor", "secret-ish",
                      key_path=str(self.key), rules_path=str(self.rules))
 
+    def test_setup_signs_serial_1_and_a_signed_change_signs_the_next(self):
+        """Live run 9x, C44: each change signs a higher serial, so a ledger can refuse to go back."""
+        public = load_private_key_file(self.key).public_key()
+        before = verify_signed(load_envelope(self.dir / "constitution.signed.json"), public)
+        self.assertEqual(before.serial, 1)
+        self.signed("tool_specs.tool_a.irreversible", True)
+        after = verify_signed(load_envelope(self.dir / "constitution.signed.json"), public)
+        self.assertEqual(after.serial, 2)
+        self.assertIn("serial: 2", self.rules.read_text(encoding="utf-8"))
+
+    def test_undo_of_a_signed_change_the_proxy_already_ran_is_refused(self):
+        """Putting serial 1 back after the ledger ran serial 2 would only make the proxy refuse to start."""
+        self.signed("tool_specs.tool_a.irreversible", True)
+        public = load_private_key_file(self.key).public_key()
+        running = verify_signed(load_envelope(self.dir / "constitution.signed.json"), public)
+        ledger = self.ledger()
+        ledger.append("constitution_loaded", {"digest": running.digest, "serial": running.serial})
+        ledger.checkpoint()
+        with self.assertRaisesRegex(ConfigChangeError, "constitution_rollback: .*config set"):
+            quiet(config_set.undo, self.proxy, key_path=str(self.key), confirm=self.confirm(), confirm_weaker=True,
+                  environ={})
+        self.assertEqual(verify_signed(load_envelope(self.dir / "constitution.signed.json"), public).serial, 2)
+
     def test_undo_of_a_signed_change_needs_the_key(self):
         before = (self.dir / "constitution.signed.json").read_bytes()
         self.signed("tool_specs.tool_a.irreversible", True)

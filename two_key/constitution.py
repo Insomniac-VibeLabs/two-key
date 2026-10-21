@@ -33,9 +33,12 @@ FORMAT_V2 = "two-key-constitution-v2"
 FORMAT_V3 = "two-key-constitution-v3"
 ENVELOPE_FORMATS = ("auto", "v2", "v3")
 _V2_SIGNED_KEYS = {"prose", "hard_rules", "tool_specs", "fields"}
+# The principal's ordering of constitutions (live run 9x, C44): a positive integer, signed, v3 only. A ledger that has
+# run serial N refuses a lower one and refuses N again with other bytes (two_key.core).
+_V3_SIGNED_KEYS = _V2_SIGNED_KEYS | {"serial"}
 # The keys the loaders accept in a rules file and in a tool spec. Named here so docs/SETTINGS.md and its test
 # (two_key/settings.py) read the same sets the validators use.
-RULES_FILE_KEYS = ("hard_rules", "tool_specs", "fields")
+RULES_FILE_KEYS = ("hard_rules", "tool_specs", "fields", "serial")
 TOOL_SPEC_KEYS = ("irreversible", "data_class_floor", "amount", "counterparties", "payload", "deny_unmapped",
                   "fields")
 AMOUNT_KEYS = ("json_path", "unit", "currency_path")
@@ -56,6 +59,11 @@ class Constitution:
     tool_specs: dict
     specs_enforced: bool
     fields: dict = field(default_factory=dict)   # canonical custom-field registry; empty without one
+
+    @property
+    def serial(self) -> int | None:
+        """The signed serial, or None for a constitution signed without one."""
+        return self.document["signed"].get("serial")
 
     @property
     def digest(self) -> str:
@@ -133,6 +141,15 @@ def _check_caller_mapping(where: str, defn: Mapping, entry: Any) -> None:
 
 V3_FEATURES = ("caller-supplied fields (source: caller), case: exact fields, not_applicable marks, and @domain "
                "allow entries")
+
+
+def validate_serial(value: Any) -> int | None:
+    """A constitution serial: absent (None) or a positive integer. ``true`` and ``1.0`` are not serials."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 2 ** 53:
+        raise ConstitutionError("serial must be a positive integer (the principal's order of constitutions)")
+    return value
 
 
 def uses_v3(registry: Mapping, specs: Mapping) -> bool:
@@ -411,9 +428,10 @@ def load_unsigned(prose_path: Path | str, rules_path: Path | str) -> tuple[str, 
 
 
 def load_unsigned_with_fields(prose_path: Path | str, rules_path: Path | str) -> tuple[str, list, Mapping, dict]:
-    """Return prose, hard rules, tool specs, and the canonical custom-field registry (empty if none)."""
+    """Return prose, hard rules, tool specs, and the canonical custom-field registry (empty if none). A
+    ``serial`` in the rules file is read by ``load_serial``."""
     prose = Path(prose_path).read_text(encoding="utf-8")
-    rules, specs, fields = _load_rules_document(Path(rules_path))
+    rules, specs, fields, _ = _load_rules_document(Path(rules_path))
     try:
         registry = validate_fields(fields)
     except FieldError as e:
@@ -421,7 +439,12 @@ def load_unsigned_with_fields(prose_path: Path | str, rules_path: Path | str) ->
     return prose, validate_rules(rules, fields=registry), specs, registry
 
 
-def _load_rules_document(path: Path) -> tuple[list, Mapping, Any]:
+def load_serial(rules_path: Path | str) -> int | None:
+    """The ``serial`` a rules file declares, validated; None when it declares none."""
+    return validate_serial(_load_rules_document(Path(rules_path))[3])
+
+
+def _load_rules_document(path: Path) -> tuple[list, Mapping, Any, Any]:
     if path.suffix.lower() != ".json":
         try:
             import yaml  # noqa: F401
@@ -445,19 +468,19 @@ def _load_rules_document(path: Path) -> tuple[list, Mapping, Any]:
         specs = data["tool_specs"]
         if not isinstance(specs, Mapping):
             raise ConstitutionError("tool_specs must be a mapping")
-        return rules, specs, data.get("fields")
+        return rules, specs, data.get("fields"), data.get("serial")
     raise ConstitutionError("hard rules must be a list")
 
 
 def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = None, *,
-                      fields: Any = None, envelope_format: str = "auto") -> dict:
+                      fields: Any = None, envelope_format: str = "auto", serial: int | None = None) -> dict:
     """Sign prose, hard rules, tool specs, and the optional custom-field registry.
 
     ``envelope_format`` is the principal's choice at signing time. ``auto`` (the default) writes
     ``v1``, byte for byte as before, when there are no custom fields, ``v2`` when there are, and ``v3`` when
     a field is caller-supplied (``source: caller``) or ``case: exact``, or a tool marks one
-    ``not_applicable``. ``v2`` always writes at least ``v2``, and ``v3`` always writes ``v3``. None of those
-    can be signed as ``v2``. An install older than custom fields refuses a ``v2`` envelope; one before 0.5.0
+    ``not_applicable``, or the constitution has a ``serial``. ``v2`` always writes at least ``v2``, and ``v3``
+    always writes ``v3``. None of those can be signed as ``v2``. An install older than custom fields refuses a ``v2`` envelope; one before 0.5.0
     refuses ``v3``.
     """
     if envelope_format not in ENVELOPE_FORMATS:
@@ -478,9 +501,12 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
     }
     if registry:
         signed["fields"] = registry
-    v3 = uses_v3(registry, signed["tool_specs"])
+    serial = validate_serial(serial)
+    if serial is not None:
+        signed["serial"] = serial
+    v3 = uses_v3(registry, signed["tool_specs"]) or serial is not None
     if v3 and envelope_format == "v2":
-        raise ConstitutionError(f"{V3_FEATURES} need a v3 constitution")
+        raise ConstitutionError(f"{V3_FEATURES}, and a serial, need a v3 constitution")
     if v3 or envelope_format == "v3":
         fmt = FORMAT_V3
     elif registry or envelope_format == "v2":
@@ -532,11 +558,15 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
     if not verify(public_key, canonical_bytes(signed), envelope.get("signature") or ""):
         raise ConstitutionSignatureError("constitution signature failed")
     if fmt in (FORMAT_V2, FORMAT_V3):
-        extra = set(signed) - _V2_SIGNED_KEYS
+        extra = set(signed) - (_V3_SIGNED_KEYS if fmt == FORMAT_V3 else _V2_SIGNED_KEYS)
         if extra:
             raise ConstitutionError(f"unknown signed key(s) {sorted(map(str, extra))} in a {fmt[-2:]} constitution")
     elif "fields" in signed:
         raise ConstitutionError("custom fields need a v2 constitution")
+    if "serial" in signed:
+        if fmt != FORMAT_V3:
+            raise ConstitutionError("a serial needs a v3 constitution")
+        validate_serial(signed["serial"])
     prose = signed.get("prose")
     rules = signed.get("hard_rules")
     if not isinstance(prose, str) or not prose.strip():

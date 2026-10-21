@@ -191,7 +191,8 @@ def starter_rules(tools: Any) -> dict:
             raise SetupError("tools: each tool is a mapping with an id")
         specs[tool["id"]] = {"irreversible": tool.get("irreversible", True),
                              "data_class_floor": tool.get("data_class_floor", "classified")}
-    return {"hard_rules": [{"id": "tools", "allow_only_tools": list(specs)}], "tool_specs": specs}
+    # serial 1: every later change signs a higher one, and the ledger refuses to go back (live run 9x, C44)
+    return {"serial": 1, "hard_rules": [{"id": "tools", "allow_only_tools": list(specs)}], "tool_specs": specs}
 
 
 def proxy_doc(answers: Mapping, digest: str) -> dict:
@@ -324,7 +325,7 @@ def _staging(target: Path) -> Path:
 
 def _write_constitution(staging: Path, answers: Mapping, key):
     """The prose, the rules, and the constitution signed from them. Returns the envelope and what verified."""
-    from .constitution import load_unsigned_with_fields, sign_constitution, verify_signed
+    from .constitution import load_serial, load_unsigned_with_fields, sign_constitution, verify_signed
     prose = _read_source(answers["prose_file"], "prose_file") if answers.get("prose_file") else \
         STARTER_PROSE.encode("utf-8")
     _write(staging / FILES["prose"], prose)
@@ -335,7 +336,8 @@ def _write_constitution(staging: Path, answers: Mapping, key):
     _write(staging / FILES["rules"], rules_bytes)
     try:
         text, rules, specs, fields = load_unsigned_with_fields(staging / FILES["prose"], staging / FILES["rules"])
-        envelope = sign_constitution(text, rules, key, specs, fields=fields)
+        envelope = sign_constitution(text, rules, key, specs, fields=fields,
+                                     serial=load_serial(staging / FILES["rules"]))
         signed = verify_signed(json.loads(json.dumps(envelope)), key.public_key())
     except (ValueError, TypeError) as e:
         raise SetupError(f"rules: {e}") from None

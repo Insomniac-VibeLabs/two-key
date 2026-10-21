@@ -288,6 +288,13 @@ flowchart TD
   one local judge, and a yes from a local judge;
   `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag
   is still not a skip. `min_distinct_providers` still defaults to 1.
+- An older constitution put back. A constitution signed by the principal
+  stays valid forever, so a copy of an older one (with fewer rules) would
+  start. With a signed `serial` in the rules file, a ledger that has run
+  serial N refuses a lower serial, N again with other rules, and a
+  constitution with no serial (live run 9x, C44). It does not help a
+  deployment that has never signed a serial, nor an attacker who holds the
+  principal key, who can sign anything.
 - A judge is not the monitored agent: `TwoKey` refuses to start when a
   judge holds the agent's credential (the same API token, or the same
   username and password) at any address, whether or not either side sends

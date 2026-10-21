@@ -266,6 +266,7 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `hard_rules` | required |  | The rules Path A runs, at least one. |
 | `tool_specs` | required |  | Where Path A reads each value, per tool. Every allow-listed tool needs one. |
 | `fields` | none |  | The custom Path A fields, up to 64. A rules file with `fields:` signs as a v2 constitution. |
+| `serial` | none |  | A positive integer: the principal's order of constitutions. A ledger that has run serial N refuses a lower one, and N again with other rules (`constitution_rollback`, `constitution_serial_reused`); once a ledger has run one with a serial, one without is refused too. Signs as a v3 constitution. `two-key setup` writes `serial: 1`; `config set` on a signed setting raises it by one. |
 | `hard_rules[].id` | `rule[i]:type` |  | The rule's name in the ledger. Unique. |
 | `hard_rules[].allow_only_tools` | one rule type per rule |  | A list of tool ids; any other tool is denied. |
 | `hard_rules[].deny_counterparties` | one rule type per rule |  | A list of blocked parties, each exact. No `@domain` entries. |

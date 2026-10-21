@@ -135,6 +135,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Copyright and author headers — 2026-10-21](#copyright-and-author-headers--2026-10-21)
 - [OpenSSF Scorecard hardening: Semgrep token, hashed CI installs, SECURITY.md (#31, #32, #33) — 2026-10-21](#openssf-scorecard-hardening-semgrep-token-hashed-ci-installs-securitymd-31-32-33--2026-10-21)
 - [Live runs 9 and 9x: SIEM cursor and `config check` fixes — 2026-10-21](#live-runs-9-and-9x-siem-cursor-and-config-check-fixes--2026-10-21)
+- [A ledger never goes back to an older constitution (signed serial) — 2026-10-21](#a-ledger-never-goes-back-to-an-older-constitution-signed-serial--2026-10-21)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4323,3 +4324,28 @@ From the run 9 and 9x findings (`live-runs` b0b57e9 and a506e80, both on `workin
   (run 9, finding 1).
 - Docs: docs/SIEM.md, docs/SETUP.md, docs/HOWTO.md, docs/THREAT_MODEL.md, docs/CONNECTING.md, AGENTS.md,
   llms.txt.
+
+## A ledger never goes back to an older constitution (signed serial) — 2026-10-21
+
+Live run 9x, C44: an older constitution (the library rules without DEL-1, signed with the same principal key)
+started on a ledger written under the newer one, with no warning. Both are validly signed, and nothing recorded
+which came first. Option A of the run 9 findings response, chosen by the maintainer.
+
+- **`serial` in the rules file.** A positive integer, the principal's order of constitutions, signed into the
+  constitution (`signed.serial`). A constitution with a serial signs as v3; one without stays byte-for-byte what
+  it was (`tests/test_fields_compat.py`). A serial under a v1 or v2 label is refused, and an install before this
+  change refuses it as an unknown signed key, so an older Two-Key cannot ignore it.
+- **The start-up check** (`two_key.core.check_constitution_order`, before anything is written). Once a ledger
+  has run a constitution with serial N: a lower serial is refused (`constitution_rollback`), N again with other
+  bytes (`constitution_serial_reused`), and a constitution with no serial (`constitution_serial_missing`). A
+  ledger that has never run one with a serial accepts any, as before. No setting turns it off; to go back to older
+  rules, sign them again with a higher serial.
+- **`constitution_loaded`** records `serial` and `previous_digest` (the digest the ledger last ran) for a
+  constitution with a serial; the entry is unchanged for one without. Both are sent to a SIEM.
+- **`two-key setup`** writes `serial: 1` into the rules file it starts. **`config set`** on a signed setting signs
+  the next serial and writes it into the rules file. **`config undo`** refuses to put back a constitution the
+  ledger has already moved past (the proxy would refuse to start with it); change the rules back with `config set`.
+- `sign-constitution` reads `serial` from the rules file.
+- Tests: `tests/test_constitution_serial.py`; `tests/test_config_set.py` (setup's serial, the next serial, undo).
+- Docs: AGENTS.md (a fail-closed default; `tests/live/COVERAGE.md` F27), docs/HOWTO.md, docs/SETTINGS.md
+  (generated), docs/THREAT_MODEL.md, llms.txt.

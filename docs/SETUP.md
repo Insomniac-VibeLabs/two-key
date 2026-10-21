@@ -108,7 +108,7 @@ an access list for your account only), except the public key, which is not a sec
 | `principal.pem` | The principal private key. Signs the constitution and the ledger head. Encrypted when `key_passphrase_file` is given, and then `proxy.yaml` names that file as `keys.passphrase_file` |
 | `principal.pub.pem` | Its public half |
 | `constitution.md` | The prose the judges read |
-| `hard_rules.yaml` | The rules Path A runs, with the tool specs |
+| `hard_rules.yaml` | The rules Path A runs, with the tool specs, and `serial: 1` (see below) |
 | `constitution.signed.json` | Both, signed with the principal key |
 | `judges.yaml` | The judges, the quorum `profile`, and the `monitored_agent` |
 | `proxy.yaml` | Proxy only. Every scalar setting at its default, written out: `ttl_seconds: 120`, `allow_unresolved_identity: false`, `on_agent_access: refuse`, `on_writable_paths: warn` (`refuse` under `high_assurance`, which does not accept `warn`), and `upstream.on_schema_change: refuse` with `call_timeout_seconds: 60` |
@@ -287,6 +287,12 @@ the prose already signed, in at least the current envelope format, and verifies 
 principal's public key before anything is written. Then `config check` verifies the staged envelope again,
 as the proxy will. It writes the rules file and the envelope together, both owner-only, and records the new
 constitution's digest in the ledger.
+
+**The serial goes up by one with each signed change.** The rules file `setup` writes starts at `serial: 1`.
+Once the proxy has run a constitution, its ledger refuses any older one (a lower serial), so a copy of old rules
+cannot be put back (live run 9x, C44; HOWTO "The serial"). For the same reason, `config undo` refuses to put back
+a constitution the ledger has already run past (`constitution_rollback`): change the setting back with
+`config set` instead, which signs the next serial.
 
 ### What the ledger records
 

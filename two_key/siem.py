@@ -258,7 +258,7 @@ KINDS: dict[str, KindSpec] = {
         excluded=("tail_file",), severity=NOTICE),
     "constitution_loaded": KindSpec(
         sent=("digest", "bytecode_hash", "nl_hash", "spec_hash", "policy_digest",
-              "capability_key_fingerprint"),
+              "capability_key_fingerprint", "serial", "previous_digest"),
         excluded=("quorum_policy", "judge_agent_separation", "scanner", "same_model_tenant_optin",
                   "same_model_tenant_optin_pairs"),
         extract=_constitution_fields),
