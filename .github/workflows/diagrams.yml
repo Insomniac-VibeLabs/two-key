@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 name: diagrams
 
-# Draws every Mermaid diagram in the docs with a pinned mermaid-cli and uploads the pictures, so a
+# Draws every Mermaid diagram in the docs with a pinned mermaid-cli (.github/diagrams/package-lock.json,
+# every package with its integrity hash, installed with npm ci) and uploads the pictures, so a
 # reviewer can look at all of them in one place. Not a required check: tests/test_doc_diagrams.py is the
 # gate, and this job only shows what GitHub's renderer will roughly draw. Nothing here is committed;
 # the docs keep real Mermaid, not pictures.
@@ -14,6 +15,7 @@ on:
       - "**/*.md"
       - "tests/test_doc_diagrams.py"
       - ".github/workflows/diagrams.yml"
+      - ".github/diagrams/**"
   workflow_dispatch:
 
 permissions:
@@ -33,9 +35,9 @@ jobs:
       - name: Install mermaid-cli
         run: |
           mkdir "$RUNNER_TEMP/mmdc"
+          cp .github/diagrams/package.json .github/diagrams/package-lock.json "$RUNNER_TEMP/mmdc/"
           cd "$RUNNER_TEMP/mmdc"
-          npm init -y > /dev/null
-          npm install --no-audit --no-fund @mermaid-js/mermaid-cli@11.4.2
+          npm ci --no-audit --no-fund
           echo '{"args": ["--no-sandbox"]}' > puppeteer.json
       - name: Draw each block at GitHub's page width
         run: |

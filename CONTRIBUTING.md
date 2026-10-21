@@ -47,7 +47,10 @@ Diagrams in the docs are real Mermaid, never pictures. They follow the house
 style in `tests/test_doc_diagrams.py` (short label lines, at most five
 participants, a one-line italic caption under each), and the test suite fails
 on a diagram that does not. The non-required `diagrams.yml` workflow draws
-every diagram and uploads the pictures for a look before a release.
+every diagram and uploads the pictures for a look before a release. It
+installs mermaid-cli with `npm ci` from `.github/diagrams/package-lock.json`;
+to change the version, edit `package.json` there and run `npm install
+--package-lock-only --ignore-scripts` in that folder.
 Every file that can hold a comment opens with the copyright header: `Copyright 2026 Insomniac-VibeLabs`,
 `Author: Stephan Busch`, `SPDX-License-Identifier: Apache-2.0`, as `#` lines (after a shebang) or, in
 Markdown, an HTML comment so the page renders unchanged. A new file gets it too; `tests/test_file_headers.py`

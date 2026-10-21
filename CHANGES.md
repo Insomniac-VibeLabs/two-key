@@ -4289,9 +4289,12 @@ Scorecard v5.6.0 run on main (51dc293, score 5.5).
   - `siem-integration.yml` installs Two-Key's dependencies the same way and runs Two-Key from the checkout
     (`PYTHONPATH`) instead of `pip install -e ".[yaml]"`, which resolved them with no lock at all.
   - `coverage.yml` no longer installs coverage outside the uv.lock environment; it was not used there.
+  - `diagrams.yml` installs mermaid-cli 11.4.2 with `npm ci` from `.github/diagrams/package-lock.json`
+    (every package with its integrity hash) instead of `npm install` with no lock. CONTRIBUTING.md says how to
+    change the version.
 - **SECURITY.md (#33).** Links the private reporting form
   (`/security/advisories/new`; private vulnerability reporting is on), says not to report a vulnerability in
   a public issue, states acknowledgement within 7 days, and adds "Supported versions": the latest release
   only.
-- Docs: AGENTS.md, CONTRIBUTING.md, README ("uv.lock" install), docs/HOWTO.md and docs/PYPI.md name
+- Docs: AGENTS.md, CONTRIBUTING.md (also the diagrams lock), README ("uv.lock" install), docs/HOWTO.md and docs/PYPI.md name
   `.github/requirements/` where they named the pins in the workflows; llms.txt.
