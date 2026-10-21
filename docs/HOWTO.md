@@ -104,7 +104,7 @@ protected on each.
 
 That follows the ranges in `pyproject.toml`. CI installs from the same
 checkout's `uv.lock` instead (wheels only). To match it, install the uv
-version pinned in `.github/workflows/tests.yml`, run `uv sync --locked
+version pinned in `.github/requirements/uv.in`, run `uv sync --locked
 --no-build --extra yaml --extra mcp --no-dev`, and run the tests with
 `.venv/bin/python`. When a dependency range changes, regenerate `uv.lock`
 with that same uv and commit it. The lock is not a consumer pin: a git

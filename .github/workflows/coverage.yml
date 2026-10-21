@@ -20,9 +20,9 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: |
-          pip install --only-binary :all: "uv==0.13.0" "coverage==7.16.2"
+          pip install --require-hashes --only-binary :all: -r .github/requirements/uv.txt
           uv sync --locked --no-build --extra yaml --extra mcp --no-dev --python python --no-managed-python --no-python-downloads
-          uv pip install --python .venv --only-binary :all: "coverage==7.16.2"
+          uv pip install --python .venv --require-hashes --only-binary :all: -r .github/requirements/coverage.txt
       - name: Run coverage and produce XML
         run: |
           .venv/bin/coverage run -m unittest discover -s tests

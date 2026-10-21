@@ -27,17 +27,21 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - name: Install build
+      - name: Install build and uv
         run: |
-          pip install --only-binary :all: "build==1.6.1"
+          pip install --require-hashes --only-binary :all: -r .github/requirements/build.txt -r .github/requirements/uv.txt
       - name: Build sdist and wheel
-        run: python -m build
+        # No isolated build environment: the backend (setuptools) is the hashed one from build.txt.
+        run: python -m build --no-isolation
       - name: Install the wheel into a fresh venv and run the demo
         run: |
           python -m venv "$RUNNER_TEMP/wheel-venv"
           if [ -x "$RUNNER_TEMP/wheel-venv/Scripts/python.exe" ]; then py="$RUNNER_TEMP/wheel-venv/Scripts/python.exe"
           else py="$RUNNER_TEMP/wheel-venv/bin/python"; fi
-          "$py" -m pip install --only-binary :all: dist/*.whl
+          # The wheel's dependencies come from uv.lock, with their hashes; the wheel itself brings none.
+          uv export --quiet --locked --no-dev --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/runtime.txt"
+          "$py" -m pip install --require-hashes --only-binary :all: -r "$RUNNER_TEMP/runtime.txt"
+          "$py" -m pip install --no-deps dist/*.whl
           # From outside the checkout, so the installed wheel is imported, not the source tree.
           cd "$RUNNER_TEMP"
           "$py" -c "import two_key; print(two_key.__version__, two_key.__file__); assert 'site-packages' in two_key.__file__"

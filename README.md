@@ -706,7 +706,7 @@ A clone installed with `pip install -e` follows the ranges in
 `pyproject.toml`. CI does not: it installs the versions in `uv.lock`
 (cryptography, PyYAML, the MCP SDK for the `mcp` extra, and their
 dependencies), wheels only. To match CI, use the uv version pinned in
-`.github/workflows/tests.yml`:
+`.github/requirements/uv.in`:
 
 ```bash
 pip install --only-binary :all: "uv==0.13.0"

@@ -31,7 +31,12 @@ Update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`, `docs/FIT.md`,
 When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
 in the same release.
 When `dependencies`, the `yaml` extra, or the `mcp` extra changes, regenerate `uv.lock` with
-the uv version pinned in `.github/workflows/tests.yml` and commit it.
+the uv version pinned in `.github/requirements/uv.in` and commit it.
+The CI tools (uv, build and its backend, coverage, bandit, twine, the SBOM tool)
+are pinned with hashes in `.github/requirements/`: change a version in a
+`NAME.in` file there, run `sh .github/requirements/compile.sh` with that same uv,
+and commit both files. Workflows install them with `pip install
+--require-hashes`, so an unhashed tool fails the job.
 After adding, renaming, or moving a heading in a document that has a table of
 contents, run `python tests/test_doc_toc.py --write`; the test suite fails
 while a table is out of date.

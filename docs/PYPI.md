@@ -69,10 +69,14 @@ set beside it: current build tools may reject the pair.
 It runs only from this branch (`refs/heads/PyPI`) or from a tag whose name
 starts with `v`. A pull request does not publish.
 
-1. Build an sdist and a wheel with `build==1.6.1` (same pin as
-   `.github/workflows/build.yml`).
+1. Build an sdist and a wheel with `build==1.6.1` and the setuptools
+   backend, both from `.github/requirements/publish.txt` with their hashes
+   (`--require-hashes`; the same pins as `build.txt` for
+   `.github/workflows/build.yml`). The build runs with `--no-isolation`, so
+   no backend is fetched without a hash.
 2. `twine check --strict`. A warning fails the job. Nothing is uploaded.
-3. Install that wheel into a throwaway virtualenv and write
+3. Install that wheel into a throwaway virtualenv, its dependencies from
+   `uv.lock` with their hashes, and write
    `sbom.cdx.json` (CycloneDX, `cyclonedx-bom==7.5.0`). The SBOM is a
    workflow artifact kept 90 days. It is not a file on PyPI. The upload
    directory contains only the sdist and the wheel, so the SBOM cannot be
@@ -197,8 +201,8 @@ create an environment with no reviewer the first time the job asks for it.
 From a clone of this branch:
 
 ```bash
-pip install "build==1.6.1" "twine==7.0.0"
-python -m build
+pip install --require-hashes --only-binary :all: -r .github/requirements/publish.txt
+python -m build --no-isolation
 twine check --strict dist/*
 ```
 

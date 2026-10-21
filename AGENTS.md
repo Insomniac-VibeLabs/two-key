@@ -68,13 +68,14 @@ python -m unittest discover -s tests
 python -m two_key demo
 ```
 
-CI does not use that floating install. `.github/workflows/tests.yml` pins
-`uv==0.13.0` and runs `uv sync --locked --no-build --extra yaml --extra mcp`, which
+CI does not use that floating install. `.github/workflows/tests.yml` installs
+`uv==0.13.0` (with its hashes, `.github/requirements/uv.txt`) and runs `uv sync --locked --no-build --extra yaml --extra mcp`, which
 installs `uv.lock` (cryptography, PyYAML, the MCP SDK, and their dependencies) as wheels.
 Regenerate `uv.lock` with that uv when a dependency range changes, and
 commit the lock. Do not treat the lock as a release pin for consumers.
-Build, coverage, and bandit are pinned in their workflows, not in
-`pyproject.toml`.
+Build, coverage, bandit, and the publish tools are pinned with hashes in
+`.github/requirements/` (each `NAME.in` is compiled to `NAME.txt` by `compile.sh`
+there), not in `pyproject.toml`. CI installs them with `--require-hashes`.
 
 | Extra | Provides | When needed |
 | --- | --- | --- |

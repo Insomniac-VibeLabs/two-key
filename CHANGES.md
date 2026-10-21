@@ -133,6 +133,7 @@ SPDX-License-Identifier: Apache-2.0
 - [`two-key setup` and `two-key config set`, `get`, `undo`, `key-passphrase`: one way in for setup and changes — 2026-10-20](#two-key-setup-and-two-key-config-set-get-undo-key-passphrase-one-way-in-for-setup-and-changes--2026-10-20)
 - [Live harness: run 9 (set-up commands, upstream paths, two proxies, free play, sabotage) — 2026-10-21](#live-harness-run-9-set-up-commands-upstream-paths-two-proxies-free-play-sabotage--2026-10-21)
 - [Copyright and author headers — 2026-10-21](#copyright-and-author-headers--2026-10-21)
+- [OpenSSF Scorecard hardening: Semgrep token, hashed CI installs, SECURITY.md (#31, #32, #33) — 2026-10-21](#openssf-scorecard-hardening-semgrep-token-hashed-ci-installs-securitymd-31-32-33--2026-10-21)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4264,3 +4265,33 @@ live yet; the maintainer decides when GrokBot runs it.
   arguments inside the `assertRaises` block now build them first (S5778; `test_key_passphrase.py`,
   `test_config_set.py`, `test_upstream_paths.py`), two `TestCase` helpers are private (`_files`, `_changes`), and
   `test_live_harness.py` uses `assertIn`.
+
+## OpenSSF Scorecard hardening: Semgrep token, hashed CI installs, SECURITY.md (#31, #32, #33) — 2026-10-21
+
+CI and docs only. No change to `two_key/`, to any check's name, or to what a check tests. From a read-only
+Scorecard v5.6.0 run on main (51dc293, score 5.5).
+
+- **Semgrep token (#31).** `semgrep.yml` keeps `contents: read` as the workflow default and grants
+  `security-events: write` and `actions: read` to the Semgrep job only. Its checkout no longer leaves the
+  token in the clone (`persist-credentials: false`).
+- **Hashed CI installs (#32).** Every `pip install` in a workflow now installs a file from
+  `.github/requirements/` with `--require-hashes`: `uv.txt` (tests, coverage, build, publish,
+  siem-integration), `coverage.txt`, `build.txt`, `bandit.txt`, and `publish.txt` (build, twine,
+  cyclonedx-bom). Each `NAME.txt` is compiled from `NAME.in` by `compile.sh` (uv 0.13.0, universal across
+  Linux, macOS and Windows and Python 3.10 and up, wheels only); the versions are the ones the workflows
+  pinned before. CONTRIBUTING.md says how to change one.
+  - The build backend is pinned too: `setuptools==84.0.0` (the newest release more than two weeks old) is in
+    `build.txt` and `publish.txt`, and `build.yml` and `pypi-publish.yml` build with `--no-isolation`, so
+    the published wheel is no longer built by a setuptools fetched without a hash.
+  - Installing the built wheel (build's demo, the publish job's SBOM) takes its dependencies from `uv.lock`
+    with their hashes (`uv export --locked`), then the wheel with `--no-deps`. The SBOM therefore lists the
+    locked versions of cryptography, cffi and pycparser instead of the newest on the day.
+  - `siem-integration.yml` installs Two-Key's dependencies the same way and runs Two-Key from the checkout
+    (`PYTHONPATH`) instead of `pip install -e ".[yaml]"`, which resolved them with no lock at all.
+  - `coverage.yml` no longer installs coverage outside the uv.lock environment; it was not used there.
+- **SECURITY.md (#33).** Links the private reporting form
+  (`/security/advisories/new`; private vulnerability reporting is on), says not to report a vulnerability in
+  a public issue, states acknowledgement within 7 days, and adds "Supported versions": the latest release
+  only.
+- Docs: AGENTS.md, CONTRIBUTING.md, README ("uv.lock" install), docs/HOWTO.md and docs/PYPI.md name
+  `.github/requirements/` where they named the pins in the workflows; llms.txt.

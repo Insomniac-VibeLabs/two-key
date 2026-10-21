@@ -11,13 +11,28 @@ Status: beta (pre-1.0). The maintainer reviews changes with live LLM testing
 Bandit, CodeQL). There has been no independent or paid audit, and no
 production use is claimed.
 
-Report a vulnerability privately: the repository's Security tab, "Report a
-vulnerability". State what the code does, what the docs claim, and how you
-checked. Hardening ideas and documentation errors that do not expose users
-are welcome as public issues.
+Report a vulnerability privately through GitHub's form:
+<https://github.com/Insomniac-VibeLabs/two-key/security/advisories/new>
+(the repository's Security tab, "Report a vulnerability"). Do not report a
+vulnerability in a public issue, a pull request, or a discussion. State what
+the code does, what the docs claim, and how you checked. Hardening ideas and
+documentation errors that do not expose users are welcome as public issues.
+
+The maintainer acknowledges a report within 7 days. A fix ships in a new
+release; earlier releases do not get backports.
 
 The threat model is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). This file
 is how to report a vulnerability. It is not the model.
+
+## Supported versions
+
+Only the latest release on [PyPI](https://pypi.org/project/two-key/) gets
+security fixes. Upgrade to it before reporting, if you can.
+
+| Version | Supported |
+| --- | --- |
+| Latest release | Yes |
+| Any earlier release | No |
 
 ## In scope
 

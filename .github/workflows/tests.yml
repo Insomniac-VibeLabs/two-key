@@ -27,7 +27,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install from uv.lock
         run: |
-          pip install --only-binary :all: "uv==0.13.0"
+          pip install --require-hashes --only-binary :all: -r .github/requirements/uv.txt
           uv sync --locked --no-build --extra yaml --extra mcp --no-dev --python python --no-managed-python --no-python-downloads
       - name: Tests
         run: uv run --no-sync --no-build python -m unittest discover -s tests
@@ -51,7 +51,7 @@ jobs:
           allow-prereleases: true
       - name: Install from uv.lock, building PyYAML only
         run: |
-          pip install --only-binary :all: "uv==0.13.0"
+          pip install --require-hashes --only-binary :all: -r .github/requirements/uv.txt
           export UV_NO_BUILD_PACKAGE="$(python -c 'import tomllib; print(" ".join(sorted({p["name"] for p in tomllib.load(open("uv.lock", "rb"))["package"]} - {"pyyaml", "two-key"})))')"
           uv sync --locked --extra yaml --extra mcp --no-dev --python python --no-managed-python --no-python-downloads
       - name: Tests
