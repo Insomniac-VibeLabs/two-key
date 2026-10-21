@@ -111,13 +111,13 @@ class Cases(unittest.TestCase):
         self.assertGreater(len(steps), 20)
         self.assertEqual(len(steps), len(set(steps)))
         for step in steps:
-            self.assertTrue(f'"{step}"' in story, f"deploy_cases.py never runs a step named {step}")
+            self.assertIn(f'"{step}"', story, f"deploy_cases.py never runs a step named {step}")
 
     def test_every_case_has_an_expectation_the_report_reads(self):
         report = (LIVE / "report.py").read_text(encoding="utf-8")
         for k in self.make.c:
             effect = k["expect"]["effect"]
-            self.assertTrue(f'"{effect}"' in report, f"report.py has no verdict for {effect!r} ({k['title']})")
+            self.assertIn(f'"{effect}"', report, f"report.py has no verdict for {effect!r} ({k['title']})")
 
     def test_the_free_play_round_has_no_answer_in_it(self):
         play = [k for k in self.make.c if k["expect"]["effect"] == "invariants"]

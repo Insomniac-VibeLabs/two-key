@@ -173,9 +173,10 @@ class Unchecked(Tree):
 
     def test_high_assurance_refuses(self):
         cfg = self.config(command=["sudo", "-n", "-u", "mcp-billing", "--", "npx", "-y", "@example/server"])
+        stream = io.StringIO()
         with self.assertRaisesRegex(ProxyConfigError, r"^upstream_paths_unchecked: upstream.command starts with "
                                                       r"sudo, .*; high_assurance refuses to start$"):
-            check_upstream_paths(cfg.upstream, True, stream=io.StringIO())
+            check_upstream_paths(cfg.upstream, True, stream=stream)
 
     def test_quiet_when_something_is_named_or_there_is_no_launcher(self):
         cases = [self.config(),

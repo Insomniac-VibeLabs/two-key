@@ -92,20 +92,24 @@ class Format(unittest.TestCase):
         nonce = bytearray(base64.b64decode(header["enc"]["nonce"]))
         nonce[0] ^= 1
         moved = dict(header, enc=dict(header["enc"], nonce=base64.b64encode(bytes(nonce)).decode()))
+        blob = armour(moved)
         with self.assertRaisesRegex(ValueError, "^key_passphrase_wrong: "):
-            decrypt_private_key(armour(moved), PASSPHRASE)
+            decrypt_private_key(blob, PASSPHRASE)
         cipher = bytearray(base64.b64decode(header["ciphertext"]))
         cipher[-1] ^= 1
         flipped = dict(header, ciphertext=base64.b64encode(bytes(cipher)).decode())
+        blob = armour(flipped)
         with self.assertRaisesRegex(ValueError, "^key_passphrase_wrong: "):
-            decrypt_private_key(armour(flipped), PASSPHRASE)
+            decrypt_private_key(blob, PASSPHRASE)
         # Fewer iterations than Two-Key writes is refused before the KDF runs: a file cannot weaken itself.
         cheap = dict(header, kdf=dict(header["kdf"], iterations=1000))
+        blob = armour(cheap)
         with self.assertRaisesRegex(ValueError, "^key_file_invalid: "):
-            decrypt_private_key(armour(cheap), PASSPHRASE)
+            decrypt_private_key(blob, PASSPHRASE)
         extra = dict(header, note="x")
+        blob = armour(extra)
         with self.assertRaisesRegex(ValueError, "^key_file_invalid: "):
-            decrypt_private_key(armour(extra), PASSPHRASE)
+            decrypt_private_key(blob, PASSPHRASE)
 
     def test_a_new_passphrase_needs_twelve_bytes(self):
         with self.assertRaisesRegex(ValueError, "^key_passphrase_short: "):
@@ -154,8 +158,9 @@ class Format(unittest.TestCase):
     def test_no_terminal_means_no_prompt(self):
         save_private_key(self.path, self.key, passphrase=PASSPHRASE)
         with mock.patch("sys.stdin", io.StringIO(PASSPHRASE.decode() + "\n")):
+            source = passphrase_source(None)
             with self.assertRaisesRegex(ValueError, "^key_passphrase_needed: .*no terminal"):
-                load_private_key_file(self.path, passphrase_source(None))
+                load_private_key_file(self.path, source)
 
     def test_remember_asks_once_per_file(self):
         asked = []
@@ -206,8 +211,9 @@ class CommandLine(unittest.TestCase):
         self.assertFalse((self.dir / "k" / "principal.pem").exists())
 
     def test_the_passphrase_is_never_an_argument(self):
+        args = ("init-key", str(self.dir / "k"), "--passphrase", PASSPHRASE.decode())
         with self.assertRaises(SystemExit):
-            run("init-key", str(self.dir / "k"), "--passphrase", PASSPHRASE.decode())
+            run(*args)
 
 
 class Encrypted(Deployment):
@@ -247,7 +253,7 @@ class Encrypted(Deployment):
             quiet(config_set.undo, self.proxy, confirm=self.confirm(), environ={})
 
     def test_it_is_recorded_with_names_and_no_key_digest(self):
-        entry = self.changes()[-1]
+        entry = self._changes()[-1]
         self.assertEqual(entry.body["command"], "key-passphrase")
         self.assertEqual(entry.body["settings"], ["keys.principal", "keys.passphrase_file"])
         self.assertTrue(entry.body["confirmed"])
@@ -259,11 +265,11 @@ class Encrypted(Deployment):
 
     def test_a_setting_changes_with_the_passphrase_from_the_file(self):
         self.set("ttl_seconds", 60)
-        self.assertEqual(self.changes()[-1].body["settings"], ["ttl_seconds"])
+        self.assertEqual(self._changes()[-1].body["settings"], ["ttl_seconds"])
 
     def test_a_signed_change_with_the_encrypted_key(self):
         self.set("tool_specs.tool_a.irreversible", True, key_path=str(self.key), rules_path=str(self.rules))
-        entry = self.changes()[-1]
+        entry = self._changes()[-1]
         self.assertTrue(entry.body["signed"])
         self.assertTrue(keys.key_file_is_encrypted(self.key))
 
@@ -276,7 +282,7 @@ class Encrypted(Deployment):
               environ={})
         self.assertFalse(keys.key_file_is_encrypted(self.key))
         self.assertIsNone(load_proxy_config(self.proxy).principal_passphrase_file)
-        self.assertEqual(self.changes()[-1].body["weaker"], ["keys.principal: the key is no longer encrypted"])
+        self.assertEqual(self._changes()[-1].body["weaker"], ["keys.principal: the key is no longer encrypted"])
         with self.assertRaisesRegex(ConfigChangeError, "^unchanged: "):
             quiet(config_set.change_key_encryption, self.proxy, remove=True, confirm_weaker=True,
                   confirm=self.confirm(), environ={})
@@ -344,7 +350,7 @@ class SetupWithPassphrase(Deployment):
         self.assertTrue(keys.key_file_is_encrypted(self.key))
         self.assertEqual(load_proxy_config(self.proxy).principal_passphrase_file, self.pass_file)
         self.assertNotIn(PASSPHRASE.decode(), self.proxy.read_text(encoding="utf-8"))
-        self.assertEqual(self.changes()[0].body["command"], "setup")
+        self.assertEqual(self._changes()[0].body["command"], "setup")
         self.assertFalse([t for level, t in config_cmd.check(str(self.proxy), {}) if level == config_cmd.FAIL])
 
     def test_setup_refuses_a_relative_or_short_passphrase_file(self):

@@ -79,7 +79,7 @@ class Deployment(unittest.TestCase):
     def ledger(self):
         return Ledger(self.dir / "ledger", load_private_key_file(self.key))
 
-    def changes(self):
+    def _changes(self):
         return [e for e in self.ledger().entries if e.kind == "config_changed"]
 
     def snapshot(self):
@@ -114,7 +114,7 @@ class Setup(Deployment):
         for name in ("principal.pem", "constitution.md", "hard_rules.yaml", "constitution.signed.json",
                      "judges.yaml", "proxy.yaml"):
             self.assertTrue(private(self.dir / name), name)
-        [entry] = self.changes()
+        [entry] = self._changes()
         self.assertEqual(entry.body["command"], "setup")
         recorded = {f["file"]: f["new_sha256"] for f in entry.body["files"]}
         self.assertNotIn("principal.pem", recorded, "a private key's digest is not recorded")
@@ -247,7 +247,7 @@ class Set(Deployment):
         self.assertIn(VALUE_CANARY, self.proxy.read_text(encoding="utf-8"))
         self.assertTrue(private(self.proxy))
         self.assertEqual((self.dir / "proxy.yaml.prev").read_bytes(), before)
-        entry = self.changes()[-1]
+        entry = self._changes()[-1]
         self.assertEqual(entry.body["settings"], ["agent_id"])
         self.assertEqual(entry.body["files"][0]["old_sha256"], config_set.sha256(before))
         self.assertEqual(entry.body["files"][0]["new_sha256"], config_set.sha256(self.proxy.read_bytes()))
@@ -256,7 +256,7 @@ class Set(Deployment):
 
     def test_the_siem_copy_has_names_and_digests_but_not_the_account(self):
         self.set("agent_id", VALUE_CANARY)
-        entry = self.changes()[-1]
+        entry = self._changes()[-1]
         event = project(entry.kind, entry.body)
         self.assertEqual(event["settings"], ["agent_id"])
         self.assertEqual(set(event["files"][0]), {"role", "file", "old_sha256", "new_sha256"})
@@ -266,7 +266,7 @@ class Set(Deployment):
     def test_a_judges_setting_goes_to_judges_yaml(self):
         self.set("judges[0].timeout", 20)
         self.assertIn("timeout: 20", (self.dir / "judges.yaml").read_text(encoding="utf-8"))
-        self.assertEqual(self.changes()[-1].body["files"][0]["role"], "judges")
+        self.assertEqual(self._changes()[-1].body["files"][0]["role"], "judges")
 
     def test_unset_brings_back_the_default(self):
         self.set("ttl_seconds", 60)
@@ -363,7 +363,7 @@ class Weaker(Deployment):
         result, _, _ = self.set("on_agent_access", "warn", confirm_weaker=True)
         self.assertEqual(result["weaker"], ["on_agent_access: refuse to warn"])
         self.assertEqual(len(self.answered), 1)
-        body = self.changes()[-1].body
+        body = self._changes()[-1].body
         self.assertEqual((body["weaker"], body["confirmed"]), (["on_agent_access: refuse to warn"], True))
 
     def test_without_a_terminal_the_answer_is_no(self):
@@ -446,7 +446,7 @@ class Signed(Deployment):
         signed = verify_signed(envelope, load_private_key_file(self.key).public_key())
         self.assertTrue(signed.tool_specs["tool_a"]["irreversible"])
         self.assertTrue(private(self.dir / "constitution.signed.json"))
-        body = self.changes()[-1].body
+        body = self._changes()[-1].body
         self.assertEqual((body["signed"], body["constitution_hash"]), (True, signed.digest))
         self.assertEqual({f["role"] for f in body["files"]}, {"rules", "constitution"})
 
@@ -469,8 +469,9 @@ class Signed(Deployment):
     def test_undo_of_a_signed_change_needs_the_key(self):
         before = (self.dir / "constitution.signed.json").read_bytes()
         self.signed("tool_specs.tool_a.irreversible", True)
+        confirm = self.confirm()
         with self.assertRaisesRegex(ConfigChangeError, "principal_key_needed"):
-            quiet(config_set.undo, self.proxy, confirm=self.confirm(), environ={})
+            quiet(config_set.undo, self.proxy, confirm=confirm, environ={})
         quiet(config_set.undo, self.proxy, key_path=str(self.key), confirm=self.confirm(), confirm_weaker=True,
               environ={})
         self.assertEqual((self.dir / "constitution.signed.json").read_bytes(), before)
@@ -490,7 +491,7 @@ class Undo(Deployment):
         self.assertEqual(self.proxy.read_bytes(), first)
         self.undo()
         self.assertEqual(self.proxy.read_bytes(), changed)
-        self.assertEqual([e.body["command"] for e in self.changes()], ["setup", "set", "undo", "undo"])
+        self.assertEqual([e.body["command"] for e in self._changes()], ["setup", "set", "undo", "undo"])
 
     def test_undo_that_weakens_needs_the_flag(self):
         self.set("ttl_seconds", 60)

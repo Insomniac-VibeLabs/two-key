@@ -52,7 +52,7 @@ class Workspace(unittest.TestCase):
             f"upstream:\n  command: [server]\n  schema_digest: {DIGEST}\n"
             "  env: {TOKEN: {env: UPSTREAM_SECRET_VAR}, LEVEL: info-literal-value}\n" + extra, encoding="utf-8")
 
-    def files(self):
+    def _files(self):
         return sorted(p.name for p in self.dir.iterdir())
 
     @property
@@ -62,7 +62,7 @@ class Workspace(unittest.TestCase):
 
 class Show(Workspace):
     def test_shows_the_effective_settings_without_values_that_could_be_secret(self):
-        before = self.files()
+        before = self._files()
         code, out, _ = run("config", "show", "--config", self.proxy)
         self.assertEqual(code, 0)
         shown = json.loads(out)
@@ -73,7 +73,7 @@ class Show(Workspace):
         self.assertNotIn("info-literal-value", out)
         self.assertEqual(shown["upstream"]["check_paths"], [])
         self.assertEqual(shown["judges"][0]["id"], "j1")
-        self.assertEqual(self.files(), before, "show wrote a file, or opened the ledger")
+        self.assertEqual(self._files(), before, "show wrote a file, or opened the ledger")
 
     def test_a_scanner_variable_is_never_shown(self):
         self.write_proxy("scan: {type: command, command: [/bin/true], env: {SCAN_PW: scanner-secret-value}}\n")
@@ -98,11 +98,11 @@ class Check(Workspace):
         return {level for level, _ in found}
 
     def test_a_good_setup_has_no_failure_and_writes_nothing(self):
-        before = self.files()
+        before = self._files()
         found = self.check()
         self.assertNotIn(config_cmd.FAIL, self.levels(found), found)
         self.assertTrue(any("signed by the principal key" in text for _, text in found))
-        self.assertEqual(self.files(), before, "check wrote a file, or opened the ledger")
+        self.assertEqual(self._files(), before, "check wrote a file, or opened the ledger")
 
     def test_an_unset_variable_fails_and_the_value_is_never_printed(self):
         found = self.check({})

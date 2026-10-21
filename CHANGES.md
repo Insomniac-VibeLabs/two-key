@@ -4260,3 +4260,7 @@ live yet; the maintainer decides when GrokBot runs it.
   imports of names the module already imports (PYL-W0404, `test_ledger_error_cap.py`, `test_token_lifetime.py`,
   `test_same_agent_rule.py`, `test_mcp_draft.py`) and a one-item unpacking of a list it could not size
   (PYL-W0632, `test_b5_local_proxy.py`). The duplicate imports are gone and the test checks the list's length.
+- SonarCloud's twelve open findings on the draft pull request, all in tests: exception tests that built their
+  arguments inside the `assertRaises` block now build them first (S5915; `test_key_passphrase.py`,
+  `test_config_set.py`, `test_upstream_paths.py`), two `TestCase` helpers are private (`_files`, `_changes`), and
+  `test_live_harness.py` uses `assertIn`.
