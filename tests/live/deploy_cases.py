@@ -43,7 +43,7 @@ def sha_file(path: Path) -> str | None:
 def run_cli(ctx, args, *, answer: str | None = None):
     """One CLI call. `answer` types that line on a pseudo-terminal; without it there is no terminal at all."""
     cmd = [sys.executable, "-m", "two_key", *map(str, args)]
-    kw = dict(cwd=ctx["pkg"], capture_output=True, text=True, env=ctx["env"], timeout=300)
+    kw = dict(cwd=ctx["pkg"], capture_output=True, text=True, env=ctx["env"], timeout=300, check=False)
     if answer is None:
         r = subprocess.run(cmd, stdin=subprocess.DEVNULL, **kw)  # nosec B603
     else:
@@ -296,7 +296,8 @@ def run(ctx) -> dict:
 def proxy_start(ctx, config: Path) -> dict:
     """`mcp-proxy` on a deployment's config with no input: it checks, says "serving" (or why not), and exits."""
     r = subprocess.run([sys.executable, "-m", "two_key", "mcp-proxy", "--config", str(config)], cwd=ctx["pkg"],  # nosec
-                       capture_output=True, text=True, env=ctx["env"], timeout=120, stdin=subprocess.DEVNULL)
+                       capture_output=True, text=True, env=ctx["env"], timeout=120, stdin=subprocess.DEVNULL,
+                       check=False)
     ctx["log"]("cli", args=["mcp-proxy", str(config)], rc=r.returncode, stdout=r.stdout[-1000:],
                stderr=r.stderr[-3000:], tty=False)
     return {"rc": r.returncode, "stdout": r.stdout[-2000:], "stderr": r.stderr[-4000:], "facts": {}}

@@ -681,7 +681,7 @@ def write_outbox(role, rnd):
 # ---------------------------------------------------------------- setup: keys, draft, review, sign, configs
 def cli(*args, env=None, stdin=None):
     r = subprocess.run([sys.executable, "-m", "two_key", *args], cwd=PKG, capture_output=True, text=True,  # nosec
-                       env=env, timeout=300, stdin=stdin)
+                       env=env, timeout=300, stdin=stdin, check=False)
     log("cli", args=[a if len(a) < 300 else a[:80] + "..." for a in args], rc=r.returncode,
         stdout=r.stdout[-4000:], stderr=r.stderr[-4000:])
     return r
@@ -1040,7 +1040,9 @@ async def run_two_proxies(results, config):
     from mcp.client.stdio import stdio_client
     params = StdioServerParameters(command=sys.executable, args=["-m", "two_key", "mcp-proxy", "--config",
                                                                  str(config)], env=base_env(), cwd=str(PKG))
-    case = next(c for c in CASES if c["kind"] == "twoproxy")
+    case = next((c for c in CASES if c["kind"] == "twoproxy"), None)
+    if case is None:
+        raise SystemExit("no twoproxy case in cases.jsonl")
     CURRENT["case"], CURRENT["step"] = case["id"], 0
     log("case_start", case=case["id"], case_kind="twoproxy")
     calls = []
@@ -1188,7 +1190,7 @@ def sabotage_all():
         if sabotage.PATCHES[name].get("needs_non_root") and hasattr(os, "geteuid") and os.geteuid() == 0:
             rows.append((name, "skipped", "needs a non-root account: the commands it weakens refuse to run as root"))
             continue
-        r = subprocess.run([sys.executable, str(HERE / "harness.py"), "--sabotage", name], capture_output=True,  # nosec
+        r = subprocess.run([sys.executable, str(HERE / "harness.py"), "--sabotage", name], capture_output=True, check=False,  # nosec
                            text=True, timeout=3600)
         res = json.loads((HERE / "selftest" / f"sabotage_{name}" / "results.json").read_text()) \
             if r.returncode == 0 else None
@@ -1218,7 +1220,7 @@ def start_sabotage():
     if BASE.exists():
         shutil.rmtree(BASE)
     sabotage.apply(OPTS.sabotage, REPO, PKG)
-    where = subprocess.run([sys.executable, "-c", "import two_key; print(two_key.__file__)"], cwd=PKG,  # nosec
+    where = subprocess.run([sys.executable, "-c", "import two_key; print(two_key.__file__)"], cwd=PKG, check=False,  # nosec
                            capture_output=True, text=True, env=base_env(credentials=False)).stdout.strip()
     if not where.startswith(str(PKG)):
         raise SystemExit(f"--sabotage: the proxies would run {where!r}, not the copy in {PKG}")
