@@ -80,6 +80,13 @@ class ClamdHandler(socketserver.BaseRequestHandler):
             data += recv_exact(sock, size)
             if len(data) > server.limit:
                 sock.sendall(b"INSTREAM size limit exceeded. ERROR\0")
+                # Read what the client is still sending before closing: on Windows, a socket closed with
+                # unread data resets the connection, and the reset can discard the reply before it is read.
+                sock.shutdown(socket.SHUT_WR)
+                sock.settimeout(5)
+                with contextlib.suppress(OSError):
+                    while sock.recv(65536):
+                        pass
                 return
         server.streams.append(data)
         if server.hang:

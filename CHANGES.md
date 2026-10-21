@@ -123,6 +123,7 @@
 - [DeepSource runs the Python analyzer, and on `working` — 2026-10-20](#deepsource-runs-the-python-analyzer-and-on-working--2026-10-20)
 - [Docs review: README from main, clearer diagrams, `config show` described correctly — 2026-10-21](#docs-review-readme-from-main-clearer-diagrams-config-show-described-correctly--2026-10-21)
 - [CI: each workflow runs once per change — 2026-10-21](#ci-each-workflow-runs-once-per-change--2026-10-21)
+- [A Windows-only test failure in the clamd tests — 2026-10-21](#a-windows-only-test-failure-in-the-clamd-tests--2026-10-21)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4095,3 +4096,16 @@ No change to any check, only to when it runs. Tests, build, bandit, coverage, Co
 a change to `working` with a pull request open: once for the push, once for the pull request (59 checks on
 PR #30). They now run on a pull request, and on a push only to `main`, `PyPI` and `testpypi`. Job names are
 unchanged, so required checks on main still match. Without an open pull request, a push to `working` runs no CI.
+
+## A Windows-only test failure in the clamd tests — 2026-10-21
+
+- `tests/test_scanners.py` `Clamd.test_could_not_finish_is_flagged`
+  failed once on Windows with Python 3.11 (`unavailable` instead of
+  `flagged`, `limits_exceeded`). The fake clamd replied at its size limit
+  and closed while the client was still sending; on Windows that closes
+  with a reset, which can discard the reply before it is read. The fake
+  now reads the rest of the stream before it closes, as a server that
+  lingers does. Two-Key's own code is unchanged. Against a real clamd
+  that closes the same way, Windows can report such a file as
+  `unavailable` rather than `limits_exceeded`; the signed stance and the
+  judges then decide on `unavailable`.
