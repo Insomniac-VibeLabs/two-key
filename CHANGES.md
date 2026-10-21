@@ -4089,6 +4089,7 @@ No change to any check, key or ledger entry.
 - docs/SIEM.md: the diagram no longer draws `siem-verify` reaching into the ledger; a SIEM never does.
   The cursor now hangs off the sender (it saves it and resumes from it, reading missed entries from the ledger),
   and the sender is labelled as formatting JSON or CEF for the collector and the webhook.
+  The export section now says `siem-export` takes `--format cef` as well as `--schema`.
 - docs/SETTINGS.md (from `two_key/settings.py`): `config show` prints defaults filled in, not where a value
   came from, and `config check` does not run the `on_agent_access` check or compare `schema_digest`.
 

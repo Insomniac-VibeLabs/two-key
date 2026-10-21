@@ -234,6 +234,8 @@ two-key siem-verify --key principal.pem --ledger ./ledger \
   --events events.jsonl --require-complete
 ```
 
+`--schema` and `--format` take the same values as in `proxy.yaml` (`--format cef` maps the native schema only).
+
 `siem-export` opens the ledger the way `two-key audit` does, so the chain, the
 signed head, and both witness pins are checked first; a ledger that does not
 verify is not exported. `--out` creates a new owner-only file and refuses an
