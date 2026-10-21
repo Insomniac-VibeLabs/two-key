@@ -401,7 +401,7 @@ class Ledger:
                         os.close(self.fd)
                     self.fd = None
                 if self.held:
-                    ledger._lock.release()
+                    ledger._lock.release()  # skipcq: PYL-W0212 - the guard belongs to this ledger and releases the ledger's own lock
                     self.held = False
 
         return _Guard()
@@ -413,6 +413,15 @@ class Ledger:
     @property
     def head_path(self) -> Path:
         return self.path / "head.json"
+
+    def anchor_path(self) -> Path:
+        """The monotonic head anchor (``anchor_path`` at construction, or the default beside the ledger key)."""
+        return self._anchor_path
+
+    def exclusive(self):
+        """Hold the ledger's write lock, against this process and others, for the ``with`` block. A backup
+        copies the ledger's files under it so it never sees a half-written entry."""
+        return self._exclusive()
 
     def fingerprint_key_path(self) -> Path:
         """Per-install HMAC key for credential fingerprints, beside the ledger key, outside the ledger."""
@@ -704,7 +713,8 @@ class Ledger:
         self._append_unlocked("witness_pinned", body)
         self._checkpoint_unlocked(self._witness)
 
-    def _hash(self, seq: int, prev: str, kind: str, body: dict) -> str:
+    @staticmethod
+    def _hash(seq: int, prev: str, kind: str, body: dict) -> str:
         return canonical_hash({"seq": seq, "prev": prev, "kind": kind, "body": body})
 
     def append_bounded(self, kind: str, body: dict) -> Entry:

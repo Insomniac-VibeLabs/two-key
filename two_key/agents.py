@@ -362,7 +362,8 @@ class MonitoredAgent:
         return f"{self.base_url}/chat/completions", body
 
 
-    def _deoptimize(self, body: dict) -> dict | None:
+    @staticmethod
+    def _deoptimize(body: dict) -> dict | None:
         """One 400 fallback. Does not accept a proposal the local parser rejects."""
         out = {k: v for k, v in body.items() if k not in ("reasoning_effort", "store")}
         fmt = out.get("response_format") or {}

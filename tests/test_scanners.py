@@ -272,7 +272,7 @@ class Icap(unittest.TestCase):
         self.assertIn("X-Two-Key-Tool: send_email", lines)
         self.assertIn("X-Two-Key-Part: file:attachments[0].content", lines)
         offsets = dict(item.split("=") for item in
-                       next(x for x in lines if x.startswith("Encapsulated:"))[14:].split(", "))
+                       next(x for x in lines if x.startswith("Encapsulated:"))[14:].split(", "))  # skipcq: PTC-W0063 - test only
         http_head = rest[int(offsets["req-hdr"]):int(offsets["req-body"])]
         self.assertTrue(http_head.startswith(b"POST /two-key/send_email/"))
         self.assertTrue(http_head.endswith(b"Content-Length: 5\r\n\r\n"))

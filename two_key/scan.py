@@ -564,7 +564,8 @@ class Scanner:
         return rec
 
     # -- one call ------------------------------------------------------------------------------------------
-    def _occurrences(self, arguments: Any, item: FileArg) -> list[tuple[str, Any, list]]:
+    @staticmethod
+    def _occurrences(arguments: Any, item: FileArg) -> list[tuple[str, Any, list]]:
         """Each value at ``item.path``: (concrete name, value, location to replace it). A missing key is no
         file; a value of the wrong type on the way (a list where a name is expected) is unreadable."""
         found: list[tuple[str, Any, list]] = []
@@ -593,7 +594,8 @@ class Scanner:
         walk(arguments, item.segments(), "", None, None)
         return found
 
-    def _decode(self, value: Any, kind: str) -> bytes:
+    @staticmethod
+    def _decode(value: Any, kind: str) -> bytes:
         if not isinstance(value, str):
             raise _Unreadable("not_a_string")
         text = value.replace("\r", "").replace("\n", "")
@@ -608,7 +610,8 @@ class Scanner:
             raise _Unreadable(f"bad_{kind}") from None
         return data
 
-    def read_confined(self, value: Any, folder: str, limit: int) -> bytes:
+    @staticmethod
+    def read_confined(value: Any, folder: str, limit: int) -> bytes:
         """The file at ``value``, which must be an absolute path inside ``folder`` with no link or junction
         below the folder. Opened without following a link; a regular file of at most ``limit`` bytes (``_Over``
         past it: nothing beyond ``limit`` is kept, and a file whose size says it is larger is not read)."""

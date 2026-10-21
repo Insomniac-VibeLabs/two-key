@@ -34,7 +34,8 @@ class AnthropicJudge(LLMJudge):
         h["anthropic-version"] = ANTHROPIC_VERSION
         return h
 
-    def _content(self, user: str) -> list:
+    @staticmethod
+    def _content(user: str) -> list:
         if _CONSTITUTION_END in user:
             trusted, rest = user.split(_CONSTITUTION_END, 1)
             trusted += _CONSTITUTION_END

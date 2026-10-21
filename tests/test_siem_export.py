@@ -60,7 +60,7 @@ class Fixture(unittest.TestCase):
         result = write(self.ledger, path, **kw)
         return path, result
 
-    def events_of(self, path):
+    def events_of(self, path):  # skipcq: PYL-R0201 - test only
         return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
     def cli(self, *args):
@@ -116,7 +116,7 @@ class Export(Fixture):
 
     def test_the_lines_are_a_generator_that_does_not_hold_the_ledger(self):
         produced = lines(self.ledger)
-        self.assertTrue(next(produced).startswith("{"))
+        self.assertTrue(next(produced).startswith("{"))  # skipcq: PTC-W0063 - test only
 
 
 class Verify(Fixture):
@@ -130,7 +130,7 @@ class Verify(Fixture):
     def test_an_edited_field_is_caught(self):
         path, _ = self.exported()
         events = self.events_of(path)
-        decision = next(e for e in events if e["kind"] == "decision")
+        decision = next(e for e in events if e["kind"] == "decision")  # skipcq: PTC-W0063 - test only
         decision["reason"] = "forged_allow"
         self.rewrite(path, events)
         problems = verify(self.ledger, path)["problems"]
@@ -237,7 +237,7 @@ class Verify(Fixture):
         with self.assertRaises(ExportError):
             verify(self.ledger, self.dir / "nope.jsonl")
 
-    def rewrite(self, path, events):
+    def rewrite(self, path, events):  # skipcq: PYL-R0201 - test only
         path.write_text("\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8", newline="\n")
 
 

@@ -441,7 +441,7 @@ def write(base, cases, results, entries, effects, log, pending=(), siem=()):
            "agree word for word. A repeat points to memory only when the request changed in a way the reply should "
            "show, or the reply names something only an earlier run had.", "",
            f"- Replies identical to an earlier run: {len(earlier)}"]
-    md += [f"  - {x['role']} {x['case']} step {x.get('n', 0)}: same as {', '.join(x.get('matches') or [])[:200]}"
+    md += [f"  - {x['role']} {x['case']} step {x.get('n', 0)}: same as {', '.join(x.get('matches') or [])[:200]}"  # skipcq: PY-W0800 - test only
            for x in earlier]
     md += [f"- Requests both judges answered word for word alike: {len(alike)} of {both}"
            + (f" ({', '.join(alike)[:300]})" if alike else "")

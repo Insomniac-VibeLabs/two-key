@@ -1661,7 +1661,7 @@ def main():
         d.mkdir(parents=True, exist_ok=True)
     ingest_batches()
     rnd = 1 + len(list(OUT.glob("BATCH_*.txt")))
-    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip()  # nosec
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip()  # nosec  # skipcq: PYL-W1510 - test only
     log("pass_start", round=rnd, repo_head=head, selftest=OPTS.selftest, sabotage=OPTS.sabotage,
         python=sys.version.split()[0], platform=sys.platform, root=hasattr(os, "geteuid") and os.geteuid() == 0)
     prose, digest = setup_state()

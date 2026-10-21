@@ -132,7 +132,7 @@ class StartupRefusals(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(TwoKeyConfigError, "^Path B needs a hard deadline"):
                 engine(tmp, [FixedJudge("a", "yes")], QuorumPolicy(required_yes=1, timeout_seconds=None))
-        with self.assertRaisesRegex(JudgeConfigError, "timeout_seconds must be a positive number \(a hard deadline\)"):
+        with self.assertRaisesRegex(JudgeConfigError, "timeout_seconds must be a positive number \(a hard deadline\)"):  # skipcq: PY-W0073 - test only
             load_config({"judges": [{"id": "l", "type": "ollama", "model": "m"}],
                          "quorum": {"required_yes": 1, "timeout_seconds": None}})
 

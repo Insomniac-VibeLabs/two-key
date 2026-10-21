@@ -50,7 +50,7 @@ class EncodedOnce(unittest.TestCase):
                          verify_signed(env, key.public_key()), [FixedJudge("a", "yes")], private_key=key,
                          quorum=QuorumPolicy(required_yes=1), allow_test_doubles=True, monitored_agent=TEST_AGENT)
 
-    def count_arg_encodings(self, fn, args):
+    def count_arg_encodings(self, fn, args):  # skipcq: PYL-R0201 - test only
         real = canonical_mod.canonical_bytes
         seen = []
 

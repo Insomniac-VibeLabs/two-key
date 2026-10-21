@@ -22,14 +22,14 @@ YAML_BLOCKS = re.findall(r"```yaml\n(.*?)```", SECTION, re.S)
 
 class WorkedExample(unittest.TestCase):
     def test_rules_example_signs(self):
-        doc = load_yaml(next(b for b in YAML_BLOCKS if "tool_specs:" in b))
+        doc = load_yaml(next(b for b in YAML_BLOCKS if "tool_specs:" in b))  # skipcq: PTC-W0063 - test only
         env = sign_constitution("Pay approved vendors.", doc["hard_rules"], generate_private_key(), doc["tool_specs"],
                                 fields=doc.get("fields"))
         self.assertEqual(sorted(env["signed"]["tool_specs"]), ["pay_vendor", "read_report"])
         self.assertEqual(env["format"], "two-key-constitution-v3")        # po_matched is a caller-supplied fact
 
     def test_proxy_example_parses(self):
-        text = next(b for b in YAML_BLOCKS if "upstream:" in b).replace('"sha256:..."', '"sha256:' + "a" * 64 + '"')
+        text = next(b for b in YAML_BLOCKS if "upstream:" in b).replace('"sha256:..."', '"sha256:' + "a" * 64 + '"')  # skipcq: PTC-W0063 - test only
         data = load_yaml(text)
         windows = os.name == "nt"
         if windows:

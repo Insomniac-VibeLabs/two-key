@@ -43,7 +43,7 @@ class Compare(unittest.TestCase):
         os.environ["OPTIN_AGENT_KEY"] = "agent-key-K"
         self.addCleanup(os.environ.pop, "OPTIN_AGENT_KEY", None)
 
-    def verdict(self, agent, j, flag):
+    def verdict(self, agent, j, flag):  # skipcq: PYL-R0201 - test only
         a = AgentDeclaration.from_mapping(agent).resolve(fp_key=FP)
         return compare(a, judge_identity(j, FP), allow_same_model_distinct_tenant=flag)
 

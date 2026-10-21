@@ -47,7 +47,7 @@ class B5(unittest.TestCase):
         os.environ["B5_AGENT_KEY"] = "agent-key-K"
         self.addCleanup(os.environ.pop, "B5_AGENT_KEY", None)
 
-    def resolved(self, agent: dict, j):
+    def resolved(self, agent: dict, j):  # skipcq: PYL-R0201 - test only
         return AgentDeclaration.from_mapping(agent).resolve(fp_key=FP), judge_identity(j, FP)
 
     def verdict(self, agent: dict, j) -> str | None:

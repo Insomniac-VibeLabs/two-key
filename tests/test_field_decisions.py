@@ -40,7 +40,7 @@ LOOKUP = {"irreversible": False, "data_class_floor": "public", "payload": [{"jso
 MARKED = dict(LOOKUP, fields={"ticket_verified": "not_applicable"})
 
 
-def sign_with(specs, fields=FIELDS, rules=RULES, **kw):
+def sign_with(specs, fields=FIELDS, rules=RULES, **kw):  # skipcq: PYL-W0102 - test only
     return sign_constitution("p", rules, generate_private_key(), specs, fields=fields, **kw)
 
 
@@ -92,7 +92,7 @@ class Format(unittest.TestCase):
         with self.assertRaisesRegex(ConstitutionError, "need a v3"):
             sign_with({"reset_password": RESET, "lookup_kb": MARKED}, envelope_format="v2")
 
-    def _resigned(self, signed, fmt):
+    def _resigned(self, signed, fmt):  # skipcq: PYL-R0201 - test only
         key = generate_private_key()
         return key, {"format": fmt, "signed": signed, "signature": sign(key, canonical_bytes(signed)),
                      "fingerprint": "x"}

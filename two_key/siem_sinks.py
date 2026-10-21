@@ -388,7 +388,7 @@ class WebhookSink:
         finally:
             connection.close()
 
-    def close(self) -> None:
+    def close(self) -> None:  # skipcq: PYL-R0201 - part of the sink interface; a webhook sink holds nothing to close
         return None
 
 

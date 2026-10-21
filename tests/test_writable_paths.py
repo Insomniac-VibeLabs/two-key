@@ -193,7 +193,7 @@ class AtStart(Fixture):
         self.con = verify_signed(sign_constitution("p", RULES, self.key, SPECS), self.key.public_key())
         self.n = 0
 
-    def start(self, judges=ONE, quorum=None, **kw):
+    def start(self, judges=ONE, quorum=None, **kw):  # skipcq: PYL-W0102 - test only
         self.n += 1
         self.ledger = Ledger(self.dir / f"ledger{self.n}", self.key)
         err = io.StringIO()
@@ -206,7 +206,7 @@ class AtStart(Fixture):
                 self.err = err.getvalue()
         return tk
 
-    def high(self):
+    def high(self):  # skipcq: PYL-R0201 - test only
         return QuorumPolicy.high_assurance(required_yes=2, timeout_seconds=10)
 
     @NO_RUNTIME

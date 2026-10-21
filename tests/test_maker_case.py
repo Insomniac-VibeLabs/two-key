@@ -78,7 +78,7 @@ class OldNames(unittest.TestCase):
 
     def test_vendor_keyword_is_refused(self):
         with self.assertRaisesRegex(TypeError, "vendor"):
-            FixedJudge("a", "yes", vendor="OpenAI")
+            FixedJudge("a", "yes", vendor="OpenAI")  # skipcq: PYL-E1123 - test only
         with self.assertRaisesRegex(TypeError, "vendor"):
             OpenAICompatibleJudge("o", "p", "m", "https://api.example.com/v1", vendor="xai")
         self.assertFalse(hasattr(FixedJudge("a", "yes", maker="OpenAI"), "vendor"))

@@ -4374,3 +4374,20 @@ Test code only (`tests/live/`); nothing in `two_key/` changes.
 - DeepSource on PR #30: no mutable default in `tests/test_constitution_serial.py` (PYL-W0102), a `next()` with a
   default in the tamper step (PTC-W0063), and the two stand-in MCP servers' `logging.disable` marked as a test double
   (PY-A6006, a genuine false positive: neither is a deployed service).
+
+## DeepSource: the findings on main, fixed or marked — 2026-10-21
+
+DeepSource's badge counts main (95 issues from its first Python scan of main). Twenty-six were already fixed on
+`working`. The rest:
+
+- Fixed in `two_key/`, with no change in behaviour: `backup.py` uses the ledger's new public `exclusive()` (the
+  write lock) and `anchor_path()` instead of its private names (PYL-W0212); `constitution.py` checks duplicate
+  paths with a small `_PathSet` per tool instead of a function defined inside the loop (PYL-W0640); `quorum.py`
+  and `mcp_proxy/draft.py` give `next()` a default and say what is missing (PTC-W0063); six methods that do not
+  use `self` are static methods (PYL-R0201: `Ledger._hash`, `MonitoredAgent._deoptimize`, `Scanner._occurrences`,
+  `Scanner._decode`, `Scanner.read_confined`, `AnthropicJudge._content`).
+- Marked as genuine false positives, with the reason on the line: the sink interface's `close()` on the webhook
+  sink, the `LLMJudge._deoptimize` hook the judges override, `CapabilityVerifier.issue` (a verifier refuses to
+  mint) and the issuer's override of it, and the ledger's lock guard releasing its own lock.
+- Findings in test code are marked `skipcq: ... - test only`. Test code is not part of the installed package and
+  nothing in `two_key/` imports it.

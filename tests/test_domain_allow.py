@@ -40,7 +40,7 @@ SPECS = {"send_notice": {"irreversible": False, "data_class_floor": "personal",
 NOTICE = {"tool": "send_notice", "data_class": "personal", "irreversible": False}
 
 
-def signed(specs=SPECS, rules=RULES, **kw):
+def signed(specs=SPECS, rules=RULES, **kw):  # skipcq: PYL-W0102 - test only
     return sign_constitution("p", rules, generate_private_key(), specs, **kw)
 
 

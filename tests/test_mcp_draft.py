@@ -148,9 +148,9 @@ class Drafting(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_MCP, "needs the mcp extra")
 class CommandLine(unittest.TestCase):
-    def run_cli(self, *argv):
+    def run_cli(self, *argv):  # skipcq: PYL-R0201 - test only
         env = child_env(PYTHONPATH=str(ROOT))
-        return subprocess.run([sys.executable, "-m", "two_key", "mcp-draft-specs", *argv],  # nosec B603
+        return subprocess.run([sys.executable, "-m", "two_key", "mcp-draft-specs", *argv],  # nosec B603  # skipcq: PYL-W1510 - test only
                               capture_output=True, text=True, env=env, timeout=120)
 
     def test_draft_then_digest_of_the_signed_constitution(self):

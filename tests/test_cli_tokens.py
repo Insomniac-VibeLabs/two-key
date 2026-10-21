@@ -184,7 +184,7 @@ class CliOmittedClaims(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _run(self, argv):
+    def _run(self, argv):  # skipcq: PYL-R0201 - test only
         judges = [FixedJudge("a", "yes", provider="p0"), FixedJudge("b", "yes", provider="p1")]
         out, err = io.StringIO(), io.StringIO()
         with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=2))), \

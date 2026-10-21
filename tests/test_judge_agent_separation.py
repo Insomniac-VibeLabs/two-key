@@ -417,7 +417,7 @@ def _yes_transport(calls, bodies):
 class ConfiguredCredentialIsCompared(Env):
     """A placeholder ``agent_session`` must not hide the key named in the config."""
 
-    def cloud(self, calls, bodies, key_var="SEP_JUDGE_KEY"):
+    def cloud(self, calls, bodies, key_var="SEP_JUDGE_KEY"):  # skipcq: PYL-R0201 - test only
         return OpenAICompatibleJudge(
             "c", "openai", "gpt-4o", "https://api.openai.com/v1", EnvApiKey(key_var),
             transport=_yes_transport(calls, bodies))

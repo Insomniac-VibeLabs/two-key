@@ -24,7 +24,7 @@ class SharedLedger(unittest.TestCase):
         self.a = Ledger(self.path, self.key)
         self.b = Ledger(self.path, self.key)
 
-    def write(self, ledger, n):
+    def write(self, ledger, n):  # skipcq: PYL-R0201 - test only
         ledger.append("note", {"n": n})
         ledger.checkpoint()
 

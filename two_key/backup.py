@@ -718,7 +718,7 @@ def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
     except LedgerError as e:
         raise BackupError(f"backup_refused: {e}") from None
     try:
-        with ledger._exclusive():
+        with ledger.exclusive():
             groups = _snapshot_files(ledger, principal_path)
     except LedgerError as e:       # a BackupError from the snapshot is not a LedgerError and passes through
         raise BackupError(f"backup_refused: {e}") from None
@@ -792,7 +792,7 @@ def _snapshot_files(ledger, principal_path) -> dict:
     if not os.path.lexists(cap_path) or not os.path.lexists(fp_path):
         raise BackupError("backup_refused: the capability key or the fingerprint key is missing. "
                           "Start TwoKey once so both exist, then export. Export does not create them.")
-    anchor = _read_file(ledger._anchor_path, MAX_BUNDLE_BYTES)
+    anchor = _read_file(ledger.anchor_path(), MAX_BUNDLE_BYTES)
     return {
         "principal": {
             "principal.pem": _read_file(Path(principal_path), MAX_BUNDLE_BYTES),

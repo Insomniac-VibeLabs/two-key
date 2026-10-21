@@ -221,6 +221,19 @@ def _require_field_decisions(specs: Mapping, rules: list) -> None:
             f"(name: not_applicable under the tool's fields:): {shown}")
 
 
+class _PathSet:
+    """The paths one tool spec declares. A path given twice is refused."""
+
+    def __init__(self) -> None:
+        self.seen: set[str] = set()
+
+    def take(self, path: str, where: str) -> str:
+        if path in self.seen:
+            raise ConstitutionError(f"{where}: duplicate path")
+        self.seen.add(path)
+        return path
+
+
 def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: list, take) -> dict:
     """``tool_specs.<tool>.fields``: declared field name -> mapping, or ``not_applicable`` for a field this tool
     does not carry (it gets the signed default). Adds each path to ``control_paths``.
@@ -305,13 +318,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
             )
         if "deny_unmapped" in spec and not isinstance(spec["deny_unmapped"], bool):
             raise ConstitutionError(f"tool_specs.{tool}.deny_unmapped: expected a boolean")
-        seen_paths: set[str] = set()
-
-        def take(path: str, where: str) -> str:
-            if path in seen_paths:
-                raise ConstitutionError(f"{where}: duplicate path")
-            seen_paths.add(path)
-            return path
+        take = _PathSet().take
 
         amount = spec.get("amount")
         amount_out = None

@@ -75,7 +75,7 @@ class VmFaultExceptionCap(unittest.TestCase):
         mark = "ZQXVM"
 
         class BoomAction:
-            def field_value(self, name):
+            def field_value(self, name):  # skipcq: PYL-R0201 - test only
                 raise RuntimeError(mark + "y" * (5 << 20))
 
         vm = PolicyVM([(Op.LOAD, "tool"), (Op.PASS,)])
@@ -344,7 +344,7 @@ class CredentialErrorTypeName(unittest.TestCase):
 
     HUGE = "C" * 5000
 
-    def _raiser(self, cls):
+    def _raiser(self, cls):  # skipcq: PYL-R0201 - test only
         def fn():
             raise cls("secret-free message")
         return fn

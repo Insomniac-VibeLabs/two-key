@@ -258,7 +258,7 @@ class Allowlist(Fixture):
 
 
 class Schemas(Fixture):
-    def event(self, kind="decision", fields=None):
+    def event(self, kind="decision", fields=None):  # skipcq: PYL-R0201 - test only
         return Event(seq=7, entry_hash="h" * 64, prev="p" * 64, kind=kind,
                      fields=fields if fields is not None else {"allowed": True, "reason": "both_paths_allow",
                                                                "tool": "search", "agent_id": "agent-7"},
@@ -331,7 +331,7 @@ class Schemas(Fixture):
 
 
 class Delivering(Fixture):
-    def config(self, *sinks, **kw):
+    def config(self, *sinks, **kw):  # skipcq: PYL-R0201 - test only
         return SiemConfig(sinks=tuple(sinks), **kw)
 
     def drain(self, tk, sink, want):
@@ -555,7 +555,7 @@ class WithoutSiem(Fixture):
 
 
 class Plaintext(Fixture):
-    def plain(self, label="plain"):
+    def plain(self, label="plain"):  # skipcq: PYL-R0201 - test only
         sink = ListSink(label=label)
         sink.plaintext = True
         return sink

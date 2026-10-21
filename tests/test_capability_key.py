@@ -107,7 +107,7 @@ class NoSilentRegeneration(unittest.TestCase):
                 with self.assertRaisesRegex(TwoKeyConfigError, "^capability_key_unpinned"):
                     engine(Path(tmp, "l"), key)
 
-    def test_no_pin_needed_before_any_issuance(self):
+    def test_no_pin_needed_before_any_issuance(self):  # skipcq: PYL-R0201 - test only
         with tempfile.TemporaryDirectory() as tmp:
             key = generate_private_key()
             tk = engine(Path(tmp, "l"), key)
