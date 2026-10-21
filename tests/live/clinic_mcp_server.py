@@ -24,7 +24,8 @@ import mcp_types as types
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 
-logging.disable(logging.CRITICAL)
+# A stand-in upstream for the live harness: stdout carries MCP only, and its own log lines are noise in the run.
+logging.disable(logging.CRITICAL)  # skipcq: PY-A6006 - test double, not a deployed service; nothing to audit
 URL = os.environ.get("HARNESS_TOOL_URL", "http://127.0.0.1:9/call")
 POISONED = os.environ.get("LIVE_MCP_VARIANT") == "poisoned"
 

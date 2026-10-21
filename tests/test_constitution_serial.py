@@ -83,8 +83,9 @@ class Order(unittest.TestCase):
         self.dir = Path(tmp.name)
         self.key = generate_private_key()
 
-    def constitution(self, serial=None, rules=RULES):
-        return verify_signed(sign_constitution(PROSE, rules, self.key, SPECS, serial=serial), self.key.public_key())
+    def constitution(self, serial=None, rules=None):
+        return verify_signed(sign_constitution(PROSE, rules or RULES, self.key, SPECS, serial=serial),
+                             self.key.public_key())
 
     def start(self, constitution):
         with contextlib.redirect_stderr(io.StringIO()):

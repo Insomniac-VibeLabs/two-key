@@ -1345,7 +1345,9 @@ def run_tamper_cases(results):
             mid = len(lines) // 2
             rec = json.loads(lines[mid])
             blob = json.dumps(rec)
-            i = next(i for i, ch in enumerate(blob) if ch.isalnum() and i > len(blob) // 2)
+            i = next((i for i, ch in enumerate(blob) if ch.isalnum() and i > len(blob) // 2), None)
+            if i is None:
+                raise SystemExit(f"tamper {how}: no character to change in the middle entry")
             flipped = blob[:i] + ("0" if blob[i] != "0" else "1") + blob[i + 1:]
             lines[mid] = flipped + "\n"
             ent.write_text("".join(lines))

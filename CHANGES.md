@@ -4371,3 +4371,6 @@ Test code only (`tests/live/`); nothing in `two_key/` changes.
 - The scripted slow judge and slow ICAP server no longer print BrokenPipe when Two-Key has already given up.
 - `tests/test_live_harness.py` expects one free play per deployment; COVERAGE.md F27 is live (C44).
 - RELAY.md "Run 9x and 9y".
+- DeepSource on PR #30: no mutable default in `tests/test_constitution_serial.py` (PYL-W0102), a `next()` with a
+  default in the tamper step (PTC-W0063), and the two stand-in MCP servers' `logging.disable` marked as a test double
+  (PY-A6006, a genuine false positive: neither is a deployed service).
