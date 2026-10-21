@@ -22,29 +22,34 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 SIGNED, OPERATOR = "signed", "operator"
-FILES = ("proxy.yaml", "judges.yaml", "agents.yaml", "constitution.md", "hard_rules.yaml")
-TIER = {"proxy.yaml": OPERATOR, "judges.yaml": OPERATOR, "agents.yaml": OPERATOR,
-        "constitution.md": SIGNED, "hard_rules.yaml": SIGNED}
+PROXY_YAML = "proxy.yaml"
+JUDGES_YAML = "judges.yaml"
+AGENTS_YAML = "agents.yaml"
+RULES_YAML = "hard_rules.yaml"
+PROSE_MD = "constitution.md"
+FILES = (PROXY_YAML, JUDGES_YAML, AGENTS_YAML, PROSE_MD, RULES_YAML)
+TIER = {PROXY_YAML: OPERATOR, JUDGES_YAML: OPERATOR, AGENTS_YAML: OPERATOR,
+        PROSE_MD: SIGNED, RULES_YAML: SIGNED}
 FILE_NOTES = {
-    "proxy.yaml": "The MCP proxy's own settings (`two-key mcp-proxy --config proxy.yaml`). Read strictly: a repeated "
+    PROXY_YAML: "The MCP proxy's own settings (`two-key mcp-proxy --config proxy.yaml`). Read strictly: a repeated "
                   "key, a YAML merge key and an unknown key are refused. Relative paths are relative to this file.",
-    "judges.yaml": "The judges, the quorum policy, and the `monitored_agent:` block. `proxy.yaml` names this file. "
+    JUDGES_YAML: "The judges, the quorum policy, and the `monitored_agent:` block. `proxy.yaml` names this file. "
                    "Only the top-level keys `judges`, `quorum` and `monitored_agent` are accepted.",
-    "agents.yaml": "Monitored agents that Two-Key itself calls (`two_key.agents`), for the library and the command "
+    AGENTS_YAML: "Monitored agents that Two-Key itself calls (`two_key.agents`), for the library and the command "
                    "line. The MCP proxy does not read it, and `two-key config set` does not change it. Only the "
                    "top-level key `agents` is accepted.",
-    "constitution.md": "The prose the judges read.",
-    "hard_rules.yaml": "The rules Path A runs, the per-tool specs that say where Path A reads each value, and the "
+    PROSE_MD: "The prose the judges read.",
+    RULES_YAML: "The rules Path A runs, the per-tool specs that say where Path A reads each value, and the "
                        "custom fields. Signed together with `constitution.md`.",
 }
 
 
 # Keys ``two-key config set`` does not change: which files, keys and ledger Two-Key trusts. ``two-key setup``
 # writes them; moving one is a change of deployment, made by hand and then checked (docs/SETUP.md).
-NOT_SETTABLE = frozenset({("proxy.yaml", "constitution"), ("proxy.yaml", "keys"), ("proxy.yaml", "keys.principal"),
-                          ("proxy.yaml", "keys.passphrase_file"),
-                          ("proxy.yaml", "ledger"), ("proxy.yaml", "judges"), ("proxy.yaml", "witness_public_key"),
-                          ("proxy.yaml", "head_anchor"), ("constitution.md", "(the file)")})
+NOT_SETTABLE = frozenset({(PROXY_YAML, "constitution"), (PROXY_YAML, "keys"), (PROXY_YAML, "keys.principal"),
+                          (PROXY_YAML, "keys.passphrase_file"),
+                          (PROXY_YAML, "ledger"), (PROXY_YAML, "judges"), (PROXY_YAML, "witness_public_key"),
+                          (PROXY_YAML, "head_anchor"), (PROSE_MD, "(the file)")})
 
 
 @dataclass(frozen=True)
@@ -67,7 +72,7 @@ class Setting:
     @property
     def settable(self) -> bool:
         """Whether ``two-key config set`` changes it."""
-        return (self.file, self.key) not in NOT_SETTABLE and self.file != "agents.yaml"
+        return (self.file, self.key) not in NOT_SETTABLE and self.file != AGENTS_YAML
 
 
 def _rows(file: str, rows: list[tuple]) -> list[Setting]:
@@ -81,7 +86,7 @@ def _rows(file: str, rows: list[tuple]) -> list[Setting]:
 
 _HA_QUORUM = {"ha": "2"}
 
-PROXY = _rows("proxy.yaml", [
+PROXY = _rows(PROXY_YAML, [
     ("constitution", "required", "Path to the signed constitution (`constitution.signed.json`)."),
     ("keys", "required", "The key files."),
     ("keys.principal", "required", "Path to the principal private key, which signs the ledger head. Owner-only: a "
@@ -190,7 +195,10 @@ PROXY = _rows("proxy.yaml", [
     ("siem.sinks[webhook].label", "webhook:host:port", "A name for the sink in warnings."),
 ])
 
-JUDGES = _rows("judges.yaml", [
+# monitored_agent: exactly one of credential_env, credential: none, or username_env with password_env.
+_ONE_OF_THREE = "one of three"
+
+JUDGES = _rows(JUDGES_YAML, [
     ("judges", "required", "The Path B judges, at least one. Ids must be unique."),
     ("judges[].id", "required", "The judge's name in ballots and the ledger."),
     ("judges[].type", "required", "`openai_compatible`, `anthropic`, `gemini`, or `ollama`."),
@@ -270,12 +278,12 @@ JUDGES = _rows("judges.yaml", [
     ("monitored_agent.model", "required", "The agent's model."),
     ("monitored_agent.provider", "required", "A label, recorded and never compared."),
     ("monitored_agent.base_url", "required", "The agent's API address."),
-    ("monitored_agent.credential_env", "one of three", "Name of the environment variable holding the agent's key.",
+    ("monitored_agent.credential_env", _ONE_OF_THREE, "Name of the environment variable holding the agent's key.",
      {"secret": True}),
-    ("monitored_agent.credential", "one of three", "`none`, only for a keyless loopback or private agent."),
-    ("monitored_agent.username_env", "one of three", "With `password_env`, HTTP Basic over HTTPS.",
+    ("monitored_agent.credential", _ONE_OF_THREE, "`none`, only for a keyless loopback or private agent."),
+    ("monitored_agent.username_env", _ONE_OF_THREE, "With `password_env`, HTTP Basic over HTTPS.",
      {"secret": True}),
-    ("monitored_agent.password_env", "one of three", "With `username_env`.", {"secret": True}),
+    ("monitored_agent.password_env", _ONE_OF_THREE, "With `username_env`.", {"secret": True}),
     ("monitored_agent.tenant", "none", "A mapping of `organization`, `project`, `account`, `deployment`."),
     ("monitored_agent.tenant.organization", "none", "The tenant's organization id."),
     ("monitored_agent.tenant.project", "none", "The tenant's project id."),
@@ -285,7 +293,7 @@ JUDGES = _rows("judges.yaml", [
      "verified."),
 ])
 
-AGENTS = _rows("agents.yaml", [
+AGENTS = _rows(AGENTS_YAML, [
     ("agents", "required", "The monitored agents, at least one. Ids must be unique."),
     ("agents[].id", "required", "The agent's name."),
     ("agents[].type", "required", "`openai_compatible`, `anthropic`, `gemini`, or `ollama`."),
@@ -298,11 +306,11 @@ AGENTS = _rows("agents.yaml", [
     ("agents[].max_tokens", "800", "Reply length."),
 ])
 
-CONSTITUTION = _rows("constitution.md", [
+CONSTITUTION = _rows(PROSE_MD, [
     ("(the file)", "required", "The prose the judges read and Path B votes on. It is signed with the rules."),
 ])
 
-RULES = _rows("hard_rules.yaml", [
+RULES = _rows(RULES_YAML, [
     ("hard_rules", "required", "The rules Path A runs, at least one."),
     ("tool_specs", "required", "Where Path A reads each value, per tool. Every allow-listed tool needs one."),
     ("fields", "none", "The custom Path A fields, up to 64. A rules file with `fields:` signs as a v2 constitution."),
@@ -448,7 +456,7 @@ def render_markdown() -> str:
         parts.append("| Setting | Default | `high_assurance` | What it does |\n| --- | --- | --- | --- |")
         for s in rows:
             summary = s.summary + (" **Names a secret.**" if s.names_secret else "") + (
-                "" if s.settable or file == "agents.yaml" else " **Not changed by `config set`.**")
+                "" if s.settable or file == AGENTS_YAML else " **Not changed by `config set`.**")
             key = s.key if s.key.startswith("(") else f"`{s.key}`"
             parts.append(f"| {key} | {_cell(s.default)} | {_cell(s.high_assurance)} | {_cell(summary)} |")
         parts.append("")

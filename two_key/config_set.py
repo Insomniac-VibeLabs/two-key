@@ -58,12 +58,13 @@ MAX_NAME_CHARS = 200
 MAX_SETTINGS_RECORDED = 64
 
 PROXY, JUDGES, RULES, CONSTITUTION, KEY = "proxy", "judges", "rules", "constitution", "key"
-SETTINGS_FILE = {PROXY: "proxy.yaml", JUDGES: "judges.yaml", RULES: "hard_rules.yaml"}
+SETTINGS_FILE = {PROXY: settings.PROXY_YAML, JUDGES: settings.JUDGES_YAML, RULES: settings.RULES_YAML}
 _JUDGES_TOP = ("judges", "quorum", "monitored_agent")
 _RULES_TOP = ("hard_rules", "tool_specs", "fields")
 # Which files Two-Key trusts, and which keys and ledger it uses (settings.NOT_SETTABLE). `setup` writes them; a
 # change is a move to another deployment, made by hand and then checked, not one setting among others.
-NOT_SETTABLE = tuple(sorted(key for file, key in settings.NOT_SETTABLE if file == "proxy.yaml" and "." not in key))
+NOT_SETTABLE = tuple(sorted(key for file, key in settings.NOT_SETTABLE
+                            if file == settings.PROXY_YAML and "." not in key))
 # A literal here can be a secret (an upstream token, a scanner's password).
 SECRET_LITERALS = (("upstream", "env"), ("scan", "env"))
 # The findings of `config check` about this shell's variables: the proxy's own environment may differ.
@@ -89,23 +90,32 @@ def parse_name(name: str) -> list[str | int]:
     i = 0
     while i < len(name):
         if name[i] == "[":
-            m = _BRACKET.match(name, i)
-            if not m:
-                raise ConfigChangeError(f"setting {name!r}: an unclosed [ at {i}")
-            inner = m.group(1)
-            tokens.append(int(inner) if inner.isdigit() else inner)
-            i = m.end()
+            token, i = _bracketed(name, i)
         else:
-            if tokens:
-                if name[i] != ".":
-                    raise ConfigChangeError(f"setting {name!r}: expected . or [ at {i}")
-                i += 1
-            m = _SEGMENT.match(name, i)
-            if not m:
-                raise ConfigChangeError(f"setting {name!r}: expected a key at {i}")
-            tokens.append(m.group(0))
-            i = m.end()
+            token, i = _segment(name, i, first=not tokens)
+        tokens.append(token)
     return tokens
+
+
+def _bracketed(name: str, i: int) -> tuple[str | int, int]:
+    """``[3]`` or ``[fs.read]`` at ``i``: the index or key, and where the next token starts."""
+    m = _BRACKET.match(name, i)
+    if not m:
+        raise ConfigChangeError(f"setting {name!r}: an unclosed [ at {i}")
+    inner = m.group(1)
+    return (int(inner) if inner.isdigit() else inner), m.end()
+
+
+def _segment(name: str, i: int, *, first: bool) -> tuple[str, int]:
+    """A dotted key at ``i`` (after its ``.`` unless it is the first token), and where the next one starts."""
+    if not first:
+        if name[i] != ".":
+            raise ConfigChangeError(f"setting {name!r}: expected . or [ at {i}")
+        i += 1
+    m = _SEGMENT.match(name, i)
+    if not m:
+        raise ConfigChangeError(f"setting {name!r}: expected a key at {i}")
+    return m.group(0), m.end()
 
 
 def format_name(tokens: list[str | int]) -> str:
@@ -138,10 +148,10 @@ def role_for(tokens: list[str | int]) -> str:
 
 # Mappings whose keys the operator names, and what the catalogue calls such a key.
 _FREE_KEYS = {
-    ("proxy.yaml", "tools"): "<id>",
-    ("hard_rules.yaml", "tool_specs"): "<tool>",
-    ("hard_rules.yaml", "tool_specs.<tool>.fields"): "<name>",
-    ("hard_rules.yaml", "fields"): "<name>",
+    (settings.PROXY_YAML, "tools"): "<id>",
+    (settings.RULES_YAML, "tool_specs"): "<tool>",
+    (settings.RULES_YAML, "tool_specs.<tool>.fields"): "<name>",
+    (settings.RULES_YAML, "fields"): "<name>",
 }
 
 
@@ -239,38 +249,11 @@ def set_at(doc: Any, tokens: list[str | int], value: Any, *, unset: bool = False
     out = copy.deepcopy(doc) if doc is not None else {}
     if not isinstance(out, dict):
         raise ConfigChangeError("the file is not a mapping")
-    node: Any = out
     name = format_name(tokens)
-    for i, t in enumerate(tokens[:-1]):
-        nxt = tokens[i + 1]
-        if isinstance(t, int):
-            if not isinstance(node, list) or not 0 <= t < len(node):
-                raise ConfigChangeError(f"{name}: {format_name(tokens[:i + 1])} does not exist")
-            node = node[t]
-            continue
-        if not isinstance(node, dict):
-            raise ConfigChangeError(f"{name}: {format_name(tokens[:i])} is not a mapping")
-        if t not in node or node[t] is None:
-            if unset:
-                raise ConfigChangeError(f"{name}: is not set")
-            if isinstance(nxt, int):
-                raise ConfigChangeError(f"{name}: {format_name(tokens[:i + 1])} does not exist")
-            node[t] = {}
-        node = node[t]
+    node = _parent(out, tokens, unset, name)
     last = tokens[-1]
     if isinstance(last, int):
-        if not isinstance(node, list):
-            raise ConfigChangeError(f"{name}: {format_name(tokens[:-1])} is not a list")
-        if unset:
-            if not 0 <= last < len(node):
-                raise ConfigChangeError(f"{name}: is not set")
-            del node[last]
-        elif last == len(node):
-            node.append(value)
-        elif 0 <= last < len(node):
-            node[last] = value
-        else:
-            raise ConfigChangeError(f"{name}: the list has {len(node)} item(s); add one at [{len(node)}]")
+        _set_item(node, tokens, value, unset, name)
         return out
     if not isinstance(node, dict):
         raise ConfigChangeError(f"{name}: {format_name(tokens[:-1])} is not a mapping")
@@ -281,6 +264,44 @@ def set_at(doc: Any, tokens: list[str | int], value: Any, *, unset: bool = False
     else:
         node[last] = value
     return out
+
+
+def _parent(out: dict, tokens: list[str | int], unset: bool, name: str) -> Any:
+    """The node that holds the last token, creating the mappings on the way (not when unsetting)."""
+    node: Any = out
+    for i, t in enumerate(tokens[:-1]):
+        if isinstance(t, int):
+            if not isinstance(node, list) or not 0 <= t < len(node):
+                raise ConfigChangeError(f"{name}: {format_name(tokens[:i + 1])} does not exist")
+            node = node[t]
+            continue
+        if not isinstance(node, dict):
+            raise ConfigChangeError(f"{name}: {format_name(tokens[:i])} is not a mapping")
+        if t not in node or node[t] is None:
+            if unset:
+                raise ConfigChangeError(f"{name}: is not set")
+            if isinstance(tokens[i + 1], int):
+                raise ConfigChangeError(f"{name}: {format_name(tokens[:i + 1])} does not exist")
+            node[t] = {}
+        node = node[t]
+    return node
+
+
+def _set_item(node: Any, tokens: list[str | int], value: Any, unset: bool, name: str) -> None:
+    """Set, add (at the next index) or remove a list item."""
+    last = tokens[-1]
+    if not isinstance(node, list):
+        raise ConfigChangeError(f"{name}: {format_name(tokens[:-1])} is not a list")
+    if unset:
+        if not 0 <= last < len(node):
+            raise ConfigChangeError(f"{name}: is not set")
+        del node[last]
+    elif last == len(node):
+        node.append(value)
+    elif 0 <= last < len(node):
+        node[last] = value
+    else:
+        raise ConfigChangeError(f"{name}: the list has {len(node)} item(s); add one at [{len(node)}]")
 
 
 def parse_value(text: str) -> Any:
@@ -610,11 +631,10 @@ class Change:
     command: str
     settings: list[str]
     files: list[FileChange]
-    key: Any = None                 # the principal private key, for a signed change
+    key: Any = None                 # the principal private key: signs the ledger entry (and the constitution)
     signed_before: Mapping | None = None
     signed_after: Mapping | None = None
     shown: list[str] = field(default_factory=list)
-    passphrase: Any = None          # opens an encrypted principal key (two_key.keys.Passphrase)
 
 
 Confirm = Callable[[str], bool]
@@ -640,88 +660,31 @@ def _blocking(findings) -> list[str]:
 def apply(config_path: Path, config, change: Change, *, confirm_weaker: bool, confirm: Confirm,
           environ: Mapping[str, str] | None, out=None) -> dict:
     """Check, confirm, record, and write ``change``. Raises ``ConfigChangeError`` (nothing written) or returns
-    what was done."""
-    from . import config_cmd
-    from .mcp_proxy.config import parse_proxy_config
-    from .strict import load_file_strict
+    what was done. ``change.key`` signs the ledger entry: the caller opens it before anything is staged, so a
+    key that does not open refuses."""
     out = sys.stdout if out is None else out
     for fc in change.files:
         check_target(fc.path)
         fc.old = _read(fc.path)
     if os.path.lexists(undo_path(config_path)):
         check_target(undo_path(config_path))
-    # The key that signs the ledger entry, opened before anything is staged: one that does not open refuses.
-    ledger_key = change.key if change.key is not None else open_principal(config, change.passphrase)
-    roles = {fc.role for fc in change.files}
-    keep_prev = KEY not in roles
-    staged: dict[str, Path] = {}
+    keep_prev = KEY not in {fc.role for fc in change.files}
     created: list[Path] = []
     recorded = False
     try:
-        for fc in change.files:
-            tmp = _staged_name(fc.path, "staged")
-            _write_new(tmp, fc.new)
-            created.append(tmp)
-            staged[fc.role] = tmp
-        new_config = config
-        if PROXY in staged:
-            try:
-                new_config = parse_proxy_config(load_file_strict(staged[PROXY]), config.path)
-            except (OSError, ValueError) as e:
-                raise ConfigChangeError(f"config_invalid: {e}") from None
-        check_config = replace(new_config, judges=staged.get(JUDGES, new_config.judges),
-                               constitution=staged.get(CONSTITUTION, new_config.constitution),
-                               principal_key=staged.get(KEY, new_config.principal_key))
-        findings = config_cmd.check_config(check_config, environ)
-        blocking = _blocking(findings)
-        if blocking:
-            for level, text in findings:
-                print(f"{level:<4}  {text}", file=sys.stderr)
-            raise ConfigChangeError(f"config_check_failed: {blocking[0]}" +
-                                    (f" (and {len(blocking) - 1} more)" if len(blocking) > 1 else "") +
-                                    "; nothing was written")
-        try:
-            before = posture(config)
-        except Exception as e:      # every loader's own error: fail closed
-            raise ConfigChangeError(f"config_current_invalid: the files as they are now do not load "
-                                    f"({type(e).__name__}: {e}), so whether this change weakens them cannot be "
-                                    "told; fix them by hand or with config undo, then run config check") from None
-        try:
-            after = posture(check_config)
-        except Exception as e:      # the check passed, so this is not expected; fail closed
-            raise ConfigChangeError(f"config_check_failed: {type(e).__name__}: {e}") from None
-        reasons = weaker(before, after)
+        staged = _stage(change.files, "staged", created)
+        reasons = _weaker_change(config, _checked(config, staged, environ))
         for line in change.shown:
             print(line, file=out)
         if reasons and not confirm_weaker:
             raise ConfigChangeError("weaker: " + "; ".join(reasons) + ". Run it again with --confirm-weaker to "
                                     "go ahead; nothing was written")
         signed = CONSTITUTION in staged
-        if reasons:
-            for line in reasons:
-                print(f"weaker: {line}", file=out)
-        if reasons or signed or not keep_prev:
-            if signed:
-                what = ("This puts back the previous signed constitution" if change.command == "undo" else
-                        "This signs a new constitution")
-            elif not keep_prev:
-                what = "This rewrites the principal key file, and config undo cannot reverse it"
-            else:
-                what = "This weakens what Two-Key enforces"
-            if reasons and (signed or not keep_prev):
-                what += ", and weakens what Two-Key enforces"
-            out.flush()
-            if not confirm(f"{what}. Type yes to go ahead: "):
-                raise ConfigChangeError("not_confirmed: nothing was written")
-        prevs = {}
-        if keep_prev:
-            for fc in change.files:
-                tmp = _staged_name(fc.path, "prev")
-                _write_new(tmp, fc.old)
-                created.append(tmp)
-                prevs[fc.role] = tmp
-        body = ledger_body(change, reasons, confirmed=bool(reasons) or signed or not keep_prev)
-        record(config, body, ledger_key)
+        for line in reasons:
+            print(f"weaker: {line}", file=out)
+        confirmed = _confirmed(change.command, reasons, signed, keep_prev, confirm, out)
+        prevs = _stage(change.files, "prev", created, old=True) if keep_prev else {}
+        record(config, ledger_body(change, reasons, confirmed=confirmed), change.key)
         recorded = True
         for fc in change.files:
             if keep_prev:
@@ -741,6 +704,77 @@ def apply(config_path: Path, config, change: Change, *, confirm_weaker: bool, co
     return {"ok": True, "command": change.command, "settings": change.settings,
             "files": [str(fc.path) for fc in change.files], "weaker": reasons, "signed": signed,
             "next": "restart the proxy: a running proxy keeps the settings it started with"}
+
+
+def _stage(files: list[FileChange], label: str, created: list[Path], *, old: bool = False) -> dict[str, Path]:
+    """Each file's new (or, with ``old``, current) bytes in a new file beside it, by role."""
+    staged: dict[str, Path] = {}
+    for fc in files:
+        tmp = _staged_name(fc.path, label)
+        _write_new(tmp, fc.old if old else fc.new)
+        created.append(tmp)
+        staged[fc.role] = tmp
+    return staged
+
+
+def _checked(config, staged: Mapping[str, Path], environ: Mapping[str, str] | None):
+    """The configuration as it would be with the staged files, after ``config check`` passed on it."""
+    from . import config_cmd
+    from .mcp_proxy.config import parse_proxy_config
+    from .strict import load_file_strict
+    new_config = config
+    if PROXY in staged:
+        try:
+            new_config = parse_proxy_config(load_file_strict(staged[PROXY]), config.path)
+        except (OSError, ValueError) as e:
+            raise ConfigChangeError(f"config_invalid: {e}") from None
+    check_config = replace(new_config, judges=staged.get(JUDGES, new_config.judges),
+                           constitution=staged.get(CONSTITUTION, new_config.constitution),
+                           principal_key=staged.get(KEY, new_config.principal_key))
+    findings = config_cmd.check_config(check_config, environ)
+    blocking = _blocking(findings)
+    if blocking:
+        for level, text in findings:
+            print(f"{level:<4}  {text}", file=sys.stderr)
+        raise ConfigChangeError(f"config_check_failed: {blocking[0]}" +
+                                (f" (and {len(blocking) - 1} more)" if len(blocking) > 1 else "") +
+                                "; nothing was written")
+    return check_config
+
+
+def _weaker_change(config, check_config) -> list[str]:
+    """:func:`weaker` from the files as they are to the checked ones; either failing to load refuses."""
+    try:
+        before = posture(config)
+    except Exception as e:      # every loader's own error: fail closed
+        raise ConfigChangeError(f"config_current_invalid: the files as they are now do not load "
+                                f"({type(e).__name__}: {e}), so whether this change weakens them cannot be "
+                                "told; fix them by hand or with config undo, then run config check") from None
+    try:
+        after = posture(check_config)
+    except Exception as e:      # the check passed, so this is not expected; fail closed
+        raise ConfigChangeError(f"config_check_failed: {type(e).__name__}: {e}") from None
+    return weaker(before, after)
+
+
+def _confirmed(command: str, reasons: list[str], signed: bool, keep_prev: bool, confirm: Confirm, out) -> bool:
+    """Asks for a typed yes when the change weakens, signs, or rewrites the key; refuses without one. Returns
+    whether it asked."""
+    if not (reasons or signed or not keep_prev):
+        return False
+    if signed:
+        what = ("This puts back the previous signed constitution" if command == "undo" else
+                "This signs a new constitution")
+    elif not keep_prev:
+        what = "This rewrites the principal key file, and config undo cannot reverse it"
+    else:
+        what = "This weakens what Two-Key enforces"
+    if reasons and (signed or not keep_prev):
+        what += ", and weakens what Two-Key enforces"
+    out.flush()
+    if not confirm(f"{what}. Type yes to go ahead: "):
+        raise ConfigChangeError("not_confirmed: nothing was written")
+    return True
 
 
 def ledger_body(change: Change, reasons: list[str], *, confirmed: bool) -> dict:
@@ -906,7 +940,7 @@ def set_setting(config_path: Path | str, name: str, value: Any = None, *, unset:
             change = Change("set", [format_name(tokens)], [FileChange(role, path, dump(new_doc, path))],
                             shown=[f"{format_name(tokens)} in {path.name}: "
                                    f"{_show(tokens, before)} -> {'(unset)' if unset else _show(tokens, value)}"],
-                            passphrase=passphrase)
+                            key=open_principal(config, passphrase))
         return apply(config_path, config, change, confirm_weaker=confirm_weaker, confirm=confirm,
                      environ=environ, out=out)
 
@@ -953,9 +987,7 @@ def _envelope_rank(fmt: str) -> int:
 def resign(signed: Mapping, rules_doc: Mapping, key, current_format: str) -> dict:
     """A new envelope for the rules document, with the signed prose, in at least the current format; verified
     with the key's public half before it is returned."""
-    from .constitution import (ConstitutionError, ConstitutionSignatureError, sign_constitution,
-                               verify_signed)
-    from .policy_vm import ConstitutionError as RulesError
+    from .constitution import sign_constitution, verify_signed
     try:
         envelope = sign_constitution(signed["prose"], rules_doc.get("hard_rules"), key, rules_doc.get("tool_specs"),
                                      fields=rules_doc.get("fields"))
@@ -964,7 +996,7 @@ def resign(signed: Mapping, rules_doc: Mapping, key, current_format: str) -> dic
                                          rules_doc.get("tool_specs"), fields=rules_doc.get("fields"),
                                          envelope_format="v3" if _envelope_rank(current_format) == 3 else "v2")
         verify_signed(json.loads(json.dumps(envelope)), key.public_key())
-    except (ConstitutionError, ConstitutionSignatureError, RulesError, ValueError, TypeError) as e:
+    except (ValueError, TypeError) as e:
         raise ConfigChangeError(f"constitution_refused: {e}") from None
     return envelope
 
@@ -975,17 +1007,16 @@ def _plain(value: Any) -> Any:
 
 def _signed_of(rules_doc: Mapping, prose: str, key) -> dict:
     """What signing ``rules_doc`` would put in the envelope (validated, canonical)."""
-    from .constitution import ConstitutionError, sign_constitution
-    from .policy_vm import ConstitutionError as RulesError
+    from .constitution import sign_constitution
     try:
         return sign_constitution(prose, rules_doc.get("hard_rules"), key, rules_doc.get("tool_specs"),
                                  fields=rules_doc.get("fields"))["signed"]
-    except (ConstitutionError, RulesError, ValueError, TypeError) as e:
+    except (ValueError, TypeError) as e:
         raise ConfigChangeError(f"rules_invalid: {e}") from None
 
 
 def _signed_change(config, tokens, value, unset, key_path, rules_path, passphrase) -> Change:
-    from .constitution import ConstitutionError, ConstitutionSignatureError, load_envelope, verify_signed
+    from .constitution import load_envelope, verify_signed
     key = _principal(config, key_path, passphrase)
     if not rules_path:
         raise ConfigChangeError("rules_file_needed: a signed setting is changed in the rules file the constitution "
@@ -993,7 +1024,7 @@ def _signed_change(config, tokens, value, unset, key_path, rules_path, passphras
     try:
         envelope = load_envelope(config.constitution)
         current = verify_signed(envelope, key.public_key())
-    except (OSError, ValueError, ConstitutionError, ConstitutionSignatureError) as e:
+    except (OSError, ValueError) as e:
         raise ConfigChangeError(f"constitution: {config.constitution}: {e}") from None
     rules_file = Path(rules_path).resolve()
     rules_doc = _document(rules_file)
@@ -1018,8 +1049,7 @@ def _signed_change(config, tokens, value, unset, key_path, rules_path, passphras
     envelope_bytes = (json.dumps(new_envelope, indent=2) + "\n").encode("utf-8")
     return Change("set", [name], [FileChange(RULES, rules_file, dump(new_doc, rules_file)),
                                   FileChange(CONSTITUTION, Path(config.constitution), envelope_bytes)],
-                  key=key, signed_before=signed_before, signed_after=new_envelope["signed"], shown=shown,
-                  passphrase=passphrase)
+                  key=key, signed_before=signed_before, signed_after=new_envelope["signed"], shown=shown)
 
 
 def signed_diff(before: Mapping, after: Mapping) -> list[str]:
@@ -1041,7 +1071,7 @@ def undo(config_path: Path | str, *, key_path: str | None = None, confirm_weaker
          confirm: Confirm = terminal_confirm, environ: Mapping[str, str] | None = None, out=None,
          key_passphrase_file: str | None = None) -> dict:
     """``config undo``: put back the files of the last change. Running it again puts the change back."""
-    from .constitution import ConstitutionError, ConstitutionSignatureError, verify_signed
+    from .constitution import verify_signed
     from .strict import StrictParseError, loads_json
     refuse_root()
     config_path = Path(config_path).resolve()
@@ -1082,28 +1112,29 @@ def undo(config_path: Path | str, *, key_path: str | None = None, confirm_weaker
             if sha256(then) != item.get("before"):
                 raise ConfigChangeError(f"undo_stale: {prev} is not the version the last change replaced")
             files.append(FileChange(item["role"], path, then))
-        key = None
         by_role = {fc.role: fc for fc in files}
-        if CONSTITUTION in by_role:
+        if CONSTITUTION not in by_role:
+            key = open_principal(config, passphrase)
+        else:
             key = _principal(config, key_path, passphrase)
             restored = by_role[CONSTITUTION]
             try:
                 verify_signed(loads_json(restored.new), key.public_key())
-            except (StrictParseError, ValueError, ConstitutionError, ConstitutionSignatureError) as e:
+            except ValueError as e:
                 raise ConfigChangeError(f"constitution_refused: the previous constitution does not verify: {e}") \
                     from None
         names = [str(s) for s in manifest.get("settings") or []][:MAX_SETTINGS_RECORDED]
-        change = Change("undo", names, files, key=key, passphrase=passphrase,
+        change = Change("undo", names, files, key=key,
                         shown=[f"undo: {', '.join(names) or '(no setting named)'} in "
                                f"{', '.join(fc.path.name for fc in files)}"])
         return apply(config_path, config, change, confirm_weaker=confirm_weaker, confirm=confirm,
                      environ=environ, out=out)
 
 
-def key_passphrase(config_path: Path | str, *, new_from: str | None = None, remove: bool = False,
-                   confirm_weaker: bool = False, confirm: Confirm = terminal_confirm,
-                   environ: Mapping[str, str] | None = None, out=None,
-                   key_passphrase_file: str | None = None) -> dict:
+def change_key_encryption(config_path: Path | str, *, new_from: str | None = None, remove: bool = False,
+                          confirm_weaker: bool = False, confirm: Confirm = terminal_confirm,
+                          environ: Mapping[str, str] | None = None, out=None,
+                          key_passphrase_file: str | None = None) -> dict:
     """``config key-passphrase``: encrypt the principal key with the passphrase in ``new_from`` (or change it),
     or, with ``remove``, store it unencrypted again; ``keys.passphrase_file`` follows, in the same change.
 
@@ -1147,7 +1178,6 @@ def key_passphrase(config_path: Path | str, *, new_from: str | None = None, remo
         if not remove:
             files.reverse()     # the proxy file first: a stop between the two leaves a key it can still open
         change = Change("key-passphrase", ["keys.principal", "keys.passphrase_file"], files, key=key,
-                        passphrase=passphrase,
                         shown=[f"keys.principal in {config_path.name}: "
                                + ("encrypted -> not encrypted" if remove else
                                   f"encrypted with the passphrase in {setting}")])
@@ -1174,7 +1204,7 @@ def _report(result: dict) -> int:
 def run_get(args) -> int:
     try:
         print(json.dumps(get(args.config, args.setting), indent=2, default=str))
-    except (ConfigChangeError, OSError, ValueError) as e:
+    except (OSError, ValueError) as e:
         print(f"two-key: config get: {e}", file=sys.stderr)
         return 1
     return 0
@@ -1216,7 +1246,7 @@ def run_undo(args) -> int:
 
 def run_key_passphrase(args) -> int:
     try:
-        result = key_passphrase(args.config, new_from=args.new_from, remove=bool(args.remove),
+        result = change_key_encryption(args.config, new_from=args.new_from, remove=bool(args.remove),
                                 confirm_weaker=args.confirm_weaker, key_passphrase_file=args.key_passphrase_file)
     except ConfigChangeError as e:
         print(f"two-key: config key-passphrase: refused: {e}", file=sys.stderr)
@@ -1224,5 +1254,5 @@ def run_key_passphrase(args) -> int:
     return _report(result)
 
 
-__all__ = ["ConfigChangeError", "LEDGER_KIND", "apply", "get", "key_passphrase", "parse_name", "set_setting", "undo",
-           "weaker"]
+__all__ = ["ConfigChangeError", "LEDGER_KIND", "apply", "change_key_encryption", "get", "parse_name", "set_setting",
+           "undo", "weaker"]

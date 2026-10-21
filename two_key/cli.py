@@ -617,6 +617,7 @@ def _backup_restore(args) -> int:
     return 0
 
 
+_PROXY_CONFIG_HELP = "the proxy config file (YAML or JSON)"
 _KEY_HELP = "the principal private key (principal.pem from init-key, mode 0600); not principal.pub.pem"
 _KEY_UNLOCK_HELP = ("for an encrypted --key: a file only you can read holding its passphrase; without it, "
                         "the passphrase is asked for on the terminal")
@@ -767,7 +768,7 @@ def main(argv: list[str] | None = None) -> int:
     siem_verify.set_defaults(func=_siem_verify)
     proxy = sub.add_parser("mcp-proxy", help="serve an upstream MCP server's signed tools over stdio, through "
                                              "both keys (needs the mcp extra)")
-    proxy.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
+    proxy.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
     proxy.set_defaults(func=_mcp_proxy)
     cfg = sub.add_parser("config", help="show, check, or change a proxy config's settings")
     cfg_sub = cfg.add_subparsers(dest="config_cmd", required=True)
@@ -775,15 +776,15 @@ def main(argv: list[str] | None = None) -> int:
                        ("check", "load every file the config names and report what would stop or warn at start; "
                                  "writes nothing, opens no ledger")):
         part = cfg_sub.add_parser(name, help=text)
-        part.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
+        part.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
         part.set_defaults(func=_config_show if name == "show" else _config_check)
     getter = cfg_sub.add_parser("get", help="print one setting: its value, file, tier, and default")
-    getter.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
+    getter.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
     getter.add_argument("setting", help="the setting's name, as docs/SETTINGS.md lists it (siem.sinks[0].port)")
     getter.set_defaults(func=_config_get)
     setter = cfg_sub.add_parser("set", help="change one setting: checked, recorded in the ledger, undoable; "
                                             "takes effect at the next start")
-    setter.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
+    setter.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
     setter.add_argument("setting", help="the setting's name, as docs/SETTINGS.md lists it (siem.sinks[0].port)")
     setter.add_argument("value", nargs="?", default=None,
                         help="the new value: JSON (true, 120, [\"a\"], {\"env\": \"NAME\"}) or plain text; never a "
@@ -801,7 +802,7 @@ def main(argv: list[str] | None = None) -> int:
     setter.add_argument("--key-passphrase-file", default=None, metavar="FILE", help=_KEY_UNLOCK_HELP)
     setter.set_defaults(func=_config_set)
     undoer = cfg_sub.add_parser("undo", help="put back the files the last config set (or undo) replaced")
-    undoer.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
+    undoer.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
     undoer.add_argument("--confirm-weaker", action="store_true",
                         help="go ahead when putting the files back weakens what Two-Key enforces")
     undoer.add_argument("--key", default=None, metavar="FILE",
@@ -811,7 +812,7 @@ def main(argv: list[str] | None = None) -> int:
     phraser = cfg_sub.add_parser("key-passphrase",
                                  help="encrypt the principal key with a passphrase from a file, change it, or remove "
                                       "it; sets keys.passphrase_file to match, recorded in the ledger")
-    phraser.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
+    phraser.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
     which = phraser.add_mutually_exclusive_group(required=True)
     which.add_argument("--new-from", default=None, metavar="FILE",
                        help="absolute path of a file only this account can read, holding the new passphrase "

@@ -224,7 +224,6 @@ def _read_source(path: str, what: str) -> bytes:
 
 def _schema_digest(command: list[str], envelope: Mapping) -> str:
     """Read the upstream's tools and digest the signed ones, as ``mcp-draft-specs --constitution`` does."""
-    from .mcp_proxy.config import ProxyConfigError
     try:
         from .mcp_proxy import sdk
         from .mcp_proxy.draft import signed_check
@@ -233,7 +232,7 @@ def _schema_digest(command: list[str], envelope: Mapping) -> str:
                          "instead (two-key mcp-draft-specs --constitution prints it)") from None
     try:
         digest, missing, _ = signed_check(sdk.draft_tools(command, {}), envelope)
-    except (ProxyConfigError, ValueError) as e:
+    except ValueError as e:
         raise SetupError(f"upstream.schema_digest: {e}") from None
     if missing:
         raise SetupError(f"upstream: the server does not list the signed tool(s) {list(missing)}")
@@ -244,9 +243,8 @@ def build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] | 
     """Write and check every file in a new folder, rename it to ``target``, then create the ledger."""
     from .config_cmd import FAIL, check
     from .config_set import ENVIRONMENT_ONLY
-    from .constitution import ConstitutionError, load_unsigned_with_fields, sign_constitution, verify_signed
+    from .constitution import load_unsigned_with_fields, sign_constitution, verify_signed
     from .keys import check_new_passphrase, generate_private_key, read_passphrase_file, save_private_key, save_public_key
-    from .policy_vm import ConstitutionError as RulesError
     out = sys.stdout if out is None else out
     try:
         refuse_root()
@@ -295,7 +293,7 @@ def build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] | 
             text, rules, specs, fields = load_unsigned_with_fields(staging / FILES["prose"], staging / FILES["rules"])
             envelope = sign_constitution(text, rules, key, specs, fields=fields)
             signed = verify_signed(json.loads(json.dumps(envelope)), key.public_key())
-        except (ConstitutionError, RulesError, ValueError, TypeError) as e:
+        except (ValueError, TypeError) as e:
             raise SetupError(f"rules: {e}") from None
         _write(staging / FILES["constitution"], (json.dumps(envelope, indent=2) + "\n").encode("utf-8"))
         _write(staging / FILES["judges"], dump(judges_doc(answers), staging / FILES["judges"], "setup"))

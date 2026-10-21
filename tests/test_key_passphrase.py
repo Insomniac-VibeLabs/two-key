@@ -11,6 +11,7 @@ import contextlib
 import io
 import json
 import os
+import secrets
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,8 +31,9 @@ from two_key.mcp_proxy.config import load_proxy_config
 from two_key.mcp_proxy.core import startup_paths
 
 POSIX = not _platform.WINDOWS
-PASSPHRASE = b"correct horse battery staple"
-OTHER = b"a different passphrase entirely"
+# Made at run time: a test passphrase is no credential, and none is written into the source.
+PASSPHRASE = secrets.token_hex(16).encode("ascii")
+OTHER = secrets.token_hex(16).encode("ascii")
 
 
 def write_secret(path: Path, data: bytes) -> Path:
@@ -216,7 +218,7 @@ class Encrypted(Deployment):
     def encrypt(self, source=None, **kw):
         kw.setdefault("confirm", self.confirm())
         kw.setdefault("environ", {})
-        return quiet(config_set.key_passphrase, self.proxy, new_from=str(source or self.pass_file), **kw)
+        return quiet(config_set.change_key_encryption, self.proxy, new_from=str(source or self.pass_file), **kw)
 
     def ledger(self):
         from two_key.ledger import Ledger
@@ -265,16 +267,16 @@ class Encrypted(Deployment):
     def test_removing_it_is_weaker(self):
         before = self.snapshot()
         with self.assertRaisesRegex(ConfigChangeError, "^weaker: keys.principal: the key is no longer encrypted"):
-            quiet(config_set.key_passphrase, self.proxy, remove=True, confirm=self.confirm(), environ={})
+            quiet(config_set.change_key_encryption, self.proxy, remove=True, confirm=self.confirm(), environ={})
         self.assertEqual(self.snapshot(), before)
-        quiet(config_set.key_passphrase, self.proxy, remove=True, confirm_weaker=True, confirm=self.confirm(),
+        quiet(config_set.change_key_encryption, self.proxy, remove=True, confirm_weaker=True, confirm=self.confirm(),
               environ={})
         self.assertFalse(keys.key_file_is_encrypted(self.key))
         self.assertIsNone(load_proxy_config(self.proxy).principal_passphrase_file)
         self.assertEqual(self.changes()[-1].body["weaker"], ["keys.principal: the key is no longer encrypted"])
         with self.assertRaisesRegex(ConfigChangeError, "^unchanged: "):
-            quiet(config_set.key_passphrase, self.proxy, remove=True, confirm_weaker=True, confirm=self.confirm(),
-                  environ={})
+            quiet(config_set.change_key_encryption, self.proxy, remove=True, confirm_weaker=True,
+                  confirm=self.confirm(), environ={})
 
     def test_changing_it_needs_the_current_one_and_writes_nothing_on_a_refusal(self):
         new = write_secret(self.base / "new.pass", OTHER + b"\n")

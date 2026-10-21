@@ -30,10 +30,10 @@ def _load(path: Path | str):
 
 
 def _judges(config):
-    from .judges.config import JudgeConfigError, load_config_file
+    from .judges.config import load_config_file
     try:
         return load_config_file(config.judges), None
-    except (OSError, ValueError, JudgeConfigError) as e:
+    except (OSError, ValueError) as e:
         return None, (FAIL, f"judges_invalid: {type(e).__name__}: {e}")
 
 
@@ -69,7 +69,7 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
 
 
 def _constitution(config) -> list[tuple[str, str]]:
-    from .constitution import ConstitutionError, ConstitutionSignatureError, load_envelope, verify_signed
+    from .constitution import load_envelope, verify_signed
     from .keys import key_file_is_encrypted
     try:
         # As the proxy opens it: with keys.passphrase_file when it is encrypted, never a prompt.
@@ -87,7 +87,7 @@ def _constitution(config) -> list[tuple[str, str]]:
                         "(two-key config key-passphrase, docs/SETUP.md)")
     try:
         signed = verify_signed(load_envelope(config.constitution), public)
-    except (OSError, ValueError, ConstitutionError, ConstitutionSignatureError) as e:
+    except (OSError, ValueError) as e:
         return [(FAIL, f"constitution: {config.constitution}: {e}")]
     out = [key_line, (OK, f"constitution: signed by the principal key, digest {signed.digest}")]
     unknown = sorted(set(config.tools) - set(signed.tool_specs))
@@ -108,10 +108,10 @@ def _quorum(judges, policy) -> list[tuple[str, str]]:
 
 
 def _agent(config) -> list[tuple[str, str]]:
-    from .identity import IdentityError, load_monitored_agent_file
+    from .identity import load_monitored_agent_file
     try:
         agent = load_monitored_agent_file(config.judges)
-    except (OSError, ValueError, IdentityError) as e:
+    except (OSError, ValueError) as e:
         return [(FAIL, f"monitored_agent: {e}")]
     if agent is None:
         return [(WARN, "monitored_agent: none declared, so judges are not checked against the agent's "
@@ -177,13 +177,12 @@ def _agent_access(config, high: bool) -> list[tuple[str, str]]:
 
 
 def _siem(config, high: bool) -> list[tuple[str, str]]:
-    from .siem import SiemConfigError
     from .siem_sinks import siem_from_config
     if config.siem is None:
         return [(OK, "siem: not configured, no copy leaves the ledger")]
     try:
         siem = siem_from_config(config.siem, config.path.parent)
-    except (OSError, ValueError, SiemConfigError) as e:
+    except (OSError, ValueError) as e:
         return [(FAIL, f"siem_invalid: {e}")]
     plain = siem.plaintext_sinks
     if plain and high:
@@ -257,7 +256,7 @@ def _scan_view(scan):
         return None
     view = dict(scan)
     if isinstance(view.get("env"), dict):
-        view["env"] = {name: "<literal>" for name in sorted(view["env"])}
+        view["env"] = dict.fromkeys(sorted(view["env"]), "<literal>")
     return view
 
 
