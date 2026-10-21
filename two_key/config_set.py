@@ -545,7 +545,7 @@ def account_label() -> str:
     uid = _euid()
     if uid is None:  # pragma: no cover
         return os.environ.get("USERNAME", "unknown")
-    return _platform._posix_account(uid)
+    return _platform.posix_account(uid)
 
 
 def refuse_root() -> None:
@@ -1083,10 +1083,10 @@ def undo(config_path: Path | str, *, key_path: str | None = None, confirm_weaker
                 raise ConfigChangeError(f"undo_stale: {prev} is not the version the last change replaced")
             files.append(FileChange(item["role"], path, then))
         key = None
-        roles = {fc.role for fc in files}
-        if CONSTITUTION in roles:
+        by_role = {fc.role: fc for fc in files}
+        if CONSTITUTION in by_role:
             key = _principal(config, key_path, passphrase)
-            restored = next(fc for fc in files if fc.role == CONSTITUTION)
+            restored = by_role[CONSTITUTION]
             try:
                 verify_signed(loads_json(restored.new), key.public_key())
             except (StrictParseError, ValueError, ConstitutionError, ConstitutionSignatureError) as e:

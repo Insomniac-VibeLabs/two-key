@@ -311,7 +311,9 @@ class Encrypted(Deployment):
         from two_key.mcp_proxy.config import ProxyConfigError
         from two_key.mcp_proxy.core import build_two_key
         text = self.proxy.read_text(encoding="utf-8")
-        line = next(l for l in text.splitlines() if "passphrase_file" in l)
+        lines = [l for l in text.splitlines() if "passphrase_file" in l]
+        self.assertEqual(len(lines), 1, lines)
+        line = lines[0]
         chmod(self.proxy, 0o600)
         self.proxy.write_text(text.replace(line + "\n", ""), encoding="utf-8")
         with self.assertRaisesRegex(ProxyConfigError, "key_passphrase_needed"):

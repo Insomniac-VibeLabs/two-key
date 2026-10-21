@@ -561,7 +561,8 @@ class Refused(unittest.TestCase):
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             counter.note("bad_signature")
-        [counts] = self.reported
+        self.assertEqual(len(self.reported), 1)
+        counts = self.reported[0]
         self.assertEqual(counts["bad_signature"], 1)
         self.assertEqual(counts["total"], 1)
         self.assertIn("bad_signature=1", err.getvalue())

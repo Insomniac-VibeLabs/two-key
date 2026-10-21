@@ -165,14 +165,15 @@ class Setup(Deployment):
             setup_cmd.load_answers(str(path))
 
     def test_the_interview_asks_for_names_never_secrets(self):
-        replies = iter(["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "",
-                        "no", "agent", "some-model", "other", "https://agent.example/v1", "AGENT_KEY_VAR", "", "",
-                        "tool_a", "no", "public", "", "server --stdio", DIGEST, ""])
+        replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "",
+                   "no", "agent", "some-model", "other", "https://agent.example/v1", "AGENT_KEY_VAR", "", "",
+                   "tool_a", "no", "public", "", "server --stdio", DIGEST, ""]
         asked = []
 
         def ask(prompt):
             asked.append(prompt)
-            return next(replies)
+            self.assertTrue(replies, f"the interview asked more than the test answers: {prompt}")
+            return replies.pop(0)
         answers, _, _ = quiet(setup_cmd.interview, ask)
         self.assertEqual(answers["upstream"], {"command": ["server", "--stdio"], "schema_digest": DIGEST})
         self.assertEqual(answers["tools"], [{"id": "tool_a", "irreversible": False, "data_class_floor": "public"}])
