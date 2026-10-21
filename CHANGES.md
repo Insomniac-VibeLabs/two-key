@@ -4090,6 +4090,7 @@ No change to any check, key or ledger entry.
   The cursor now hangs off the sender (it saves it and resumes from it, reading missed entries from the ledger),
   and the sender is labelled as formatting JSON or CEF for the collector and the webhook.
   The export section now says `siem-export` takes `--format cef` as well as `--schema`.
+  "In plain words" now explains the live copy and `siem-export` side by side, and when to use each.
 - docs/SETTINGS.md (from `two_key/settings.py`): `config show` prints defaults filled in, not where a value
   came from, and `config check` does not run the `on_agent_access` check or compare `schema_digest`.
 

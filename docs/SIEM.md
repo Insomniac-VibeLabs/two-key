@@ -51,6 +51,15 @@ flowchart TD
 
 *The live copy goes from the ledger through the sender to the collector and the webhook, as JSON or CEF. Dashed lines are the catch-up after an outage: the sender reads the cursor, then the missed entries from the ledger. The export writes a file instead.*
 
+There are two ways to get that copy out, and they use the same event formats:
+
+- **The live copy** runs inside the proxy all the time. As each entry is written, the sender thread pushes it
+  to your collector or webhook. You turn it on in `proxy.yaml` and do nothing after that.
+- **`two-key siem-export`** is a command you run when you want it. It checks the ledger, decrypts it, and
+  writes the events to a file. Use it to load history from before the live copy was on (the live copy starts
+  from now), to feed a SIEM that cannot take a live feed, or to make the file that `siem-verify` checks
+  against the ledger. Nothing is sent: you carry the file to the SIEM yourself.
+
 Three properties hold whatever you configure:
 
 1. **The copy never gates a call.** The ledger calls a hook that only puts a
