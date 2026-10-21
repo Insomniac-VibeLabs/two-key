@@ -146,36 +146,33 @@ def _agent_variables(agent) -> list[tuple[str, str]]:
             if isinstance(getattr(agent, name, None), str)]
 
 
+def _named_variables(config, judges, agent) -> list[tuple[str, str, str]]:
+    """``(level, finding, variable)`` for each environment variable the proxy and its judges read; ``finding`` is the
+    line printed when the variable is unset. An upstream or agent variable is a FAIL (the upstream would not get it,
+    or the proxy refuses to start without it); a judge's is a WARN (the proxy starts, and that judge abstains)."""
+    found = [(FAIL, f"upstream_env_missing: upstream.env.{name} reads {value.from_env}", value.from_env)
+             for name, value in sorted(config.upstream.env.items()) if value.from_env is not None]
+    if config.agent_session_env:
+        found.append((FAIL, f"agent_session_missing: agent_session_env names {config.agent_session_env}",
+                      config.agent_session_env))
+    found += [(FAIL, f"agent_credential_missing: monitored_agent.{setting} names {var}", var)
+              for setting, var in _agent_variables(agent)]
+    found += [(WARN, f"judge_env_missing: judge {judge.judge_id} {setting} names {var}", var)
+              for judge in judges for setting, var in judge_variables(judge)]
+    return found
+
+
 def _environment(config, environ: Mapping[str, str], judges=(), agent=None) -> list[tuple[str, str]]:
     """Variables the proxy and its judges read, by name; a value is never printed (live run 9, finding 1)."""
-    out, checked = [], []
+    named = _named_variables(config, judges, agent)
     here = "which is unset or empty here (the proxy's own environment may differ)"
-    for name, value in sorted(config.upstream.env.items()):
-        if value.from_env is not None:
-            checked.append(value.from_env)
-            if not environ.get(value.from_env):
-                out.append((FAIL, f"upstream_env_missing: upstream.env.{name} reads {value.from_env}, {here}"))
-    if config.agent_session_env:
-        checked.append(config.agent_session_env)
-        if not environ.get(config.agent_session_env):
-            out.append((FAIL, f"agent_session_missing: agent_session_env names {config.agent_session_env}, {here}"))
-    for setting, var in _agent_variables(agent):
-        checked.append(var)
-        if not environ.get(var):
-            # The proxy reads it at start to tell a judge from the agent, and refuses without it.
-            out.append((FAIL, f"agent_credential_missing: monitored_agent.{setting} names {var}, {here}"))
-    for judge in judges:
-        for setting, var in judge_variables(judge):
-            checked.append(var)
-            if not environ.get(var):
-                # The proxy starts; this judge abstains on every call, so its yes never counts.
-                out.append((WARN, f"judge_env_missing: judge {judge.judge_id} {setting} names {var}, {here}; "
-                                  "the judge will abstain"))
+    out = [(level, f"{finding}, {here}" + ("; the judge will abstain" if level == WARN else ""))
+           for level, finding, var in named if not environ.get(var)]
     if out:
         return out
-    if not checked:
+    if not named:
         return [(OK, "environment: the config names no variables")]
-    return [(OK, f"environment: set here: {', '.join(sorted(set(checked)))}")]
+    return [(OK, f"environment: set here: {', '.join(sorted({var for _, _, var in named}))}")]
 
 
 def _upstream(config, high: bool) -> list[tuple[str, str]]:
