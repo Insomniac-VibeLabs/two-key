@@ -75,7 +75,7 @@ class Drafting(unittest.TestCase):
     def test_every_input_path_a_reads_is_checked_not_only_payees(self):
         # Data-agnostic: an id, an environment, or a ticket the principal maps as a custom field is checked too,
         # at --constitution and at proxy start, where the signed spec and the upstream schema meet.
-        from two_key.mcp_proxy.core import select_tools, undescribed_advice, undescribed_inputs
+        from two_key.mcp_proxy.core import undescribed_advice, undescribed_inputs
         upstream = [{"name": "share_folder", "inputSchema": {"type": "object", "properties": {
             "target": {"type": "object", "properties": {
                 "folder_id": {"type": "string"},

@@ -4256,3 +4256,7 @@ live yet; the maintainer decides when GrokBot runs it.
   as written), and `tests/fixtures/v1_constitution.md`.
 - `pyproject.toml` names Stephan Busch as an author alongside Insomniac-VibeLabs.
 - `tests/test_file_headers.py` fails on a tracked file without the header. CONTRIBUTING.md and AGENTS.md say so.
+- DeepSource re-read every file the header touched and reported old findings in five test files as new: local
+  imports of names the module already imports (PYL-W0404, `test_ledger_error_cap.py`, `test_token_lifetime.py`,
+  `test_same_agent_rule.py`, `test_mcp_draft.py`) and a one-item unpacking of a list it could not size
+  (PYL-W0632, `test_b5_local_proxy.py`). The duplicate imports are gone and the test checks the list's length.

@@ -114,9 +114,8 @@ if __name__ == "__main__":
 
 class TtlBounds(unittest.TestCase):
     def test_issuer_and_verifier_bounds(self):
-        from two_key.capability import MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier
-        from two_key.keys import generate_private_key as gen
-        key = gen()
+        from two_key.capability import MAX_TTL_SECONDS
+        key = generate_private_key()
         self.assertEqual(CapabilityIssuer(key, max_ttl_seconds=MAX_TTL_SECONDS).max_ttl_seconds, 300)
         for bad in (float("nan"), float("inf"), 301, 0, True, 1.0):
             with self.assertRaisesRegex(ValueError, "max_ttl_seconds must be an integer from 1 to 300", msg=repr(bad)):

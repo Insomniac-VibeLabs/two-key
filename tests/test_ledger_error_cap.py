@@ -128,7 +128,6 @@ class EncodingErrorReasonCap(unittest.TestCase):
         from two_key.gateway import ToolGateway
         from two_key.keys import generate_private_key
         from two_key.ledger import Ledger
-        from two_key.quorum import QuorumPolicy
         from two_key.testing import TEST_AGENT, FixedJudge
 
         self.tmp = tempfile.TemporaryDirectory()
@@ -197,7 +196,6 @@ class DeriveValueUnreadableBounded(unittest.TestCase):
         from two_key.core import TwoKey
         from two_key.keys import generate_private_key
         from two_key.ledger import Ledger
-        from two_key.quorum import QuorumPolicy
         from two_key.testing import TEST_AGENT, FixedJudge
 
         self.tmp = tempfile.TemporaryDirectory()
@@ -216,7 +214,6 @@ class DeriveValueUnreadableBounded(unittest.TestCase):
 
     def test_pathological_type_name_in_value_unreadable_is_type_tag(self):
         from unittest import mock
-        from two_key.agent_meta import MAX_TYPE_TAG_CHARS, type_tag
         from two_key.derive import DeriveError, derive
 
         huge = "P" * 200_000
@@ -234,7 +231,6 @@ class DeriveValueUnreadableBounded(unittest.TestCase):
     def test_authorize_derive_failed_reason_bounded_for_huge_type_name(self):
         """Even a pre-capped DeriveError reason is cap_ledger_text'd into the decision."""
         from unittest import mock
-        from two_key.agent_meta import MAX_LEDGER_ERROR_CHARS
         from two_key.derive import DeriveError
 
         huge = "Q" * 200_000
@@ -254,7 +250,6 @@ class DeriveValueUnreadableBounded(unittest.TestCase):
 
     def test_derive_raises_type_tag_then_authorize_is_bounded(self):
         from unittest import mock
-        from two_key.agent_meta import MAX_TYPE_TAG_CHARS, type_tag
 
         huge = "R" * 200_000
         cls = type(huge, (OverflowError,), {})
@@ -283,7 +278,6 @@ class LedgerOmitDefaultBounded(unittest.TestCase):
         self.ledger = Ledger(Path(self.tmp.name, "ledger"), self.key)
 
     def test_pathological_type_name_does_not_inflate_omit_digest_allocation(self):
-        from two_key.agent_meta import MAX_TYPE_TAG_CHARS, type_tag
 
         huge = "O" * 200_000
         bad = type(huge, (), {})()
@@ -302,8 +296,6 @@ class LlmAbstainTypeTag(unittest.TestCase):
     """#27: transport / malformed_response abstain errors use type_tag."""
 
     def test_transport_pathological_type_name_is_type_tag(self):
-        from two_key.action import normalize_action
-        from two_key.agent_meta import MAX_TYPE_TAG_CHARS, type_tag
         from two_key.judges.ollama import OllamaJudge
 
         huge = "T" * 200_000
@@ -323,8 +315,6 @@ class LlmAbstainTypeTag(unittest.TestCase):
         self.assertLess(len(b.error), 80)
 
     def test_malformed_response_pathological_type_name_is_type_tag(self):
-        from two_key.action import normalize_action
-        from two_key.agent_meta import MAX_TYPE_TAG_CHARS, type_tag
         from two_key.judges.ollama import OllamaJudge
 
         huge = "M" * 200_000
