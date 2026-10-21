@@ -4084,6 +4084,8 @@ No change to any check, key or ledger entry.
   and raw arguments not shared with the judges?"; the sequence diagram's matching branch is reworded the same way.
 - docs/CONNECTING.md says that "billing" (`mcp-billing`, `BILLING_TOKEN`) is only an example.
 - docs/SIEM.md: the diagram no longer draws `siem-verify` reaching into the ledger; a SIEM never does.
+  The cursor now hangs off the sender (it saves it and resumes from it, reading missed entries from the ledger),
+  and the sender is labelled as formatting JSON or CEF for the collector and the webhook.
 - docs/SETTINGS.md (from `two_key/settings.py`): `config show` prints defaults filled in, not where a value
   came from, and `config check` does not run the `on_agent_access` check or compare `schema_digest`.
 

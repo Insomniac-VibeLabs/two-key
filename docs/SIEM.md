@@ -40,14 +40,16 @@ flowchart TD
   auth["authorize / gateway"] -- "append" --> ledger[("Encrypted ledger<br/>(the record)")]
   ledger -- "after the entry<br/>is on disk" --> filter["Allowlist<br/>no argument values"]
   filter --> queue["Bounded queue"]
-  queue --> sender["Sender thread"]
+  queue --> sender["Sender thread<br/>formats JSON or CEF"]
   sender -- "udp, tcp or tls" --> syslog["Syslog collector"]
   sender -- "https POST" --> hook["Webhook"]
-  cursor["Cursor: last seq<br/>delivered"] -. "replays after<br/>an outage" .-> sender
+  sender -- "saves last seq<br/>delivered" --> cursor["Cursor file<br/>beside the ledger"]
+  cursor -. "after an outage,<br/>resume from here" .-> sender
+  ledger -. "replay: entries<br/>after the cursor" .-> sender
   ledger -- "two-key siem-export" --> file["JSON Lines or CEF file"]
 ```
 
-*The live copy runs from the ledger to the collector; the export writes a file. The dashed line is the cursor's replay after an outage; the cursor is how the sender knows where to resume.*
+*The live copy goes from the ledger through the sender to the collector and the webhook, as JSON or CEF. Dashed lines are the catch-up after an outage: the sender reads the cursor, then the missed entries from the ledger. The export writes a file instead.*
 
 Three properties hold whatever you configure:
 
