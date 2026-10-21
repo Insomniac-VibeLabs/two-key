@@ -58,6 +58,10 @@ class Deployment(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.base = Path(os.path.realpath(tmp.name))
+        # The proxy starts the upstream in its own folder when upstream.cwd is unset, so the writable-path
+        # check sees the folder the suite runs in; a CI checkout drive (D:\ on Windows runners) fails it.
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.base)
         for patch in (mock.patch.object(config_set, "_euid", return_value=None if _platform.WINDOWS else 1000),
                       NO_RUNTIME):
             patch.start()
