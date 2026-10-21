@@ -121,6 +121,7 @@
 - [The proxy checks the upstream server's files behind a launcher (#13) — 2026-10-20](#the-proxy-checks-the-upstream-servers-files-behind-a-launcher-13--2026-10-20)
 - [`upstream.check_paths` on Windows needs the drive (#13) — 2026-10-20](#upstreamcheck_paths-on-windows-needs-the-drive-13--2026-10-20)
 - [DeepSource runs the Python analyzer, and on `working` — 2026-10-20](#deepsource-runs-the-python-analyzer-and-on-working--2026-10-20)
+- [Docs review: README from main, clearer diagrams, `config show` described correctly — 2026-10-21](#docs-review-readme-from-main-clearer-diagrams-config-show-described-correctly--2026-10-21)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4064,3 +4065,18 @@ refuse` included. On Linux, macOS, and Windows alike:
   calls it `tk`, as HOWTO does, which also stops it shadowing the
   `two_key` package it imports from.
 - CONTRIBUTING says where DeepSource runs.
+
+## Docs review: README from main, clearer diagrams, `config show` described correctly — 2026-10-21
+
+No change to any check, key or ledger entry.
+
+- README.md is main's again, including its overview diagrams, with only the changes the current code needs:
+  Python 3.10 to 3.14, the dead `#45` links pointed at HOWTO "Deployment boundary", the SETTINGS row, and the
+  `config show` and `config check` sentence. `tests/test_doc_diagrams.py` exempts README.md from the size
+  rules (its syntax is still checked); every file in docs/ still follows them.
+- README: the diagram's question "derive_failed: and no tool_args_on_derive_deny?" now reads "Call unreadable,
+  and raw arguments not shared with the judges?"; the sequence diagram's matching branch is reworded the same way.
+- docs/CONNECTING.md says that "billing" (`mcp-billing`, `BILLING_TOKEN`) is only an example.
+- docs/SIEM.md: the diagram no longer draws `siem-verify` reaching into the ledger; a SIEM never does.
+- docs/SETTINGS.md (from `two_key/settings.py`): `config show` prints defaults filled in, not where a value
+  came from, and `config check` does not run the `on_agent_access` check or compare `schema_digest`.

@@ -119,6 +119,15 @@ Two-Key checks what it can see of this when it starts, and names any file
 or folder another account could change
 ([What Two-Key checks for you](#what-two-key-checks-for-you)).
 
+**"Billing" is only an example.** The worked examples in this guide use a
+billing system (`mcp-billing`, `BILLING_TOKEN`, "Billing API") because
+they need some tool to point at. Two-Key does not care what the tool does
+or what kind of data it handles. Read "billing" as "whatever system your
+upstream tool reaches": a ticketing system, a file store, a database, a
+message service. Rename `mcp-billing` and `BILLING_TOKEN` to match, and
+keep the rules the same: one OS user per upstream, and the credential
+held only by that user.
+
 ## Route 1: an MCP client, through `two-key mcp-proxy`
 
 The agent host starts the proxy instead of the real server. The proxy

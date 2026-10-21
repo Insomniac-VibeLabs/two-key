@@ -384,8 +384,10 @@ variable or the path of an owner-only file; a loader refuses a secret written in
 
 A running proxy keeps the settings it started with. A change to an operator file takes effect at the next start.
 
-`two-key config show` prints the effective value of every setting here and where it came from.
-`two-key config check` loads the files together and runs the start-up checks without serving.
+`two-key config show` prints the effective value of every `proxy.yaml` setting, with defaults filled in. It
+does not say whether a value was set or defaulted. `two-key config check` loads the files together and runs the
+start-up checks that need no running process; it does not run the `on_agent_access` check or compare the
+upstream's tools with `schema_digest`, which only the proxy can do.
 
 ## What `high_assurance` changes
 

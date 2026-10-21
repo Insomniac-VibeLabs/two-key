@@ -134,19 +134,17 @@ from your own hook, never from the agent. A refused call comes back to the
 agent as a tool error with a reason code.
 
 ```mermaid
-flowchart TD
-  host["Agent host<br/>MCP client"] -- "tools/list and<br/>tools/call, stdio" --> tk
+flowchart LR
+  host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
   subgraph proxy["two-key mcp-proxy, its own OS user"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["TwoKey.authorize<br/>Path A and Path B"]
-    tk -- "token" --> gw["Gateway<br/>same process"]
+    tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk
   end
   tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected arguments,<br/>stdio" --> up["Upstream MCP server<br/>child process,<br/>third OS user"]
+  gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
   up --> sor["System of record"]
   hooks -. "look facts up" .-> sor
 ```
-
-*The agent host talks only to the proxy. Solid lines are the call path; dashed lines are the record sent to the judges and the hook's own lookups.*
 
 `two-key config check --config proxy.yaml` says whether the proxy would start, and `config show` prints the settings it resolves to; both are read-only (HOWTO "Look at a config without starting the proxy"). `two-key mcp-draft-specs` drafts the tool specs from the server's own
 schemas for you to review and sign. The walkthrough, with a worked
@@ -278,48 +276,46 @@ once the call is well-formed and within limits.
 Only the gateway runs a tool.
 
 ```mermaid
-flowchart LR
-  constitution["Signed<br/>constitution"] --> compile["Compile"]
-  compile --> bytecode["Path A<br/>policy bytecode"]
-  compile --> judgeText["Path B<br/>judge prose"]
-```
-
-*The principal signs the constitution once. Path A runs its compiled rules; Path B shows its prose to the judges.*
-
-What happens to one proposal:
-
-```mermaid
 flowchart TD
-  instruction["Untrusted<br/>instruction"] --> agent["Monitored agent"]
-  agent -- "JSON proposal<br/>or decline" --> authorize["TwoKey.authorize"]
-  authorize --> early{"Early deny?"}
-  early -- "yes" --> ledger["Encrypted ledger"]
-  early -- "no" --> derive["Derive fields"]
-  derive -. "optional scan" .-> hook["AV or DLP hook"]
-  hook -. "verdict" .-> derive
-  derive --> paths["Path A and Path B<br/>(next diagram)"]
-```
+  constitution["Signed<br/>Constitution"] --> compile["Compile"]
+  compile --> bytecode["Path A<br/>Policy"]
+  compile --> judgeText["Path B<br/>Judges"]
 
-*An early deny (a malformed or oversized proposal, a decline, file limits) is ledgered and neither path runs. Dashed lines are the optional scanner hook.*
+  instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
+  agent -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>Authorize"]
 
-Then both paths decide:
+  authorize --> early{"Early deny?<br/>malformed / size<br/>agent_declined<br/>file limits"}
+  early -->|yes| ledger["Encrypted<br/>Ledger"]
+  early -->|no| derive["Derive fields"]
 
-```mermaid
-flowchart TD
-  derive["Derived fields"] --> pathA["Path A<br/>policy VM"]
-  derive --> skipcheck{"derive_failed and no<br/>tool_args_on_derive_deny?"}
-  skipcheck -- "yes" --> skipped["Path B skipped"]
-  skipcheck -- "no" --> pathB["Path B<br/>judges and quorum"]
-  pathA --> gate{"Both paths allow?"}
+  derive -.->|"optional"| hook["AV/DLP<br/>Hook"]
+  hook -.-> derive
+
+  derive --> pathA["Path A<br/>Policy VM"]
+  bytecode --> pathA
+
+  derive --> pbCheck{"Call unreadable, and<br/>raw arguments<br/>not shared with<br/>the judges?"}
+  pbCheck -->|yes| skipped["Path B<br/>skipped"]
+  pbCheck -->|no| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
+  judgeText --> pathB
+
+  pathA --> gate{"Both paths<br/>allow?"}
   pathB --> gate
   skipped --> gate
-  gate -- "no" --> ledger["Encrypted ledger"]
-  gate -- "yes" --> token["Single-use<br/>capability token"]
-  token --> gateway["Tool gateway"]
-  gateway -- "verify" --> tool["Registered tool"]
-```
 
-*Each path's result, the gate's verdict and the gateway's redemption are written to the ledger. An optional copy of the ledger goes to a SIEM ([docs/SIEM.md](docs/SIEM.md)).*
+  pathA --> ledger
+  pathB --> ledger
+  skipped --> ledger
+
+  gate -->|no| ledger
+  gate -->|yes| token["Single-Use<br/>Capability<br/>Token"]
+
+  token --> gateway["Tool<br/>Gateway"]
+  gateway -->|"verify"| tool["Registered<br/>Tool"]
+  gateway --> ledger
+
+  ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
+```
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
 It does not receive Path A bytecode, judge credentials, or tool
@@ -431,71 +427,55 @@ sequenceDiagram
   participant Caller
   participant Agent as Monitored agent
   participant TwoKey
+  participant PathA as Path A VM
+  participant PathB as Path B quorum
+  participant Judge as Judges
   participant Ledger
-  Caller->>Agent: instruction, prose, vocabulary (syntax)
+  participant Gateway
+  participant Tool
+
+  Caller->>Agent: instruction, constitution prose, opt-in vocabulary (syntax only)
   Agent-->>Caller: JSON proposal or decline, no tool call
   Caller->>TwoKey: proposal and agent_session
   alt agent declined
-    TwoKey->>Ledger: agent_declined, with the reason
+    TwoKey->>Ledger: decision agent_declined, with the decline reason
     TwoKey-->>Caller: deny, neither path runs, no token
-  else malformed or over a size limit
+  end
+  alt malformed or over a size limit
+    Note over TwoKey: malformed_proposal, proposal_too_large,<br/>action_too_large, malformed_action,<br/>args_too_large, invalid_call, file limits
     TwoKey->>Ledger: decision with size and digest only
     TwoKey-->>Caller: deny, neither path runs
   end
-```
-
-*A decline and a malformed or oversized proposal stop here. The reason codes are `malformed_proposal`, `proposal_too_large`, `action_too_large`, `malformed_action`, `args_too_large`, `invalid_call`, and the file limits.*
-
-A well-formed proposal goes to both paths:
-
-```mermaid
-sequenceDiagram
-  participant TwoKey
-  participant PathA as Path A VM
-  participant PathB as Path B judges
-  participant Ledger
-  TwoKey->>PathA: structured fields (after scan, derive)
+  TwoKey->>PathA: structured fields (after optional scan / derive)
   PathA-->>TwoKey: allow or deny
-  alt derive_failed, no tool_args_on_derive_deny
-    Note over TwoKey,PathB: Path B skipped
+  alt call unreadable, arguments not shared
+    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed)
     TwoKey->>Ledger: proposal, path_a, path_b skipped
   else
     TwoKey->>PathB: action record and binding hashes
-    PathB->>PathB: judges score in parallel, own credentials
+    Note over PathB: args omitted on derive deny unless tool_args_on_derive_deny
+    Note over PathB: scan flag can also withhold args/proposal
+    PathB->>Judge: score in parallel, own credentials
+    Judge-->>PathB: yes, no, or abstain
     PathB-->>TwoKey: quorum pass or deny
     TwoKey->>Ledger: proposal, path_a, path_b
   end
-```
-
-*Judges see no arguments after a derive deny unless `tool_args_on_derive_deny` is set, and a scan flag can also withhold the arguments and the proposal. A skipped Path B is ledgered as `skipped:derive_failed`.*
-
-If both allow, the caller redeems the token:
-
-```mermaid
-sequenceDiagram
-  participant Caller
-  participant TwoKey
-  participant Gateway
-  participant Ledger
-  participant Tool
   alt both allow
     TwoKey->>Ledger: capability_issued, then decision
     TwoKey-->>Caller: single-use token
     Caller->>Gateway: token, tool, arguments
-    Note over Gateway: same process as TwoKey,<br/>verifies with the capability public key only
+    Note over Gateway: same process as TwoKey,<br/>verifies with capability public key only
     opt authenticated token refused
-      Gateway->>Ledger: gateway_denied (reason, jti, tool)
+      Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
     end
     Gateway->>Ledger: redemption_started
     Gateway->>Tool: registered function
-    Gateway->>Ledger: redemption, or redemption_aborted
+    Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
   else either path denies or skipped
     TwoKey->>Ledger: decision, no token
     TwoKey-->>Caller: deny
   end
 ```
-
-*`gateway_denied` also records the argument size and digest; `redemption_aborted` is written when the tool raises an exception.*
 
 The token is signed by the capability key (`<ledger>.capability/capability.pem`,
 outside the ledger directory). It is bound to the tool, the argument hash,
@@ -632,15 +612,13 @@ are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
-flowchart TD
+flowchart LR
   r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
   r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
   r07 --> r10["1.0.0<br/>Review and release"]
-  r10 -. "later" .-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
+  r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
 ```
-
-*Each release builds on the one above it. The dashed line leads to work planned after 1.0.*
 
 | Version | What | Status |
 | --- | --- | --- |

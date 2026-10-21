@@ -45,10 +45,9 @@ flowchart TD
   sender -- "https POST" --> hook["Webhook"]
   cursor["Cursor: last seq<br/>delivered"] -. "replays after<br/>an outage" .-> sender
   ledger -- "two-key siem-export" --> file["JSON Lines or CEF file"]
-  file -. "siem-verify only reads,<br/>compares with" .-> ledger
 ```
 
-*The live copy runs from the ledger to the collector; the export writes a file. The dashed lines are the cursor's replay and `siem-verify`, which only reads both and never writes to the ledger.*
+*The live copy runs from the ledger to the collector; the export writes a file. The dashed line is the cursor's replay after an outage; the cursor is how the sender knows where to resume.*
 
 Three properties hold whatever you configure:
 

@@ -13,6 +13,9 @@ style, which keeps GitHub's renderer from splitting words, clipping notes, or sh
 6. A flowchart that mixes solid and dashed lines says "dashed" in its caption.
 7. A caption, one line of italic text, follows every diagram.
 
+README.md is exempt from rules 1 to 7 (its syntax is still checked): the maintainer chose its overview
+diagrams, which are larger than the rules allow, over the split ones. Every file in docs/ follows them.
+
 A Mermaid renderer needs Node and a browser, so it cannot run here. The `diagrams` workflow draws every
 block with a pinned mermaid-cli and uploads the pictures for a look before a release; it gets the blocks
 from `python tests/test_doc_diagrams.py --extract DIR`.
@@ -31,6 +34,7 @@ ARROW = re.compile(r"<?(?:-{2,}>|-\.+->|-{3,}|={2,}>)")
 EDGE_LABEL = re.compile(r'(?:--|-\.)\s*"([^"]*)"\s*(?:-->|\.->|---)|\|\s*"([^"]*)"\s*\|')
 CAPTION = re.compile(r"^\*[^*\s][^*]*\*$")
 MAX_LABEL_LINE, MAX_TITLE, MAX_EDGE_LINES = 28, 40, 2
+STYLE_EXEMPT = {"README.md"}
 MAX_PARTICIPANTS, MAX_SEQ_TEXT, MAX_NOTE_LINES, MAX_BOXES, MAX_LR_CHAIN = 5, 50, 2, 12, 4
 
 
@@ -155,6 +159,8 @@ class HouseStyle(unittest.TestCase):
     def test_every_diagram_follows_the_house_style(self):
         found = []
         for doc in documents():
+            if doc.name in STYLE_EXEMPT and doc.parent == ROOT:
+                continue
             for line, block, after in diagrams(doc.read_text(encoding="utf-8")):
                 found += [f"{doc.name}:{line}: {p}" for p in problems(block, after)]
         self.assertEqual(found, [], "see the rules in this file's docstring")
