@@ -4081,10 +4081,10 @@ No change to any check, key or ledger entry.
   Python 3.10 to 3.14, the dead `#45` links pointed at HOWTO "Deployment boundary", the SETTINGS row, and the
   `config show` and `config check` sentence. `tests/test_doc_diagrams.py` exempts README.md from the size
   rules (its syntax is still checked); every file in docs/ still follows them.
-- README: the diagram's question "derive_failed: and no tool_args_on_derive_deny?" now reads "Can the judges be
-  shown this call?", with the yes and no branches swapped to match (a call that could not be read, with
-  `tool_args_on_derive_deny` off, is a no); the sequence diagram's branch says "judges cannot be shown the call",
-  and a sentence under the diagram names the setting.
+- README: the diagram's question "derive_failed: and no tool_args_on_derive_deny?" now reads "Unreadable call: do
+  judges get the raw arguments?", and the skipped box says "= deny, no token" (a skipped Path B never passes,
+  so the call is denied; checked in `core.py`); the sequence diagram's branch is worded to match, and a
+  paragraph under the diagram names `tool_args_on_derive_deny`.
 - docs/CONNECTING.md says that "billing" (`mcp-billing`, `BILLING_TOKEN`) is only an example.
 - docs/SIEM.md: the diagram no longer draws `siem-verify` reaching into the ledger; a SIEM never does.
   The cursor now hangs off the sender (it saves it and resumes from it, reading missed entries from the ledger),

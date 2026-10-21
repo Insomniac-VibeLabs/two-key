@@ -294,9 +294,9 @@ flowchart TD
   derive --> pathA["Path A<br/>Policy VM"]
   bytecode --> pathA
 
-  derive --> pbCheck{"Can the judges be<br/>shown this call?"}
-  pbCheck -->|no| skipped["Path B<br/>skipped"]
-  pbCheck -->|yes| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
+  derive --> pbCheck{"Unreadable call:<br/>do judges get the<br/>raw arguments?"}
+  pbCheck -->|"no"| skipped["Path B skipped<br/>= deny, no token"]
+  pbCheck -->|"yes, or the call<br/>was readable"| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
   judgeText --> pathB
 
   pathA --> gate{"Both paths<br/>allow?"}
@@ -317,9 +317,11 @@ flowchart TD
   ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
 ```
 
-The judges are not shown a call that could not be read under its signed spec
-(`derive_failed:`) unless `tool_args_on_derive_deny` is set. That is the "no"
-branch above: Path B is skipped and ledgered as `skipped:derive_failed`.
+A call that could not be read under its signed spec (`derive_failed:`) is already
+denied by Path A. Unless `tool_args_on_derive_deny` is set, the judges are not shown
+its raw arguments, so they are not asked: Path B is skipped and ledgered as
+`skipped:derive_failed`. A skipped Path B counts as not passing, so the call is
+denied and no token is issued.
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
 It does not receive Path A bytecode, judge credentials, or tool
@@ -452,8 +454,8 @@ sequenceDiagram
   end
   TwoKey->>PathA: structured fields (after optional scan / derive)
   PathA-->>TwoKey: allow or deny
-  alt judges cannot be shown the call
-    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed)
+  alt unreadable call, judges get no arguments
+    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed), so the call is denied
     TwoKey->>Ledger: proposal, path_a, path_b skipped
   else
     TwoKey->>PathB: action record and binding hashes
