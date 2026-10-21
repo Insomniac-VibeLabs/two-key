@@ -51,6 +51,9 @@ only on Linux runners. Coverage (`coverage.yml`) is one report, from Linux.
 DeepSource (`.deepsource.toml`: the Python analyzer and the secrets check)
 analyses main and pull requests only, so a draft pull request from `working`
 to main stays open to have each push to `working` analysed.
+Each workflow runs once per change: on a pull request, and on a push only to
+`main`, `PyPI` and `testpypi`. A push to `working` is covered by the draft pull
+request, so it is not run twice.
 Tests that start a child process build its environment with
 `tests/child_env.py`, which keeps the variables Windows needs.
 

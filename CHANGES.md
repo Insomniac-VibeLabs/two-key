@@ -122,6 +122,7 @@
 - [`upstream.check_paths` on Windows needs the drive (#13) — 2026-10-20](#upstreamcheck_paths-on-windows-needs-the-drive-13--2026-10-20)
 - [DeepSource runs the Python analyzer, and on `working` — 2026-10-20](#deepsource-runs-the-python-analyzer-and-on-working--2026-10-20)
 - [Docs review: README from main, clearer diagrams, `config show` described correctly — 2026-10-21](#docs-review-readme-from-main-clearer-diagrams-config-show-described-correctly--2026-10-21)
+- [CI: each workflow runs once per change — 2026-10-21](#ci-each-workflow-runs-once-per-change--2026-10-21)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4080,3 +4081,10 @@ No change to any check, key or ledger entry.
 - docs/SIEM.md: the diagram no longer draws `siem-verify` reaching into the ledger; a SIEM never does.
 - docs/SETTINGS.md (from `two_key/settings.py`): `config show` prints defaults filled in, not where a value
   came from, and `config check` does not run the `on_agent_access` check or compare `schema_digest`.
+
+## CI: each workflow runs once per change — 2026-10-21
+
+No change to any check, only to when it runs. Tests, build, bandit, coverage, CodeQL and Semgrep ran twice for
+a change to `working` with a pull request open: once for the push, once for the pull request (59 checks on
+PR #30). They now run on a pull request, and on a push only to `main`, `PyPI` and `testpypi`. Job names are
+unchanged, so required checks on main still match. Without an open pull request, a push to `working` runs no CI.

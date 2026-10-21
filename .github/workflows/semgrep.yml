@@ -3,7 +3,7 @@ name: Semgrep
 on:
   pull_request: {}
   push:
-    branches: [main, working]
+    branches: [main, PyPI, testpypi]
   workflow_dispatch: {}
 
 permissions:
