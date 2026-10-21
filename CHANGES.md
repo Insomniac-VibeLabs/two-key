@@ -4057,9 +4057,14 @@ refuse` included. On Linux, macOS, and Windows alike:
 
 - DeepSource had no `.deepsource.toml`, so it ran its secrets check alone,
   and only on main and pull requests, never on a push to `working`.
-  `.deepsource.toml` now turns on the Python analyzer beside the secrets
-  check, with `tests/` marked as test code, and a draft pull request from
+  The Python analyzer is now on beside the secrets check, with `tests/`
+  marked as test code. DeepSource keeps that setting in its own repository
+  configuration, which is where it was turned on; `.deepsource.toml` holds
+  the same so the repository says what runs. A draft pull request from
   `working` to main (#30) stays open so each push to `working` is analysed.
+- The Python analyzer's first findings on `working` were two test helpers
+  that did not use `self` (PYL-R0201), in `tests/test_upstream_paths.py`
+  and `tests/test_config_cmd.py`; both are static methods now.
 - Its first finding on `working` was a false positive in docs/SIEM.md: the
   Python example named its `TwoKey` instance `two_key = TwoKey(...)`,
   which the secrets check read as a hardcoded credential. The example now

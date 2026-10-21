@@ -48,8 +48,9 @@ ships 3.15 wheels (#27). CodeQL (`codeql.yml`)
 runs on all three as well. Semgrep (`semgrep.yml`) stays on Linux: it
 analyses the source, not the running system, and its container image runs
 only on Linux runners. Coverage (`coverage.yml`) is one report, from Linux.
-DeepSource (`.deepsource.toml`: the Python analyzer and the secrets check)
-analyses main and pull requests only, so a draft pull request from `working`
+DeepSource (the Python analyzer and the secrets check, set in DeepSource's
+repository configuration and mirrored in `.deepsource.toml`) analyses main
+and pull requests only, so a draft pull request from `working`
 to main stays open to have each push to `working` analysed.
 Each workflow runs once per change: on a pull request, and on a push only to
 `main`, `PyPI` and `testpypi`. A push to `working` is covered by the draft pull

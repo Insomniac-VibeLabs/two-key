@@ -83,7 +83,8 @@ class Check(Workspace):
     def check(self, environ=None):
         return config_cmd.check(self.proxy, {"UPSTREAM_SECRET_VAR": "x"} if environ is None else environ)
 
-    def levels(self, found):
+    @staticmethod
+    def levels(found):
         return {level for level, _ in found}
 
     def test_a_good_setup_has_no_failure_and_writes_nothing(self):

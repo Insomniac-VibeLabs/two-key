@@ -111,7 +111,8 @@ class Setting(Tree):
 
 
 class WhatIsChecked(Tree):
-    def targets(self, cfg):
+    @staticmethod
+    def targets(cfg):
         return {(key(p), rule) for p, rule in startup_paths(cfg)}
 
     def test_absolute_arguments_that_exist_are_checked_with_their_folders(self):

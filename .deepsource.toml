@@ -1,4 +1,5 @@
-# DeepSource (https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key/). It analyses main and every pull
+# DeepSource (https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key/), mirroring its repository configuration,
+# which is the one it uses. It analyses main and every pull
 # request; `working` gets its runs through the draft pull request kept open against main.
 version = 1
 
