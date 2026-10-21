@@ -43,15 +43,15 @@ def sha_file(path: Path) -> str | None:
 def run_cli(ctx, args, *, answer: str | None = None):
     """One CLI call. `answer` types that line on a pseudo-terminal; without it there is no terminal at all."""
     cmd = [sys.executable, "-m", "two_key", *map(str, args)]
-    kw = dict(cwd=ctx["pkg"], capture_output=True, text=True, env=ctx["env"], timeout=300, check=False)
+    kw = dict(cwd=ctx["pkg"], capture_output=True, text=True, env=ctx["env"], timeout=300)
     if answer is None:
-        r = subprocess.run(cmd, stdin=subprocess.DEVNULL, **kw)  # nosec B603
+        r = subprocess.run(cmd, stdin=subprocess.DEVNULL, check=False, **kw)  # nosec B603
     else:
         import pty
         master, slave = pty.openpty()
         try:
             os.write(master, (answer + "\n").encode())       # typed ahead: the line waits in the terminal's queue
-            r = subprocess.run(cmd, stdin=slave, **kw)  # nosec B603
+            r = subprocess.run(cmd, stdin=slave, check=False, **kw)  # nosec B603
         finally:
             os.close(master)
             os.close(slave)
