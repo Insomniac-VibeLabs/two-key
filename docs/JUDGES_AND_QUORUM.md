@@ -1,3 +1,8 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
 
 # Judges and quorum
 

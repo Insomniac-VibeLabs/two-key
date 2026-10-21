@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Ledger export to a SIEM (0.7.0): the event allowlist, the schemas, and delivery.
 
 The ledger stays the record. A SIEM gets a copy of each entry, built from an allowlist, so an operator

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The MCP proxy's configuration file (``two-key mcp-proxy --config proxy.yaml``).
 
 Read strictly (``two_key.strict``): a repeated key, a YAML merge key, and an unknown key are refused, so a

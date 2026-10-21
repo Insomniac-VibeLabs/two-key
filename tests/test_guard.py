@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """two_key.guard: one call through both keys, with caller-supplied facts looked up before authorize and again
 before the tool runs."""
 

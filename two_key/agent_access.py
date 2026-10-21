@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The account that started the MCP proxy, checked before the proxy opens its ledger (``on_agent_access``).
 
 ``two-key mcp-proxy`` is started by the agent's host: directly, through the ``run-proxy`` sudo rule, or by a

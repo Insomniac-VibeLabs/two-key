@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Live runs 6 to 8: Two-Key behind the MCP proxy, refereed, wired only through documented interfaces.
 
 What runs:

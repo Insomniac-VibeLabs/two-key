@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Take Two-Key's SIEM copy and index it into Elasticsearch. Example code, standard library only.
 
 A collector in front of Elasticsearch, the way a real one would sit there: it terminates syslog over

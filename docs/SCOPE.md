@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Scope
 
 `two-key` is beta (pre-1.0). Package version 0.7.0, tag `v0.7.0` on `main`. What each release

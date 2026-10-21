@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Run 9: known weakenings of Two-Key, for `harness.py --sabotage NAME`.
 
 A PASS in a live run says Two-Key denied what it should. It does not say the harness would have noticed if Two-Key

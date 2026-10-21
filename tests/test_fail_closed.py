@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Every Path B failure is a deny: abstain, error, timeout, unparseable output, no judges, no deadline."""
 
 import tempfile

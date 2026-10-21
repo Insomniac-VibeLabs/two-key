@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Live run 6 and 7: the clinic's upstream MCP server. two-key mcp-proxy starts it as its child over stdio.
 
 It does no work itself: each tools/call is forwarded over loopback HTTP to the harness (HARNESS_TOOL_URL), which

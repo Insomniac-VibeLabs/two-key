@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The live harness (tests/live) keeps three promises that nothing else checks, and each breaks silently:
 
 - a sabotage patch (tests/live/sabotage.py) must still match the source it weakens, or the pass would "test" a

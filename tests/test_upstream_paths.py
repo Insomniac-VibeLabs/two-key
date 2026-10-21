@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The upstream server's own files in the proxy's start-up checks (#13, two_key/mcp_proxy/core.py).
 
 With ``upstream.command: [sudo, -n, -u, mcp-billing, <interpreter>, <server script>]``, ``command[0]`` is the

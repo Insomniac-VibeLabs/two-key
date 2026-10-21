@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Single-use capability tokens bound to the ledger root at issuance.
 
 Tokens are signed by a capability key that lives outside the ledger

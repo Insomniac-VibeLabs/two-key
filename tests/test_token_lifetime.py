@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Fix 8: a token may not outlive the configured TTL, be issued in the future, or lack a time field."""
 
 import tempfile

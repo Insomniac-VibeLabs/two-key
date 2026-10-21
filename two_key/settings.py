@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The catalogue of every setting, and ``docs/SETTINGS.md`` generated from it.
 
 One row per key that a loader accepts, in the file that holds it. Each row says what the key does, its
@@ -380,7 +383,13 @@ def lookup(file: str, key: str) -> Setting | None:
 
 # -- docs/SETTINGS.md ------------------------------------------------------------------------------------------
 
-INTRO = """# Every setting
+INTRO = """<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# Every setting
 
 Every key that Two-Key reads from a file, where it lives, what it does, its default, and what the
 `high_assurance` profile does to it. This page is generated from `two_key/settings.py`, and

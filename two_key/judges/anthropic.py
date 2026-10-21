@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Anthropic Messages API judge (POST {base_url}/v1/messages).
 
 The static system prompt and the principal's constitution are marked with an

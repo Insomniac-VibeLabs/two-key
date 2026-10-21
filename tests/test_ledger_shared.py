@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Two processes on one ledger (two MCP proxies, say): the one that did not write catches up under the lock.
 
 Each Ledger object here stands for a process: it keeps its own copy of the ledger's state, as a second proxy

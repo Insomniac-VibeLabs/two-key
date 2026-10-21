@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Locality is an explicit allowlist (127/8, ::1, RFC 1918, fc00::/7), not ipaddress.is_private."""
 
 import unittest

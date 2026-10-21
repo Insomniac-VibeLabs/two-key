@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Every tool decides each field a deny_if_fields rule reads: it maps it, or marks it not_applicable (#10).
 
 A forgotten mapping used to hand the tool the field's signed default, with only a warning at signing: a

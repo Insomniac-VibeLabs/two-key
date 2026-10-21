@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Recompute the digests a decision entry carries and check them against ``constitution_loaded``.
 
 Each ``constitution_loaded`` entry holds the resolved judge and agent identities

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """#6: judge connections are pooled per origin and reused across threads and quorum rounds."""
 
 import json

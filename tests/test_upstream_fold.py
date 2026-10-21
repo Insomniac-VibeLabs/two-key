@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Declared upstream labels are folded; bare openai maps to api.openai.com (#9)."""
 from __future__ import annotations
 

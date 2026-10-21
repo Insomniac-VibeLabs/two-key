@@ -208,3 +208,9 @@ An agent that can reach the upstream directly bypasses the proxy; run the upstre
 decision.reason names one cause (parse/limit/derive deny, then Path A, then Path B); read
 path_a.reason and path_b.reason too. judges.yaml and agents.yaml are trusted operator config:
 a callback auth entry imports the module it names.
+
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->

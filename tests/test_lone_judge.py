@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """A start-up warning when one judge can approve a call alone while the others are down (live run 6x, X03).
 
 With two judges, required_yes 1 and min_responding unset (so 1), judge A's yes passed with judge B on a dead

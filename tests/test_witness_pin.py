@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """#58: the ledger's witness public key is pinned in the ledger and, optionally, outside it.
 
 A new ledger's first entry is ``witness_pinned``. A ledger made before 0.2.3 pins the key that signed its

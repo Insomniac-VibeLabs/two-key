@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Guard: one call that authorizes and runs a tool through both keys, with caller-supplied facts.
 
 Usable from any agent loop (LangChain, the OpenAI Agents SDK, custom code) and used by the MCP proxy. For each

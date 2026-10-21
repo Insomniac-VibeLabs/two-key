@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Fix 9: the capability key file, its directory, its fingerprint pin, and the principal-key split."""
 
 import os

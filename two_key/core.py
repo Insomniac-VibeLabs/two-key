@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Two-Key: a tool call runs only if Path A and Path B both allow.
 
 ``authorize_from_agent`` runs both paths once the call is well-formed and within limits,

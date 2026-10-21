@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The reference scanner adapters (0.6.0): clamd, ICAP, a command, and a Python hook.
 
 Fake clamd and ICAP servers run on 127.0.0.1 inside the tests; nothing leaves the machine. The EICAR test

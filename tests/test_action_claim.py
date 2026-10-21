@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """B-1: the raw action claim is size-capped, the tool name is an identifier, and reasons carry no values."""
 
 import io

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Owner-only files, locks, and no-follow opens on Linux, macOS, and Windows (0.6.0).
 
 Two-Key keeps its keys in files only their owner can read, opens them without following a symlink,

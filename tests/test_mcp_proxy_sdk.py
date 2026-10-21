@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The MCP proxy through the MCP SDK, against a fake upstream server started as a child process over stdio
 (tests/fixtures/fake_mcp_server.py). Network-free. Skipped without the mcp extra."""
 

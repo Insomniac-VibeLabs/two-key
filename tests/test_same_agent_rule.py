@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The judge-is-not-the-agent rule (owner decision, 2026-10-08).
 
 A judge must not be the monitored agent: TwoKey refuses to start when a judge holds the agent's credential (an API

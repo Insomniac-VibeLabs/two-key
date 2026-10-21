@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Connect an antivirus or DLP product
 
 This guide is for operators who want an antivirus or data loss prevention

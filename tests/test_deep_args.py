@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Arguments nested too deeply to walk are a deny, never a RecursionError reaching the caller."""
 
 import tempfile

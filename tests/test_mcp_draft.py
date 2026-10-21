@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """two-key mcp-draft-specs: drafts fail closed, flag fact-like fields, and pin the digest the proxy checks."""
 
 import contextlib

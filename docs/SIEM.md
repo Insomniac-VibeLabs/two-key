@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Send the ledger to a SIEM (0.7.0)
 
 Two-Key's ledger is the record of every decision: who proposed what, which

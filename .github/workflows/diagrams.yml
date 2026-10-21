@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 name: diagrams
 
 # Draws every Mermaid diagram in the docs with a pinned mermaid-cli and uploads the pictures, so a

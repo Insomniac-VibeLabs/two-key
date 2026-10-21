@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Append-only hash-chained ledger with a signed head.
 
 Entries and the head are AES-256-GCM ciphertext at rest. The data key is

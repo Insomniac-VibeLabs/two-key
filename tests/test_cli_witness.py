@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """#58 on the command line: --witness-public-key on authorize, rotate-witness, and audit."""
 
 import io

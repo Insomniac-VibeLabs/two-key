@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Depth boundary: tool args, the action claim, and a structured proposal are held to MAX_INPUT_DEPTH, two
 levels under the encoder's MAX_DEPTH, so an accepted input still encodes inside a judge's record and a
 ledger entry. One level past the limit is a ledgered deny, never internal_error. A ledger body that cannot be

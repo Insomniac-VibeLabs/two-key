@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Custom Path A fields: a signed registry of typed fields, read from argument bytes.
 
 The principal declares each field once, at the top of the rules file (``fields:``), with a type and a

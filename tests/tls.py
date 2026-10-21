@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """A throwaway certificate authority for the SIEM sink tests. Offline: nothing is fetched or published.
 
 ``test_ca(dir)`` writes a CA certificate, a server certificate for 127.0.0.1 and localhost, and a client

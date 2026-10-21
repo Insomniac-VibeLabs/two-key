@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Ledger export to a SIEM (0.7.0): the allowlist, the schemas and formats, and delivery.
 
 Every sink here is in-process; nothing leaves the machine (the syslog and webhook adapters have their own

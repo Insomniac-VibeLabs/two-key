@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Draft ``tool_specs`` from an upstream server's tool schemas (``two-key mcp-draft-specs``). No MCP SDK here.
 
 A draft is a starting point for the principal to review and sign, never a signed policy. It fails closed:

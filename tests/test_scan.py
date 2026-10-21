@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Content scanning (0.6.0): Two-Key starts every scan, the signed stance rules on the verdict, files are
 scanned by digest, the judges and the ledger never get content, and the gateway checks the files again.
 

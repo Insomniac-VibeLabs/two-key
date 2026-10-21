@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Roadmap
 
 Where `two-key` goes from 0.5.0 to a 1.0 release. It states intent, not a

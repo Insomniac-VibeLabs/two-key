@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Credential providers for Path B judge connectors.
 
 Judges connect to whichever AI the user picks, by "api or username/password

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """An MCP stdio proxy that puts Two-Key in front of an upstream MCP server (``two-key mcp-proxy``).
 
 The agent's host starts the proxy instead of the upstream server. The proxy starts the upstream server as a

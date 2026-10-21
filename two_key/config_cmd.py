@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """``two-key config show`` and ``two-key config check``: read-only views of a proxy's configuration.
 
 Neither command writes a file, opens the ledger, starts the proxy, or contacts a judge, a scanner, a

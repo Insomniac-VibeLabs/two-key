@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """``@domain`` allow entries: every email address at exactly one domain, as the principal's signed choice (run 6x).
 
 The school constitution had to list every staff address, and one it forgot stopped a leak only by luck (X31).

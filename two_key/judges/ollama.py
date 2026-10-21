@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Local Ollama judge (native /api/chat with format=json). No auth by default.
 
 ``local_weights`` defaults to True only when ``base_url`` is a loopback or

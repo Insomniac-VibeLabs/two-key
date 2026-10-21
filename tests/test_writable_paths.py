@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Paths another account could change, checked when Two-Key starts (0.6.0, two_key/writable.py).
 
 Code and settings in such a path run with Two-Key's keys, so Two-Key names them on stderr, refuses to start

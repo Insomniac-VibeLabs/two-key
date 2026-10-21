@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Every setting
 
 Every key that Two-Key reads from a file, where it lives, what it does, its default, and what the

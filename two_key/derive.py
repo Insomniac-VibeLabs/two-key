@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Derive Path A's form from the argument bytes and a signed tool spec.
 
 The agent may still send amount, data class, counterparty, and irreversible.

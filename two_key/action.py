@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Normalized action record and its validation.
 
 ``normalize_action`` validates and canonicalizes a proposed action before

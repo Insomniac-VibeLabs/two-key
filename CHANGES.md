@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Changes
 
 ## Contents
@@ -126,6 +132,7 @@
 - [A Windows-only test failure in the clamd tests — 2026-10-21](#a-windows-only-test-failure-in-the-clamd-tests--2026-10-21)
 - [`two-key setup` and `two-key config set`, `get`, `undo`, `key-passphrase`: one way in for setup and changes — 2026-10-20](#two-key-setup-and-two-key-config-set-get-undo-key-passphrase-one-way-in-for-setup-and-changes--2026-10-20)
 - [Live harness: run 9 (set-up commands, upstream paths, two proxies, free play, sabotage) — 2026-10-21](#live-harness-run-9-set-up-commands-upstream-paths-two-proxies-free-play-sabotage--2026-10-21)
+- [Copyright and author headers — 2026-10-21](#copyright-and-author-headers--2026-10-21)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4236,3 +4243,16 @@ live yet; the maintainer decides when GrokBot runs it.
   a sabotage patch stops matching its source, when `COVERAGE.md` and the case tags disagree or name a missing test
   file, when AGENTS.md gains a fail-closed default with no row, or when a case names a step the story does not run.
 - Docs: `tests/live/RELAY.md` (run 9, the sabotage pass, the non-root requirement), ROADMAP, AGENTS.md.
+
+## Copyright and author headers — 2026-10-21
+
+- Every tracked file that can hold a comment now opens with a three-line header: `Copyright 2026
+  Insomniac-VibeLabs`, `Author: Stephan Busch`, and `SPDX-License-Identifier: Apache-2.0` (the licence in
+  `LICENSE`, unchanged). Python, YAML, TOML, shell, `MANIFEST.in`, and `.gitignore` files use `#` lines, after the
+  shebang where there is one; Markdown uses an HTML comment, so no page renders differently; `llms.txt` keeps its
+  title first and carries the comment at the end. `docs/SETTINGS.md` gets the header from `two_key/settings.py`.
+- No header in the files that cannot hold a comment or whose bytes are data: `LICENSE`, `uv.lock`, the JSON and
+  NDJSON files, the banner image, `examples/constitution.md` (constitution prose is signed and sent to the judges
+  as written), and `tests/fixtures/v1_constitution.md`.
+- `pyproject.toml` names Stephan Busch as an author alongside Insomniac-VibeLabs.
+- `tests/test_file_headers.py` fails on a tracked file without the header. CONTRIBUTING.md and AGENTS.md say so.

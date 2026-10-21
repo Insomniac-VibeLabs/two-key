@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """A principal key encrypted with a passphrase (two_key/keys.py), and everything that opens it: the proxy at
 start, ``config check``, every ``--key`` command, ``config set``/``undo``, ``config key-passphrase``, ``setup``
 and the key backup.

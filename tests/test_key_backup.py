@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """0.3 key backup: three passphrase bundles, restore, wrong passphrase, tampered bundle.
 
 The ledger key and the witness key are never in the same bundle. A restore writes

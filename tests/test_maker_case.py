@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The maker-diversity floor compares maker names case-insensitively (and NFKC, trimmed).
 
 ``maker`` / ``min_makers`` were ``vendor`` / ``min_vendors`` through 0.2.1; 0.2.3 refuses the old names.

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Live run verdicts (run 6 and its re-runs): from the system-of-record journal, the MCP results, and the ledger only,
 never from what a bot says about itself."""
 import json

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Ballot / VM ledger error strings are capped; type labels never use raw __name__."""
 from __future__ import annotations
 

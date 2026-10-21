@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Mermaid diagrams in the docs must parse on GitHub, and stay readable there.
 
 Two kinds of check. The first is syntax: a ';' ends a statement in a sequence diagram, so one inside a

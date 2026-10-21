@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Files written by the two-key-concept repository (before 0.4.0) are refused with a clear message.
 
 0.4.0 renamed every format identifier from "two-key-concept-..." to "two-key-...". Old constitutions,

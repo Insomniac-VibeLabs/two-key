@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """B-2: a :cloud / -cloud model is cloud and never local for every judge class, not only OllamaJudge."""
 
 import unittest

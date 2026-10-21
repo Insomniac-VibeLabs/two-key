@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """B5: a local proxy or daemon serving the agent's exact model.
 
 Owner rule (2026-10-08): a judge is refused as the monitored agent when it holds the agent's credential, at any address,

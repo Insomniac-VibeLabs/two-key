@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """origin is passed down per call, not stored on the TwoKey, so one call cannot label another's decision."""
 
 import tempfile

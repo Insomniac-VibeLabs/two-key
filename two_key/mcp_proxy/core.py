@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """What the MCP proxy decides, without the MCP SDK.
 
 The SDK module (``two_key.mcp_proxy.sdk``) moves messages; everything that decides is here, so it is tested

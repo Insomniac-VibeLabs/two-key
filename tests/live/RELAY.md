@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Live runs 6 to 9: relay procedure (operator)
 
 Run 6 tests Two-Key behind the MCP proxy (branch `working`, also `mcp-proxy`). The harness is the agent's MCP host: it starts

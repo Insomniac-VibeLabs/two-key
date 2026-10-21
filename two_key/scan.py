@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Content scanning (0.6.0): an antivirus or DLP product looks at a call before the two keys decide.
 
 Two-Key starts every scan. The signed constitution says which tools are scanned (a tool that maps the scan

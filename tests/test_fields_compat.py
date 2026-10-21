@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """A constitution without custom fields signs, hashes, and binds exactly as it did before they existed.
 
 The hashes below were recorded from the code before custom fields were added. If one changes, every

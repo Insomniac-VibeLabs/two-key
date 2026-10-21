@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Arguments are encoded once per authorize and once per gateway call; the cap still measures UTF-8 compact JSON."""
 
 import json

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Where the ledger copy goes (0.7.0): syslog over UDP, TCP, or TLS, and an HTTPS webhook.
 
 Standard library only (``socket``, ``ssl``, ``http.client``): no new dependency and no extra. Linux,

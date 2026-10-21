@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Google Gemini API judge (generateContent, JSON response mode).
 
 responseSchema asks Gemini to emit the ballot shape. The local parser still

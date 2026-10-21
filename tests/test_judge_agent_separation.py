@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """A judge must not be the monitored agent. Checked at start-up from operator config only.
 
 Owner rule (2026-10-08, restated 2026-10-09): a judge may run any model from any vendor. A judge must not be the

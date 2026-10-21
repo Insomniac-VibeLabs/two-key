@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """allow_same_model_distinct_tenant: deprecated, no effect (2026-10-08).
 
 A judge is refused when it uses the monitored agent's credential, at any address, so nothing is left for the

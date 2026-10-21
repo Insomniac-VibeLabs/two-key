@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """docs/SETTINGS.md maps every setting, and it cannot go stale.
 
 The page is generated from the catalogue in ``two_key/settings.py``. This test reads the key sets the loaders

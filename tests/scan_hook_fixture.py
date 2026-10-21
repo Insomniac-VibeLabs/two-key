@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """A Python scanner hook for tests/test_scanners.py: ``scan_hook_fixture:inspect``."""
 
 from two_key.scan import ScanResult

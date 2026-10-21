@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # AGENTS.md
 
 Guidance for coding agents working in this clone of
@@ -106,6 +112,8 @@ The unmoved tag is still `pip install "two-key[yaml] @ git+https://github.com/In
   the house style in `tests/test_doc_diagrams.py`: it fails on a long label
   line, a sequence diagram with more than five participants, a diagram with no
   one-line italic caption under it, and the rest of the rules in its docstring.
+- New files open with the copyright header (copyright Insomniac-VibeLabs, author Stephan Busch,
+  `SPDX-License-Identifier: Apache-2.0`); `tests/test_file_headers.py` fails without it. See CONTRIBUTING.md.
 - Tables of contents are generated: after changing a heading, run
   `python tests/test_doc_toc.py --write` (`tests/test_doc_toc.py` fails
   while one is stale).

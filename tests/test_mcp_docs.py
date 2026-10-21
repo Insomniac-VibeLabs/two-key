@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The MCP proxy's worked example in docs/HOWTO.md stays true: its proxy.yaml parses, its rules sign."""
 
 import os

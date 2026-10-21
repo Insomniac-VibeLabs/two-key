@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Each long document has a table of contents that matches its headings, with GitHub's anchors.
 
 After adding, renaming, or moving a heading, regenerate them:

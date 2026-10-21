@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Generates cases.jsonl, the PRIVATE answer key for live runs 6 to 8 (MCP proxy; run 7 added content scanning, run 8
 adds four personas, the SIEM copy, and the paths 0.6.0 refactored). Never send this file, its output,
 or anything derived from it to a role bot. Case ids are neutral (C01..) and shuffled so ids reveal nothing.

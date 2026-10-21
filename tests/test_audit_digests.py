@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """two_key.audit recomputes identities_digest and policy_digest and catches a decision that does not match."""
 
 import tempfile

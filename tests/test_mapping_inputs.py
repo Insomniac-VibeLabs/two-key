@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """A non-dict Mapping (top level or nested) in the tool args, the action claim, or the proposal is copied
 once into built-in types and sized, hashed, judged, ledgered, and handed to the tool from that copy. Its
 str() or repr() never stands in for its size, so a 5 MB custom Mapping cannot get a token."""

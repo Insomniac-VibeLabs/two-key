@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """A judge is local only from its endpoint host, never from the declared local_weights flag."""
 
 import unittest

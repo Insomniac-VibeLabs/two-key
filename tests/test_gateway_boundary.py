@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """#45: the gateway runs in the TwoKey process, on the TwoKey ledger object. A split gateway is unsupported."""
 
 import tempfile

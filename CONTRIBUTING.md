@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Contributing
 
 Changes should stay inside the core of
@@ -37,6 +43,11 @@ style in `tests/test_doc_diagrams.py` (short label lines, at most five
 participants, a one-line italic caption under each), and the test suite fails
 on a diagram that does not. The non-required `diagrams.yml` workflow draws
 every diagram and uploads the pictures for a look before a release.
+Every file that can hold a comment opens with the copyright header: `Copyright 2026 Insomniac-VibeLabs`,
+`Author: Stephan Busch`, `SPDX-License-Identifier: Apache-2.0`, as `#` lines (after a shebang) or, in
+Markdown, an HTML comment so the page renders unchanged. A new file gets it too; `tests/test_file_headers.py`
+fails on a tracked file without it and lists the files exempt from it (the licence, constitution prose, and
+formats with no comments: JSON, NDJSON, `uv.lock`, images).
 Run `python -m unittest discover -s tests` before opening a pull request.
 
 CI runs every pipeline that runs code on Linux, macOS, and Windows: the tests

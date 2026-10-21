@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # What a live pass covers
 
 Every fail-closed default in [AGENTS.md](../../AGENTS.md) ("Fail-closed defaults to preserve") has a row: the unit

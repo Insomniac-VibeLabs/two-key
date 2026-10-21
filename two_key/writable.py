@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Paths another account could change, checked when Two-Key starts (0.6.0).
 
 Two-Key's process holds the minting, principal, witness, and ledger keys, and runs the code it imports:

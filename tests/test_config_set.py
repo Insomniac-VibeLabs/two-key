@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """``two-key config set``, ``get`` and ``undo`` (two_key/config_set.py), and ``two-key setup`` (two_key/setup_cmd.py).
 
 What is refused writes nothing: no file changes, no ``.prev``, no ledger entry. What is written is owner-only,

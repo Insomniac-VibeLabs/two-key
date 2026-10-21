@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The account that started the MCP proxy (two_key/agent_access.py, ``on_agent_access``): refused by default
 when it is Two-Key's own, root, unknown, or can change a path the proxy runs or reads."""
 

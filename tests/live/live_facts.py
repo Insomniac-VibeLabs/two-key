@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Live run 6: the clinic's system of record, and the caller-supplied fact hook the proxy runs.
 
 `two-key mcp-proxy` imports `live_facts:po_matches` (proxy.yaml `tools.pay_vendor.facts.po_matched.hook`) and

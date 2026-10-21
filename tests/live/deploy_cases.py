@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Run 9: the set-up and change commands (`two-key setup`, `config set`, `undo`, `key-passphrase`) and their ledger
 entry (`config_changed`), driven the way an operator would, with no bot.
 

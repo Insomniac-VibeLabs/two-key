@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """``two-key setup``: write a new deployment's files in one go, then check them (docs/SETUP.md).
 
 It asks for the route (``proxy``, ``guard`` or ``library``), the profile (``default`` or ``high_assurance``), the

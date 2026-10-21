@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Content scanning behind the MCP proxy, without the MCP SDK: the proxy.yaml scan block and per-tool files,
 the drafter's file hints, the start-up warning for undeclared files, and one tools/call with an attached file
 through the scanner, Path A, Path B, and the gateway (two_key.mcp_proxy)."""

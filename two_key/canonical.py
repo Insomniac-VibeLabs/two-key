@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Canonical encoding for the ledger, tokens, and judge bindings.
 
 JSON with sorted keys and no insignificant whitespace. Non-finite numbers

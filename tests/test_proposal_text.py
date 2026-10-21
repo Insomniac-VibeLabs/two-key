@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """An agent proposal is measured before it is parsed, and a bad one is a ledgered deny, not an exception."""
 
 import json

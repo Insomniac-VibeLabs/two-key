@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 [build-system]
 requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
@@ -11,6 +14,7 @@ requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [
+    { name = "Stephan Busch" },
     { name = "Insomniac-VibeLabs" },
 ]
 keywords = [

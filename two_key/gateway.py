@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Redeem a capability token. It never scans: a scanned tool's token carries the verdict and each file's digest
 (scan.py), and the gateway checks the files again just before the tool runs (``file_changed``).
 

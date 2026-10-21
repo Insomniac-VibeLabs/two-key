@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """``case: exact`` string fields: compared, and passed to the tool, exactly as written (live run 6x, X19).
 
 A case-insensitive ASCII field is lower-cased, and the tool receives the value Path A checked, so a

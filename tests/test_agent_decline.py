@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """An agent may decline. A decline is a ledgered deny: never a call, never a token, neither path runs."""
 
 import json

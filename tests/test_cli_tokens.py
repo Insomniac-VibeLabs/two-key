@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Fix 13: the CLI never prints the bearer token, never takes the session secret on argv,
 loads the principal key through the safe loader, uses the configured TTL, and ledgers origin: cli."""
 

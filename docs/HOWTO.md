@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # How to run Two-Key
 
 Whether this package is the right control is [FIT.md](FIT.md). What it is

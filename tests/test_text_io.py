@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Every text file Two-Key opens names its encoding, and every text file it writes uses "\\n" (0.6.0).
 
 Without them a file hashes or signs differently on Windows, where the default encoding is the ANSI code

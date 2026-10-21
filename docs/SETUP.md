@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Set up and change Two-Key
 
 Two-Key's settings stay in separate files on purpose: the signed rules, the operator's configuration, and the

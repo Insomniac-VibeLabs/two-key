@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Connecting the monitored agent so it cannot go around Two-Key
 
 Two-Key can only stop the calls that go through it. This guide covers

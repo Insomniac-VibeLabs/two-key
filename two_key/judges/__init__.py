@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Path B judges: abstract interface, credential providers, and connectors.
 
 Connectors: OpenAICompatibleJudge (OpenAI, xAI, llama.cpp, vLLM, Ollama /v1),

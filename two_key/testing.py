@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Offline TEST DOUBLES only. They are not real judges.
 
 ``HeuristicJudge`` is the original prototype's keyword heuristic. It is kept

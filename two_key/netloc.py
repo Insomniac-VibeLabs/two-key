@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Where an endpoint really is, from its URL host. Never from a declared flag.
 
 Both checks use an explicit allowlist, not ``ipaddress``'s ``is_private``

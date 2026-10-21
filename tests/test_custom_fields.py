@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Custom Path A fields: typed, signed, read from argument bytes only, and bound into the token.
 
 Each test class is one invariant from the plan. Negative and bypass attempts are the point.

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """``two-key config show`` and ``config check`` (two_key/config_cmd.py): read-only, and no secret in the output."""
 
 import contextlib

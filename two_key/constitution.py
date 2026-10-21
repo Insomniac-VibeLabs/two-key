@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Signed constitution: prose for Path B, hard rules for Path A, and tool specs."""
 
 from __future__ import annotations
