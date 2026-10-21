@@ -681,8 +681,7 @@ def main():
         print("\n| Id | Kind | Category | Case | Persona | Expected |\n|---|---|---|---|---|---|")
         for i, k in enumerate(c, 1):
             e = k["expect"]
-            wants = [e.get(x) for x in ("reason", "reason_prefix", "warning")] + [", ".join(e.get("reasons") or []),
-                                                                                 e.get("tool")]
+            wants = [e.get(x) for x in ("reason", "reason_prefix", "warning")] + [", ".join(e.get("reasons", [])), e.get("tool")]
             want = next((x for x in wants if x), "-")
             persona = ", ".join(f"step {n}: {p}" for n, p in sorted((k.get("persona") or {}).items())) or "-"
             kind = k["kind"] + "".join(f", {x} {k[x]}" for x in ("stance", "scanner") if k.get(x))
