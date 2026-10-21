@@ -24,7 +24,7 @@ import subprocess  # nosec B404 - runs this repository's own CLI
 import sys
 from pathlib import Path
 
-PASSPHRASE = "correct horse battery staple"          # 12+ bytes; made up for the pass, protects a throwaway key
+UNLOCK_WORDS = "correct horse battery staple"          # 12+ bytes; made up for the pass, opens a throwaway key
 CANARY = "canary-not-a-secret-7731"                   # a value that must never be written anywhere by a refusal
 
 
@@ -104,8 +104,11 @@ def write_answers(ctx, name, **over) -> Path:
 
 
 def private_file(path: Path, text: str, mode=0o600) -> Path:
-    path.write_text(text)
-    os.chmod(path, mode)
+    """A test file with its mode set when it is created. `mode` 0o644 makes the one a refusal case must reject."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    with os.fdopen(fd, "wb") as f:
+        f.write(text.encode("utf-8"))
+    os.chmod(path, mode)          # the umask may have narrowed it
     return path
 
 
@@ -167,7 +170,7 @@ def run(ctx) -> dict:
     step("setup_passphrase_short", ["setup", "--dir", work / "deploy_s", "--answers",
                                     write_answers(ctx, "s", key_passphrase_file=str(short))],
          facts=lambda: {"dir_created": (work / "deploy_s").exists()})
-    wide = private_file(work / "pass_wide", PASSPHRASE, 0o644)
+    wide = private_file(work / "pass_wide", UNLOCK_WORDS, 0o644)
     step("setup_passphrase_readable", ["setup", "--dir", work / "deploy_w", "--answers",
                                        write_answers(ctx, "w", key_passphrase_file=str(wide))],
          facts=lambda: {"dir_created": (work / "deploy_w").exists()})
@@ -227,7 +230,7 @@ def run(ctx) -> dict:
     # ---- deployment B: the principal key encrypted with a passphrase
     b = work / "deploy_b"
     pb = b / "proxy.yaml"
-    pf = private_file(work / "principal.pass", PASSPHRASE)
+    pf = private_file(work / "principal.pass", UNLOCK_WORDS)
     plain_head = b"-----BEGIN PRIVATE KEY-----"
 
     def key_state():
