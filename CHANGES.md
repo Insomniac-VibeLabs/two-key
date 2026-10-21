@@ -125,6 +125,7 @@
 - [CI: each workflow runs once per change — 2026-10-21](#ci-each-workflow-runs-once-per-change--2026-10-21)
 - [A Windows-only test failure in the clamd tests — 2026-10-21](#a-windows-only-test-failure-in-the-clamd-tests--2026-10-21)
 - [`two-key setup` and `two-key config set`, `get`, `undo`, `key-passphrase`: one way in for setup and changes — 2026-10-20](#two-key-setup-and-two-key-config-set-get-undo-key-passphrase-one-way-in-for-setup-and-changes--2026-10-20)
+- [Live harness: run 9 (set-up commands, upstream paths, two proxies, free play, sabotage) — 2026-10-21](#live-harness-run-9-set-up-commands-upstream-paths-two-proxies-free-play-sabotage--2026-10-21)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4193,3 +4194,45 @@ is `keys.passphrase_file` among the paths they look at. docs/SETUP.md is the gui
   showing settings, each with who may run it and what it refuses), SETTINGS, CONNECTING ("Every connection
   and hook"), README, HOWTO ("Start here", "Create a principal key", the key backup, and "Look at a config
   without starting the proxy"), SIEM, THREAT_MODEL, ROADMAP, AGENTS.md, llms.txt.
+
+## Live harness: run 9 (set-up commands, upstream paths, two proxies, free play, sabotage) — 2026-10-21
+
+Test code and docs only (`tests/live/`); no change to `two_key/`. 115 cases (74 in run 8). Nothing has been run
+live yet; the maintainer decides when GrokBot runs it.
+
+- **The set-up and change commands** (`tests/live/deploy_cases.py`, 32 cases, no bot): `two-key setup` into a new
+  folder (owner-only files, one `config_changed` entry, no key digest; an existing folder, an unknown answer, a
+  short or world-readable passphrase file refused), `config set` refused for a weaker change without
+  `--confirm-weaker`, with it but no terminal, and with a human typing no; refused for a secret on the command line,
+  a typo, a setting that names the ledger, and a signed setting without the key or with no terminal; accepted when a
+  human types `yes` (a weaker change, a signed change that re-signs the constitution), recorded without any value;
+  `config undo` (restores the file, refuses after a hand edit); a deployment with an encrypted principal key (the
+  proxy opens it from `keys.passphrase_file`, and refuses without it or with a passphrase file others can read;
+  `key-passphrase --remove` and `--new-from` refuse with no terminal and name the key without a digest); and
+  `high_assurance` still refusing `on_agent_access: warn` after a typed `yes`. A typed `yes` runs on a
+  pseudo-terminal. The commands refuse root, so these cases are N/A in a pass run as root or on Windows, and
+  `RESULTS.md` says so.
+- **The upstream server's files** (#13), 7 config cases: the script's folder writable by another account (warns,
+  refuses under `on_writable_paths: refuse`), a writable and a missing `upstream.check_paths` entry, and an `env`
+  launcher with nothing naming the server (warns `upstream_paths_unchecked`, refuses under `high_assurance`, quiet
+  once `check_paths` names its folder).
+- **Two proxies on one ledger**: both started, four calls alternating, then `two-key audit`; each call must run and
+  the chain must verify (the outage fixed in `7e08d48`).
+- **A free-play round**: the agent plays EVIL for eight steps with no case. The harness grades invariants from the
+  system of record and the ledger (a token only after both keys passed, none redeemed twice, no unsigned tool reached,
+  no argument value in a deny reason, the ledger verifies afterwards) and lists every call in `RESULTS.md`. The
+  SIEM argument-value check no longer counts a value that is also a tool name or ledger kind, which an agent writing
+  free text can produce (`roster` is inside `export_patient_roster`).
+- **A coverage map**: `tests/live/COVERAGE.md` has a row for each fail-closed default of AGENTS.md (26): the unit
+  tests, whether a live case exercises it, and what is left to the unit tests and why. `RESULTS.md` prints it with
+  the pass's verdicts. A case is tagged with a row through `COVERS` in `make_cases.py`.
+- **A sabotage pass** (`harness.py --sabotage NAME|all`, `tests/live/sabotage.py`): runs the self-test against a copy
+  of the package with one check weakened (Path A ignored, a missing ballot counted as yes, a scanner's flag read as
+  clean, the SIEM copy sending every field, the upstream server's files ignored, `config set` skipping the typed
+  yes) and reports whether the harness noticed. `control` weakens nothing and must show no FAIL. One weakening is a
+  stated blind spot: the gateway's argument-hash check cannot be reached by a live call, because the proxy mints and
+  redeems in one process (unit tests cover it). The repository's `two_key/` is never touched.
+- `RESULTS.md` now names the Python version and whether the pass ran as root. `tests/test_live_harness.py` fails when
+  a sabotage patch stops matching its source, when `COVERAGE.md` and the case tags disagree or name a missing test
+  file, when AGENTS.md gains a fail-closed default with no row, or when a case names a step the story does not run.
+- Docs: `tests/live/RELAY.md` (run 9, the sabotage pass, the non-root requirement), ROADMAP, AGENTS.md.

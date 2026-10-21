@@ -72,11 +72,21 @@ ARGS.add_argument("--selftest", action="store_true", help="stub bots; writes onl
 ARGS.add_argument("--mask-run", metavar="DIR",
                   help="mask the antivirus test string in a finished run directory (after COMPLETE, before it is "
                        "committed) and write MASKED.md; does nothing else")
+ARGS.add_argument("--sabotage", metavar="NAME", help="run 9: run the self-test against a copy of the package with one known "
+                                                     "weakening applied (sabotage.py), and say whether the harness "
+                                                     "noticed; NAME is one of its patches or `all`. Needs no bot")
 ARGS.add_argument("--earlier", action="append", default=[], metavar="DIR",
                   help="an earlier run's directory (with relay/inbox); a reply identical to one there is flagged. "
                        "Repeatable; LIVE_EARLIER_RUNS (os.pathsep-separated) adds more")
 OPTS = ARGS.parse_args()
+if OPTS.sabotage:
+    OPTS.selftest = True            # a sabotage pass answers with the stub bots and never touches the relay
 BASE = HERE / "selftest" if OPTS.selftest else HERE
+if OPTS.sabotage and OPTS.sabotage != "all":
+    BASE = BASE / f"sabotage_{OPTS.sabotage}"
+# The package the proxies run: this repository's, or (--sabotage) a copy with one weakening applied. The harness
+# itself reads ledgers and judges verdicts with the real package, so a weakened copy cannot grade itself.
+PKG = BASE / "pkg" if OPTS.sabotage and OPTS.sabotage != "all" else REPO
 RELAY_DIR = BASE / "relay"
 OUT, INB = RELAY_DIR / "outbox", RELAY_DIR / "inbox"
 LOGS, STATE, CONST = BASE / "logs", BASE / "state", BASE / "constitution"
@@ -122,6 +132,10 @@ FIELDS = {"po_matched": {"type": "boolean", "default": True, "source": "caller",
 STANCE_RULES = {"default": [{"id": "scan", "deny_if_fields": {"scan": {"eq": "flagged"}}}],
                 "strict": [{"id": "scan", "deny_if_fields": {"scan": {"in": ["flagged", "unavailable"]}}}],
                 "monitor": [],
+                # Run 9: a proxy and ledger of their own for the two-proxies case and the free-play round, signed with
+                # the default stance; the ledger is theirs alone, so the free-play invariants read all of it.
+                "twoproxy": [{"id": "scan", "deny_if_fields": {"scan": {"eq": "flagged"}}}],
+                "freeplay": [{"id": "scan", "deny_if_fields": {"scan": {"eq": "flagged"}}}],
                 # The default stance, with send_message signed to pass encrypted files (docs/SCANNERS.md "Encrypted
                 # files"): the principal's choice for a tool whose recipients are on a signed allow list.
                 "encrypted_pass": [{"id": "scan", "deny_if_fields": {"scan": {"eq": "flagged"}}}]}
@@ -666,17 +680,19 @@ def write_outbox(role, rnd):
 
 # ---------------------------------------------------------------- setup: keys, draft, review, sign, configs
 def cli(*args, env=None, stdin=None):
-    r = subprocess.run([sys.executable, "-m", "two_key", *args], cwd=REPO, capture_output=True, text=True,  # nosec
+    r = subprocess.run([sys.executable, "-m", "two_key", *args], cwd=PKG, capture_output=True, text=True,  # nosec
                        env=env, timeout=300, stdin=stdin)
     log("cli", args=[a if len(a) < 300 else a[:80] + "..." for a in args], rc=r.returncode,
         stdout=r.stdout[-4000:], stderr=r.stderr[-4000:])
     return r
 
 
-def base_env():
-    env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": f"{REPO}{os.pathsep}{HERE}",
+def base_env(credentials=True):
+    """The environment every child of a pass gets. `credentials=False` is for --sabotage's check of which package
+    runs, which happens before a pass has made any."""
+    env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": f"{PKG}{os.pathsep}{HERE}",
            "HOME": os.environ.get("HOME", "/tmp")}
-    for k in CREDENTIAL_VARS:
+    for k in CREDENTIAL_VARS if credentials else ():
         env[k] = os.environ[k]
     return env
 
@@ -845,17 +861,21 @@ AGENT_ACCESS = "warn"
 
 
 def write_proxy(path, digest, *, judges="judges.yaml", ledger="ledger", variant="", on_change="refuse", tools=None,
-                siem=None, agent_access=AGENT_ACCESS):
-    env = {"HARNESS_TOOL_URL": f"http://127.0.0.1:{TOOL_PORT}/call"}
+                siem=None, agent_access=AGENT_ACCESS, command=None, env_extra=None, upstream_extra=None, extra=None):
+    """`command`, `env_extra`, `upstream_extra` (more `upstream:` keys, such as check_paths), and `extra` (more
+    top-level keys, such as on_writable_paths) are for the config cases that test start-up checks."""
+    env = {"HARNESS_TOOL_URL": f"http://127.0.0.1:{TOOL_PORT}/call", **(env_extra or {})}
     if variant:
         env["LIVE_MCP_VARIANT"] = variant
     cfg = {"constitution": "constitution.signed.json", "keys": {"principal": "keys/principal.pem"}, "ledger": ledger,
            "judges": judges, "agent_session_env": "LIVE_AGENT_API_KEY", "agent_id": "test-monitored-agent",
-           "upstream": {"command": server_cmd(), "env": env, "schema_digest": digest, "on_schema_change": on_change},
+           "upstream": {"command": command or server_cmd(), "env": env, "schema_digest": digest,
+                        "on_schema_change": on_change, **(upstream_extra or {})},
            "tools": CLAIMS if tools is None else tools,
            "scan": {"type": "icap", "url": f"icap://127.0.0.1:{SCAN_PORT}/dlp", "timeout_seconds": SCAN_TIMEOUT}}
     if agent_access is not None:
         cfg["on_agent_access"] = agent_access
+    cfg.update(extra or {})
     if siem is not None:
         cfg["siem"] = siem
     path.write_text(json.dumps(cfg, indent=1))
@@ -876,8 +896,65 @@ def config_siem(attack, d):
     return None
 
 
+def config_upstream(attack, d):
+    """Run 9 (issue #13): the upstream server's own files. What `write_proxy` should add for each case, as
+    keyword arguments. A launcher hides the program it starts, so the start-up checks cannot see the server
+    unless an absolute argument or `upstream.check_paths` names it; the case copies the server into a folder
+    another account could change and names it each way."""
+    srv = d / "srv"
+    out: dict = {}
+    if attack.startswith("upstream_"):
+        srv.mkdir()
+        os.chmod(srv, 0o777)         # nosec B103 - the point of the cases: another account could change this folder
+    if attack == "upstream_script_folder_writable":
+        # The issue's repro: the program is the interpreter and its script sits in a folder others can write.
+        shutil.copyfile(HERE / "clinic_mcp_server.py", srv / "clinic_mcp_server.py")
+        out["command"] = [sys.executable, str(srv / "clinic_mcp_server.py")]
+    elif attack == "upstream_script_folder_writable_refuse":
+        shutil.copyfile(HERE / "clinic_mcp_server.py", srv / "clinic_mcp_server.py")
+        out["command"] = [sys.executable, str(srv / "clinic_mcp_server.py")]
+        out["extra"] = {"on_writable_paths": "refuse"}
+    elif attack in ("upstream_launcher_unchecked", "upstream_launcher_high_assurance",
+                    "upstream_launcher_check_paths"):
+        # `env python3 -m clinic_mcp_server`: no absolute argument, so nothing names the server's files. The
+        # module is found through the upstream's own PYTHONPATH.
+        out["command"] = ["env", "python3", "-m", "clinic_mcp_server"]
+        out["env_extra"] = {"PYTHONPATH": str(HERE)}
+        if attack == "upstream_launcher_check_paths":
+            safe = d / "server_files"
+            safe.mkdir()
+            os.chmod(safe, 0o700)
+            out["upstream_extra"] = {"check_paths": [str(safe)]}
+    elif attack == "upstream_check_path_missing":
+        out["upstream_extra"] = {"check_paths": [str(d / "not-there")]}
+    elif attack == "upstream_check_path_writable":
+        out["upstream_extra"] = {"check_paths": [str(srv)]}
+    return out
+
+
 # What each config case puts in `on_agent_access`: None leaves the key out, which is the default (refuse).
 AGENT_ACCESS_BY_CASE = {"agent_access_default": None, "agent_access_bad_value": "sometimes"}
+
+
+def run_deploy_cases(results):
+    """Run 9: the set-up and change commands (deploy_cases.py), once, then hand each case its step. No bot."""
+    import deploy_cases
+    work = STATE / "deploy"
+    work.mkdir()
+    os.chmod(work, 0o700)
+    ctx = {"pkg": PKG, "env": base_env(), "work": work, "log": log, "rules": CONST / "rules.yaml",
+           "prose": CONST / "constitution.md", "server_cmd": server_cmd(), "claims": CLAIMS,
+           "scan": {"type": "icap", "url": f"icap://127.0.0.1:{SCAN_PORT}/dlp", "timeout_seconds": SCAN_TIMEOUT},
+           "ports": {"agent": AGENT_PORT, "judgeA": JUDGE_A_PORT, "judgeB": JUDGE_B_PORT}}
+    steps = deploy_cases.run(ctx)
+    for case in CASES:
+        if case["kind"] != "deploy":
+            continue
+        if "_not_applicable" in steps:
+            results[case["id"]] = {"not_applicable": steps["_not_applicable"]}
+        else:
+            results[case["id"]] = steps.get(case["step"]) or {"missing": f"step {case['step']} did not run"}
+        log("case_result", case=case["id"], **results[case["id"]])
 
 
 def run_config_case(case, digest):
@@ -890,11 +967,13 @@ def run_config_case(case, digest):
     write_judges(judges, declare_upstream=atk != "unresolved_identity",
                  judge_a_var="LIVE_AGENT_API_KEY" if atk == "judge_is_agent" else "LIVE_JUDGE_A_KEY",
                  required_yes=1 if atk == "lone_judge" else 2,
-                 profile="high_assurance" if atk == "agent_access_high_assurance" else None)
+                 profile="high_assurance" if atk in ("agent_access_high_assurance", "upstream_launcher_high_assurance")
+                 else None)
     variant = "poisoned" if atk.startswith("schema_changed") else ""
     tools = dict(CLAIMS, export_patient_roster={}) if atk == "unsigned_tools_entry" else None
     write_proxy(d / "proxy.json", digest, variant=variant, on_change="warn" if atk == "schema_changed_warn" else "refuse",
-                tools=tools, siem=config_siem(atk, d), agent_access=AGENT_ACCESS_BY_CASE.get(atk, AGENT_ACCESS))
+                tools=tools, siem=config_siem(atk, d), agent_access=AGENT_ACCESS_BY_CASE.get(atk, AGENT_ACCESS),
+                **config_upstream(atk, d))
     r = cli("mcp-proxy", "--config", str(d / "proxy.json"), env=base_env(), stdin=subprocess.DEVNULL)
     return {"rc": r.returncode, "stdout": r.stdout[-2000:], "stderr": r.stderr[-4000:]}
 
@@ -952,13 +1031,43 @@ def result_record(r):
     return {"is_error": bool(r.is_error), "text": text}
 
 
+async def run_two_proxies(results, config):
+    """Run 9: two proxies on one ledger (0.7.0, `7e08d48`). A second proxy writing the ledger used to make the first
+    deny every later call (`ledger_failed`) until it restarted. Both are started before the first call, so each has
+    to find the other's entries; the calls alternate, and `two-key audit` reads the chain afterwards."""
+    import contextlib
+    from mcp import Client, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+    params = StdioServerParameters(command=sys.executable, args=["-m", "two_key", "mcp-proxy", "--config",
+                                                                 str(config)], env=base_env(), cwd=str(PKG))
+    case = next(c for c in CASES if c["kind"] == "twoproxy")
+    CURRENT["case"], CURRENT["step"] = case["id"], 0
+    log("case_start", case=case["id"], case_kind="twoproxy")
+    calls = []
+    async with contextlib.AsyncExitStack() as stack:
+        clients = []
+        for i in (0, 1):
+            errlog = stack.enter_context((config.parent / f"proxy{i}.stderr").open("w"))
+            clients.append(await stack.enter_async_context(Client(stdio_client(params, errlog=errlog), cache=None)))
+        for i, c in enumerate(case["calls"]):
+            via = i % 2
+            r = result_record(await clients[via].call_tool(c["tool"], c["arguments"]))
+            calls.append({"call": c, "result": r, "via": via})
+    audit = cli("audit", "--ledger", str(config.parent / "ledger"), "--key", str(STATE / "keys" / "principal.pem"),
+                stdin=subprocess.DEVNULL)
+    results[case["id"]] = {"calls": calls, "audit": {"rc": audit.returncode, "stdout": audit.stdout[-1500:],
+                                                      "stderr": audit.stderr[-1500:]}}
+    log("case_result", case=case["id"], **results[case["id"]])
+    CURRENT["case"] = None
+
+
 async def run_mcp_cases(prose, results, config=None, stance=None):
     """The cases of one proxy: the main pass (stance unset), or one scan stance's host cases (run 7)."""
     from mcp import Client, StdioServerParameters
     from mcp.client.stdio import stdio_client
     config = config or STATE / "proxy.yaml"
     params = StdioServerParameters(command=sys.executable, args=["-m", "two_key", "mcp-proxy", "--config",
-                                                                 str(config)], env=base_env(), cwd=str(REPO))
+                                                                 str(config)], env=base_env(), cwd=str(PKG))
     with (config.parent / "proxy.stderr").open("w") as errlog:
         async with Client(stdio_client(params, errlog=errlog), cache=None) as client:
             listed = await client.list_tools()
@@ -1071,19 +1180,68 @@ def credential_scan(rnd):
         log("referee_incident", type="credential_in_run_files", files=sorted(found))
 
 
+def sabotage_all():
+    """`--sabotage all`: each patch in a pass of its own (a fresh process, as the ports and globals are per pass)."""
+    import sabotage
+    rows = []
+    for name in sabotage.PATCHES:
+        if sabotage.PATCHES[name].get("needs_non_root") and hasattr(os, "geteuid") and os.geteuid() == 0:
+            rows.append((name, "skipped", "needs a non-root account: the commands it weakens refuse to run as root"))
+            continue
+        r = subprocess.run([sys.executable, str(HERE / "harness.py"), "--sabotage", name], capture_output=True,  # nosec
+                           text=True, timeout=3600)
+        res = json.loads((HERE / "selftest" / f"sabotage_{name}" / "results.json").read_text()) \
+            if r.returncode == 0 else None
+        if res is None:
+            rows.append((name, "error", r.stderr[-300:]))
+            continue
+        failing = [f"{c['id']} {c['title']}" for c in res["cases"] if c["verdict"] in ("FAIL", "ERROR")]
+        incidents = res.get("referee_incidents") or []
+        rows.append((name, sabotage.verdict(name, res["counts"], len(incidents)),
+                     f"{len(failing)} case(s) failed; referee incidents: {sorted({i['type'] for i in incidents})}"))
+    lines = ["| Weakening | Result | Detail |", "|---|---|---|"]
+    lines += [f"| {n} | **{v}** | {d} |" for n, v, d in rows]
+    out = HERE / "selftest" / "SABOTAGE.md"
+    out.write_text("# Sabotage pass (run 9)\n\n" + "\n".join(lines) + "\n")
+    print("\n".join(lines))
+    bad = [n for n, v, _ in rows if v in ("missed", "control_failed", "error")]
+    if bad:
+        raise SystemExit(f"SABOTAGE: the harness did not notice, or broke: {bad}")
+    print(f"SABOTAGE: ok; written to {out}")
+
+
+def start_sabotage():
+    """Copy the package with the patch applied, and check the proxies will run the copy."""
+    import sabotage
+    if OPTS.sabotage not in sabotage.PATCHES:
+        raise SystemExit(f"--sabotage: {OPTS.sabotage!r} is not one of {sorted(sabotage.PATCHES)} or `all`")
+    if BASE.exists():
+        shutil.rmtree(BASE)
+    sabotage.apply(OPTS.sabotage, REPO, PKG)
+    where = subprocess.run([sys.executable, "-c", "import two_key; print(two_key.__file__)"], cwd=PKG,  # nosec
+                           capture_output=True, text=True, env=base_env(credentials=False)).stdout.strip()
+    if not where.startswith(str(PKG)):
+        raise SystemExit(f"--sabotage: the proxies would run {where!r}, not the copy in {PKG}")
+
+
 def main():
+    if OPTS.sabotage == "all":
+        return sabotage_all()
     if OPTS.mask_run:
         d = Path(OPTS.mask_run)
         if not d.is_dir():
             raise SystemExit(f"--mask-run: {d} is not a directory")
         print(f"MASKED: {mask_run(d)} file(s) in {d}; see {d / 'MASKED.md'}")
         return
+    if OPTS.sabotage:
+        start_sabotage()
     for d in (OUT, INB, LOGS):
         d.mkdir(parents=True, exist_ok=True)
     ingest_batches()
     rnd = 1 + len(list(OUT.glob("BATCH_*.txt")))
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip()  # nosec
-    log("pass_start", round=rnd, repo_head=head, selftest=OPTS.selftest)
+    log("pass_start", round=rnd, repo_head=head, selftest=OPTS.selftest, sabotage=OPTS.sabotage,
+        python=sys.version.split()[0], platform=sys.platform, root=hasattr(os, "geteuid") and os.geteuid() == 0)
     prose, digest = setup_state()
     results = {}
     for case in CASES:
@@ -1091,6 +1249,7 @@ def main():
             CURRENT["case"] = case["id"]
             results[case["id"]] = run_config_case(case, digest)
             log("case_result", case=case["id"], **results[case["id"]])
+    run_deploy_cases(results)
     servers = [serve(JUDGE_A_PORT, type("JA", (ChatEndpoint,), {"role": "judgeA"})),
                serve(JUDGE_B_PORT, type("JB", (ChatEndpoint,), {"role": "judgeB"})),
                serve(TOOL_PORT, ToolBridge), serve_icap(), serve_siem(SIEM_TLS["certs"])]
@@ -1099,7 +1258,16 @@ def main():
         asyncio.run(run_mcp_cases(prose, results))
         for stance in stances:
             d = setup_stance(stance, digest)
+            if any(c["kind"] == "twoproxy" and c.get("stance") == stance for c in CASES):
+                asyncio.run(run_two_proxies(results, d / "proxy.json"))
+                continue
             asyncio.run(run_mcp_cases(prose, results, d / "proxy.json", stance))
+            for case in CASES:      # run 9: the free-play round's ledger must still verify afterwards
+                if case.get("stance") == stance and (case["expect"] or {}).get("effect") == "invariants":
+                    a = cli("audit", "--ledger", str(d / "ledger"), "--key", str(STATE / "keys" / "principal.pem"),
+                            stdin=subprocess.DEVNULL)
+                    results[case["id"]]["audit"] = {"rc": a.returncode, "stdout": a.stdout[-1500:],
+                                                    "stderr": a.stderr[-1500:]}
     finally:
         time.sleep(2)           # the SIEM sender's last pass runs as the proxy exits; let it land
         for s in servers:
@@ -1123,6 +1291,11 @@ def main():
         print(f"OUTBOX: {out[0]}  (soft leak-term hits from library text: {out[1]})")
     else:
         print(f"COMPLETE: {BASE / 'RESULTS.md'} and results.json written")
+        if OPTS.sabotage:
+            import sabotage
+            res = json.loads((BASE / "results.json").read_text())
+            print(f"SABOTAGE {OPTS.sabotage}: {sabotage.verdict(OPTS.sabotage, res['counts'], len(res['referee_incidents']))} "
+                  f"{res['counts']} referee incidents: {len(res['referee_incidents'])}")
 
 
 if __name__ == "__main__":

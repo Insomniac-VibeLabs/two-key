@@ -107,6 +107,15 @@ in the same release.
   `init-key --passphrase`); the upstream server's files behind a launcher in the
   start-up checks (#13); and the compiled-file check on Python 3.15 (#27).
   CHANGES.md has each.
+- **Live testing, run 9 (harness built 2026-10-21, not yet run)**: 115 cases
+  (74 in run 8). New: the set-up and change commands (`setup`, `config set`,
+  `undo`, `key-passphrase`, and the `config_changed` entry, run as a
+  non-root account with a typed yes on a pseudo-terminal), the upstream
+  server's files behind a launcher (#13), two proxies on one ledger, a
+  free-play round graded on invariants instead of an answer key, a coverage
+  map (`tests/live/COVERAGE.md`) that says what a pass does and does not
+  cover, and a sabotage pass that shows which weakenings of Two-Key the
+  harness would notice (`harness.py --sabotage all`). It runs on one machine.
 - **Next**: the judge history summary (#1), then the public review and the
   1.0 release.
 - **Not yet tested enough: agents on another machine.** The maintainer
@@ -117,7 +126,8 @@ in the same release.
   container: real accounts, the sudo rule, the forced command's chain, and
   `sshd -t`; no sshd ran, and no agent connected across a network. Live
   run 8 is entirely same-machine and loopback, so it proves nothing about
-  a remote agent. Before 1.0: a live run with the agent on another machine
+  a remote agent, and run 9 stays on one machine too (maintainer's decision,
+  2026-10-20). Before 1.0: a live run with the agent on another machine
   over SSH (connect, reconnect, a dropped connection, two agents at once,
   and the escape attempts `restrict` should stop: a shell, `sftp`, port
   forwarding, environment variables), the same on macOS and Windows hosts,

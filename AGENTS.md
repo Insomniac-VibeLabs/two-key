@@ -96,6 +96,12 @@ The unmoved tag is still `pip install "two-key[yaml] @ git+https://github.com/In
   in the same release.
 - Keep [docs/HOWTO.md](docs/HOWTO.md) "Known trade-offs by configuration"
   accurate when a config trade-off changes.
+- The live harness (`tests/live/`) is test code and needs no network. A new
+  fail-closed default in this file gets a row in `tests/live/COVERAGE.md`
+  (`tests/test_live_harness.py` fails without one), and a check a live case
+  relies on can get a weakening in `tests/live/sabotage.py`, so the
+  harness's own sensitivity stays visible (`harness.py --sabotage all`).
+  Never commit `tests/live/state/`, `selftest/`, or `cases.jsonl`.
 - Diagrams are real Mermaid on `working` and `main`, never pictures. Follow
   the house style in `tests/test_doc_diagrams.py`: it fails on a long label
   line, a sequence diagram with more than five participants, a diagram with no
