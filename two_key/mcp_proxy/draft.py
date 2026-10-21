@@ -224,10 +224,9 @@ def render_rules(draft: Draft, command: list[str]) -> str:
     ]
     if not draft.tools:
         lines[-1] = "tool_specs: {}"
+    views = {v.get("name"): v for v in draft.views}    # draft_specs keeps one view per tool, names unique
     for t in draft.tools:
-        view = next((v for v in draft.views if v.get("name") == t.upstream_name), None)
-        if view is None:
-            raise ValueError(f"no upstream listing for {t.upstream_name!r}")
+        view = views[t.upstream_name]
         lines.append(f"  # {t.tool_id}: {_comment(str(view.get('description') or '(no description)'))}")
         if t.upstream_name != t.tool_id:
             lines.append(f"  # upstream name {_comment(t.upstream_name)!r}: set tools.{t.tool_id}.upstream_name "

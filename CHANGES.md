@@ -4384,7 +4384,7 @@ DeepSource's badge counts main (95 issues from its first Python scan of main). T
 - Fixed in `two_key/`, with no change in behaviour: `backup.py` uses the ledger's new public `exclusive()` (the
   write lock) and `anchor_path()` instead of its private names (PYL-W0212); `constitution.py` checks duplicate
   paths with a small `_PathSet` per tool instead of a function defined inside the loop (PYL-W0640); `quorum.py`
-  and `mcp_proxy/draft.py` give `next()` a default and say what is missing (PTC-W0063); six methods that do not
+  gives `next()` a default and `mcp_proxy/draft.py` looks the views up by name (PTC-W0063); six methods that do not
   use `self` are static methods (PYL-R0201: `Ledger._hash`, `MonitoredAgent._deoptimize`, `Scanner._occurrences`,
   `Scanner._decode`, `Scanner.read_confined`, `AnthropicJudge._content`).
 - Marked as genuine false positives, with the reason on the line: the sink interface's `close()` on the webhook

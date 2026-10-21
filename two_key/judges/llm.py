@@ -253,7 +253,7 @@ class LLMJudge(Judge):
     def _extract_text(self, resp: dict) -> str:
         raise NotImplementedError
 
-    def _deoptimize(self, body: dict) -> dict | None:  # skipcq: PYL-R0201 - a hook; the OpenAI, Gemini and Anthropic judges override it
+    def _deoptimize(self, body: dict) -> dict | None:  # NOSONAR  # skipcq: PYL-R0201 - a hook; the OpenAI, Gemini and Anthropic judges override it
         """Optional one-shot 400 fallback. Must not weaken the local ballot parser."""
         return None
 
