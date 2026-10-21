@@ -175,6 +175,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [ROADMAP.md](ROADMAP.md) | The path to 1.0 |
 | [CHANGES.md](CHANGES.md) | Every change, with upgrade notes |
 | [SECURITY.md](SECURITY.md) | How to report a vulnerability |
+| [docs/UPGRADING.md](docs/UPGRADING.md) | Upgrading to a new version and keeping your keys and ledger |
 | [docs/PYPI.md](docs/PYPI.md) | Registering the package name and publishing a release |
 
 ## Components
