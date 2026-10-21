@@ -275,16 +275,23 @@ def _parent(out: dict, tokens: list[str | int], unset: bool, name: str) -> Any:
                 raise ConfigChangeError(f"{name}: {format_name(tokens[:i + 1])} does not exist")
             node = node[t]
             continue
-        if not isinstance(node, dict):
-            raise ConfigChangeError(f"{name}: {format_name(tokens[:i])} is not a mapping")
-        if t not in node or node[t] is None:
-            if unset:
-                raise ConfigChangeError(f"{name}: is not set")
-            if isinstance(tokens[i + 1], int):
-                raise ConfigChangeError(f"{name}: {format_name(tokens[:i + 1])} does not exist")
-            node[t] = {}
-        node = node[t]
+        node = _mapping_under(node, tokens, i, unset, name)
     return node
+
+
+def _mapping_under(node: Any, tokens: list[str | int], i: int, unset: bool, name: str) -> Any:
+    """The mapping under key ``tokens[i]``, created when it is missing (not when unsetting, and not when a
+    list index follows: a list is not made up)."""
+    t = tokens[i]
+    if not isinstance(node, dict):
+        raise ConfigChangeError(f"{name}: {format_name(tokens[:i])} is not a mapping")
+    if t not in node or node[t] is None:
+        if unset:
+            raise ConfigChangeError(f"{name}: is not set")
+        if isinstance(tokens[i + 1], int):
+            raise ConfigChangeError(f"{name}: {format_name(tokens[:i + 1])} does not exist")
+        node[t] = {}
+    return node[t]
 
 
 def _set_item(node: Any, tokens: list[str | int], value: Any, unset: bool, name: str) -> None:
@@ -434,72 +441,86 @@ def _mode(value, high, resolve) -> str:
 def weaker(old: Posture, new: Posture) -> list[str]:
     """Why the new configuration enforces less than the old one, one line each (setting names, never a value
     that could be a secret). Empty when it does not."""
-    from . import agent_access
-    out: list[str] = []
     a, b = old.config, new.config
-    pa, pb = old.policy, new.policy
-    ha, hb = bool(pa.is_high_assurance), bool(pb.is_high_assurance)
-    if ha and not hb:
-        out.append("quorum: high_assurance turned off")
-    if old.key_encrypted and not new.key_encrypted:
-        out.append("keys.principal: the key is no longer encrypted")
-    for name, resolve in (("on_writable_paths", writable.resolve_mode), ("on_agent_access", agent_access.resolve_mode)):
-        if _mode(getattr(a, name), ha, resolve) == "refuse" and _mode(getattr(b, name), hb, resolve) == "warn":
-            out.append(f"{name}: refuse to warn")
-    if a.upstream.on_schema_change == "refuse" and b.upstream.on_schema_change == "warn":
-        out.append("upstream.on_schema_change: refuse to warn")
-    if set(a.upstream.check_paths) - set(b.upstream.check_paths):
-        out.append("upstream.check_paths: a path is no longer checked")
-    if not a.allow_unresolved_identity and b.allow_unresolved_identity:
-        out.append("allow_unresolved_identity: turned on")
-    if b.ttl_seconds > a.ttl_seconds:
-        out.append("ttl_seconds: tokens live longer")
-    if a.agent_session_env and not b.agent_session_env:
-        out.append("agent_session_env: removed")
-    old_sinks, new_sinks = _sinks(a.siem), _sinks(b.siem)
-    if a.siem is not None and b.siem is None:
-        out.append("siem: the copy to the SIEM is turned off")
-    else:
-        for label in sorted(set(old_sinks) - set(new_sinks)):
-            out.append(f"siem: a sink no longer gets the copy ({label.split(' ')[0]})")
-        for label, plain in sorted(new_sinks.items()):
-            if plain and not old_sinks.get(label, False):
-                out.append(f"siem: a sink sends in the clear ({label.split(' ')[0]})")
+    out = _weaker_proxy(old, new)
+    out += _weaker_siem(a.siem, b.siem)
     if a.scan is not None and b.scan is None:
         out.append("scan: the content scanner is removed")
     for tool in sorted(set(a.tools) | set(b.tools)):
-        pa_t, pb_t = a.tool_policy(tool), b.tool_policy(tool)
-        floor = new.floors.get(tool) or old.floors.get(tool)
-        if _class_rank(pb_t.claim, floor) < _class_rank(pa_t.claim, floor):
-            out.append(f"tools.{tool}.claim: a lower data class")
-        if {f.path for f in pa_t.files} - {f.path for f in pb_t.files}:
-            out.append(f"tools.{tool}.files: a file is no longer declared for the scanner")
-    out += _weaker_quorum(pa, pb)
+        out += _weaker_tool(tool, a.tool_policy(tool), b.tool_policy(tool),
+                            new.floors.get(tool) or old.floors.get(tool))
+    out += _weaker_quorum(old.policy, new.policy)
     out += _weaker_judges(old.judges_doc, new.judges_doc)
     out += _weaker_signed(old.signed, new.signed)
     return out
 
 
-def _weaker_quorum(pa, pb) -> list[str]:
-    out = []
-    for name in ("required_yes", "effective_min_responding", "min_distinct_providers", "min_makers",
-                 "min_local_judges"):
-        x, y = getattr(pa, name), getattr(pb, name)
-        if x is not None and y is not None and y < x:
-            out.append(f"quorum.{name.removeprefix('effective_')}: lowered")
-    for name in ("require_local_yes",):
-        if getattr(pa, name) and not getattr(pb, name):
-            out.append(f"quorum.{name}: turned off")
-    for name in ("tool_args_on_derive_deny", "tool_args_on_scan_flag"):
-        if not getattr(pa, name) and getattr(pb, name):
-            out.append(f"quorum.{name}: judges see more")
-    if pa.judge_inputs == "record_only" and pb.judge_inputs != "record_only":
-        out.append("quorum.judge_inputs: judges see the proposal")
-    if pa.ballot_binding == "echo" and pb.ballot_binding != "echo":
-        out.append("quorum.ballot_binding: echo to stamp")
-    if pa.heterogeneity_scope == "responding" and pb.heterogeneity_scope != "responding":
-        out.append("quorum.heterogeneity_scope: responding to selection")
+def _weaker_proxy(old: Posture, new: Posture) -> list[str]:
+    """The profile, the key, the start-up checks and the proxy's own settings."""
+    from . import agent_access
+    a, b = old.config, new.config
+    ha, hb = bool(old.policy.is_high_assurance), bool(new.policy.is_high_assurance)
+    checks = [(ha and not hb, "quorum: high_assurance turned off"),
+              (old.key_encrypted and not new.key_encrypted, "keys.principal: the key is no longer encrypted")]
+    for name, resolve in (("on_writable_paths", writable.resolve_mode), ("on_agent_access", agent_access.resolve_mode)):
+        checks.append((_mode(getattr(a, name), ha, resolve) == "refuse" and
+                       _mode(getattr(b, name), hb, resolve) == "warn", f"{name}: refuse to warn"))
+    checks += [
+        (a.upstream.on_schema_change == "refuse" and b.upstream.on_schema_change == "warn",
+         "upstream.on_schema_change: refuse to warn"),
+        (bool(set(a.upstream.check_paths) - set(b.upstream.check_paths)),
+         "upstream.check_paths: a path is no longer checked"),
+        (not a.allow_unresolved_identity and b.allow_unresolved_identity, "allow_unresolved_identity: turned on"),
+        (b.ttl_seconds > a.ttl_seconds, "ttl_seconds: tokens live longer"),
+        (a.agent_session_env and not b.agent_session_env, "agent_session_env: removed"),
+    ]
+    return [line for weaker_now, line in checks if weaker_now]
+
+
+def _weaker_siem(old_siem, new_siem) -> list[str]:
+    """A sink that no longer gets the copy, or now sends it in the clear. Only the sink's type is named."""
+    if old_siem is not None and new_siem is None:
+        return ["siem: the copy to the SIEM is turned off"]
+    old_sinks, new_sinks = _sinks(old_siem), _sinks(new_siem)
+    out = [f"siem: a sink no longer gets the copy ({label.split(' ')[0]})"
+           for label in sorted(set(old_sinks) - set(new_sinks))]
+    out += [f"siem: a sink sends in the clear ({label.split(' ')[0]})"
+            for label, plain in sorted(new_sinks.items()) if plain and not old_sinks.get(label, False)]
     return out
+
+
+def _weaker_tool(tool: str, old_policy, new_policy, floor) -> list[str]:
+    out = []
+    if _class_rank(new_policy.claim, floor) < _class_rank(old_policy.claim, floor):
+        out.append(f"tools.{tool}.claim: a lower data class")
+    if {f.path for f in old_policy.files} - {f.path for f in new_policy.files}:
+        out.append(f"tools.{tool}.files: a file is no longer declared for the scanner")
+    return out
+
+
+_QUORUM_COUNTS = ("required_yes", "effective_min_responding", "min_distinct_providers", "min_makers",
+                  "min_local_judges")
+
+
+def _lowered(old, new) -> bool:
+    return old is not None and new is not None and new < old
+
+
+def _weaker_quorum(pa, pb) -> list[str]:
+    out = [f"quorum.{name.removeprefix('effective_')}: lowered" for name in _QUORUM_COUNTS
+           if _lowered(getattr(pa, name), getattr(pb, name))]
+    checks = [
+        (pa.require_local_yes and not pb.require_local_yes, "quorum.require_local_yes: turned off"),
+        (not pa.tool_args_on_derive_deny and pb.tool_args_on_derive_deny,
+         "quorum.tool_args_on_derive_deny: judges see more"),
+        (not pa.tool_args_on_scan_flag and pb.tool_args_on_scan_flag, "quorum.tool_args_on_scan_flag: judges see more"),
+        (pa.judge_inputs == "record_only" and pb.judge_inputs != "record_only",
+         "quorum.judge_inputs: judges see the proposal"),
+        (pa.ballot_binding == "echo" and pb.ballot_binding != "echo", "quorum.ballot_binding: echo to stamp"),
+        (pa.heterogeneity_scope == "responding" and pb.heterogeneity_scope != "responding",
+         "quorum.heterogeneity_scope: responding to selection"),
+    ]
+    return out + [line for weaker_now, line in checks if weaker_now]
 
 
 def _judge_map(doc: Mapping) -> dict[str, Mapping]:
@@ -536,23 +557,31 @@ def _weaker_signed(old: Mapping | None, new: Mapping | None) -> list[str]:
         out.append("hard_rules: a rule was changed or removed")
     if (old.get("fields") or {}) != (new.get("fields") or {}):
         out.append("fields: a custom field changed")
-    a, b = old.get("tool_specs") or {}, new.get("tool_specs") or {}
+    return out + _weaker_specs(old.get("tool_specs") or {}, new.get("tool_specs") or {})
+
+
+def _weaker_specs(a: Mapping, b: Mapping) -> list[str]:
+    out = []
     for tool in sorted(set(a) | set(b)):
         if tool not in a or tool not in b:
             out.append(f"tool_specs.{tool}: " + ("added" if tool not in a else "removed"))
-            continue
-        for key in sorted(set(a[tool]) | set(b[tool])):
-            x, y = a[tool].get(key), b[tool].get(key)
-            if x == y:
-                continue
-            if key == "irreversible" and x is False and y is True:
-                continue
-            if key == "deny_unmapped" and not x and y is True:
-                continue
-            if key == "data_class_floor" and _FLOOR_RANK.get(y, 4) > _FLOOR_RANK.get(x, 4):
-                continue
-            out.append(f"tool_specs.{tool}.{key}: changed")
+        else:
+            out += [f"tool_specs.{tool}.{key}: changed" for key in sorted(set(a[tool]) | set(b[tool]))
+                    if not _same_or_tighter(key, a[tool].get(key), b[tool].get(key))]
     return out
+
+
+def _same_or_tighter(key: str, old, new) -> bool:
+    """A tool spec key that did not change, or changed only to enforce more."""
+    if old == new:
+        return True
+    if key == "irreversible":
+        return old is False and new is True
+    if key == "deny_unmapped":
+        return not old and new is True
+    if key == "data_class_floor":
+        return _FLOOR_RANK.get(new, 4) > _FLOOR_RANK.get(old, 4)
+    return False
 
 
 # -- account and files ---------------------------------------------------------------------------------------
@@ -663,11 +692,7 @@ def apply(config_path: Path, config, change: Change, *, confirm_weaker: bool, co
     what was done. ``change.key`` signs the ledger entry: the caller opens it before anything is staged, so a
     key that does not open refuses."""
     out = sys.stdout if out is None else out
-    for fc in change.files:
-        check_target(fc.path)
-        fc.old = _read(fc.path)
-    if os.path.lexists(undo_path(config_path)):
-        check_target(undo_path(config_path))
+    _read_targets(config_path, change.files)
     keep_prev = KEY not in {fc.role for fc in change.files}
     created: list[Path] = []
     recorded = False
@@ -686,11 +711,7 @@ def apply(config_path: Path, config, change: Change, *, confirm_weaker: bool, co
         prevs = _stage(change.files, "prev", created, old=True) if keep_prev else {}
         record(config, ledger_body(change, reasons, confirmed=confirmed), change.key)
         recorded = True
-        for fc in change.files:
-            if keep_prev:
-                _platform.replace(prevs[fc.role], prev_path(fc.path))
-            _platform.replace(staged[fc.role], fc.path)
-            _platform.fsync_dir(fc.path.parent)
+        _install(change.files, staged, prevs)
         _write_undo(config_path, change, undoable=keep_prev)
     except OSError as e:
         if recorded:    # rare: a rename in a folder only this account can change failed
@@ -704,6 +725,24 @@ def apply(config_path: Path, config, change: Change, *, confirm_weaker: bool, co
     return {"ok": True, "command": change.command, "settings": change.settings,
             "files": [str(fc.path) for fc in change.files], "weaker": reasons, "signed": signed,
             "next": "restart the proxy: a running proxy keeps the settings it started with"}
+
+
+def _read_targets(config_path: Path, files: list[FileChange]) -> None:
+    """Each file's current bytes, after checking it (and the undo manifest) is one this may replace."""
+    for fc in files:
+        check_target(fc.path)
+        fc.old = _read(fc.path)
+    if os.path.lexists(undo_path(config_path)):
+        check_target(undo_path(config_path))
+
+
+def _install(files: list[FileChange], staged: Mapping[str, Path], prevs: Mapping[str, Path]) -> None:
+    """Renames each staged file into place, and its current version to ``.prev`` when one is kept."""
+    for fc in files:
+        if fc.role in prevs:
+            _platform.replace(prevs[fc.role], prev_path(fc.path))
+        _platform.replace(staged[fc.role], fc.path)
+        _platform.fsync_dir(fc.path.parent)
 
 
 def _stage(files: list[FileChange], label: str, created: list[Path], *, old: bool = False) -> dict[str, Path]:
@@ -1067,62 +1106,78 @@ def signed_diff(before: Mapping, after: Mapping) -> list[str]:
     return out
 
 
+def _undo_manifest(manifest_path: Path) -> dict:
+    """The manifest the last change left, when it can be undone."""
+    from .strict import StrictParseError, loads_json
+    if not manifest_path.is_file():
+        raise ConfigChangeError(f"nothing_to_undo: {manifest_path} does not exist")
+    check_target(manifest_path)
+    try:
+        manifest = loads_json(_read(manifest_path))
+    except (OSError, StrictParseError) as e:
+        raise ConfigChangeError(f"undo_invalid: {manifest_path}: {e}") from None
+    if not isinstance(manifest, dict) or manifest.get("format") != UNDO_FORMAT or not isinstance(
+            manifest.get("files"), list):
+        raise ConfigChangeError(f"undo_invalid: {manifest_path} is not a {UNDO_FORMAT} file")
+    if manifest.get("undoable") is False:
+        raise ConfigChangeError(f"nothing_to_undo: the last change was config {manifest.get('command')}, which "
+                                "keeps no copy of the key as it was; run config key-passphrase again to change "
+                                "the passphrase")
+    return manifest
+
+
+def _restored(item: Any, config, config_path: Path, manifest_path: Path, command: Any) -> FileChange:
+    """One file of the manifest put back from its ``.prev``: still this proxy's file, and both versions the
+    ones the last change wrote and replaced."""
+    if not isinstance(item, dict) or item.get("role") not in (PROXY, JUDGES, RULES, CONSTITUTION):
+        raise ConfigChangeError(f"undo_invalid: {manifest_path}: a file entry is not one this writes")
+    path = Path(str(item.get("path")))
+    expected = {PROXY: config_path, JUDGES: Path(config.judges).resolve(),
+                CONSTITUTION: Path(config.constitution).resolve()}.get(item["role"])
+    if expected is not None and path.resolve() != expected:
+        raise ConfigChangeError(f"undo_stale: {path} is no longer this proxy's {item['role']} file")
+    prev = prev_path(path)
+    check_target(path)
+    check_target(prev)
+    now, then = _read(path), _read(prev)
+    if sha256(now) != item.get("after"):
+        raise ConfigChangeError(f"undo_stale: {path} changed after the last config {command}; "
+                                "put it back by hand from the .prev file if that is what you want")
+    if sha256(then) != item.get("before"):
+        raise ConfigChangeError(f"undo_stale: {prev} is not the version the last change replaced")
+    return FileChange(item["role"], path, then)
+
+
+def _undo_key(config, key_path: str | None, passphrase, files: list[FileChange]):
+    """The principal key; when a constitution is put back, the one given with ``--key``, and that
+    constitution must verify with it."""
+    from .constitution import verify_signed
+    from .strict import loads_json
+    restored = next((fc for fc in files if fc.role == CONSTITUTION), None)
+    if restored is None:
+        return open_principal(config, passphrase)
+    key = _principal(config, key_path, passphrase)
+    try:
+        verify_signed(loads_json(restored.new), key.public_key())
+    except ValueError as e:
+        raise ConfigChangeError(f"constitution_refused: the previous constitution does not verify: {e}") from None
+    return key
+
+
 def undo(config_path: Path | str, *, key_path: str | None = None, confirm_weaker: bool = False,
          confirm: Confirm = terminal_confirm, environ: Mapping[str, str] | None = None, out=None,
          key_passphrase_file: str | None = None) -> dict:
     """``config undo``: put back the files of the last change. Running it again puts the change back."""
-    from .constitution import verify_signed
-    from .strict import StrictParseError, loads_json
     refuse_root()
     config_path = Path(config_path).resolve()
     manifest_path = undo_path(config_path)
     with _Lock(config_path):
-        if not manifest_path.is_file():
-            raise ConfigChangeError(f"nothing_to_undo: {manifest_path} does not exist")
-        check_target(manifest_path)
-        try:
-            manifest = loads_json(_read(manifest_path))
-        except (OSError, StrictParseError) as e:
-            raise ConfigChangeError(f"undo_invalid: {manifest_path}: {e}") from None
-        if not isinstance(manifest, dict) or manifest.get("format") != UNDO_FORMAT or not isinstance(
-                manifest.get("files"), list):
-            raise ConfigChangeError(f"undo_invalid: {manifest_path} is not a {UNDO_FORMAT} file")
-        if manifest.get("undoable") is False:
-            raise ConfigChangeError(f"nothing_to_undo: the last change was config {manifest.get('command')}, which "
-                                    "keeps no copy of the key as it was; run config key-passphrase again to change "
-                                    "the passphrase")
+        manifest = _undo_manifest(manifest_path)
         config = _load(config_path)
         passphrase = _passphrase(config, key_passphrase_file)
-        files: list[FileChange] = []
-        for item in manifest["files"]:
-            if not isinstance(item, dict) or item.get("role") not in (PROXY, JUDGES, RULES, CONSTITUTION):
-                raise ConfigChangeError(f"undo_invalid: {manifest_path}: a file entry is not one this writes")
-            path = Path(str(item.get("path")))
-            expected = {PROXY: config_path, JUDGES: Path(config.judges).resolve(),
-                        CONSTITUTION: Path(config.constitution).resolve()}.get(item["role"])
-            if expected is not None and path.resolve() != expected:
-                raise ConfigChangeError(f"undo_stale: {path} is no longer this proxy's {item['role']} file")
-            prev = prev_path(path)
-            check_target(path)
-            check_target(prev)
-            now, then = _read(path), _read(prev)
-            if sha256(now) != item.get("after"):
-                raise ConfigChangeError(f"undo_stale: {path} changed after the last config {manifest.get('command')}; "
-                                        "put it back by hand from the .prev file if that is what you want")
-            if sha256(then) != item.get("before"):
-                raise ConfigChangeError(f"undo_stale: {prev} is not the version the last change replaced")
-            files.append(FileChange(item["role"], path, then))
-        by_role = {fc.role: fc for fc in files}
-        if CONSTITUTION not in by_role:
-            key = open_principal(config, passphrase)
-        else:
-            key = _principal(config, key_path, passphrase)
-            restored = by_role[CONSTITUTION]
-            try:
-                verify_signed(loads_json(restored.new), key.public_key())
-            except ValueError as e:
-                raise ConfigChangeError(f"constitution_refused: the previous constitution does not verify: {e}") \
-                    from None
+        files = [_restored(item, config, config_path, manifest_path, manifest.get("command"))
+                 for item in manifest["files"]]
+        key = _undo_key(config, key_path, passphrase, files)
         names = [str(s) for s in manifest.get("settings") or []][:MAX_SETTINGS_RECORDED]
         change = Change("undo", names, files, key=key,
                         shown=[f"undo: {', '.join(names) or '(no setting named)'} in "

@@ -310,23 +310,25 @@ CONSTITUTION = _rows(PROSE_MD, [
     ("(the file)", "required", "The prose the judges read and Path B votes on. It is signed with the rules."),
 ])
 
+_ONE_RULE_TYPE = "one rule type per rule"   # a rule has exactly one of these keys
+
 RULES = _rows(RULES_YAML, [
     ("hard_rules", "required", "The rules Path A runs, at least one."),
     ("tool_specs", "required", "Where Path A reads each value, per tool. Every allow-listed tool needs one."),
     ("fields", "none", "The custom Path A fields, up to 64. A rules file with `fields:` signs as a v2 constitution."),
     ("hard_rules[].id", "`rule[i]:type`", "The rule's name in the ledger. Unique."),
-    ("hard_rules[].allow_only_tools", "one rule type per rule", "A list of tool ids; any other tool is denied."),
-    ("hard_rules[].deny_counterparties", "one rule type per rule", "A list of blocked parties, each exact. No "
+    ("hard_rules[].allow_only_tools", _ONE_RULE_TYPE, "A list of tool ids; any other tool is denied."),
+    ("hard_rules[].deny_counterparties", _ONE_RULE_TYPE, "A list of blocked parties, each exact. No "
      "`@domain` entries."),
-    ("hard_rules[].deny_if", "one rule type per rule", "A mapping of conditions; the call is denied when all of "
+    ("hard_rules[].deny_if", _ONE_RULE_TYPE, "A mapping of conditions; the call is denied when all of "
      "them hold."),
     ("hard_rules[].deny_if.tool", "none", "A tool id."),
     ("hard_rules[].deny_if.amount_usd_gt", "none", "A number of US dollars."),
     ("hard_rules[].deny_if.data_class_in", "none", "A list of data classes."),
     ("hard_rules[].deny_if.irreversible", "none", "`true` or `false`."),
-    ("hard_rules[].deny_if_irreversible_over", "one rule type per rule", "A number: deny an irreversible call "
+    ("hard_rules[].deny_if_irreversible_over", _ONE_RULE_TYPE, "A number: deny an irreversible call "
      "over this amount."),
-    ("hard_rules[].deny_if_fields", "one rule type per rule", "A condition over custom fields. The scan stance is "
+    ("hard_rules[].deny_if_fields", _ONE_RULE_TYPE, "A condition over custom fields. The scan stance is "
      "one of these, over the `scan` field."),
     ("tool_specs.<tool>.irreversible", "required", "`true` or `false`: whether the tool cannot be undone."),
     ("tool_specs.<tool>.data_class_floor", "required", "The lowest data class a call to the tool can claim: "

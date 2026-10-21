@@ -36,6 +36,7 @@ SALT_BYTES = 16
 NONCE_BYTES = 12
 MIN_PASSPHRASE_BYTES = 12           # for a new passphrase; shorter is refused
 MAX_PASSPHRASE_BYTES = 1024
+NOT_ED25519 = "principal key must be Ed25519"
 MAX_KEY_FILE_BYTES = 64 * 1024
 _ENCRYPTED_BEGIN = b"-----BEGIN TWO-KEY ENCRYPTED PRIVATE KEY-----"
 _ENCRYPTED_END = b"-----END TWO-KEY ENCRYPTED PRIVATE KEY-----"
@@ -191,7 +192,7 @@ def decrypt_private_key(data: bytes, passphrase: bytes, what: str = "the key fil
     except (TypeError, ValueError, UnsupportedAlgorithm):
         raise ValueError(f"key_file_invalid: {what} does not hold a private key") from None
     if not isinstance(key, Ed25519PrivateKey):
-        raise ValueError("principal key must be Ed25519")
+        raise ValueError(NOT_ED25519)
     return key
 
 
@@ -293,7 +294,7 @@ def load_private_key(path: Path | str) -> Ed25519PrivateKey:
     data = Path(path).read_bytes()
     key = serialization.load_pem_private_key(data, password=None)
     if not isinstance(key, Ed25519PrivateKey):
-        raise ValueError("principal key must be Ed25519")
+        raise ValueError(NOT_ED25519)
     return key
 
 
@@ -340,7 +341,7 @@ def load_private_key_file(path: Path | str, passphrase: Passphrase = None) -> Ed
         raise ValueError(f"key_file_invalid: {path} is not an unencrypted PEM private key, or Two-Key's "
                          "encrypted form") from None
     if not isinstance(key, Ed25519PrivateKey):
-        raise ValueError("principal key must be Ed25519")
+        raise ValueError(NOT_ED25519)
     return key
 
 
