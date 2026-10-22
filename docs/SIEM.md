@@ -189,6 +189,12 @@ length only.
 
 An event sent late — a catch-up at start, or after an outage — carries
 `"replay": true`, so a SIEM does not read the send time as the decision time.
+
+**Two proxies on one ledger.** Each proxy sends every entry in the ledger,
+the other proxy's too, so every entry arrives twice. The copy a proxy sends of
+an entry the other proxy wrote is marked `"replay": true`; the writer's own
+copy is not (live run 9y). Dedupe on `entry_hash`, or count only events
+without `replay`.
 Ledger entries carry no timestamp of their own (that would change the entry
 format); `sent_at` is the time the copy was sent.
 
@@ -339,6 +345,8 @@ but not tested in CI.
   down your SIEM is behind. The ledger keeps everything, the cursor remembers
   where the copy stopped, and the catch-up is marked `replay`. If your SIEM is
   the thing you alert on, alert on the gap in `seq`, not on silence.
+- **A shared ledger sends each entry twice**, once from each proxy; the second
+  copy is marked `replay`. Dedupe on `entry_hash`.
 - **`replay_from: start`** on a large ledger sends every entry on the next
   start; prefer `siem-export` for a backfill.
 - **Argument digests** let whoever reads the SIEM test a guess of a

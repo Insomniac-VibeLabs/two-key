@@ -324,6 +324,7 @@ class Ledger:
         self._merkle_roots: list[str] = []
         self._kind_seqs: dict[str, list[int]] = {}   # kind -> entry seqs, in order (#50)
         self._entries_size: int | None = None                   # bytes of entries.jsonl last read or written
+        self._from_others: set[int] = set()     # seqs another process appended while this one had it open
         anchor = self._read_anchor()
         if anchor is not None and anchor["size"] > 0 and self._ledger_files_incomplete():
             raise LedgerError(self._rollback_message(0, anchor))
@@ -624,6 +625,7 @@ class Ledger:
             self._track(entry, verify=True)
             self.entries.append(entry)
             self._merkle_add(bytes.fromhex(entry.entry_hash))
+            self._from_others.add(entry.seq)
             prev = entry.entry_hash
         self._entries_size = size
         self._verify_head()
@@ -779,6 +781,11 @@ class Ledger:
         self._track(entry, verify=False)
         self._notify(entry)
         return entry
+
+    def from_another_process(self, seq: int) -> bool:
+        """True for an entry another process sharing this ledger appended after this one opened it. Its SIEM
+        copy is that process's to send; one sent from here as well is marked ``replay`` (run 9y, F4)."""
+        return seq in self._from_others
 
     def observe(self, callback) -> None:
         """Call ``callback(entry.seq)`` after each entry is written and fsynced.

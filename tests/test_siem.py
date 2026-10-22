@@ -387,6 +387,21 @@ class Delivering(Fixture):
         self.drain(again, second, 1)
         self.assertEqual(min(second.seqs()), first.seqs()[-1] + 1)
 
+    def test_on_a_shared_ledger_the_other_proxys_entries_are_marked_replay(self):
+        """Run 9y, F4: each proxy sends every entry, so the copies it sends of the other proxy's are marked."""
+        mine, other = ListSink("mine"), ListSink("other")
+        tk = self.start(ledger=self.ledger(), siem_config=self.config(mine, replay_from="now"))
+        peer = self.start(ledger=self.ledger(), siem_config=self.config(other, replay_from="now"))
+        start = tk.ledger.size()
+        tk.authorize(SEARCH, {"q": "weather"}, "look")       # reads peer's start first, then writes its own
+        theirs = {e.seq for e in tk.ledger.entries[start:] if tk.ledger.from_another_process(e.seq)}
+        self.assertTrue(theirs, "the peer's start was read from the shared file")
+        self.drain(tk, mine, tk.ledger.size() - start)
+        bodies = {json.loads(m.body)["seq"]: json.loads(m.body) for m in mine.sent}
+        for seq in range(start, tk.ledger.size()):
+            with self.subTest(seq=seq):
+                self.assertEqual(bodies[seq].get("replay", False), seq in theirs)
+
     def _restart_with_cursor(self, edit, resumes=False):
         """Run once to fill the cursor, change it with ``edit``, then start again on the same ledger. ``resumes``:
         the second start is expected to send only the entries after the cursor."""

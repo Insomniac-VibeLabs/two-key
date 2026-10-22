@@ -139,7 +139,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Live harness: run 9x ported to `working`, and the fixes for run 9y — 2026-10-21](#live-harness-run-9x-ported-to-working-and-the-fixes-for-run-9y--2026-10-21)
 - [DeepSource: the findings on main, fixed or marked — 2026-10-21](#deepsource-the-findings-on-main-fixed-or-marked--2026-10-21)
 - [Version number on `working`: 0.7.3 — 2026-10-22](#version-number-on-working-073--2026-10-22)
-- [Live run 9y: two proxies starting at once, and rules without a serial — 2026-10-22](#live-run-9y-two-proxies-starting-at-once-and-rules-without-a-serial--2026-10-22)
+- [Live run 9y: two proxies starting at once, rules without a serial, and shared-ledger SIEM copies — 2026-10-22](#live-run-9y-two-proxies-starting-at-once-rules-without-a-serial-and-shared-ledger-siem-copies--2026-10-22)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4408,7 +4408,7 @@ The version only. No behaviour changed.
 - `pyproject.toml`, `two_key.__version__` and `uv.lock` say `0.7.3` instead of `0.7.0`. PyPI has `0.7.0`, `0.7.1` and `0.7.2`, so `0.7.3` is the next number.
 - docs/PYPI.md says so. Nothing is tagged or uploaded: the maintainer releases it, and `v0.7.0` and the other tags are not moved.
 
-## Live run 9y: two proxies starting at once, and rules without a serial — 2026-10-22
+## Live run 9y: two proxies starting at once, rules without a serial, and shared-ledger SIEM copies — 2026-10-22
 
 - **Two proxies started at once on one ledger could both run one serial** (run 9y, S6c). Each read the ledger,
   checked the serial, and recorded `constitution_loaded`, so in 3 of 4 tries two different serial-2 constitutions
@@ -4425,3 +4425,10 @@ The version only. No behaviour changed.
   which was true only of its starter rules.
 - HOWTO "The serial": count up by one; 2^53 is the highest serial, and a ledger that has run it cannot take newer
   rules (run 9y, S3i).
+- **SIEM on a shared ledger: the copy of another proxy's entry is marked `replay`** (run 9 F4; run 9y saw 50 of 99
+  duplicates unmarked). Each proxy still sends every entry, so nothing waits on a stopped proxy; the ledger remembers
+  which entries it read from another process (`Ledger.from_another_process`), and docs/SIEM.md says to dedupe on
+  `entry_hash`.
+- Live harness: C170 (the agent's over-cap payment) also accepts `derive_failed:field_missing:po_matched`, a valid
+  stop; its scripted twin reaches the cap. C172 (the split waiver) was ruled working as designed: one part-waiver
+  within FINE-1's caps may run, and the case fails only if a second part runs or the parts clear the charge.

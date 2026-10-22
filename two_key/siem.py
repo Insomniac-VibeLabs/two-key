@@ -881,7 +881,10 @@ class Delivery:
             except IndexError:      # the ledger shrank under us (recover); the next pass re-reads it
                 break
         sent_at = now_text(self._clock)
-        return [e.at(sent_at, replay=e.ledgered and e.seq < state.replay_until) for e in batch]
+        # Late, or written by another proxy on a shared ledger, which sends its own copy (run 9y, F4).
+        return [e.at(sent_at, replay=e.ledgered and (e.seq < state.replay_until
+                                                     or self.ledger.from_another_process(e.seq)))
+                for e in batch]
 
     def _took(self, state: _SinkState, batch: Sequence[Event]) -> None:
         taken = len([e for e in batch if not e.ledgered])
