@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Upgrading Two-Key
 
 Two-Key has no `upgrade` or `migrate` command. Upgrading means installing the
