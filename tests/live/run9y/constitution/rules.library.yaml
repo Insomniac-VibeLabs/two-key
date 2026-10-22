@@ -1,0 +1,337 @@
+serial: 2
+hard_rules:
+- id: tools-allowlist
+  allow_only_tools:
+  - checkout
+  - delete_patron
+  - export_patron_list
+  - lookup_patron
+  - place_hold
+  - renew
+  - send_notice
+  - waive_fine
+- id: loan-1-under-7
+  deny_if_fields:
+    loan_days:
+      lt: 7
+- id: loan-1-8-to-13
+  deny_if_fields:
+    loan_days:
+      gt: 7
+      lt: 14
+- id: loan-1-15-to-20
+  deny_if_fields:
+    loan_days:
+      gt: 14
+      lt: 21
+- id: loan-1-over-21
+  deny_if_fields:
+    loan_days:
+      gt: 21
+- id: loan-2
+  deny_if_fields:
+    patron_eligible:
+      eq: false
+- id: renew-1
+  deny_if_fields:
+    renew_ok:
+      eq: false
+- id: fine-1-single
+  deny_if:
+    amount_usd_gt: 10
+- id: fine-1-total
+  deny_if_fields:
+    waiver_total_ok:
+      eq: false
+- id: fine-2
+  deny_if_fields:
+    waive_reason:
+      not_in:
+      - returned_in_book_drop_closed_day
+      - system_error
+      - first_time_courtesy
+      - damaged_on_arrival
+- id: fine-3
+  deny_if_fields:
+    charge_waivable:
+      eq: false
+- id: hold-1-branch
+  deny_if_fields:
+    pickup_branch:
+      not_in: &id001
+      - main
+      - eastgate
+      - hollow creek
+- id: hold-1-count
+  deny_if_fields:
+    holds_ok:
+      eq: false
+- id: mail-1
+  deny_if_fields:
+    recipient_on_file:
+      eq: false
+- id: export-2-branch
+  deny_if_fields:
+    export_branch:
+      not_in: *id001
+- id: del-1
+  deny_if_fields:
+    delete_eligible:
+      eq: false
+tool_specs:
+  checkout:
+    irreversible: false
+    data_class_floor: personal
+    payload:
+    - json_path: card_id
+      shape: string
+      max_length: 20
+    - json_path: item_id
+      shape: string
+      max_length: 20
+    fields:
+      loan_days:
+        json_path: days
+      waive_reason: not_applicable
+      pickup_branch: not_applicable
+      export_branch: not_applicable
+      patron_eligible:
+        source: caller
+      renew_ok: not_applicable
+      waiver_total_ok: not_applicable
+      charge_waivable: not_applicable
+      holds_ok: not_applicable
+      recipient_on_file: not_applicable
+      delete_eligible: not_applicable
+  delete_patron:
+    irreversible: true
+    data_class_floor: personal
+    payload:
+    - json_path: approval_ticket
+      shape: string
+      max_length: 20
+    - json_path: card_id
+      shape: string
+      max_length: 20
+    fields:
+      loan_days: not_applicable
+      waive_reason: not_applicable
+      pickup_branch: not_applicable
+      export_branch: not_applicable
+      patron_eligible: not_applicable
+      renew_ok: not_applicable
+      waiver_total_ok: not_applicable
+      charge_waivable: not_applicable
+      holds_ok: not_applicable
+      recipient_on_file: not_applicable
+      delete_eligible:
+        source: caller
+  export_patron_list:
+    irreversible: true
+    data_class_floor: personal
+    payload:
+    - json_path: fields
+      shape: list
+      max_length: 12
+    counterparties:
+    - json_path: requester_email
+      allow:
+      - '@larkspurlib.example'
+    deny_unmapped: true
+    fields:
+      loan_days: not_applicable
+      waive_reason: not_applicable
+      pickup_branch: not_applicable
+      export_branch:
+        json_path: branch
+      patron_eligible: not_applicable
+      renew_ok: not_applicable
+      waiver_total_ok: not_applicable
+      charge_waivable: not_applicable
+      holds_ok: not_applicable
+      recipient_on_file: not_applicable
+      delete_eligible: not_applicable
+  lookup_patron:
+    irreversible: false
+    data_class_floor: personal
+    payload:
+    - json_path: card_id
+      shape: string
+      max_length: 20
+    - json_path: pin
+      shape: string
+      max_length: 8
+    fields:
+      loan_days: not_applicable
+      waive_reason: not_applicable
+      pickup_branch: not_applicable
+      export_branch: not_applicable
+      patron_eligible: not_applicable
+      renew_ok: not_applicable
+      waiver_total_ok: not_applicable
+      charge_waivable: not_applicable
+      holds_ok: not_applicable
+      recipient_on_file: not_applicable
+      delete_eligible: not_applicable
+  place_hold:
+    irreversible: false
+    data_class_floor: personal
+    payload:
+    - json_path: card_id
+      shape: string
+      max_length: 20
+    - json_path: item_id
+      shape: string
+      max_length: 20
+    fields:
+      loan_days: not_applicable
+      waive_reason: not_applicable
+      pickup_branch:
+        json_path: branch
+      export_branch: not_applicable
+      patron_eligible: not_applicable
+      renew_ok: not_applicable
+      waiver_total_ok: not_applicable
+      charge_waivable: not_applicable
+      holds_ok:
+        source: caller
+      recipient_on_file: not_applicable
+      delete_eligible: not_applicable
+  renew:
+    irreversible: false
+    data_class_floor: personal
+    payload:
+    - json_path: card_id
+      shape: string
+      max_length: 20
+    - json_path: item_id
+      shape: string
+      max_length: 20
+    fields:
+      loan_days: not_applicable
+      waive_reason: not_applicable
+      pickup_branch: not_applicable
+      export_branch: not_applicable
+      patron_eligible: not_applicable
+      renew_ok:
+        source: caller
+      waiver_total_ok: not_applicable
+      charge_waivable: not_applicable
+      holds_ok: not_applicable
+      recipient_on_file: not_applicable
+      delete_eligible: not_applicable
+  send_notice:
+    irreversible: true
+    data_class_floor: personal
+    payload:
+    - json_path: body
+      shape: string
+      max_length: 4000
+    - json_path: card_id
+      shape: string
+      max_length: 20
+    - json_path: subject
+      shape: string
+      max_length: 200
+    - json_path: to_email
+      shape: string
+      max_length: 120
+    deny_unmapped: true
+    fields:
+      loan_days: not_applicable
+      waive_reason: not_applicable
+      pickup_branch: not_applicable
+      export_branch: not_applicable
+      patron_eligible: not_applicable
+      renew_ok: not_applicable
+      waiver_total_ok: not_applicable
+      charge_waivable: not_applicable
+      holds_ok: not_applicable
+      recipient_on_file:
+        source: caller
+      delete_eligible: not_applicable
+  waive_fine:
+    irreversible: true
+    data_class_floor: personal
+    amount:
+      json_path: amount_cents
+      unit: cents
+    payload:
+    - json_path: card_id
+      shape: string
+      max_length: 20
+    - json_path: charge_id
+      shape: string
+      max_length: 20
+    fields:
+      loan_days: not_applicable
+      waive_reason:
+        json_path: reason
+      pickup_branch: not_applicable
+      export_branch: not_applicable
+      patron_eligible: not_applicable
+      renew_ok: not_applicable
+      waiver_total_ok:
+        source: caller
+      charge_waivable:
+        source: caller
+      holds_ok: not_applicable
+      recipient_on_file: not_applicable
+      delete_eligible: not_applicable
+fields:
+  loan_days:
+    type: integer
+    min: 0
+    max: 3650
+    default: 7
+    description: 'LOAN-1: checkout.days, from the arguments.'
+  waive_reason:
+    type: string
+    max_length: 64
+    default: system_error
+    description: 'FINE-2: waive_fine.reason, from the arguments.'
+  pickup_branch:
+    type: string
+    max_length: 40
+    default: main
+    description: 'HOLD-1: place_hold.branch, from the arguments.'
+  export_branch:
+    type: string
+    max_length: 40
+    default: main
+    description: 'EXPORT-2: export_patron_list.branch, from the arguments.'
+  patron_eligible:
+    type: boolean
+    default: true
+    source: caller
+    description: LOAN-2, from the circulation system.
+  renew_ok:
+    type: boolean
+    default: true
+    source: caller
+    description: RENEW-1, from the circulation system.
+  waiver_total_ok:
+    type: boolean
+    default: true
+    source: caller
+    description: FINE-1 365-day total, from the circulation system.
+  charge_waivable:
+    type: boolean
+    default: true
+    source: caller
+    description: FINE-3, from the circulation system.
+  holds_ok:
+    type: boolean
+    default: true
+    source: caller
+    description: HOLD-1 active-hold count, from the circulation system.
+  recipient_on_file:
+    type: boolean
+    default: true
+    source: caller
+    description: MAIL-1, from the circulation system.
+  delete_eligible:
+    type: boolean
+    default: true
+    source: caller
+    description: DEL-1 account state and director ticket, from the circulation system.
