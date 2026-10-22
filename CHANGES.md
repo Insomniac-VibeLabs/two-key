@@ -138,6 +138,7 @@ SPDX-License-Identifier: Apache-2.0
 - [A ledger never goes back to an older constitution (signed serial) — 2026-10-21](#a-ledger-never-goes-back-to-an-older-constitution-signed-serial--2026-10-21)
 - [Live harness: run 9x ported to `working`, and the fixes for run 9y — 2026-10-21](#live-harness-run-9x-ported-to-working-and-the-fixes-for-run-9y--2026-10-21)
 - [DeepSource: the findings on main, fixed or marked — 2026-10-21](#deepsource-the-findings-on-main-fixed-or-marked--2026-10-21)
+- [Version number on `working`: 0.7.3 — 2026-10-22](#version-number-on-working-073--2026-10-22)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4392,3 +4393,10 @@ DeepSource's badge counts main (95 issues from its first Python scan of main). T
   mint) and the issuer's override of it, and the ledger's lock guard releasing its own lock.
 - Findings in test code are marked `skipcq: ... - test only`. Test code is not part of the installed package and
   nothing in `two_key/` imports it.
+
+## Version number on `working`: 0.7.3 — 2026-10-22
+
+The version only. No behaviour changed.
+
+- `pyproject.toml`, `two_key.__version__` and `uv.lock` say `0.7.3` instead of `0.7.0`. PyPI has `0.7.0`, `0.7.1` and `0.7.2`, so `0.7.3` is the next number.
+- docs/PYPI.md says so. Nothing is tagged or uploaded: the maintainer releases it, and `v0.7.0` and the other tags are not moved.

@@ -14,9 +14,9 @@ registered. It does not change what Two-Key does.
 `0.7.1` and `0.7.2` are packaging releases made from the `PyPI` branch, which
 swaps the Mermaid diagrams for pictures (PyPI shows the README and nothing
 under `docs/`) and names its own version in the install lines. They are not
-on this branch: `pyproject.toml` and `two_key.__version__` here still say
-`0.7.0`, and the next release is numbered above `0.7.2`, a number chosen at
-release time. PyPI treats `two-key`, `two_key`, and `two.key` as the same
+on this branch. `pyproject.toml` and `two_key.__version__` here say `0.7.3`,
+the next number after `0.7.2`; nothing is tagged or uploaded until the
+maintainer releases it. PyPI treats `two-key`, `two_key`, and `two.key` as the same
 project. The import name stays `two_key`. The public 1.0 review in
 [ROADMAP.md](../ROADMAP.md) is still ahead.
 
