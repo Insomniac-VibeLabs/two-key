@@ -182,6 +182,10 @@ def judges_doc(answers: Mapping) -> dict:
             "quorum": {"profile": answers.get("profile", "default")}}
 
 
+NO_SERIAL = ("until a constitution with a serial runs, this ledger accepts any constitution signed with this key, "
+             "an older one too (docs/HOWTO.md, The serial)")
+
+
 def starter_rules(tools: Any) -> dict:
     if not isinstance(tools, list) or not tools:
         raise SetupError("tools: name at least one tool, or give rules_file")
@@ -336,12 +340,14 @@ def _write_constitution(staging: Path, answers: Mapping, key):
     _write(staging / FILES["rules"], rules_bytes)
     try:
         text, rules, specs, fields = load_unsigned_with_fields(staging / FILES["prose"], staging / FILES["rules"])
-        envelope = sign_constitution(text, rules, key, specs, fields=fields,
-                                     serial=load_serial(staging / FILES["rules"]))
+        serial = load_serial(staging / FILES["rules"])
+        envelope = sign_constitution(text, rules, key, specs, fields=fields, serial=serial)
         signed = verify_signed(json.loads(json.dumps(envelope)), key.public_key())
     except (ValueError, TypeError) as e:
         raise SetupError(f"rules: {e}") from None
     _write(staging / FILES["constitution"], (json.dumps(envelope, indent=2) + "\n").encode("utf-8"))
+    if serial is None:      # an operator's rules file; the starter has serial 1 (run 9y, S8)
+        print(f"two-key: setup: WARNING: rules_file has no serial: {NO_SERIAL}", file=sys.stderr)
     return envelope, signed
 
 
@@ -398,12 +404,16 @@ def _record_setup(target: Path, key, written: list[str], constitution_hash: str)
 
 
 def _next_steps(route: str, target: Path, answers: Mapping) -> list[str]:
+    from .constitution import load_serial
     names = sorted({j.get("auth_env") for j in answers.get("judges") or [] if isinstance(j, Mapping)
                     and j.get("auth_env")} | {(answers.get("monitored_agent") or {}).get("credential_env")} -
                    {None, ""})
     steps = []
     if names:
         steps.append(f"set {', '.join(names)} in the proxy's own environment (values never go in a file)")
+    if answers.get("rules_file") and load_serial(target / FILES["rules"]) is None:
+        steps.append(f"add serial: 1 to {target / FILES['rules']} and sign it again with two-key sign-constitution: "
+                     f"{NO_SERIAL}")
     if route == "proxy":
         steps += [f"two-key config check --config {target / FILES['proxy']}",
                   "start the proxy from the agent's host as another account (docs/CONNECTING.md)",

@@ -129,8 +129,9 @@ class Drafting(unittest.TestCase):
         for line in text.splitlines():
             self.assertTrue(line.isascii())
         doc = load_yaml(filled(text))
-        self.assertEqual(sorted(doc), ["hard_rules", "tool_specs"])
+        self.assertEqual(sorted(doc), ["hard_rules", "serial", "tool_specs"])
         self.assertEqual(list(doc["tool_specs"]), ["pay_vendor"])
+        self.assertEqual(doc["serial"], 1)      # rollback protection from the first signing (run 9y, S8)
 
     def test_tool_ids_are_quoted_keys(self):
         odd = dict(REPORT, name="billing:pay/v2")

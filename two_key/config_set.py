@@ -878,14 +878,15 @@ def record(config, body: dict, key, constitution=None) -> None:
     try:
         witness = load_public_key(config.witness_public_key) if config.witness_public_key else None
         ledger = Ledger(config.ledger, key, witness_public_key=witness, anchor_path=config.head_anchor)
-        if constitution is not None:
-            try:
-                check_constitution_order(ledger, constitution)
-            except TwoKeyConfigError as e:
-                raise ConfigChangeError(f"{e}. To go back to these rules, change them with config set, which "
-                                        "signs the next serial; nothing was written") from None
-        ledger.append(LEDGER_KIND, body)
-        ledger.checkpoint()
+        with ledger.exclusive():        # checked on what a running proxy wrote, and written in one hold (run 9y)
+            if constitution is not None:
+                try:
+                    check_constitution_order(ledger, constitution)
+                except TwoKeyConfigError as e:
+                    raise ConfigChangeError(f"{e}. To go back to these rules, change them with config set, which "
+                                            "signs the next serial; nothing was written") from None
+            ledger.append(LEDGER_KIND, body)
+            ledger.checkpoint()
     except ConfigChangeError:
         raise
     except (OSError, ValueError, LedgerError) as e:

@@ -567,10 +567,18 @@ the ledger has run. Once it has run serial N, it refuses a lower serial
 (`constitution_rollback`), N again with different rules
 (`constitution_serial_reused`), and a constitution with no serial
 (`constitution_serial_missing`), before anything is written. To go back to
-older rules, sign them again with a higher serial. `two-key setup` writes
-`serial: 1`, and `two-key config set` on a signed setting signs the next one
-for you. A ledger that has never run a constitution with a serial accepts any,
-as before.
+older rules, sign them again with a higher serial. `two-key setup` and
+`two-key mcp-draft-specs` write `serial: 1`, and `two-key config set` on a
+signed setting signs the next one for you. `setup` warns when the rules file
+you give it has no serial. A ledger that has never run a constitution with a
+serial accepts any, as before. Two proxies started at the same moment on one
+ledger are checked one after the other, so the second sees what the first
+recorded.
+
+Count up by one. The highest serial is 2^53 (9007199254740992): a ledger
+that has run it can never accept a newer constitution, so `config set` on a
+signed setting is refused from then on, and changing the rules needs a new
+ledger.
 
 In Python: `sign_constitution(prose, rules, key, specs, fields=fields,
 envelope_format="v2")`, with `serial=N` for a serial. `auto` writes v1 unless there are fields, and v3

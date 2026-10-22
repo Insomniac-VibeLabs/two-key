@@ -236,8 +236,7 @@ class ToolGateway:
             else:                        # not copied (too deep, too many items, an unsupported type): not measured
                 body.update({"tool_args_size": -1, "tool_args_digest": None, "tool_args_omitted": True})
             try:
-                self.ledger.append_bounded("gateway_denied", body)
-                self.ledger.checkpoint()
+                self.ledger.record("gateway_denied", body)
             except Exception as e:  # still a deny; do not mark jti, so a later deny can retry ledgering
                 print(f"two-key: could not record gateway deny {result.reason[:_MAX_REASON_CHARS]!r}: "
                       f"{type_tag(e)}"[:500], file=sys.stderr)
@@ -371,23 +370,20 @@ class ToolGateway:
                 if not same:
                     return GatewayResult(False, "file_changed")
             try:
-                self.ledger.append_bounded("redemption_started", {"jti": payload["jti"], "tool": tool,
-                                                                  "dropped_keys": dropped_keys(spec, arguments)})
-                self.ledger.checkpoint()
+                self.ledger.record("redemption_started", {"jti": payload["jti"], "tool": tool,
+                                                          "dropped_keys": dropped_keys(spec, arguments)})
             except Exception as e:      # not only LedgerError: an OSError (disk full) must not escape invoke (#60)
                 return GatewayResult(False, _ledger_failed(e))
             try:
                 output = fn(project_arguments(spec, arguments, dict(derived.fields)))
             except Exception as e:
                 try:
-                    self.ledger.append_bounded("redemption_aborted", {"jti": payload["jti"], "tool": tool})
-                    self.ledger.checkpoint()
+                    self.ledger.record("redemption_aborted", {"jti": payload["jti"], "tool": tool})
                 except Exception as le:
                     return GatewayResult(False, _ledger_failed(le))
                 return GatewayResult(False, f"tool_error:{type_tag(e)}", None)
             try:
-                self.ledger.append_bounded("redemption", {"jti": payload["jti"], "tool": tool})
-                self.ledger.checkpoint()
+                self.ledger.record("redemption", {"jti": payload["jti"], "tool": tool})
             except Exception as e:
                 return GatewayResult(False, _ledger_failed(e), output)
         return GatewayResult(True, "redeemed", output)

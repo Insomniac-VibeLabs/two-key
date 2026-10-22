@@ -134,8 +134,7 @@ class Guard:
         """Append one ledger entry (an integration's own record, such as ``mcp_proxy_started``) under the
         guard's lock, so it never interleaves with a call."""
         with self._lock:
-            self.two_key.ledger.append_bounded(kind, body)
-            self.two_key.ledger.checkpoint()
+            self.two_key.ledger.record(kind, body)
 
     def tool(self, name: str, *, claim: str = "none", facts: Mapping[str, FactHook] | None = None,
              proposal: str | None = None):

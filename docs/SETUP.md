@@ -288,7 +288,10 @@ principal's public key before anything is written. Then `config check` verifies 
 as the proxy will. It writes the rules file and the envelope together, both owner-only, and records the new
 constitution's digest in the ledger.
 
-**The serial goes up by one with each signed change.** The rules file `setup` writes starts at `serial: 1`.
+**The serial goes up by one with each signed change.** The rules file `setup` writes starts at `serial: 1`, and so
+does the `rules.draft.yaml` that `mcp-draft-specs` writes. A `rules_file` you bring is signed as it is: if it has no
+`serial`, `setup` warns, and its next steps say to add `serial: 1` and sign again, because until a constitution with
+a serial runs, the ledger accepts any constitution signed with your key, an older one too.
 Once the proxy has run a constitution, its ledger refuses any older one (a lower serial), so a copy of old rules
 cannot be put back (live run 9x, C44; HOWTO "The serial"). For the same reason, `config undo` refuses to put back
 a constitution the ledger has already run past (`constitution_rollback`): change the setting back with

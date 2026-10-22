@@ -292,7 +292,8 @@ flowchart TD
   stays valid forever, so a copy of an older one (with fewer rules) would
   start. With a signed `serial` in the rules file, a ledger that has run
   serial N refuses a lower serial, N again with other rules, and a
-  constitution with no serial (live run 9x, C44). It does not help a
+  constitution with no serial (live run 9x, C44), also when two proxies
+  start at once on one ledger (run 9y, S6c). It does not help a
   deployment that has never signed a serial, nor an attacker who holds the
   principal key, who can sign anything.
 - A judge is not the monitored agent: `TwoKey` refuses to start when a

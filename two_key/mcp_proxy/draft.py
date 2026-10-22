@@ -218,6 +218,8 @@ def render_rules(draft: Draft, command: list[str]) -> str:
         "# sign-constitution refuses this file until you replace every REPLACE_WITH_* value and fill every",
         "# empty allow list. Remove the tools the agent should not have; the digest changes if you do (the",
         "# proxy prints the digest it sees). A server's descriptions and hints are its claims, not facts.",
+        "# serial: raise it each time you sign changed rules; a ledger refuses a lower one (HOWTO, The serial).",
+        "serial: 1",
         "hard_rules:",
         f"  - {{id: tools, allow_only_tools: {_yaml_value([t.tool_id for t in draft.tools])}}}",
         "tool_specs:",

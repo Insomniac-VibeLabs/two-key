@@ -139,6 +139,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Live harness: run 9x ported to `working`, and the fixes for run 9y — 2026-10-21](#live-harness-run-9x-ported-to-working-and-the-fixes-for-run-9y--2026-10-21)
 - [DeepSource: the findings on main, fixed or marked — 2026-10-21](#deepsource-the-findings-on-main-fixed-or-marked--2026-10-21)
 - [Version number on `working`: 0.7.3 — 2026-10-22](#version-number-on-working-073--2026-10-22)
+- [Live run 9y: two proxies starting at once, and rules without a serial — 2026-10-22](#live-run-9y-two-proxies-starting-at-once-and-rules-without-a-serial--2026-10-22)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4406,3 +4407,21 @@ The version only. No behaviour changed.
 
 - `pyproject.toml`, `two_key.__version__` and `uv.lock` say `0.7.3` instead of `0.7.0`. PyPI has `0.7.0`, `0.7.1` and `0.7.2`, so `0.7.3` is the next number.
 - docs/PYPI.md says so. Nothing is tagged or uploaded: the maintainer releases it, and `v0.7.0` and the other tags are not moved.
+
+## Live run 9y: two proxies starting at once, and rules without a serial — 2026-10-22
+
+- **Two proxies started at once on one ledger could both run one serial** (run 9y, S6c). Each read the ledger,
+  checked the serial, and recorded `constitution_loaded`, so in 3 of 4 tries two different serial-2 constitutions
+  both started, and both kept restarting afterwards. The order check now runs again under the ledger's write lock,
+  after reading what other processes wrote, just before `constitution_loaded` is recorded: the second start is
+  refused (`constitution_serial_reused` or `constitution_rollback`) and writes nothing. `config set` and
+  `config undo` check and record the same way.
+- **A process sharing the ledger could read entries the signed head did not cover yet**, and fail with
+  `signed head does not match the chain` (run 9y saw it once, at start). Every write and the checkpoint that signs
+  it now happen in one hold of the lock: `Ledger.exclusive()` is re-entrant, and `Ledger.record()` appends and
+  checkpoints together. A decision's entries, a gateway redemption, a revocation and a deny each use them.
+- **`mcp-draft-specs` writes `serial: 1`** in `rules.draft.yaml`, and **`setup` warns** when the `rules_file` it is
+  given has no serial; its next steps say to add one (run 9y, S8). SETUP.md said `setup` always signs serial 1,
+  which was true only of its starter rules.
+- HOWTO "The serial": count up by one; 2^53 is the highest serial, and a ledger that has run it cannot take newer
+  rules (run 9y, S3i).

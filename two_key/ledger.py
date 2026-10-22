@@ -309,7 +309,10 @@ class Ledger:
             raise LedgerError("ledger key must live outside the ledger directory")
         if _platform.inside(self._anchor_path, self.path):
             raise LedgerError("head anchor must live outside the ledger directory")
-        self._lock = threading.Lock()
+        # Re-entrant, so one ``exclusive()`` block can hold the write lock across several appends and the
+        # checkpoint that covers them (run 9y, S6c); ``_depth`` counts this thread's nested holds.
+        self._lock = threading.RLock()
+        self._depth = 0
         self._observers: list = []          # called after each append (two_key/siem.py); never blocking
         self.entries: list[Entry] = []
         self._redeemed: set[str] = set()
@@ -379,11 +382,15 @@ class Ledger:
                 ledger._lock.acquire()
                 self.held = True
                 self.fd = None
+                if ledger._depth:       # already held by this thread: the outer block caught up and holds the file
+                    ledger._depth += 1
+                    return self
                 try:
                     self.fd = _platform.open_lock_file(ledger.lock_path())
                     _platform.lock(self.fd)
                     if check_stale and ledger._entries_size is not None and ledger._entries_file_size() != ledger._entries_size:
                         ledger._catch_up_unlocked()
+                    ledger._depth = 1
                     return self
                 except BaseException:
                     self._release()
@@ -394,6 +401,12 @@ class Ledger:
                 return False
 
             def _release(self):
+                if self.held and ledger._depth > 1:
+                    ledger._depth -= 1
+                    ledger._lock.release()  # skipcq: PYL-W0212 - the guard belongs to this ledger and releases the ledger's own lock
+                    self.held = False
+                    return
+                ledger._depth = 0
                 if self.fd is not None:
                     try:
                         _platform.unlock(self.fd)
@@ -420,8 +433,19 @@ class Ledger:
 
     def exclusive(self):
         """Hold the ledger's write lock, against this process and others, for the ``with`` block. A backup
-        copies the ledger's files under it so it never sees a half-written entry."""
+        copies the ledger's files under it so it never sees a half-written entry.
+
+        On entry it reads what other processes appended. Inside it, ``append`` and ``checkpoint`` take the
+        same lock again, so entries and the checkpoint that signs them are written in one hold: another
+        process sharing the ledger never reads entries the signed head does not cover yet (run 9y, S6c)."""
         return self._exclusive()
+
+    def record(self, kind: str, body: dict) -> Entry:
+        """``append_bounded`` and ``checkpoint`` in one hold of the write lock."""
+        with self._exclusive():
+            entry = self.append_bounded(kind, body)
+            self.checkpoint()
+            return entry
 
     def fingerprint_key_path(self) -> Path:
         """Per-install HMAC key for credential fingerprints, beside the ledger key, outside the ledger."""

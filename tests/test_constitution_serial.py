@@ -146,6 +146,24 @@ class Order(unittest.TestCase):
         self.start(self.constitution(1))
         self.assertEqual(self.loaded()[-1]["serial"], 1)
 
+    def test_two_proxies_started_at_once_cannot_both_run_one_serial(self):
+        """Run 9y, S6c: both opened the ledger before either wrote. The second re-checks under the write lock, on
+        what the first recorded, and is refused before it writes anything."""
+        with contextlib.redirect_stderr(io.StringIO()):
+            first, second = Ledger(self.dir / "ledger", self.key), Ledger(self.dir / "ledger", self.key)
+        tk = TwoKey(first, self.key.public_key(), self.constitution(2, STRICTER), [FixedJudge("a", "yes")],
+                    private_key=self.key, quorum=QuorumPolicy(required_yes=1), allow_test_doubles=True,
+                    monitored_agent=TEST_AGENT)
+        self.addCleanup(tk.close)
+        size = Ledger(self.dir / "ledger", self.key).size()
+        for constitution, code in ((self.constitution(2), "constitution_serial_reused"),
+                                   (self.constitution(1), "constitution_rollback")):
+            with self.subTest(code=code), self.assertRaisesRegex(TwoKeyConfigError, f"^{code}:"):
+                TwoKey(second, self.key.public_key(), constitution, [FixedJudge("a", "yes")],
+                       private_key=self.key, quorum=QuorumPolicy(required_yes=1), allow_test_doubles=True,
+                       monitored_agent=TEST_AGENT)
+        self.assertEqual(Ledger(self.dir / "ledger", self.key).size(), size, "a refused start wrote to the ledger")
+
     def test_the_check_on_its_own(self):
         with contextlib.redirect_stderr(io.StringIO()):
             empty = Ledger(self.dir / "empty", self.key)

@@ -155,6 +155,20 @@ class Setup(Deployment):
         self.assertIn("on_writable_paths: refuse", text)
         self.assertIn("var: JUDGE_KEY_VAR", (self.base / "ha" / "judges.yaml").read_text(encoding="utf-8"))
 
+    def test_a_rules_file_without_a_serial_is_signed_with_a_warning(self):
+        """Run 9y, S8: the starter rules have serial 1; a rules file without one is signed as it is, with a warning
+        and a next step, since its ledger accepts any constitution until one with a serial runs."""
+        rules = setup_cmd.starter_rules(ANSWERS["tools"])
+        for name, doc, warned in (("bare", {k: v for k, v in rules.items() if k != "serial"}, True),
+                                  ("serial", rules, False)):
+            path = self.base / f"{name}.json"
+            path.write_text(json.dumps(doc), encoding="utf-8")
+            result, _, err = quiet(setup_cmd.build, dict(ANSWERS, route="library", rules_file=str(path)),
+                                   self.base / name, environ={})
+            with self.subTest(name=name):
+                self.assertEqual("rules_file has no serial" in err, warned)
+                self.assertEqual(any(step.startswith("add serial: 1") for step in result["next"]), warned)
+
     def test_the_library_route_writes_no_proxy_config(self):
         quiet(setup_cmd.build, dict(ANSWERS, route="library"), self.base / "lib", environ={})
         self.assertFalse((self.base / "lib" / "proxy.yaml").exists())

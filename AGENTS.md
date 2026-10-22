@@ -218,10 +218,17 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   (`constitution_rollback`), N again with other bytes
   (`constitution_serial_reused`), and no serial (`constitution_serial_missing`)
   refuse to start before anything is written, and `config undo` refuses to
-  put such a constitution back. `setup` signs serial 1 and `config set` on a
-  signed setting signs the next. There is no setting that turns it off; going
-  back to older rules means signing them again with a higher serial
-  (`tests/test_constitution_serial.py`).
+  put such a constitution back. The check runs again under the ledger's write
+  lock, on what other processes wrote, just before `constitution_loaded` is
+  recorded, so two proxies started at once on one ledger cannot both run one
+  serial (live run 9y, S6c). `setup`'s starter rules and `mcp-draft-specs`
+  start at serial 1, and `config set` on a signed setting signs the next.
+  There is no setting that turns it off; going back to older rules means
+  signing them again with a higher serial (`tests/test_constitution_serial.py`).
+- Each ledger write and the checkpoint that signs it happen in one hold of the
+  ledger's write lock (`Ledger.record`, `Ledger.exclusive`), so a process
+  sharing the ledger never reads entries the signed head does not cover yet
+  (`tests/test_ledger_shared.py`).
 - The gateway verifies only; it never mints.
 - The guard (`two_key/guard.py`) uses a fixed claim and proposal per tool,
   never the agent's; looks facts up before `authorize` and again before
