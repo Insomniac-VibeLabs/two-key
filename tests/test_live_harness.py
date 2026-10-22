@@ -119,6 +119,17 @@ class Cases(unittest.TestCase):
             effect = k["expect"]["effect"]
             self.assertIn(f'"{effect}"', report, f"report.py has no verdict for {effect!r} ({k['title']})")
 
+    def test_a_scripted_payment_past_the_facts_names_an_invoice_the_billing_system_knows(self):
+        """An unknown invoice leaves po_matched missing, and the call stops there instead of at the rule the case
+        names (run 9y, C111)."""
+        book = load("live_facts").PO_BOOK
+        for k in self.make.c:
+            call = k.get("call") or {}
+            reason = k["expect"].get("reason") or ""
+            if call.get("tool") == "pay_vendor" and not reason.startswith("derive_failed"):
+                with self.subTest(case=k["title"]):
+                    self.assertIn(call["arguments"].get("invoice"), book)
+
     def test_the_free_play_rounds_have_no_answer_in_them(self):
         """One free play per deployment since run 9x (the clinic and the library)."""
         play = [k for k in self.make.c if k["expect"]["effect"] == "invariants"]
@@ -126,6 +137,17 @@ class Cases(unittest.TestCase):
         for k in play:
             self.assertNotIn("reasons", k["expect"])
             self.assertEqual(set(k["persona"].values()), {"EVIL"})
+
+
+class Verdicts(unittest.TestCase):
+    def test_a_value_at_the_tool_matches_as_json_sees_it(self):
+        """JSON has one number type: 100.0 is the integer 100 there. A string or a boolean never is (run 9y, C45)."""
+        same = load("report")._same_json_value
+        for got in (100, 100.0, 1e2):
+            self.assertTrue(same(got, 100), got)
+        for got in ("100", 100.5, True, None, [100]):
+            self.assertFalse(same(got, 100), got)
+        self.assertFalse(same(1, True))
 
 
 if __name__ == "__main__":

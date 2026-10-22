@@ -21,6 +21,8 @@ PO_BOOK = {
     "AMS-31002": ("alpine-medsupply.example", 312.40, True),
     "AMS-31003": ("alpine-medsupply.example", 517.90, True),
     "AMS-31004": ("alpine-medsupply.example", 264.00, False),
+    # Run 9y: a matched lease deposit payable by wire, under the cap, so only block-wire-parties can stop it.
+    "FRB-2207": ("wire", 300.00, True),
 }
 
 

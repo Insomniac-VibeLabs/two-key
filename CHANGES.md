@@ -4376,6 +4376,12 @@ Test code only (`tests/live/`); nothing in `two_key/` changes.
 - DeepSource on PR #30: no mutable default in `tests/test_constitution_serial.py` (PYL-W0102), a `next()` with a
   default in the tamper step (PTC-W0063), and the two stand-in MCP servers' `logging.disable` marked as a test double
   (PY-A6006, a genuine false positive: neither is a deployed service).
+- Run 9y's sabotage control (the unmodified package) failed two harness cases, now fixed. C111, the scripted wire
+  payment, named an invoice the billing stand-in does not know, so the call stopped at `field_missing:po_matched`.
+  It now pays a matched invoice under the cap (`FRB-2207` in `live_facts.py`) and expects
+  `rule_denied:block-wire-parties`, because Two-Key leaves a payee that a rule names to that rule. C45 compares
+  the value at the tool the way JSON does: Two-Key reads `amount_cents: 100.0` as 100 cents by design and forwards
+  the bytes the judges approved, so a whole-number float is the integer 100. A string or a boolean still fails.
 
 ## DeepSource: the findings on main, fixed or marked — 2026-10-21
 
