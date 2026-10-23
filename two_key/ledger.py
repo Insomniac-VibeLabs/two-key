@@ -402,12 +402,12 @@ class Ledger:
                 return False
 
             def _release(self):
-                if self.held and ledger._depth > 1:
+                if self.held and ledger._depth > 1:  # skipcq: PYL-W0212 - the guard belongs to this ledger and tracks the ledger's own lock depth
                     ledger._depth -= 1
                     ledger._lock.release()  # skipcq: PYL-W0212 - the guard belongs to this ledger and releases the ledger's own lock
                     self.held = False
                     return
-                ledger._depth = 0
+                ledger._depth = 0  # skipcq: PYL-W0212 - the guard belongs to this ledger and tracks the ledger's own lock depth
                 if self.fd is not None:
                     try:
                         _platform.unlock(self.fd)

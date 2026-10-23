@@ -142,6 +142,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Live run 9y: two proxies starting at once, rules without a serial, and shared-ledger SIEM copies — 2026-10-22](#live-run-9y-two-proxies-starting-at-once-rules-without-a-serial-and-shared-ledger-siem-copies--2026-10-22)
 - [Live run 9z: two harness fixes, and a faster harness — 2026-10-23](#live-run-9z-two-harness-fixes-and-a-faster-harness--2026-10-23)
 - [Release v0.7.3: setup and change commands, a signed serial, the upstream server's files — 2026-10-23](#release-v073-setup-and-change-commands-a-signed-serial-the-upstream-servers-files--2026-10-23)
+- [After 0.7.3: the serial check split for readability — 2026-10-23](#after-073-the-serial-check-split-for-readability--2026-10-23)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4513,3 +4514,14 @@ The same applies from PyPI's 0.7.1 and 0.7.2.
   still sends every entry, and the copy of the other's entry is marked `replay`: dedupe on `entry_hash`.
 - On Python 3.15, a start may name a `__pycache__` folder another account can write, which it should have
   named before.
+
+## After 0.7.3: the serial check split for readability — 2026-10-23
+
+No change in behaviour. SonarCloud rated `check_constitution_order` (`two_key/core.py`) above its cognitive
+complexity limit (18 against 15). The scan of the ledger's `constitution_loaded` entries is now its own helper,
+`_serial_history`, and the function keeps only the three refusals. `tests/test_constitution_serial.py` is unchanged
+and passes.
+- DeepSource's two open findings on main were PYL-W0212 (a protected member used from outside its class) on two lines
+  of the ledger's lock guard, `two_key/ledger.py`, added with the re-entrant hold in run 9y. The guard is a class
+  defined inside `Ledger._exclusive` and tracks that ledger's own lock depth, the same false positive already marked
+  on the guard's other lines; both lines now carry the same `skipcq` with that reason.
