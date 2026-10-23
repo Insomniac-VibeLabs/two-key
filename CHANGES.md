@@ -144,6 +144,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Release v0.7.3: setup and change commands, a signed serial, the upstream server's files — 2026-10-23](#release-v073-setup-and-change-commands-a-signed-serial-the-upstream-servers-files--2026-10-23)
 - [After 0.7.3: the serial check split for readability — 2026-10-23](#after-073-the-serial-check-split-for-readability--2026-10-23)
 - [Dependabot: uv and the diagram tools updated — 2026-10-23](#dependabot-uv-and-the-diagram-tools-updated--2026-10-23)
+- [Live run 9s: two test-code fixes — 2026-10-23](#live-run-9s-two-test-code-fixes--2026-10-23)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4542,3 +4543,14 @@ No change in Two-Key itself or in what it installs for users; only the tools CI 
   `npm audit` on the new lock finds nothing. 12.0.0 needs Node 22.13 or later, so the workflow now sets up
   Node 22, and it dropped the `-w` option, so the 780-pixel page width is now the browser window's width.
   All 27 diagrams in the docs drew without errors with the new version.
+
+## Live run 9s: two test-code fixes — 2026-10-23
+
+No change in Two-Key. Run 9s (GrokBot, on 8b3fd76) passed 165 cases with 10 inconclusive and none failed. C129 and
+C170, the two cases fixed after run 9z, both passed live. It found two problems in the test code.
+
+- `tests/test_fail_closed.py` matched an error message with `\(` in a normal string. Python warns about that
+  escape and will later refuse it; the pattern is now a raw string, so the `skipcq` that hid the warning is gone.
+- pytest collected `test_ca` (`tests/tls.py`), a helper that writes test certificates, as a test wherever a test
+  module imported it, and reported an error. It is now marked as not a test. `unittest`, which CI uses, never
+  collected it.
