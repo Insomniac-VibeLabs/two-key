@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.7.0, tag `v0.7.0` on `main`. What each release
+`two-key` is beta (pre-1.0). Package version 0.7.3, tag `v0.7.3` on `main`. What each release
 shipped is under "Shipped" in [ROADMAP.md](../ROADMAP.md); tags and branches are in
 [AGENTS.md](../AGENTS.md).
 
@@ -95,6 +95,15 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   `two-key siem-verify` checks a file against the ledger. The gateway also
   counts tokens it refuses without a ledger entry, by class, rate-limited,
   with no token text (docs/SIEM.md). It is not a SIEM and it does not alert
+- in 0.7.3: `two-key setup` and `two-key config set`, `get`, `undo`, `show`
+  and `check` (docs/SETUP.md). A change is checked as a whole before it is
+  written, a weaker one needs a typed yes, a signed one needs the principal
+  key, and each is recorded in the ledger as `config_changed` with no
+  values. A principal key can be encrypted with a passphrase. A signed
+  `serial` orders constitutions: once a ledger has run one, it refuses an
+  older, reused, or missing serial. The start-up checks also look at the
+  upstream server's files named in `upstream.command` and
+  `upstream.check_paths` (#13)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),

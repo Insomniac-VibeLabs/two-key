@@ -10,13 +10,11 @@ This page is how a release of `two-key` is published, and how the project was
 registered. It does not change what Two-Key does.
 
 `two-key` has been on [pypi.org](https://pypi.org/project/two-key/) since
-2026-10-17. PyPI has `0.7.0`, `0.7.1` and `0.7.2`, all uploaded that day.
-`0.7.1` and `0.7.2` are packaging releases made from the `PyPI` branch, which
-swaps the Mermaid diagrams for pictures (PyPI shows the README and nothing
-under `docs/`) and names its own version in the install lines. They are not
-on this branch. `pyproject.toml` and `two_key.__version__` here say `0.7.3`,
-the next number after `0.7.2`; nothing is tagged or uploaded until the
-maintainer releases it. PyPI treats `two-key`, `two_key`, and `two.key` as the same
+2026-10-17. `0.7.0`, `0.7.1` and `0.7.2` were uploaded that day; `0.7.1` and
+`0.7.2` are packaging releases of the 0.7.0 code, made from the `PyPI` branch,
+which swaps the Mermaid diagrams for pictures (PyPI shows the README and
+nothing under `docs/`) and names its own version in the install lines.
+`0.7.3` is the next release of the code, tag `v0.7.3` on `main`. PyPI treats `two-key`, `two_key`, and `two.key` as the same
 project. The import name stays `two_key`. The public 1.0 review in
 [ROADMAP.md](../ROADMAP.md) is still ahead.
 
@@ -29,11 +27,11 @@ pip install "two-key[mcp]==X.Y.Z"
 ```
 
 `X.Y.Z` is a version listed on the [project page](https://pypi.org/project/two-key/#history).
-The tag `v0.7.0` on `main` is the git snapshot of `0.7.0`, and can be installed
+The tag `v0.7.3` on `main` is the git snapshot of `0.7.3`, and can be installed
 directly:
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
+pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.3"
 ```
 
 | Extra | Pulls in | Needed for |
@@ -90,7 +88,7 @@ A tag push always targets PyPI, and only when the tag is `v` plus the
 version in `pyproject.toml`. `v0.7.1` on a tree that still says `0.7.0`
 fails before the upload. A manual run defaults to TestPyPI.
 
-`v0.7.0` already points at `main` and must not be moved. A release gets a
+`v0.7.0` and later tags point at `main` and must not be moved. A release gets a
 new version in both `pyproject.toml` and `two_key.__version__`, then a new
 signed tag `vX.Y.Z` on a commit that contains this workflow, or a manual
 run of this workflow on the `PyPI` branch. PyPI never replaces a version.
@@ -164,7 +162,7 @@ create an environment with no reviewer the first time the job asks for it.
 
 ## Tags and `main`
 
-- Do not move `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, or any older tag. A
+- Do not move `v0.7.3`, `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, or any older tag. A
   fix to what is on the index is a new version, never a retag.
 - Do not choose branch `main` in **Run workflow**. The workflow file is on
   `main`, which is why GitHub lists it. The jobs still refuse every ref

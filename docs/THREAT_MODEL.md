@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Threat model
 
-This is the design model for `two-key` 0.7.0 (tag `v0.7.0` on `main`). What each
+This is the design model for `two-key` 0.7.3 (tag `v0.7.3` on `main`). What each
 release added to the model is under [Changes by release](#changes-by-release) at the end of
 this page. Tags and branches are in [AGENTS.md](../AGENTS.md), and the full history is
 [CHANGES.md](../CHANGES.md).
@@ -840,6 +840,13 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
 
 What each release added to the model, newest first. Each is described where it applies below.
 
+- 0.7.3: `two-key setup` and `two-key config set`, `get`, `undo`, `show` and `check`
+  (`two_key/setup_cmd.py`, `two_key/config_set.py`, `two_key/config_cmd.py`), with the
+  `config_changed` ledger entry; a principal key encrypted with a passphrase
+  (`two_key/keys.py`); a signed constitution `serial` and the start-up check that refuses an
+  older one (`check_constitution_order`, run again under the ledger's write lock); one hold of
+  that lock for each write and the checkpoint that signs it, on a shared ledger; and the
+  upstream server's files in the start-up checks (`upstream.check_paths`, #13).
 - 0.7.0: the SIEM export (`two_key/siem.py`, `two_key/siem_sinks.py`, `two_key/siem_export.py`),
   an optional live copy of each ledger entry to a syslog or webhook collector, the
   `two-key siem-export` and `two-key siem-verify` commands, and a rate-limited count of tokens
@@ -866,6 +873,6 @@ What each release added to the model, newest first. Each is described where it a
   aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt.
 - 0.2.2: changed when a judge counts as the monitored agent and added HTTP Basic auth.
 
-Tags: `v0.7.0`, `v0.6.0` and `v0.5.0` are on `main`, with `v0.4.0` before them. Tags `v0.3.1` and
+Tags: `v0.7.3`, `v0.7.0`, `v0.6.0` and `v0.5.0` are on `main`, with `v0.4.0` before them. Tags `v0.3.1` and
 earlier are in the archived `two-key-concept` repository. There, `v0.3.0` stays on `e44be56`,
 `v0.2.4` on `fc836bb`, `v0.2.3` on `4a4352e` and `v0.2.0` on `2f756ac`.

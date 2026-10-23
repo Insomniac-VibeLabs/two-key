@@ -71,11 +71,13 @@ What you get:
 - **Small on purpose.** Python 3.10 to 3.14, one required dependency
   (`cryptography`), Apache-2.0.
 
-**Status:** beta. 0.7.0 is the current release: it adds the SIEM export, a
-start-up check that refuses to run when the monitored agent is Two-Key's own
-account, and a count of the tokens the gateway refuses. 0.6.0 added Windows
-support, content scanning with your antivirus or DLP product, and a start-up
-check for paths another account could change.
+**Status:** beta. 0.7.3 is the current release: it adds `two-key setup` and
+`two-key config set`, `get`, `undo` and `check` for setting up and changing a
+deployment, a signed serial so a ledger never goes back to older rules, and
+start-up checks for the upstream server's files behind a launcher. 0.7.0
+added the SIEM export, a start-up check that refuses to run when the
+monitored agent is Two-Key's own account, and a count of the tokens the
+gateway refuses.
 Maintainer-reviewed and tested with live LLM agents and judges. Read
 [Known limits](#known-limits) and [docs/FIT.md](docs/FIT.md) before you rely
 on it.
@@ -99,14 +101,13 @@ on it.
 
 ## Quick start
 
-Install 0.7.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
+Install 0.7.3 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 
 ```bash
-pip install "two-key[yaml]==0.7.0"
+pip install "two-key[yaml]==0.7.3"
 ```
 
-Tag `v0.7.0` was not moved. It is the git snapshot from before this
-packaging, not a second release.
+Tag `v0.7.3` on `main` is the same code.
 
 Or run the offline demo from a clone. It uses test-double judges, so it
 needs no API keys:
@@ -128,7 +129,7 @@ around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp]==0.7.0"
+pip install "two-key[mcp]==0.7.3"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -621,7 +622,8 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 The MCP adapter shipped in 0.5.0; Windows support, DLP and antivirus hooks,
 and judge connection reuse shipped in 0.6.0. The ledger export for a SIEM
-shipped in 0.7.0; a public review and the 1.0 release come next.
+shipped in 0.7.0, and the setup and change commands and the signed serial
+in 0.7.3; a public review and the 1.0 release come next.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
@@ -631,7 +633,8 @@ flowchart LR
   r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
   r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
-  r07 --> r10["1.0.0<br/>Review and release"]
+  r07 --> r073["0.7.3<br/>Setup and config<br/>commands<br/>Released"]
+  r073 --> r10["1.0.0<br/>Review and release"]
   r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
 ```
 
@@ -641,23 +644,28 @@ flowchart LR
 | 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners (ClamAV, ICAP products, a command, Python); judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Released, tag `v0.7.0` |
+| 0.7.3 | `two-key setup` and `config set`, `get`, `undo`, `show` and `check`; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13) | Released, tag `v0.7.3` |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). Version 0.7.0 is on PyPI. It is this beta, not
-the 1.0 community review. Tag `v0.7.0` is not moved.
+three (HOWTO "Platforms"). Version 0.7.3 is on PyPI. It is this beta, not
+the 1.0 community review. Tags are not moved.
 
 ```bash
-pip install "two-key[yaml]==0.7.0"
+pip install "two-key[yaml]==0.7.3"
 ```
 
-`v0.7.0` adds the ledger export for a SIEM, a start-up check for the account
-the monitored agent runs as, and a count of the tokens the gateway refuses.
+`v0.7.3` adds `two-key setup` and the `config` commands, a principal key
+encrypted with a passphrase, a signed serial so a ledger never goes back to
+older rules, and start-up checks for the upstream server's files.
 `main` holds that release and the fixes merged since; `working` is where the
-next changes land. For the previous release, use `@v0.6.0`: Windows support,
+next changes land. `@v0.7.0` is the ledger export for a SIEM, a start-up
+check for the account the monitored agent runs as, and a count of the tokens
+the gateway refuses. PyPI's `0.7.1` and `0.7.2` are the 0.7.0 code,
+repackaged. For the release before, use `@v0.6.0`: Windows support,
 content scanning that calls your antivirus or DLP product (ClamAV, ICAP, a
 command, or Python), a start-up check for paths another account could
 change, and judge connection reuse. `@v0.5.0` is the MCP proxy, the spec
@@ -702,6 +710,12 @@ Upgrading from an older version: read the "Upgrading" notes in
   refuses to start, and the proxy refuses to start when the monitored agent
   runs as Two-Key's own account or can change Two-Key's files. "Release
   v0.7.0" > "Upgrading from 0.6.0" in CHANGES.md.
+- 0.7.3 loads 0.7.0 constitutions, ledgers, keys, and `proxy.yaml` files
+  unchanged. Check before upgrading: the proxy now checks the upstream
+  server's files named in `upstream.command` and warns (under
+  `high_assurance`, refuses) when a launcher such as `sudo` or `npx` hides
+  them, and once a ledger has run a constitution with a `serial` it refuses
+  an older one. "Release v0.7.3" > "Upgrading from 0.7.0" in CHANGES.md.
 
 A clone installed with `pip install -e` follows the ranges in
 `pyproject.toml`. CI does not: it installs the versions in `uv.lock`

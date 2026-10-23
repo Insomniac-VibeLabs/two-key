@@ -110,8 +110,8 @@ version pinned in `.github/requirements/uv.in`, run `uv sync --locked
 with that same uv and commit it. The lock is not a consumer pin: a git
 install still uses the ranges.
 
-Version 0.7.0 is on PyPI. Tag `v0.7.0` is not moved. Install with
-`pip install "two-key[yaml]==0.7.0"` (the `mcp` extra for the proxy).
+Version 0.7.3 is on PyPI, and is tag `v0.7.3` on `main`. Install with
+`pip install "two-key[yaml]==0.7.3"` (the `mcp` extra for the proxy).
 The release steps are [PYPI.md](PYPI.md). A checkout install, above, is
 for working in this repository.
 
@@ -1743,7 +1743,7 @@ messages and decides nothing.
 ### Install
 
 ```bash
-pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
+pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.3"
 pip install -e ".[mcp]"          # or from a checkout
 ```
 

@@ -141,6 +141,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Version number on `working`: 0.7.3 — 2026-10-22](#version-number-on-working-073--2026-10-22)
 - [Live run 9y: two proxies starting at once, rules without a serial, and shared-ledger SIEM copies — 2026-10-22](#live-run-9y-two-proxies-starting-at-once-rules-without-a-serial-and-shared-ledger-siem-copies--2026-10-22)
 - [Live run 9z: two harness fixes, and a faster harness — 2026-10-23](#live-run-9z-two-harness-fixes-and-a-faster-harness--2026-10-23)
+- [Release v0.7.3: setup and change commands, a signed serial, the upstream server's files — 2026-10-23](#release-v073-setup-and-change-commands-a-signed-serial-the-upstream-servers-files--2026-10-23)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4453,3 +4454,62 @@ without a replay mark. Two cases were wrong about the test, not the product. Onl
   `--sabotage all` runs up to four passes at once (`--jobs`), each on its own ports (`LIVE_PORT_BASE`): 7 minutes
   instead of about 55 here, with the same results (control 175 PASS; every weakening caught but the declared
   blind spot).
+
+## Release v0.7.3: setup and change commands, a signed serial, the upstream server's files — 2026-10-23
+
+Package version 0.7.3 (`pyproject.toml`, `two_key.__version__`, `uv.lock`). To be tagged `v0.7.3` on `main`
+after the merge. PyPI's `0.7.1` and `0.7.2` were the 0.7.0 code, repackaged on the `PyPI` branch, so this is the
+first release of new code since 0.7.0. The entries above, from "PyPI packaging on the PyPI branch" on, are the
+detail.
+
+- **`two-key setup`** writes a whole deployment (principal key, constitution, judges, `proxy.yaml`, ledger) from
+  answers or a file, checks it before it is in place, and records it. **`two-key config set`** and **`undo`**
+  change one setting: the whole set must pass `config check`, a weaker change needs `--confirm-weaker` and a typed
+  yes, a signed setting needs the principal key, and each change is a `config_changed` ledger entry with no
+  values. **`config get`**, **`show`** and **`check`** read a config without starting anything. docs/SETUP.md.
+- **A principal key encrypted with a passphrase** (`two-key config key-passphrase`, `init-key --passphrase`),
+  read by the proxy from an owner-only `keys.passphrase_file`.
+- **A signed `serial` in the constitution.** Once a ledger has run a constitution with a serial, it refuses an
+  older one (`constitution_rollback`), the same serial with other rules (`constitution_serial_reused`), or none
+  (`constitution_serial_missing`). Two proxies started at once on one ledger cannot both run one serial: the
+  check runs again under the ledger's write lock. `setup` and `mcp-draft-specs` write `serial: 1`, and
+  `config set` signs the next one.
+- **The upstream server's files** behind a launcher such as `sudo` are in the start-up checks: absolute
+  arguments of `upstream.command`, `upstream.check_paths`, and a warning (`upstream_paths_unchecked`, refused
+  under `high_assurance`) when nothing names them (#13).
+- **A shared ledger**: each write and the checkpoint that signs it happen in one hold of the lock, so another
+  process never reads an entry the signed head does not cover. The SIEM copy of an entry another proxy wrote is
+  marked `replay`, and a delivery cursor ahead of the ledger is not trusted.
+- **docs/SETTINGS.md**: every setting, generated from the code and checked by a test.
+- **Python 3.13 and 3.14** in CI on Linux, macOS, and Windows; the compiled-file check works on 3.15 (#27).
+- **CI and supply chain**: every CI install is hash-pinned, the Semgrep job's token is scoped (OpenSSF
+  Scorecard, #31 to #33), DeepSource runs its Python analyzer, and every file carries the copyright header.
+  1181 tests.
+- **Live testing**: runs 9, 9x, 9y and 9z, 175 cases on one machine, with a sabotage pass that shows which
+  weakenings the harness notices. Every Two-Key finding is fixed; run 9z, a regression round on the fixes,
+  found none (172 of 175 PASS; of the other three, two were harness cases, now fixed, and one was stopped
+  by another valid control). Results are on the `live-runs` branch.
+- Docs: README, ROADMAP (0.7.3 under "Shipped"), SCOPE, THREAT_MODEL, FIT, HOWTO, JUDGES_AND_QUORUM, PYPI,
+  UPGRADING, CONTRIBUTING, AGENTS.md, and llms.txt name 0.7.3 as the release and `v0.7.3` as the install ref.
+
+### Upgrading from 0.7.0
+
+The same applies from PyPI's 0.7.1 and 0.7.2.
+
+- Constitutions, ledgers, keys, backups, `judges.yaml`, and `proxy.yaml` from 0.7.0 load unchanged. Nothing
+  needs re-signing, and a constitution without a `serial` signs to the same bytes as before.
+- **Check the proxy's start-up output.** It now checks the upstream server's program, script and folders named
+  as absolute paths in `upstream.command`, so it may name more paths, or refuse under
+  `on_writable_paths: refuse` or `high_assurance`. A command that starts with a launcher (`sudo`, `doas`, `env`,
+  `npx`, `uvx`, `pipx`, `cmd`, `powershell`, `pwsh`) and names no absolute path warns
+  `upstream_paths_unchecked`, and under `high_assurance` refuses: give the program as an absolute path or list
+  its folder in `upstream.check_paths`. On Windows a `check_paths` entry needs its drive.
+- **Add `serial: 1` to your rules file** and sign it again (`two-key sign-constitution`) to turn on the
+  rollback check. From then on, count up by one for each new constitution. A ledger that has run a serial
+  refuses an older one; to go back to older rules, sign them again with a higher serial.
+- `two-key config check` now fails when the monitored agent's credential variable is unset (the proxy refuses
+  to start without it), and warns for each unset judge variable.
+- **SIEM**: a new ledger kind, `config_changed`, is sent like the others. With two proxies on one ledger, each
+  still sends every entry, and the copy of the other's entry is marked `replay`: dedupe on `entry_hash`.
+- On Python 3.15, a start may name a `__pycache__` folder another account can write, which it should have
+  named before.

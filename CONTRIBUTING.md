@@ -85,5 +85,5 @@ manual, non-required workflow, never in the suite.
 
 Publishing is [docs/PYPI.md](docs/PYPI.md), on the `PyPI` branch. Do not
 put a PyPI token in the repository or in a GitHub secret. The workflow
-there uses trusted publishing. Do not move tag `v0.7.0` to point at a
+there uses trusted publishing. Do not move tag `v0.7.3` or `v0.7.0` to point at a
 packaging commit.

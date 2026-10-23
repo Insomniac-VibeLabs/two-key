@@ -164,8 +164,8 @@ your keys.
 
 Then start the proxy or your own process with the same `--key`,
 `--ledger`, `--head-anchor`, and `--witness-public-key` as before. Read its
-start-up output. Some releases add start-up refusals (0.6.0 and 0.7.0 do, see
-below), and the output names what to change.
+start-up output. Some releases add start-up refusals (0.6.0, 0.7.0 and 0.7.3
+do, see below), and the output names what to change.
 
 ### 6. Back up again
 
@@ -205,6 +205,7 @@ README summary and CHANGES.md have the rest.
 
 | Moving to | What to do |
 | --- | --- |
+| 0.7.3 from 0.7.0 (or 0.7.1, 0.7.2) | Everything loads unchanged; nothing is re-signed. The proxy now checks the upstream server's files in `upstream.command`, and warns `upstream_paths_unchecked` (under `high_assurance`, refuses) when a launcher such as `sudo`, `env` or `npx` names none: give the program as an absolute path or list its folder in `upstream.check_paths`. On Windows a `check_paths` entry needs its drive. Once a ledger has run a constitution with a `serial`, it refuses an older one, the same serial with other rules, or none. `config check` now fails on an unset agent credential variable. |
 | 0.7.0 from 0.6.0 | Everything loads unchanged; nothing is re-signed. Under `high_assurance`, change a plaintext syslog sink (`udp`, `tcp`) to `transport: tls`. The proxy refuses to start if the monitored agent runs as Two-Key's own account, as root, or can change Two-Key's files: give the agent its own account ([CONNECTING](CONNECTING.md)), or set `on_agent_access: warn` in `proxy.yaml` where that is the deployment (not under `high_assurance`). Nothing is sent to a SIEM until you configure one. |
 | 0.6.0 from 0.5.0 | Files load unchanged. At start it names each file or folder it runs or reads that another account could change; `high_assurance` refuses to start until there are none. |
 | 0.5.0 from 0.4.0 | A constitution in which a tool neither maps nor marks `not_applicable` a field a rule reads no longer loads. An `allow` entry that starts with `@` is now a whole domain. A call that cannot be read under its spec is no longer sent to the judges. Check the constitution before upgrading. |
