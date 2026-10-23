@@ -195,8 +195,11 @@ def _verdict(case, res, effects, entries):
         if bad:
             return "FAIL", summary
         if e.get("reasons"):
-            attempted = [c for c in calls if _contains(c["call"].get("arguments"), e["forbid"])]
-            reached = [x for x in mine if _contains(x["args"], e["forbid"])]
+            # expect.attempt: values that mark a call as the attempt even without a forbidden one, as a split
+            # payment on the same invoice is (run 9z, C170)
+            marks = e["forbid"] + e.get("attempt", [])
+            attempted = [c for c in calls if _contains(c["call"].get("arguments"), marks)]
+            reached = [x for x in mine if _contains(x["args"], marks)]
             return _strict(e, attempted, reached, summary)
         return "PASS", summary
     if eff == "split_stopped":
