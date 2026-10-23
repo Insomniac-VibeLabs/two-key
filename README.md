@@ -206,76 +206,118 @@ root, or can change Two-Key's files (`on_agent_access`).
 
 ## Dual-path authorization
 
-1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads five built-in structured fields (tool, amount_usd, data_class, counterparty, and irreversible) and any custom fields the principal declares under `fields:` (boolean, integer, enum, or string; up to 64; see [examples/custom_fields.yaml](examples/custom_fields.yaml) and HOWTO "Custom Path A fields"). It does not read English. A fault is a deny. A field's description is a signed note for people, never a rule. The signed constitution must include tool_specs.  Those fields are read from the
-   argument bytes by [two_key/derive.py](two_key/derive.py). A claim that
-   disagrees with the bytes is a deny. Omitting `tool_specs` will not sign
-   and will not load. A key the spec does not name does not reach the tool.
-   `deny_unmapped` defaults off, so the call can still be allowed and that
-   key is dropped at the gateway. The ledger records the dropped key names
-   (`dropped_keys`), never their values. Set it true to deny the key
-   instead. A `payload` path names a value that is not interpreted. It may
-   not equal, contain, or sit under an amount, currency, or counterparty
-   path; such a spec does not load. With no `shape`, it
-   covers that value's children. `shape` may lock it to a string, a number,
-   or a list of strings. `max_length` bounds a string or a list. Shape does
-   not read the contents. The spec does not list every nested key. A counterparty
-   path must list `allow`. A party that is not on that list is
-   `counterparty_not_allowed`; an `@example.org` entry (0.5.0) admits every
-   plain address at exactly that domain, with a signing warning. The tool
-   receives the canonical party, not the raw spelling. Every tool maps each
-   custom field a rule reads or marks it `not_applicable`, or the
-   constitution does not sign (0.5.0), and a `case: exact` string field
-   keeps a case-sensitive id as written. A value that cannot be read (for example `10**400`) is
-   a `derive_failed` deny, and any other exception in `authorize` is an
-   `internal_error:` deny, written to the ledger.
-2. Path B is a judge quorum. Judges are hooks for xAI/Grok, OpenAI,
-   Anthropic, Gemini, and Ollama. The minimum is one judge, and that judge
-   must not be the monitored agent: it may run any model from any vendor,
-   but never with the agent's credential, at any address. A missing,
-   malformed, errored, or
-   timed-out ballot does not count as yes. The default policy has no
-   diversity floors. `QuorumPolicy.high_assurance()` (or
-   `profile: high_assurance` in judges.yaml) needs judges from at least two
-   model makers, at least one local judge, and a yes from a local judge; use
-   it for destructive, irreversible, financial, or external-send tools. A
-   judge's maker is who made its model, as the operator labels it (`maker:`,
-   default: its `provider`). It is not verified, and it is a rule about the
-   judges only: it is never compared with the monitored agent. `require_local_yes`
-   with no local judge does not start. A judge is local only when it says
-   so (`local_weights: true`) and its `base_url` host is on an allowlist:
-   loopback, RFC 1918, or IPv6 unique-local. A `:cloud`/`-cloud` model is
-   never local, for any judge class. With `required_yes` unset, the approval threshold is `min(2, number_of_judges)`. The default policy permits a one-judge deployment, but the operator must still configure at least one judge; Two-Key does not create or select judges automatically. With one configured judge, one affirmative vote is required. With two or more judges, two affirmative votes are required by default. This is not a general majority rule: for example, a three-judge setup requires two affirmative votes, and a four-judge setup also requires two. Operators who want a different threshold, such as a majority or unanimity, must explicitly configure `required_yes` to the desired number of affirmative votes. With `required_yes: 1` and
-   more than one judge, one judge approves alone while the others are down;
-   `TwoKey` warns at start, and `min_responding` closes it.
-   `require_path_a_first` is not a floor and it is not a skip. After a derive
-   deny, judges do not receive the argument bytes unless
-   `tool_args_on_derive_deny` is set. A call that cannot be read under its
-   spec (`derive_failed:`) then reaches no judge: there is nothing to judge,
-   and Path B is ledgered as `skipped:derive_failed`. Other denies still go
-   to the judges, with non-empty arguments attached.
-3. A short-lived single-use token is issued only if both paths allow. The
-   token is signed by a capability key that lives outside the ledger
-   directory, not by handing that private key to the gateway. It is bound
-   to the tool, the argument hash, the ledger Merkle root at issuance, the
-   constitution hashes, `spec_hash`, and the derived form. It lives
-   `ttl_seconds` (default 120, at most 300). Redemption writes an intent before the tool
-   runs, so a crash cannot run that token twice.
-4. The gateway redeems that token with the public half of the capability
-   key. It does not hold the minting key, and it never scans. With a
-   content scanner configured (0.6.0), Two-Key scans the call
-   before the two keys decide, and the gateway checks the verdict and file
-   digests the token binds. Tool output is not scanned.
+Every tool call needs two separate "yes" answers before it can run. Path A
+is a strict rule check. Path B is a panel of AI judges. Only when both say
+yes does Two-Key issue a one-time pass (a token), and only the gateway can
+use that pass to run the tool.
 
-Both paths answer once the call is well-formed, within limits, and readable
-under its spec. A Path A deny does not skip Path B, so the ledger has both
-results. A call that cannot be read (`derive_failed:`) is denied without
-asking the judges, unless `tool_args_on_derive_deny` lets them see its
-arguments. A malformed or oversized
-call (`malformed_proposal`, `proposal_too_large`, `action_too_large`,
-`malformed_action:`, `args_too_large`, `invalid_call:`) is denied before
-either path runs, and only its size and digest are ledgered.
-`authorize_from_agent` does not execute the tool. An agent is untrusted whether it is hosted locally or in
-the cloud.
+1. **Path A: the rule check (a policy VM).**
+   - Your hard rules are compiled to bytecode and run in a small virtual
+     machine. It does not read English. It only reads structured fields.
+   - It reads five built-in fields (`tool`, `amount_usd`, `data_class`,
+     `counterparty`, and `irreversible`) plus any custom fields the
+     principal declares under `fields:` (boolean, integer, enum, or string;
+     up to 64; see [examples/custom_fields.yaml](examples/custom_fields.yaml)
+     and HOWTO "Custom Path A fields"). A field's description is a signed
+     note for people, never a rule.
+   - If the VM faults, the answer is deny.
+   - **Where the values come from.** The signed constitution must include
+     `tool_specs`. Without them it will not sign and will not load. Two-Key
+     reads the field values from the call's actual argument bytes, in
+     [two_key/derive.py](two_key/derive.py). If the agent claims a value
+     that disagrees with the bytes, the call is denied.
+   - **Keys the spec does not name.** They never reach the tool.
+     `deny_unmapped` is off by default, so the call can still be allowed and
+     the gateway simply drops those keys. The ledger records their names
+     (`dropped_keys`), never their values. Set `deny_unmapped` to true to
+     deny the call instead.
+   - **Payloads.** A `payload` path names a value that Two-Key passes along
+     without interpreting it. It may not be the same as, contain, or sit
+     under an amount, currency, or counterparty path; a spec that does that
+     will not load. With no `shape`, it covers everything under that value.
+     `shape` can lock it to a string, a number, or a list of strings, and
+     `max_length` limits how long a string or list may be. Shape checks the
+     type, not the contents. The spec does not have to list every nested
+     key.
+   - **Counterparties.** A counterparty path must have an `allow` list.
+     Anyone not on that list is denied as `counterparty_not_allowed`. An
+     entry like `@example.org` (0.5.0) allows every plain address at exactly
+     that domain, and signing shows a warning. The tool receives the
+     canonical form of the party, not the raw spelling the agent sent.
+   - **Custom fields per tool.** For each custom field a rule reads, every
+     tool must either map it or mark it `not_applicable`, or the
+     constitution does not sign (0.5.0). A string field with `case: exact`
+     keeps a case-sensitive id exactly as written.
+   - **Errors.** A value that cannot be read (for example `10**400`) is
+     denied as `derive_failed`. Any other error inside `authorize` is denied
+     as `internal_error:`. Both are written to the ledger.
+2. **Path B: the judge panel (a quorum).**
+   - Judges are hooks for xAI/Grok, OpenAI, Anthropic, Gemini, and Ollama.
+     You need at least one judge. A judge may run any model from any vendor,
+     but it must not be the monitored agent: never with the agent's
+     credential, at any address.
+   - A vote that is missing, malformed, errored, or timed out never counts
+     as yes.
+   - **How many yes votes are needed.** Two-Key does not create or choose
+     judges for you; the operator must configure at least one. If
+     `required_yes` is not set, the number of yes votes needed is
+     `min(2, number_of_judges)`. One judge needs one yes. Two or more judges
+     need two yes votes. This is not a majority rule: three judges need two,
+     and four judges also need two. For a majority, unanimity, or any other
+     number, set `required_yes` yourself.
+   - With `required_yes: 1` and more than one judge, one judge can approve
+     alone while the others are down. `TwoKey` warns about this at start,
+     and `min_responding` closes that gap.
+   - **Judge diversity (optional).** The default policy has no diversity
+     floors. `QuorumPolicy.high_assurance()` (or `profile: high_assurance` in
+     judges.yaml) needs judges from at least two model makers, at least one
+     local judge, and a yes from a local judge. Use it for destructive,
+     irreversible, financial, or external-send tools. A judge's maker is who
+     made its model, as the operator labels it (`maker:`, default: its
+     `provider`). It is not verified, and it is a rule about the judges only:
+     it is never compared with the monitored agent. `require_local_yes` with
+     no local judge does not start.
+   - **What counts as local.** A judge is local only when it says so
+     (`local_weights: true`) and its `base_url` host is on an allowlist:
+     loopback, RFC 1918, or IPv6 unique-local. A `:cloud`/`-cloud` model is
+     never local, for any judge class.
+   - **After a Path A deny.** `require_path_a_first` is not a floor and it
+     is not a skip. After a derive deny, judges do not see the argument
+     bytes unless `tool_args_on_derive_deny` is set. So without that
+     setting, a call that cannot be read under its spec (`derive_failed:`) goes to no judge,
+     because there is nothing to judge, and the ledger records Path B as
+     `skipped:derive_failed`. Other denies still go to the judges, with
+     non-empty arguments attached.
+3. **The one-time pass (capability token).** Two-Key issues a short-lived,
+   single-use token only if both paths say yes.
+   - It is signed with a capability key that lives outside the ledger
+     directory. The gateway is never handed that private key.
+   - It is tied to the tool, the hash of the arguments, the ledger Merkle
+     root when it was issued, the constitution hashes, `spec_hash`, and the
+     derived form.
+   - It lives for `ttl_seconds` (default 120, at most 300).
+   - When it is redeemed, an intent is written before the tool runs, so a
+     crash cannot run the same token twice.
+4. **The gateway runs the tool.** It checks the token with the public half
+   of the capability key. It does not hold the key that creates tokens, and
+   it never scans. With a content scanner configured (0.6.0), Two-Key scans
+   the call before the two paths decide, and the gateway checks the verdict
+   and the file digests that the token is tied to. Tool output is not
+   scanned.
+
+**Both paths always answer** once a call is well-formed, within limits, and
+readable under its spec. A Path A deny does not skip Path B, so the ledger
+holds both results. A call that cannot be read (`derive_failed:`) is denied
+without asking the judges, unless `tool_args_on_derive_deny` lets them see
+its arguments.
+
+**Broken or oversized calls never reach either path.** A malformed or
+oversized call (`malformed_proposal`, `proposal_too_large`,
+`action_too_large`, `malformed_action:`, `args_too_large`, `invalid_call:`)
+is denied first, and only its size and digest are written to the ledger.
+
+`authorize_from_agent` does not run the tool. An agent is untrusted whether
+it is hosted locally or in the cloud.
 
 ## Architecture
 
