@@ -1,0 +1,18 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
+# DeepSource (https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key/), mirroring its repository configuration,
+# which is the one it uses. It analyses main and every pull
+# request; `working` gets its runs through the draft pull request kept open against main.
+version = 1
+
+test_patterns = ["tests/**"]
+
+[[analyzers]]
+name = "python"
+
+  [analyzers.meta]
+  runtime_version = "3.x.x"
+
+[[analyzers]]
+name = "secrets"

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Every tool decides each field a deny_if_fields rule reads: it maps it, or marks it not_applicable (#10).
 
 A forgotten mapping used to hand the tool the field's signed default, with only a warning at signing: a
@@ -37,7 +40,7 @@ LOOKUP = {"irreversible": False, "data_class_floor": "public", "payload": [{"jso
 MARKED = dict(LOOKUP, fields={"ticket_verified": "not_applicable"})
 
 
-def sign_with(specs, fields=FIELDS, rules=RULES, **kw):
+def sign_with(specs, fields=FIELDS, rules=RULES, **kw):  # skipcq: PYL-W0102 - test only
     return sign_constitution("p", rules, generate_private_key(), specs, fields=fields, **kw)
 
 
@@ -89,7 +92,7 @@ class Format(unittest.TestCase):
         with self.assertRaisesRegex(ConstitutionError, "need a v3"):
             sign_with({"reset_password": RESET, "lookup_kb": MARKED}, envelope_format="v2")
 
-    def _resigned(self, signed, fmt):
+    def _resigned(self, signed, fmt):  # skipcq: PYL-R0201 - test only
         key = generate_private_key()
         return key, {"format": fmt, "signed": signed, "signature": sign(key, canonical_bytes(signed)),
                      "fingerprint": "x"}

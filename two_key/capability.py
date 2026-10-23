@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Single-use capability tokens bound to the ledger root at issuance.
 
 Tokens are signed by a capability key that lives outside the ledger
@@ -173,7 +176,7 @@ class CapabilityVerifier:
             raise TokenError("expired")
         return payload
 
-    def issue(self, **kwargs) -> IssuedCapability:
+    def issue(self, **kwargs) -> IssuedCapability:  # skipcq: PYL-R0201 - a verifier must refuse to mint; CapabilityIssuer overrides this
         raise TokenError("verifier_cannot_mint")
 
 
@@ -186,7 +189,7 @@ class CapabilityIssuer(CapabilityVerifier):
         """A redeeming object. The private key is not on it."""
         return CapabilityVerifier(self.public_key, clock=self.clock, max_ttl_seconds=self.max_ttl_seconds)
 
-    def issue(self, *, tool: str, arguments: dict, ledger_root: str, ledger_size: int,
+    def issue(self, *, tool: str, arguments: dict, ledger_root: str, ledger_size: int,  # skipcq: PYL-W0221 - the verifier's issue(**kwargs) exists only to refuse every call
               bytecode_hash: str, nl_hash: str, ttl_seconds: int = 120,
               spec_hash: str = "", form: dict | None = None,
               claimed_data_class: str | None = None, args_digest: str | None = None,

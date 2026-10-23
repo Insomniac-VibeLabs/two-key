@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Two processes on one ledger (two MCP proxies, say): the one that did not write catches up under the lock.
 
 Each Ledger object here stands for a process: it keeps its own copy of the ledger's state, as a second proxy
@@ -5,6 +8,7 @@ does. The new entries are verified like an open verifies them; a shorter file, a
 line is still refused."""
 
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -21,7 +25,7 @@ class SharedLedger(unittest.TestCase):
         self.a = Ledger(self.path, self.key)
         self.b = Ledger(self.path, self.key)
 
-    def write(self, ledger, n):
+    def write(self, ledger, n):  # skipcq: PYL-R0201 - test only
         ledger.append("note", {"n": n})
         ledger.checkpoint()
 
@@ -76,6 +80,39 @@ class SharedLedger(unittest.TestCase):
             fh.write(lines[-1])                     # a replayed record: the chain does not continue
         with self.assertRaises(LedgerError):
             self.write(self.b, 2)
+
+    def test_one_hold_writes_the_entries_and_their_checkpoint(self):
+        """Run 9y, S6c: the other process waits for the checkpoint instead of reading entries it does not cover."""
+        done = []
+
+        def other():
+            self.write(self.b, 3)
+            done.append(self.b.size())
+
+        with self.a.exclusive():
+            self.a.append("note", {"n": 1})
+            self.a.append("note", {"n": 2})
+            worker = threading.Thread(target=other)
+            worker.start()
+            worker.join(0.3)
+            self.assertTrue(worker.is_alive(), "the other writer did not wait for the lock")
+            self.a.checkpoint()
+        worker.join(10)
+        self.assertEqual(done, [4])
+        self.assertEqual(Ledger(self.path, self.key).size(), 4)
+
+    def test_record_is_an_entry_and_its_checkpoint(self):
+        self.a.record("note", {"n": 1})
+        self.write(self.b, 2)
+        self.assertEqual([e.body.get("n") for e in self.b.entries], [None, 1, 2])
+
+    def test_the_hold_is_reentrant_and_released_once(self):
+        with self.a.exclusive():
+            with self.a.exclusive():
+                self.a.append("note", {"n": 1})
+            self.a.checkpoint()
+        self.write(self.b, 2)                       # b gets the lock: nothing is left held
+        self.assertEqual(self.b.size(), 3)
 
     def test_entries_the_head_does_not_cover_are_refused(self):
         self.a.append("note", {"n": 1})             # appended, then a crash before the checkpoint

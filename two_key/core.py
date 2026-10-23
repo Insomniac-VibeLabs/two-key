@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Two-Key: a tool call runs only if Path A and Path B both allow.
 
 ``authorize_from_agent`` runs both paths once the call is well-formed and within limits,
@@ -111,6 +114,44 @@ class Decision:
         return rec
 
 
+def check_constitution_order(ledger, constitution: Constitution) -> str | None:
+    """Refuse a constitution older than one this ledger has run; return the digest the ledger last ran, if any.
+
+    The order is the principal's signed ``serial`` (live run 9x, C44: an older constitution signed with the same
+    key, put back). Once a ledger has run a constitution with a serial, a lower serial is refused
+    (``constitution_rollback``), the same serial with other bytes is refused (``constitution_serial_reused``),
+    and a constitution with no serial is refused (``constitution_serial_missing``). A ledger that has never run
+    one with a serial accepts any; there is no setting that turns the check off. To go back to older rules, sign
+    them again with a higher serial.
+    """
+    last_digest, top, top_digests = None, None, set()
+    for entry in getattr(ledger, "entries", ()):
+        if entry.kind != "constitution_loaded":
+            continue
+        last_digest = entry.body.get("digest")
+        serial = entry.body.get("serial")
+        if isinstance(serial, int) and not isinstance(serial, bool):
+            if top is None or serial > top:
+                top, top_digests = serial, set()
+            if serial == top:
+                top_digests.add(entry.body.get("digest"))
+    if top is None:
+        return last_digest
+    serial = constitution.serial
+    if serial is None:
+        raise TwoKeyConfigError(f"constitution_serial_missing: this ledger has run serial {top}; a constitution "
+                                "without a serial could be an older one. Sign it with a serial above "
+                                f"{top} (docs/SETTINGS.md, serial)")
+    if serial < top:
+        raise TwoKeyConfigError(f"constitution_rollback: this constitution is serial {serial}, and this ledger has "
+                                f"run serial {top}. To go back to older rules, sign them again with a serial above "
+                                f"{top}")
+    if serial == top and constitution.digest not in top_digests:
+        raise TwoKeyConfigError(f"constitution_serial_reused: this ledger has run another constitution as serial "
+                                f"{serial}; sign this one with a serial above {top}")
+    return last_digest
+
+
 class TwoKey:
     def __init__(self, ledger, public_key, constitution: Constitution, judges: list, *,
                  private_key=None, quorum: QuorumPolicy | None = None, ttl_seconds: int = 120,
@@ -125,6 +166,8 @@ class TwoKey:
         self.public_key = public_key
         self.private_key = private_key
         self.constitution = constitution
+        # Before anything is written: a constitution older than one this ledger has run is refused (run 9x, C44).
+        self._previous_digest = check_constitution_order(ledger, constitution)
         self.compiled: CompiledConstitution = compile_both(
             constitution.prose, constitution.hard_rules, constitution.tool_specs,
             specs_enforced=True, fields=constitution.fields)
@@ -199,6 +242,15 @@ class TwoKey:
         self._clock = clock
         # The supported deployment: the gateway runs in this process on this ledger object (#45).
         mark_two_key_ledger(ledger)
+        with self.ledger.exclusive():
+            self._record_loaded(constitution, sep)
+        self._start_siem()
+
+    def _record_loaded(self, constitution: Constitution, sep: dict) -> None:
+        """Write ``constitution_loaded`` and its checkpoint. The caller holds the ledger's write lock, which read
+        what other processes appended first: the order check runs again on that, so two proxies started at once
+        on one ledger cannot both record the same serial with different rules (run 9y, S6c)."""
+        self._previous_digest = check_constitution_order(self.ledger, constitution)
         self.ledger.append("constitution_loaded", {
             "digest": constitution.digest,
             "bytecode_hash": self.compiled.bytecode_hash,
@@ -216,9 +268,11 @@ class TwoKey:
             "same_model_tenant_optin_pairs": list(self.separation.tenant_optin_pairs),
             # Present only with a content scanner, so a setup without one records exactly what it did before.
             **({"scanner": self.scanner.to_record()} if self.scanner is not None else {}),
+            # Present only for a constitution with a serial, for the same reason (live run 9x, C44).
+            **({"serial": constitution.serial, "previous_digest": self._previous_digest}
+               if constitution.serial is not None else {}),
         })
         self.ledger.checkpoint()
-        self._start_siem()
 
     def agent_vocabulary(self, tools: list[str] | None = None) -> str:
         """Text for ``MonitoredAgent.complete(vocabulary=...)``: signed tool ids, argument paths, value
@@ -269,8 +323,7 @@ class TwoKey:
         SIEM sees that entry too."""
         if self.siem is None:
             return
-        self.ledger.append_bounded("siem_configured", self.siem.record())
-        self.ledger.checkpoint()
+        self.ledger.record("siem_configured", self.siem.record())
         self.delivery = start_siem(self.siem, self.ledger)
         self.refused_tokens = RefusedTokens(
             interval_seconds=self.siem.refused_token_interval_seconds,
@@ -626,61 +679,62 @@ class TwoKey:
             reason = path_a.reason if not path_a.allowed else quorum_reason
         token = None
         try:
-            body_omitted = False
+            with self.ledger.exclusive():       # the entries and the checkpoint over them in one hold (run 9y, S6c)
+                body_omitted = False
 
-            def _bounded(kind: str, body: dict):
-                nonlocal body_omitted
-                entry = self.ledger.append_bounded(kind, body)
-                if entry.body.get("body_omitted"):
-                    body_omitted = True
-                return entry
+                def _bounded(kind: str, body: dict):
+                    nonlocal body_omitted
+                    entry = self.ledger.append_bounded(kind, body)
+                    if entry.body.get("body_omitted"):
+                        body_omitted = True
+                    return entry
 
-            _bounded("proposal", {"tool": normalized.tool, "proposal": proposal, "agent": agent})
-            if spec is not None:
-                record = {
-                    "tool": normalized.tool,
-                    "form": form,
-                    "claimed_data_class": claimed_data_class,
-                    "deny_reason": deny_reason,
-                    # Names of keys the tool will not receive. Never their values.
-                    "dropped_keys": dropped_keys(spec, arguments),
-                }
-                if normalized.fact_fields:      # which form fields are caller-supplied facts; absent otherwise
-                    record["fact_fields"] = list(normalized.fact_fields)
-                _bounded("action_normalized", record)
-            if scanner_change is not None:
-                _bounded(*scanner_change)
-            if scanned is not None:
-                _bounded("scan", scanned.ledger_record(self.scanner.stance))
-            _bounded("path_a", path_a_rec)
-            _bounded("path_b", path_b_rec)
-            # body_omitted is only for an already-decided DENY audit entry. If it would
-            # fire on a path about to issue a token, fail closed instead.
-            if allowed and body_omitted:
-                allowed, reason = False, REASON_LEDGER_BODY
-            if allowed:
-                if self.issuer is None:
-                    allowed, reason = False, "no_issuer_key"
-                else:
-                    issued = self.issuer.issue(
-                        tool=normalized.tool, arguments=arguments, args_digest=frozen_digest,
-                        ledger_root=self.ledger.merkle_root(), ledger_size=self.ledger.size(),
-                        bytecode_hash=self.compiled.bytecode_hash, nl_hash=self.compiled.nl_hash,
-                        spec_hash=self.compiled.spec_hash,
-                        form=form, claimed_data_class=claimed_data_class if form is not None else None,
-                        ttl_seconds=self.ttl_seconds,
-                        scan=scanned.token_claim() if scanned is not None else None)
-                    token = issued.token
-                    _bounded("capability_issued", {"jti": issued.payload["jti"],
-                                                   "token_hash": issued.token_hash,
-                                                   "ledger_root": issued.payload["ledger_root"]})
-                    if body_omitted:
-                        allowed, reason, token = False, REASON_LEDGER_BODY, None
-            _bounded("decision", {"allowed": allowed, "reason": reason, "agent": agent,
-                                  "origin": origin, **self._decision_context})
-            if allowed and body_omitted:
-                allowed, reason, token = False, REASON_LEDGER_BODY, None
-            self.ledger.checkpoint()
+                _bounded("proposal", {"tool": normalized.tool, "proposal": proposal, "agent": agent})
+                if spec is not None:
+                    record = {
+                        "tool": normalized.tool,
+                        "form": form,
+                        "claimed_data_class": claimed_data_class,
+                        "deny_reason": deny_reason,
+                        # Names of keys the tool will not receive. Never their values.
+                        "dropped_keys": dropped_keys(spec, arguments),
+                    }
+                    if normalized.fact_fields:      # which form fields are caller-supplied facts; absent otherwise
+                        record["fact_fields"] = list(normalized.fact_fields)
+                    _bounded("action_normalized", record)
+                if scanner_change is not None:
+                    _bounded(*scanner_change)
+                if scanned is not None:
+                    _bounded("scan", scanned.ledger_record(self.scanner.stance))
+                _bounded("path_a", path_a_rec)
+                _bounded("path_b", path_b_rec)
+                # body_omitted is only for an already-decided DENY audit entry. If it would
+                # fire on a path about to issue a token, fail closed instead.
+                if allowed and body_omitted:
+                    allowed, reason = False, REASON_LEDGER_BODY
+                if allowed:
+                    if self.issuer is None:
+                        allowed, reason = False, "no_issuer_key"
+                    else:
+                        issued = self.issuer.issue(
+                            tool=normalized.tool, arguments=arguments, args_digest=frozen_digest,
+                            ledger_root=self.ledger.merkle_root(), ledger_size=self.ledger.size(),
+                            bytecode_hash=self.compiled.bytecode_hash, nl_hash=self.compiled.nl_hash,
+                            spec_hash=self.compiled.spec_hash,
+                            form=form, claimed_data_class=claimed_data_class if form is not None else None,
+                            ttl_seconds=self.ttl_seconds,
+                            scan=scanned.token_claim() if scanned is not None else None)
+                        token = issued.token
+                        _bounded("capability_issued", {"jti": issued.payload["jti"],
+                                                       "token_hash": issued.token_hash,
+                                                       "ledger_root": issued.payload["ledger_root"]})
+                        if body_omitted:
+                            allowed, reason, token = False, REASON_LEDGER_BODY, None
+                _bounded("decision", {"allowed": allowed, "reason": reason, "agent": agent,
+                                      "origin": origin, **self._decision_context})
+                if allowed and body_omitted:
+                    allowed, reason, token = False, REASON_LEDGER_BODY, None
+                self.ledger.checkpoint()
         except LedgerError as e:
             return Decision(False, f"ledger_failed:{cap_ledger_text(str(e))}", None, path_a_rec, path_b_rec, self.ledger.size(), agent)
         return Decision(allowed, reason, token if allowed else None, path_a_rec, path_b_rec, self.ledger.size(), agent)
@@ -736,8 +790,9 @@ class TwoKey:
                               hosting=hosting, agent_session=agent_session, origin=origin, facts=resolved)
 
     def revoke(self, reason: str) -> None:
-        self.ledger.append("revocation", {"reason": reason})
-        self.ledger.checkpoint()
+        with self.ledger.exclusive():
+            self.ledger.append("revocation", {"reason": reason})
+            self.ledger.checkpoint()
 
     def _deny(self, origin: str | None, reason: str, agent, path_a, path_b, extra: dict | None = None) -> Decision:
         """Ledger a deny decision. ``origin`` is passed down by the caller, never stored on ``self``.
@@ -750,8 +805,7 @@ class TwoKey:
                     **(extra or {}), **self._decision_context}
             if origin is not None:
                 body["origin"] = origin
-            self.ledger.append_bounded("decision", body)
-            self.ledger.checkpoint()
+            self.ledger.record("decision", body)
         except Exception as e:  # still a deny; say so, because the ledger now lacks this decision
             # Cap pieces before format so a huge str(e) is not built into one f-string then sliced.
             reason_bit = reason if len(reason) <= 200 else reason[:200]

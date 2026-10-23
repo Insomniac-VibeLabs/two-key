@@ -1,5 +1,11 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 name: security
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, PyPI, testpypi]
+  pull_request:
 permissions:
   contents: read
 jobs:
@@ -18,5 +24,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: |
-          pip install --only-binary :all: "bandit==1.9.4"
+          pip install --require-hashes --only-binary :all: -r .github/requirements/bandit.txt
       - run: bandit -r two_key -ll

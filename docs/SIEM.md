@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Send the ledger to a SIEM (0.7.0)
 
 Two-Key's ledger is the record of every decision: who proposed what, which
@@ -36,17 +42,29 @@ Both carry the same allowlisted fields. Neither can change a decision.
 The ledger stays the record. The SIEM gets a copy.
 
 ```mermaid
-flowchart LR
+flowchart TD
   auth["authorize / gateway"] -- "append" --> ledger[("Encrypted ledger<br/>(the record)")]
-  ledger -- "after the entry is on disk" --> filter["Allowlist<br/>no argument values"]
+  ledger -- "after the entry<br/>is on disk" --> filter["Allowlist<br/>no argument values"]
   filter --> queue["Bounded queue"]
-  queue --> sender["Sender thread"]
-  sender -- "udp / tcp / tls" --> syslog["Syslog collector"]
+  queue --> sender["Sender thread<br/>formats JSON or CEF"]
+  sender -- "udp, tcp or tls" --> syslog["Syslog collector"]
   sender -- "https POST" --> hook["Webhook"]
+  sender -- "saves last seq<br/>delivered" --> cursor["Cursor file<br/>beside the ledger"]
+  cursor -. "after an outage,<br/>resume from here" .-> sender
+  ledger -. "replay: entries<br/>after the cursor" .-> sender
   ledger -- "two-key siem-export" --> file["JSON Lines or CEF file"]
-  file -- "two-key siem-verify" --> ledger
-  cursor["Cursor: last seq delivered"] -. "replays after an outage" .-> sender
 ```
+
+*The live copy goes from the ledger through the sender to the collector and the webhook, as JSON or CEF. Dashed lines are the catch-up after an outage: the sender reads the cursor, then the missed entries from the ledger. The export writes a file instead.*
+
+There are two ways to get that copy out, and they use the same event formats:
+
+- **The live copy** runs inside the proxy all the time. As each entry is written, the sender thread pushes it
+  to your collector or webhook. You turn it on in `proxy.yaml` and do nothing after that.
+- **`two-key siem-export`** is a command you run when you want it. It checks the ledger, decrypts it, and
+  writes the events to a file. Use it to load history from before the live copy was on (the live copy starts
+  from now), to feed a SIEM that cannot take a live feed, or to make the file that `siem-verify` checks
+  against the ledger. Nothing is sent: you carry the file to the SIEM yourself.
 
 Three properties hold whatever you configure:
 
@@ -81,6 +99,7 @@ Sent, where the entry has it:
 | `verdict`, `categories`, `scanner`, `stance`, `elapsed_ms`, `parts[]` | the content scan: its verdict and each part's size and digest |
 | `witness_fingerprint`, `source` | the witness key pinned or rotated, as a fingerprint |
 | `origin` | `library`, `cli`, `mcp-proxy`, or whatever the integration declared |
+| `command`, `settings`, `files[]`, `weaker`, `confirmed`, `constitution_hash` | a configuration change (`config_changed`, from `two-key setup`, `config set`, and `config undo`): the setting names, each file's role, name, and digests before and after, and why it is weaker; never a value, and not the account ([SETUP](SETUP.md#what-the-ledger-records)) |
 
 Never sent, and there is no setting that sends them:
 
@@ -90,6 +109,7 @@ Never sent, and there is no setting that sends them:
 - the operator's revocation or rotation reason (its size and digest go);
 - key names the agent wrote (`dropped_keys`);
 - credentials, token text, a scanner's threat name, and file content;
+- a setting's value, and the account that changed it (`config_changed`);
 - the ledger key, the witness key, and any signature over the head.
 
 `tests/test_siem.py` puts a canary value in every one of those places and
@@ -128,14 +148,14 @@ From Python:
 from two_key.siem import SiemConfig
 from two_key.siem_sinks import SyslogSink, WebhookSink
 
-two_key = TwoKey(ledger, public_key, constitution, judges, private_key=key,
-                 siem=SiemConfig(sinks=(
-                     SyslogSink("siem.example.net", ca_file="/etc/two-key/siem-ca.pem"),
-                     WebhookSink("https://siem.example.net/ingest",
-                                 auth_value_file="/etc/two-key/siem-token"),
-                 )))
+tk = TwoKey(ledger, public_key, constitution, judges, private_key=key,
+            siem=SiemConfig(sinks=(
+                SyslogSink("siem.example.net", ca_file="/etc/two-key/siem-ca.pem"),
+                WebhookSink("https://siem.example.net/ingest",
+                            auth_value_file="/etc/two-key/siem-token"),
+            )))
 ...
-two_key.close()      # a last pass for the sender; what is left goes out on the next start
+tk.close()      # a last pass for the sender; what is left goes out on the next start
 ```
 
 What happens at start:
@@ -158,8 +178,23 @@ it) is what `cursor` reads and every sink keeps up to date:
 | `start` | the whole ledger, on **every** start, not only the first: it ignores the cursor, so a restart sends the history again (live run 8x). Set it to backfill once, then put it back to `cursor`, or use `siem-export` |
 | `now` | only entries from now on |
 
+The cursor keeps each sink's last sequence number and the `entry_hash` of
+that entry. A cursor that points past the ledger's last entry, or at an entry
+this ledger does not have (the cursor of another ledger, or one moved by
+hand), is not trusted: the proxy prints a warning naming the sink and sends
+the whole ledger again, every copy marked `replay`. That repeats entries
+rather than skipping them silently; dedupe on `entry_hash` (live run 9x,
+C140). A cursor written by an older Two-Key has no hashes and is checked by
+length only.
+
 An event sent late — a catch-up at start, or after an outage — carries
 `"replay": true`, so a SIEM does not read the send time as the decision time.
+
+**Two proxies on one ledger.** Each proxy sends every entry in the ledger,
+the other proxy's too, so every entry arrives twice. The copy a proxy sends of
+an entry the other proxy wrote is marked `"replay": true`; the writer's own
+copy is not (live run 9y). Dedupe on `entry_hash`, or count only events
+without `replay`.
 Ledger entries carry no timestamp of their own (that would change the entry
 format); `sent_at` is the time the copy was sent.
 
@@ -230,6 +265,8 @@ two-key siem-export --key principal.pem --ledger ./ledger \
 two-key siem-verify --key principal.pem --ledger ./ledger \
   --events events.jsonl --require-complete
 ```
+
+`--schema` and `--format` take the same values as in `proxy.yaml` (`--format cef` maps the native schema only).
 
 `siem-export` opens the ledger the way `two-key audit` does, so the chain, the
 signed head, and both witness pins are checked first; a ledger that does not
@@ -308,6 +345,8 @@ but not tested in CI.
   down your SIEM is behind. The ledger keeps everything, the cursor remembers
   where the copy stopped, and the catch-up is marked `replay`. If your SIEM is
   the thing you alert on, alert on the gap in `seq`, not on silence.
+- **A shared ledger sends each entry twice**, once from each proxy; the second
+  copy is marked `replay`. Dedupe on `entry_hash`.
 - **`replay_from: start`** on a large ledger sends every entry on the next
   start; prefer `siem-export` for a backfill.
 - **Argument digests** let whoever reads the SIEM test a guess of a

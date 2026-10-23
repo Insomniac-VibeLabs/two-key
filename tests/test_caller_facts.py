@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Caller-supplied facts (#2 P1): a `source: caller` field takes its value from the integration only.
 
 The agent writing it is refused, a missing fact denies, the token binds the fact, the gateway recomputes with the

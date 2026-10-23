@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Content scanning (0.6.0): Two-Key starts every scan, the signed stance rules on the verdict, files are
 scanned by digest, the judges and the ledger never get content, and the gateway checks the files again.
 
@@ -465,10 +468,10 @@ class PathFiles(Base):
         inside, read = [], []
         real_read, real_confined = os.read, Scanner.read_confined
 
-        def confined(scanner, *a):
+        def confined(*a):
             inside.append(True)
             try:
-                return real_confined(scanner, *a)
+                return real_confined(*a)
             finally:
                 inside.pop()
 
@@ -477,7 +480,7 @@ class PathFiles(Base):
                 read.append(n)
             return real_read(fd, n)
 
-        with mock.patch.object(Scanner, "read_confined", confined), mock.patch("os.read", counted):
+        with mock.patch.object(Scanner, "read_confined", staticmethod(confined)), mock.patch("os.read", counted):
             d = self.print_call(path)
         self.assertEqual((d.allowed, d.reason), (False, "file_too_large"))
         self.assertEqual(read, [])        # its size says it is too large: not one byte is read
@@ -626,7 +629,7 @@ class Configuration(Base):
                 specs = {"lookup": {"irreversible": False, "data_class_floor": "public",
                                     "payload": [{"json_path": "q", "shape": "string"}]}}
                 if fields:
-                    caller = fields["scan"].get("source") == "caller"
+                    caller = fields["scan"].get("source") == "caller"  # skipcq: PYL-E1126 - test only
                     specs["lookup"]["fields"] = {"scan": {"source": "caller"} if caller else {"json_path": "s"}}
                 env = sign_constitution("p", [{"id": "tools", "allow_only_tools": ["lookup"]}], key, specs,
                                         fields=fields or None)
@@ -667,7 +670,7 @@ class Configuration(Base):
             with self.subTest(kw=kw), self.assertRaises(ScanConfigError):
                 Scanner(Fixed(), **kw)
         with self.assertRaises(TypeError):         # replaced by max_bytes on each file
-            Scanner(Fixed(), max_file_bytes=10)
+            Scanner(Fixed(), max_file_bytes=10)  # skipcq: PYL-E1123 - test only
         with self.assertRaises(ScanConfigError):
             Scanner(object())
         self.assertEqual(FileArg("a[].b").key_path(), "a.b")
@@ -721,7 +724,7 @@ class Helpers(unittest.TestCase):
         seen = []
 
         class Where:
-            def inspect(self, request):
+            def inspect(self, request):  # skipcq: PYL-R0201 - test only
                 seen.append(threading.current_thread().name)
                 return ScanResult.clean()
         sc = Scanner(Where())

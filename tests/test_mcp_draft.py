@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """two-key mcp-draft-specs: drafts fail closed, flag fact-like fields, and pin the digest the proxy checks."""
 
 import contextlib
@@ -72,7 +75,7 @@ class Drafting(unittest.TestCase):
     def test_every_input_path_a_reads_is_checked_not_only_payees(self):
         # Data-agnostic: an id, an environment, or a ticket the principal maps as a custom field is checked too,
         # at --constitution and at proxy start, where the signed spec and the upstream schema meet.
-        from two_key.mcp_proxy.core import select_tools, undescribed_advice, undescribed_inputs
+        from two_key.mcp_proxy.core import undescribed_advice, undescribed_inputs
         upstream = [{"name": "share_folder", "inputSchema": {"type": "object", "properties": {
             "target": {"type": "object", "properties": {
                 "folder_id": {"type": "string"},
@@ -126,8 +129,9 @@ class Drafting(unittest.TestCase):
         for line in text.splitlines():
             self.assertTrue(line.isascii())
         doc = load_yaml(filled(text))
-        self.assertEqual(sorted(doc), ["hard_rules", "tool_specs"])
+        self.assertEqual(sorted(doc), ["hard_rules", "serial", "tool_specs"])
         self.assertEqual(list(doc["tool_specs"]), ["pay_vendor"])
+        self.assertEqual(doc["serial"], 1)      # rollback protection from the first signing (run 9y, S8)
 
     def test_tool_ids_are_quoted_keys(self):
         odd = dict(REPORT, name="billing:pay/v2")
@@ -145,9 +149,9 @@ class Drafting(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_MCP, "needs the mcp extra")
 class CommandLine(unittest.TestCase):
-    def run_cli(self, *argv):
+    def run_cli(self, *argv):  # skipcq: PYL-R0201 - test only
         env = child_env(PYTHONPATH=str(ROOT))
-        return subprocess.run([sys.executable, "-m", "two_key", "mcp-draft-specs", *argv],  # nosec B603
+        return subprocess.run([sys.executable, "-m", "two_key", "mcp-draft-specs", *argv],  # nosec B603  # skipcq: PYL-W1510 - test only
                               capture_output=True, text=True, env=env, timeout=120)
 
     def test_draft_then_digest_of_the_signed_constitution(self):

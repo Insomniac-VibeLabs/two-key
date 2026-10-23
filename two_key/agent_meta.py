@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Bounds on operator/library-supplied agent identity metadata written to the ledger.
 
 ``authorize(..., agent_id=, hosting=, origin=)`` and ``authorize_from_agent`` accept

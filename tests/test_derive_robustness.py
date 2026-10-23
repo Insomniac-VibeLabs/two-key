@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Fix 10: an unreadable value is a derive_failed deny, and any exception in authorize is a ledgered deny."""
 
 import tempfile

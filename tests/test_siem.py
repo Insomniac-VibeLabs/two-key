@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Ledger export to a SIEM (0.7.0): the allowlist, the schemas and formats, and delivery.
 
 Every sink here is in-process; nothing leaves the machine (the syslog and webhook adapters have their own
@@ -70,6 +73,10 @@ SAMPLE_BODIES = {
                           "tools": {"search": {"claim": "floor", "facts": []}},
                           "signed_tools_not_listed": []},
     "tool_not_offered": {"origin": "mcp-proxy", "tool": "nope"},
+    "config_changed": {"command": "set", "settings": ["ttl_seconds"], "signed": False, "weaker": [],
+                       "confirmed": False, "constitution_hash": None, "account": SECRET,
+                       "files": [{"role": "proxy", "file": "proxy.yaml", "old_sha256": "sha256:" + "0" * 64,
+                                  "new_sha256": "sha256:" + "1" * 64}]},
     "scan": {"tool": "search", "scanner": "clamd", "version": "1", "verdict": "flagged",
              "categories": ["malware"], "stance": "default", "elapsed_ms": 3, "scanner_available": True,
              "error": None, "parts": [{"part": "arguments", "bytes": 4, "sha256": "sha256:" + "0" * 64}]},
@@ -176,6 +183,12 @@ class Allowlist(Fixture):
                 continue        # the ledger's own size and digest keys, taken by shape
             self.assertIn(key, decided, f"{kind}.{key} is in no allowlist decision (two_key/siem.py)")
 
+    def test_a_config_change_sends_names_and_digests_never_the_account(self):
+        event = project("config_changed", SAMPLE_BODIES["config_changed"])
+        self.assertEqual(event["settings"], ["ttl_seconds"])
+        self.assertEqual(event["files"][0]["new_sha256"], "sha256:" + "1" * 64)
+        self.assertNotIn(SECRET, json.dumps(event))
+
     def test_known_kinds_cover_the_ledger(self):
         tk = self.exercise(self.start())
         for entry in tk.ledger.entries:
@@ -245,7 +258,7 @@ class Allowlist(Fixture):
 
 
 class Schemas(Fixture):
-    def event(self, kind="decision", fields=None):
+    def event(self, kind="decision", fields=None):  # skipcq: PYL-R0201 - test only
         return Event(seq=7, entry_hash="h" * 64, prev="p" * 64, kind=kind,
                      fields=fields if fields is not None else {"allowed": True, "reason": "both_paths_allow",
                                                                "tool": "search", "agent_id": "agent-7"},
@@ -318,7 +331,7 @@ class Schemas(Fixture):
 
 
 class Delivering(Fixture):
-    def config(self, *sinks, **kw):
+    def config(self, *sinks, **kw):  # skipcq: PYL-R0201 - test only
         return SiemConfig(sinks=tuple(sinks), **kw)
 
     def drain(self, tk, sink, want):
@@ -373,6 +386,75 @@ class Delivering(Fixture):
         again.authorize(SEARCH, {"q": "weather"}, "look")
         self.drain(again, second, 1)
         self.assertEqual(min(second.seqs()), first.seqs()[-1] + 1)
+
+    def test_on_a_shared_ledger_the_other_proxys_entries_are_marked_replay(self):
+        """Run 9y, F4: each proxy sends every entry, so the copies it sends of the other proxy's are marked."""
+        mine, other = ListSink("mine"), ListSink("other")
+        tk = self.start(ledger=self.ledger(), siem_config=self.config(mine, replay_from="now"))
+        peer = self.start(ledger=self.ledger(), siem_config=self.config(other, replay_from="now"))
+        start = tk.ledger.size()
+        tk.authorize(SEARCH, {"q": "weather"}, "look")       # reads peer's start first, then writes its own
+        theirs = {e.seq for e in tk.ledger.entries[start:] if tk.ledger.from_another_process(e.seq)}
+        self.assertTrue(theirs, "the peer's start was read from the shared file")
+        self.drain(tk, mine, tk.ledger.size() - start)
+        bodies = {json.loads(m.body)["seq"]: json.loads(m.body) for m in mine.sent}
+        for seq in range(start, tk.ledger.size()):
+            with self.subTest(seq=seq):
+                self.assertEqual(bodies[seq].get("replay", False), seq in theirs)
+
+    def _restart_with_cursor(self, edit, resumes=False):
+        """Run once to fill the cursor, change it with ``edit``, then start again on the same ledger. ``resumes``:
+        the second start is expected to send only the entries after the cursor."""
+        first, second = ListSink(), ListSink()
+        tk = self.start(siem_config=self.config(first, replay_from="start"))
+        self.drain(tk, first, tk.ledger.size())
+        tk.close()
+        path = tk.delivery.cursor.path
+        data = json.loads(path.read_text(encoding="utf-8"))
+        edit(data)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        again = self.start(ledger=self.ledger(), siem_config=self.config(second))
+        want = again.ledger.size() - (data["sinks"]["list"] + 1 if resumes else 0)
+        self.drain(again, second, want)
+        return again, second
+
+    def test_a_cursor_past_the_ledger_head_replays_everything_and_warns(self):
+        """Live run 9x, C140: a cursor ahead of the ledger is not trusted, so nothing is skipped silently."""
+        def ahead(data):
+            data["sinks"] = {k: v + 1000 for k, v in data["sinks"].items()}
+        tk, sink = self._restart_with_cursor(ahead)
+        self.assertIn("past this ledger's last entry", self.err)
+        self.assertIn("sending the whole ledger again, marked replay", self.err)
+        self.assertEqual(min(sink.seqs()), 0)
+        early = [json.loads(m.body) for m in sink.sent]
+        self.assertTrue(all(body["replay"] for body in early if body["seq"] < 3))
+
+    def test_a_cursor_for_another_ledger_replays_everything_and_warns(self):
+        def other(data):
+            data["hashes"] = dict.fromkeys(data["hashes"], "0" * 64)
+        _, sink = self._restart_with_cursor(other)
+        self.assertIn("is not this ledger's", self.err)
+        self.assertEqual(min(sink.seqs()), 0)
+
+    def test_a_cursor_without_hashes_still_resumes(self):
+        """A cursor written before 0.7.x kept no hashes: it is checked by length only."""
+        seen = {}
+
+        def older(data):
+            seen["seq"] = data["sinks"]["list"]
+            data.pop("hashes")
+        _, sink = self._restart_with_cursor(older, resumes=True)
+        self.assertNotIn("delivery cursor", self.err)
+        self.assertEqual(min(sink.seqs()), seen["seq"] + 1)
+
+    def test_the_cursor_keeps_the_hash_of_the_last_entry_taken(self):
+        sink = ListSink()
+        tk = self.start(siem_config=self.config(sink, replay_from="start"))
+        self.drain(tk, sink, tk.ledger.size())
+        tk.close()
+        data = json.loads(tk.delivery.cursor.path.read_text(encoding="utf-8"))
+        seq = data["sinks"]["list"]
+        self.assertEqual(data["hashes"]["list"], tk.ledger.entries[seq].entry_hash)
 
     def test_replay_from_now_does_not_flood_a_new_siem(self):
         sink = ListSink()
@@ -488,7 +570,7 @@ class WithoutSiem(Fixture):
 
 
 class Plaintext(Fixture):
-    def plain(self, label="plain"):
+    def plain(self, label="plain"):  # skipcq: PYL-R0201 - test only
         sink = ListSink(label=label)
         sink.plaintext = True
         return sink
@@ -551,7 +633,8 @@ class Refused(unittest.TestCase):
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             counter.note("bad_signature")
-        [counts] = self.reported
+        self.assertEqual(len(self.reported), 1)
+        counts = self.reported[0]
         self.assertEqual(counts["bad_signature"], 1)
         self.assertEqual(counts["total"], 1)
         self.assertIn("bad_signature=1", err.getvalue())

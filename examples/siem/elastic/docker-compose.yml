@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 # Elasticsearch and Kibana for the worked example in docs/SIEM.md. A local test stack, not a
 # deployment: security is off, there is no password, and both ports listen on 127.0.0.1 only.
 # Two-Key does not talk to these containers. receiver.py takes the syslog or webhook copy and

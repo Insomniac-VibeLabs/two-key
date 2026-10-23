@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Roadmap
 
 Where `two-key` goes from 0.5.0 to a 1.0 release. It states intent, not a
@@ -7,7 +13,7 @@ promise: the order may change, and version numbers are targets, not dates.
 
 <!-- toc -->
 - [The path to 1.0](#the-path-to-10)
-- [Where we are (2026-10-16)](#where-we-are-2026-10-16)
+- [Where we are (2026-10-23)](#where-we-are-2026-10-23)
 - [Ground rules](#ground-rules)
 - [1.0.0: Review and release](#100-review-and-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
@@ -19,6 +25,7 @@ promise: the order may change, and version numbers are targets, not dates.
   - [More spec field types](#more-spec-field-types)
 - [Not planned for this repository](#not-planned-for-this-repository)
 - [Shipped](#shipped)
+  - [0.7.3: Setup and change commands, signed serial](#073-setup-and-change-commands-signed-serial)
   - [0.7.0: Ledger export for SIEM](#070-ledger-export-for-siem)
   - [0.6.0: DLP and AV hooks, Windows](#060-dlp-and-av-hooks-windows)
   - [0.5.0: MCP adapter](#050-mcp-adapter)
@@ -31,13 +38,16 @@ promise: the order may change, and version numbers are targets, not dates.
 ## The path to 1.0
 
 ```mermaid
-flowchart LR
+flowchart TD
   r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
   r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
-  r07 --> r10["1.0.0<br/>Review and release"]
-  r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
+  r07 --> r073["0.7.3<br/>Setup and config<br/>commands<br/>Released"]
+  r073 --> r10["1.0.0<br/>Review and release"]
+  r10 -. "later" .-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
 ```
+
+*Each release builds on the one above it. The dashed line leads to work planned after 1.0.*
 
 | Version | What | Status |
 | --- | --- | --- |
@@ -45,6 +55,7 @@ flowchart LR
 | 0.5.0 | MCP adapter: `two-key mcp-proxy`, `two-key mcp-draft-specs`, caller-supplied facts, and the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners; a start-up check for writable paths; judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
+| 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
@@ -60,39 +71,35 @@ Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
 in the same release.
 
-## Where we are (2026-10-16)
+## Where we are (2026-10-23)
 
-- **0.7.0 is released**: tag `v0.7.0` on `main`. It adds the ledger export
-  for a SIEM, a start-up check for the account the monitored agent runs as,
-  and the gateway's count of refused tokens. 0.6.0 before it added Windows
-  support, content scanning through the operator's antivirus or DLP product,
-  the writable-path check, and judge connection reuse (#6). `working`
-  carries on from the same code; the next changes land there.
+- **0.7.3 is released**: tag `v0.7.3` on `main`, and on PyPI. It adds
+  `two-key setup` for a first deployment and `two-key config set`, `get`,
+  `undo`, `show` and `check` to change and read one (docs/SETUP.md), every
+  change checked as a whole, confirmed when weaker, signed with the principal
+  key when it is a rule, and recorded in the ledger as `config_changed`; a
+  principal key encrypted with a passphrase; a signed `serial` so a ledger
+  never goes back to an older constitution; the upstream server's files behind
+  a launcher in the start-up checks (#13); `docs/SETTINGS.md`, every setting
+  generated from the code; and CI on Python 3.13 and 3.14. PyPI's `0.7.1` and
+  `0.7.2` were the 0.7.0 code, repackaged.
+- **0.7.0** (tag `v0.7.0`) added the ledger export for a SIEM, a start-up
+  check for the account the monitored agent runs as, and the gateway's count
+  of refused tokens.
 - **Checks**: tests, the demo, the build, and bandit run on Linux, macOS,
-  and Windows; coverage, CodeQL, and Semgrep (0 findings, each suppression
-  with its reason) run too, and all pass.
-- **Live testing**: run 8 and run 8x put a monitored agent through four
-  personas, legitimate to evil, over the SIEM copy and the paths the PR #12
-  review refactored; every finding is fixed on `working` (CHANGES.md). Run 7
-  (content scanning, 49 cases) and run 7x (a new organization and 33 attack
-  cases from a security practitioner, 52 cases) passed every case with no
-  referee incident. Live-run results live on the `live-runs` branch, never
-  on `working` or `main`.
-- **Issues**: #6 shipped in 0.6.0. #2 and #10 shipped in 0.5.0. #1 comes
-  before 1.0, and #3 (repository setup after the move) has maintainer
-  settings left to confirm.
-- **What 0.7.0 ships**: live delivery to a syslog sink (TLS by default, or
-  plain TCP or UDP) and an HTTPS webhook, Two-Key's own schema plus ECS and
-  OCSF, JSON and CEF, a per-kind field allowlist, a per-sink cursor,
-  `two-key siem-export` and `two-key siem-verify`, the MCP proxy's `siem:`
-  block, the gateway's rate-limited count of refused tokens, and the
-  start-up check that refuses to run when the monitored agent is Two-Key's
-  own account or can change its files (`on_agent_access`). The design note
-  (`0.7.0-siem-export.md`) was approved on 2026-10-16.
-- **0.7.0 is the first PyPI release.** It is still this beta, not the 1.0
-  review below. Metadata, the source-distribution manifest, and the
-  trusted-publishing workflow are in place (docs/PYPI.md). Tag `v0.7.0`
-  is not moved. Install with `pip install "two-key[yaml]==0.7.0"`.
+  and Windows; coverage, CodeQL, Semgrep, DeepSource, and SonarCloud run
+  too, and all pass. CI installs are hash-pinned (OpenSSF Scorecard, #31 to
+  #33).
+- **Live testing**: runs 9, 9x, 9y and 9z (175 cases on one machine, with a
+  second deployment, a library, and cases written by GrokBot and a security
+  practitioner) covered the setup and change commands, two proxies on one
+  ledger, the signed serial, and a free-play round graded on invariants. A
+  sabotage pass shows the harness notices each weakening of Two-Key but one
+  stated blind spot. Every Two-Key finding is fixed (CHANGES.md); run 9z, a
+  regression round, found none. Results live on the `live-runs` branch,
+  never on `working` or `main`.
+- **Issues**: #13 and #27 shipped in 0.7.3. #1 comes before 1.0, and #3
+  (repository setup after the move) has maintainer settings left to confirm.
 - **Next**: the judge history summary (#1), then the public review and the
   1.0 release.
 - **Not yet tested enough: agents on another machine.** The maintainer
@@ -103,7 +110,8 @@ in the same release.
   container: real accounts, the sudo rule, the forced command's chain, and
   `sshd -t`; no sshd ran, and no agent connected across a network. Live
   run 8 is entirely same-machine and loopback, so it proves nothing about
-  a remote agent. Before 1.0: a live run with the agent on another machine
+  a remote agent, and run 9 stays on one machine too (maintainer's decision,
+  2026-10-20). Before 1.0: a live run with the agent on another machine
   over SSH (connect, reconnect, a dropped connection, two agents at once,
   and the escape attempts `restrict` should stop: a shell, `sftp`, port
   forwarding, environment variables), the same on macOS and Windows hosts,
@@ -259,6 +267,12 @@ CLI and file formats, so it adds no new logic of its own.
   saved.
 - The GUI never holds the principal key. It prepares a constitution and
   hands it to the existing signing command. Signing stays outside the GUI.
+- Changes go through the engine `two-key config set` already uses
+  (docs/SETUP.md, on `working` since 2026-10-20): Two-Key's own account
+  only, the whole config checked before anything is written,
+  `--confirm-weaker` and a typed yes for a weaker setting, and a
+  `config_changed` ledger entry for each change. The GUI adds no rule of
+  its own.
 - Ledger auditing: browse decisions, filter by tool, reason, judge, and
   time, and show both paths' results for each call. It runs the Merkle and
   digest checks (`check_decision_digests`) and shows failures plainly.
@@ -311,7 +325,8 @@ neither.
 - Running as an MCP server that offers tools of its own. The MCP proxy
   speaks MCP only to forward an upstream server's signed tools.
 - A gateway in its own process or on its own host, or a gateway-only
-  ledger role (#45). The gateway runs in the `TwoKey` process.
+  ledger role. This is a decision, not a gap: the gateway runs in the
+  `TwoKey` process ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
 - A hosted, remote, or multi-user GUI, and a GUI that holds the signing key.
 - A CMVP validation of this package, and any claim that it is "FIPS
   compliant" or "FIPS validated".
@@ -324,6 +339,27 @@ neither.
 
 The design records of released phases, kept as written. CHANGES.md is the
 record of what each release did.
+
+### 0.7.3: Setup and change commands, signed serial
+
+Released as tag `v0.7.3` on `main`, and on PyPI. Not planned as a phase of
+its own: these came from the maintainer's request for one way into setup and
+changes, from issues #13 and #27, and from live runs 9 to 9z. CHANGES.md
+"Release v0.7.3" lists them; [docs/SETUP.md](docs/SETUP.md) and
+[docs/SETTINGS.md](docs/SETTINGS.md) are the reference.
+
+- Done: `two-key setup` writes a whole deployment from answers, checks it,
+  and records it; `two-key config set` and `undo` change one setting through
+  the same checks, a typed yes for a weaker change, the principal key for a
+  signed one, and a `config_changed` ledger entry with no values;
+  `config get`, `show` and `check` read a config without starting anything.
+- Done: a principal key encrypted with a passphrase from an owner-only file.
+- Done: a signed `serial` in the constitution; a ledger refuses an older
+  serial, a reused one, or none once it has run one.
+- Done: the upstream server's program, script and folders in the start-up
+  checks, a warning for a launcher that hides them, and
+  `upstream.check_paths` for the rest (#13).
+- Done: the compiled-file check on Python 3.15 (#27); CI on 3.13 and 3.14.
 
 ### 0.7.0: Ledger export for SIEM
 
@@ -433,7 +469,7 @@ AGENTS.md requires.
      fact hooks already have.
    - Move the CodeQL action to v4 before v3's deprecation (December 2026),
      and take Dependabot's action updates.
-   - Close #2 and #10, finish #3, delete the merged `mcp-proxy` branch, and
+   - Close #2 and #10 (both closed), finish #3, delete the merged `mcp-proxy` branch, and
      push the run 6 and 6z results to their test branches.
    - **Platforms.** Make macOS a required CI job once it passes. For
      Windows, the maintainer decides between full support in 0.6.0 and
@@ -617,7 +653,7 @@ below are what shipped.
 
 0.3.0 also carries two changes that are not part of this
 phase: custom Path A fields (see "After 1.0") and the gateway deployment
-boundary (#45; see "Not planned"). CHANGES has a section for each.
+boundary ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process); see "Not planned"). CHANGES has a section for each.
 
 Not in this version: PKI and certificate identities (see "After 1.0") and
 seed-phrase backup. A weak passphrase remains a residual risk. PBKDF2 is

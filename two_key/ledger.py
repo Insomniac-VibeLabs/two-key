@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Append-only hash-chained ledger with a signed head.
 
 Entries and the head are AES-256-GCM ciphertext at rest. The data key is
@@ -306,7 +309,10 @@ class Ledger:
             raise LedgerError("ledger key must live outside the ledger directory")
         if _platform.inside(self._anchor_path, self.path):
             raise LedgerError("head anchor must live outside the ledger directory")
-        self._lock = threading.Lock()
+        # Re-entrant, so one ``exclusive()`` block can hold the write lock across several appends and the
+        # checkpoint that covers them (run 9y, S6c); ``_depth`` counts this thread's nested holds.
+        self._lock = threading.RLock()
+        self._depth = 0
         self._observers: list = []          # called after each append (two_key/siem.py); never blocking
         self.entries: list[Entry] = []
         self._redeemed: set[str] = set()
@@ -318,6 +324,7 @@ class Ledger:
         self._merkle_roots: list[str] = []
         self._kind_seqs: dict[str, list[int]] = {}   # kind -> entry seqs, in order (#50)
         self._entries_size: int | None = None                   # bytes of entries.jsonl last read or written
+        self._from_others: set[int] = set()     # seqs another process appended while this one had it open
         anchor = self._read_anchor()
         if anchor is not None and anchor["size"] > 0 and self._ledger_files_incomplete():
             raise LedgerError(self._rollback_message(0, anchor))
@@ -376,11 +383,15 @@ class Ledger:
                 ledger._lock.acquire()
                 self.held = True
                 self.fd = None
+                if ledger._depth:       # already held by this thread: the outer block caught up and holds the file
+                    ledger._depth += 1
+                    return self
                 try:
                     self.fd = _platform.open_lock_file(ledger.lock_path())
                     _platform.lock(self.fd)
                     if check_stale and ledger._entries_size is not None and ledger._entries_file_size() != ledger._entries_size:
                         ledger._catch_up_unlocked()
+                    ledger._depth = 1
                     return self
                 except BaseException:
                     self._release()
@@ -391,6 +402,12 @@ class Ledger:
                 return False
 
             def _release(self):
+                if self.held and ledger._depth > 1:
+                    ledger._depth -= 1
+                    ledger._lock.release()  # skipcq: PYL-W0212 - the guard belongs to this ledger and releases the ledger's own lock
+                    self.held = False
+                    return
+                ledger._depth = 0
                 if self.fd is not None:
                     try:
                         _platform.unlock(self.fd)
@@ -398,7 +415,7 @@ class Ledger:
                         os.close(self.fd)
                     self.fd = None
                 if self.held:
-                    ledger._lock.release()
+                    ledger._lock.release()  # skipcq: PYL-W0212 - the guard belongs to this ledger and releases the ledger's own lock
                     self.held = False
 
         return _Guard()
@@ -410,6 +427,26 @@ class Ledger:
     @property
     def head_path(self) -> Path:
         return self.path / "head.json"
+
+    def anchor_path(self) -> Path:
+        """The monotonic head anchor (``anchor_path`` at construction, or the default beside the ledger key)."""
+        return self._anchor_path
+
+    def exclusive(self):
+        """Hold the ledger's write lock, against this process and others, for the ``with`` block. A backup
+        copies the ledger's files under it so it never sees a half-written entry.
+
+        On entry it reads what other processes appended. Inside it, ``append`` and ``checkpoint`` take the
+        same lock again, so entries and the checkpoint that signs them are written in one hold: another
+        process sharing the ledger never reads entries the signed head does not cover yet (run 9y, S6c)."""
+        return self._exclusive()
+
+    def record(self, kind: str, body: dict) -> Entry:
+        """``append_bounded`` and ``checkpoint`` in one hold of the write lock."""
+        with self._exclusive():
+            entry = self.append_bounded(kind, body)
+            self.checkpoint()
+            return entry
 
     def fingerprint_key_path(self) -> Path:
         """Per-install HMAC key for credential fingerprints, beside the ledger key, outside the ledger."""
@@ -588,6 +625,7 @@ class Ledger:
             self._track(entry, verify=True)
             self.entries.append(entry)
             self._merkle_add(bytes.fromhex(entry.entry_hash))
+            self._from_others.add(entry.seq)
             prev = entry.entry_hash
         self._entries_size = size
         self._verify_head()
@@ -701,7 +739,8 @@ class Ledger:
         self._append_unlocked("witness_pinned", body)
         self._checkpoint_unlocked(self._witness)
 
-    def _hash(self, seq: int, prev: str, kind: str, body: dict) -> str:
+    @staticmethod
+    def _hash(seq: int, prev: str, kind: str, body: dict) -> str:
         return canonical_hash({"seq": seq, "prev": prev, "kind": kind, "body": body})
 
     def append_bounded(self, kind: str, body: dict) -> Entry:
@@ -742,6 +781,11 @@ class Ledger:
         self._track(entry, verify=False)
         self._notify(entry)
         return entry
+
+    def from_another_process(self, seq: int) -> bool:
+        """True for an entry another process sharing this ledger appended after this one opened it. Its SIEM
+        copy is that process's to send; one sent from here as well is marked ``replay`` (run 9y, F4)."""
+        return seq in self._from_others
 
     def observe(self, callback) -> None:
         """Call ``callback(entry.seq)`` after each entry is written and fsynced.

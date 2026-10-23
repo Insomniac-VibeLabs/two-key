@@ -1,7 +1,10 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 name: codeql
 on:
   push:
-    branches: [main, working, "10.2.2026"]
+    branches: [main, PyPI, testpypi]
   pull_request:
   schedule:
     - cron: "17 6 * * 1"

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Draft ``tool_specs`` from an upstream server's tool schemas (``two-key mcp-draft-specs``). No MCP SDK here.
 
 A draft is a starting point for the principal to review and sign, never a signed policy. It fails closed:
@@ -215,14 +218,17 @@ def render_rules(draft: Draft, command: list[str]) -> str:
         "# sign-constitution refuses this file until you replace every REPLACE_WITH_* value and fill every",
         "# empty allow list. Remove the tools the agent should not have; the digest changes if you do (the",
         "# proxy prints the digest it sees). A server's descriptions and hints are its claims, not facts.",
+        "# serial: raise it each time you sign changed rules; a ledger refuses a lower one (HOWTO, The serial).",
+        "serial: 1",
         "hard_rules:",
         f"  - {{id: tools, allow_only_tools: {_yaml_value([t.tool_id for t in draft.tools])}}}",
         "tool_specs:",
     ]
     if not draft.tools:
         lines[-1] = "tool_specs: {}"
+    views = {v.get("name"): v for v in draft.views}    # draft_specs keeps one view per tool, names unique
     for t in draft.tools:
-        view = next(v for v in draft.views if v.get("name") == t.upstream_name)
+        view = views[t.upstream_name]
         lines.append(f"  # {t.tool_id}: {_comment(str(view.get('description') or '(no description)'))}")
         if t.upstream_name != t.tool_id:
             lines.append(f"  # upstream name {_comment(t.upstream_name)!r}: set tools.{t.tool_id}.upstream_name "

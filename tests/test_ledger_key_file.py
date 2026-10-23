@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The ledger key and the wrapped data key are created with O_EXCL at 0600 and checked on read."""
 
 import tempfile

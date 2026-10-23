@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Ledger export to a SIEM (0.7.0): the event allowlist, the schemas, and delivery.
 
 The ledger stays the record. A SIEM gets a copy of each entry, built from an allowlist, so an operator
@@ -214,6 +217,20 @@ def _scan_parts(body: Mapping[str, Any]) -> dict:
     return {"parts": out}
 
 
+def _config_files(body: Mapping[str, Any]) -> dict:
+    """Each file a config change wrote, by role, name, and the digests before and after. Never its content."""
+    files = body.get("files")
+    if not isinstance(files, (list, tuple)):
+        return {}
+    out = []
+    for item in files[:MAX_LIST_ITEMS]:
+        if isinstance(item, Mapping):
+            out.append({"role": _scrub(item.get("role")), "file": _scrub(item.get("file")),
+                        "old_sha256": item.get("old_sha256") if _is_digest(item.get("old_sha256")) else None,
+                        "new_sha256": item.get("new_sha256") if _is_digest(item.get("new_sha256")) else None})
+    return {"files": out}
+
+
 @dataclass(frozen=True)
 class KindSpec:
     """What an event carries for one ledger kind, and what it never carries."""
@@ -241,7 +258,7 @@ KINDS: dict[str, KindSpec] = {
         excluded=("tail_file",), severity=NOTICE),
     "constitution_loaded": KindSpec(
         sent=("digest", "bytecode_hash", "nl_hash", "spec_hash", "policy_digest",
-              "capability_key_fingerprint"),
+              "capability_key_fingerprint", "serial", "previous_digest"),
         excluded=("quorum_policy", "judge_agent_separation", "scanner", "same_model_tenant_optin",
                   "same_model_tenant_optin_pairs"),
         extract=_constitution_fields),
@@ -274,6 +291,11 @@ KINDS: dict[str, KindSpec] = {
         excluded=("tools",), extract=_proxy_fields),
     "tool_not_offered": KindSpec(sent=("origin", "tool"), severity=WARNING),
     "siem_configured": KindSpec(sent=("event_schema", "event_format", "replay_from", "sinks")),
+    # two-key setup, config set and config undo (two_key/config_set.py): which settings and files changed,
+    # never a value. The account is in the ledger only.
+    "config_changed": KindSpec(
+        sent=("command", "settings", "signed", "weaker", "confirmed", "constitution_hash"),
+        excluded=("account", "files"), extract=_config_files, severity=NOTICE),
 }
 
 # Events this module sends that are not ledger entries. A token that does not verify is refused without a
@@ -585,6 +607,7 @@ class Cursor:
     def __init__(self, path: Path | str):
         self.path = Path(path)
         self._seqs: dict[str, int] = {}
+        self._hashes: dict[str, str] = {}      # the entry_hash at each sink's seq: which ledger the cursor is for
         self._load()
 
     def _load(self) -> None:
@@ -607,6 +630,9 @@ class Cursor:
         sinks = data.get("sinks")
         if isinstance(sinks, Mapping):
             self._seqs = {str(k): v for k, v in sinks.items() if isinstance(v, int) and not isinstance(v, bool)}
+        hashes = data.get("hashes")
+        if isinstance(hashes, Mapping):
+            self._hashes = {str(k): v for k, v in hashes.items() if isinstance(v, str) and str(k) in self._seqs}
 
     @property
     def exists(self) -> bool:
@@ -616,12 +642,21 @@ class Cursor:
         value = self._seqs.get(label)
         return default if value is None else value
 
-    def set(self, label: str, seq: int) -> None:
+    def entry_hash(self, label: str) -> str | None:
+        return self._hashes.get(label)
+
+    def set(self, label: str, seq: int, entry_hash: str | None = None) -> None:
         self._seqs[label] = seq
+        if entry_hash is None:
+            self._hashes.pop(label, None)
+        else:
+            self._hashes[label] = entry_hash
 
     def save(self) -> None:
         """Write the whole file again, through a new file and a rename, so a reader never sees half of it."""
         body = {"format": CURSOR_FORMAT, "sinks": dict(sorted(self._seqs.items()))}
+        if self._hashes:        # optional: a cursor written before these were kept still reads
+            body["hashes"] = dict(sorted(self._hashes.items()))
         tmp = self.path.parent / f".{self.path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp"
         try:
             # 0o700 is owner-only, the strictest useful mode for a directory; the rule's suggestion
@@ -741,7 +776,25 @@ class Delivery:
             return -1, size
         if self.config.replay_from == "now" or not self.cursor.exists:
             return size - 1, size
-        return min(self.cursor.get(sink.label, size - 1), size - 1), size
+        seq = self.cursor.get(sink.label, size - 1)
+        problem = self._cursor_problem(sink.label, seq, size)
+        if problem:
+            # Not trusted: the entries it claims were taken may never have left (live run 9x, C140). Send the
+            # whole ledger again, every copy marked replay; a collector dedupes on entry_hash (docs/SIEM.md).
+            print(f"two-key: WARNING: siem: {sink.label}: the delivery cursor {problem}; sending the whole ledger "
+                  "again, marked replay (docs/SIEM.md)", file=sys.stderr)
+            return -1, size
+        return seq, size
+
+    def _cursor_problem(self, label: str, seq: int, size: int) -> str | None:
+        """Why the cursor cannot be for this ledger, or None. A cursor without a hash (older) is checked by length
+        only."""
+        if seq >= size:
+            return f"is at seq {seq}, past this ledger's last entry ({size - 1})"
+        want = self.cursor.entry_hash(label)
+        if want is not None and seq >= 0 and self.ledger.entries[seq].entry_hash != want:
+            return f"names an entry at seq {seq} that is not this ledger's"
+        return None
 
     # -- the ledger's side -------------------------------------------------
 
@@ -828,15 +881,19 @@ class Delivery:
             except IndexError:      # the ledger shrank under us (recover); the next pass re-reads it
                 break
         sent_at = now_text(self._clock)
-        return [e.at(sent_at, replay=e.ledgered and e.seq < state.replay_until) for e in batch]
+        # Late, or written by another proxy on a shared ledger, which sends its own copy (run 9y, F4).
+        return [e.at(sent_at, replay=e.ledgered and (e.seq < state.replay_until
+                                                     or self.ledger.from_another_process(e.seq)))
+                for e in batch]
 
     def _took(self, state: _SinkState, batch: Sequence[Event]) -> None:
         taken = len([e for e in batch if not e.ledgered])
         state.pending = state.pending[taken:]
-        ledgered = [e.seq for e in batch if e.ledgered]
+        ledgered = [e for e in batch if e.ledgered]
         if ledgered:
-            state.seq = max(ledgered)
-            self.cursor.set(state.label, state.seq)
+            last = max(ledgered, key=lambda e: e.seq)
+            state.seq = last.seq
+            self.cursor.set(state.label, state.seq, last.entry_hash)
             self.cursor.save()
 
     def _messages(self, sink: Any, events: Sequence[Event]) -> list[Message]:

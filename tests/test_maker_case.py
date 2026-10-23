@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The maker-diversity floor compares maker names case-insensitively (and NFKC, trimmed).
 
 ``maker`` / ``min_makers`` were ``vendor`` / ``min_vendors`` through 0.2.1; 0.2.3 refuses the old names.
@@ -75,7 +78,7 @@ class OldNames(unittest.TestCase):
 
     def test_vendor_keyword_is_refused(self):
         with self.assertRaisesRegex(TypeError, "vendor"):
-            FixedJudge("a", "yes", vendor="OpenAI")
+            FixedJudge("a", "yes", vendor="OpenAI")  # skipcq: PYL-E1123 - test only
         with self.assertRaisesRegex(TypeError, "vendor"):
             OpenAICompatibleJudge("o", "p", "m", "https://api.example.com/v1", vendor="xai")
         self.assertFalse(hasattr(FixedJudge("a", "yes", maker="OpenAI"), "vendor"))

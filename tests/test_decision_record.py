@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Fix 7: the ledger records the quorum policy in effect and each judge's resolved identity.
 
 The identities are written once, in constitution_loaded; each decision references them by digest.

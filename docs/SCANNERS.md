@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Connect an antivirus or DLP product
 
 This guide is for operators who want an antivirus or data loss prevention
@@ -60,20 +66,19 @@ key, whatever the stance.
 ## Where the scanner sits
 
 ```mermaid
-flowchart LR
-  agent["Monitored agent<br/>untrusted"] -- "tool call<br/>name and arguments,<br/>files included" --> tk
-  subgraph process["The Two-Key process (proxy, guard, or library)"]
-    tk["TwoKey.authorize"] -- "1. call text, files,<br/>proposal" --> scanner["Scanner adapter<br/>clamd, ICAP, command,<br/>or Python"]
-    scanner -- "2. clean, flagged,<br/>or unavailable" --> tk
-    tk -- "3. form with scan = verdict" --> pathA["Path A<br/>signed rules"]
-    tk -- "4. record, file digests,<br/>trusted scan section" --> pathB["Path B<br/>judges"]
-    tk -- "5. token binds verdict<br/>and file digests" --> gw["Gateway<br/>re-checks files"]
-    tk --> ledger["Encrypted ledger<br/>digests and verdict,<br/>never content"]
-    gw --> ledger
+flowchart TD
+  agent["Monitored agent<br/>untrusted"] -- "tool call, with<br/>its files" --> tk
+  subgraph process["The Two-Key process"]
+    tk["TwoKey.authorize"] <-- "1. parts to scan<br/>2. verdict back" --> scanner["Scanner adapter<br/>clamd, ICAP,<br/>command, or Python"]
+    tk -- "3. form with the<br/>verdict" --> pathA["Path A<br/>signed rules"]
+    tk -- "4. record, digests,<br/>trusted scan section" --> pathB["Path B<br/>judges"]
+    tk -- "5. token binds the<br/>verdict and digests" --> gw["Gateway<br/>re-checks files"]
   end
-  scanner <-. "your product" .-> product["clamd, ICAP server,<br/>or command"]
-  gw -- "6. arguments the spec passes" --> tool["Tool"]
+  scanner -. "asks your product" .-> product["clamd, ICAP server,<br/>or command"]
+  gw -- "6. arguments the<br/>spec passes" --> tool["Tool"]
 ```
+
+*The process is the proxy, the guard, or the library. The numbers are the order of events: step 1 sends the call text, the files and the proposal, and step 2 returns clean, flagged, or unavailable. Two-Key writes the digests and the verdict, never the content, to the encrypted ledger at each step. The dashed line is your own scanner product.*
 
 The scan runs inside `authorize`, after the call reads under its signed spec
 and before Path A. A call that cannot be read is denied before any scan, and
@@ -126,28 +131,46 @@ Two-Key builds what each party receives from it.
 
 ```mermaid
 sequenceDiagram
-  autonumber
   participant Ag as Monitored agent
-  participant TK as Two-Key (proxy, guard, or library)
+  participant TK as Two-Key
   participant S as Scanner
   participant A as Path A (signed rules)
   participant B as Path B (judges)
-  participant G as Gateway
-  participant T as Tool
-  Ag->>TK: tools/call send_email with to, body, attachments[0].content as base64
-  TK->>TK: copy, size check, read the call under the signed spec
-  TK->>TK: read each declared file within its max_bytes (unreadable or too large: deny here)
-  TK->>S: argument text (each file as its digest), each file decoded, proposal text
-  S-->>TK: clean, flagged, or unavailable, with categories and a label
+  Ag->>TK: tools/call send_email, attachment as base64
+  TK->>TK: copy, size check, read under the signed spec
+  TK->>TK: read each declared file within its max_bytes
+  Note over TK: unreadable or too large: denied here
+  TK->>S: argument text, each file decoded, proposal text
+  S-->>TK: clean, flagged, or unavailable, with a label
   TK->>A: the form, with scan set to the verdict
-  TK->>B: constitution, action record (each file as digest and size), trusted scan section
+  TK->>B: prose, record, trusted scan section
   A-->>TK: allow or deny
   B-->>TK: ballots
-  TK->>G: token binding the argument bytes, the verdict, and each file's SHA-256
-  G->>G: hash each file again (no second scan)
-  G->>T: the arguments the spec passes, file unchanged
-  T-->>Ag: the tool's result (a deny returns a reason code only)
 ```
+
+*Path A gets the verdict as a field. Path B gets the action record with each file as its digest and size, never the file.*
+
+If both keys turn, the call goes on to the tool:
+
+```mermaid
+sequenceDiagram
+  participant Ag as Monitored agent
+  participant TK as Two-Key
+  participant G as Gateway
+  participant T as Tool
+  alt both keys allow
+    TK->>G: token binding the bytes, the verdict, file hashes
+    G->>G: hash each file again, no second scan
+    G->>T: the arguments the spec passes, file unchanged
+    T-->>G: the tool's result
+    G-->>TK: the result
+    TK-->>Ag: the tool's result
+  else a key denies
+    TK-->>Ag: a reason code only, the tool never runs
+  end
+```
+
+*A deny returns a reason code and nothing else: never the categories, the scanner, or any matched text.*
 
 A file travels as an ordinary argument from every entry point:
 
@@ -246,15 +269,15 @@ hard_rules:
 
 ```mermaid
 flowchart TD
-  call["Call to a scanned tool"] --> scan["Two-Key sends the parts to the scanner"]
+  call["Call to a scanned tool"] --> scan["Two-Key sends the<br/>parts to the scanner"]
   scan --> answer{"What came back?"}
   answer -->|"timeout, exception,<br/>invalid answer"| unavailable["unavailable"]
   answer -->|"could not finish"| flagged["flagged"]
   answer -->|"found something"| flagged
   answer -->|"nothing found"| clean["clean"]
-  clean --> both["Path A and Path B decide as usual"]
+  clean --> both["Path A and Path B<br/>decide as usual"]
   flagged --> fstance{"Signed stance"}
-  fstance -->|"default or strict"| deny["Path A denies: rule_denied:scan<br/>judges still vote, call is denied"]
+  fstance -->|"default or strict"| deny["Path A denies:<br/>rule_denied:scan<br/>judges still vote,<br/>the call is denied"]
   fstance -->|"monitor"| judgesflag["Judges see flagged,<br/>without the arguments"]
   judgesflag --> both
   unavailable --> ustance{"Signed stance"}
@@ -262,6 +285,8 @@ flowchart TD
   ustance -->|"default or monitor"| judgesdown["Judges see unavailable"]
   judgesdown --> both
 ```
+
+*The scanner's answer becomes a verdict, and the signed stance decides what a flagged or unavailable verdict does.*
 
 | Verdict | default | strict | monitor |
 | --- | --- | --- | --- |
@@ -387,6 +412,8 @@ sequenceDiagram
   Note over TK: the threat name is never kept
 ```
 
+*One connection per part. Two-Key never keeps the threat name.*
+
 ### Run clamd
 
 Linux (Debian, Ubuntu):
@@ -498,18 +525,20 @@ sequenceDiagram
   participant TK as Two-Key (IcapInspector)
   participant P as ICAP service
   loop each part, one connection each
-    TK->>P: REQMOD with Allow 204, X-Two-Key-Tool, X-Two-Key-Part
+    TK->>P: REQMOD with Allow 204 and two X-Two-Key headers
     TK->>P: encapsulated HTTP POST, body chunked, no preview
     alt nothing found
       P-->>TK: 204 No Content
     else found something
-      P-->>TK: 403, or 200 with an infection or violation header, or a block page, or a changed body
+      P-->>TK: 403, or a 200 that says it found something
     else error
       P-->>TK: any other status, or no answer in time
     end
   end
-  Note over TK: clean, flagged, unavailable, combined over the parts
+  Note over TK: verdicts combined over all the parts
 ```
+
+*"Found something" is any answer in the table below that is flagged: a violation header, a block page, a changed body, or a 403.*
 
 ### What Two-Key sends
 

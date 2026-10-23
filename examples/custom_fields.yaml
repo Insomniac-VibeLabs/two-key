@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 # Custom Path A fields. Sign it with examples/constitution.md or your own prose:
 #   python -m two_key sign-constitution --key ./keys/principal.pem \
 #     --prose examples/constitution.md --rules examples/custom_fields.yaml --out custom.signed.json

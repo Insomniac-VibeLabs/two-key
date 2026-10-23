@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """MCP proxy decisions without the MCP SDK: config, tool selection, schema pin, claim policy, the identity
 refusal, and one tools/call through authorize and the in-process gateway (two_key.mcp_proxy.core)."""
 
@@ -327,7 +330,7 @@ class Facts(unittest.TestCase):
 
     def test_the_agent_never_sees_the_fact_and_the_tool_gets_the_callers_value(self):
         core = self.core()
-        pay = next(t for t in core.list_tools() if t["name"] == "pay_vendor")
+        pay = next(t for t in core.list_tools() if t["name"] == "pay_vendor")  # skipcq: PTC-W0063 - test only
         self.assertNotIn("po_matched", pay["inputSchema"]["properties"])
         self.assertEqual(pay["inputSchema"]["required"], ["vendor", "amount"])
         # The digest still pins what the upstream says, hidden property included.
@@ -350,7 +353,7 @@ class Facts(unittest.TestCase):
 
     def test_a_fact_that_changes_before_the_tool_runs(self):
         answers = iter([True, False])
-        core = self.core({"pay_vendor": {"po_matched": lambda tool, args: next(answers)}})
+        core = self.core({"pay_vendor": {"po_matched": lambda tool, args: next(answers)}})  # skipcq: PTC-W0063 - test only
         out = core.call_tool("pay_vendor", {"vendor": "ada", "amount": 40, "memo": "inv-1"})
         self.assertEqual((out.allowed, out.reason, out.stage), (False, "fact_mismatch", "gateway"))
         self.assertEqual(self.calls, [])

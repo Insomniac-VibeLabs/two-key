@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # AGENTS.md
 
 Guidance for coding agents working in this clone of
@@ -35,11 +41,12 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.7.0 (package name `two-key`) is tag `v0.7.0` on `main`; 0.6.0 is
-  tag `v0.6.0`, 0.5.0 is
+- Package 0.7.3 (package name `two-key`) is tag `v0.7.3` on `main`; 0.7.0 is
+  tag `v0.7.0` (PyPI's 0.7.1 and 0.7.2 are its code, repackaged on the
+  `PyPI` branch), 0.6.0 is tag `v0.6.0`, 0.5.0 is
   tag `v0.5.0`, and 0.4.0 (tag `v0.4.0`) was the first release from this repository. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`.
   Tag `v0.2.4` stays on `fc836bb`.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.7.3`, `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
   where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
@@ -49,8 +56,8 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Install and version matrix
 
-Requires Python ≥ 3.10. Package name `two-key`, import name `two_key`,
-version `0.7.0` on PyPI (`pip install "two-key[yaml]==0.7.0"`). Tag `v0.7.0` on `main` is not moved. docs/PYPI.md is the release process. This packaging does not change the version.
+Requires Python ≥ 3.10; CI tests 3.10 to 3.14 (3.15 in a Linux job that does not block, until PyYAML ships 3.15 wheels; no `requires-python` cap). Package name `two-key`, import name `two_key`,
+version `0.7.3` on PyPI (`pip install "two-key[yaml]==0.7.3"`), tag `v0.7.3` on `main`. Tags are not moved. docs/PYPI.md is the release process.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
@@ -62,22 +69,23 @@ python -m unittest discover -s tests
 python -m two_key demo
 ```
 
-CI does not use that floating install. `.github/workflows/tests.yml` pins
-`uv==0.13.0` and runs `uv sync --locked --no-build --extra yaml --extra mcp`, which
+CI does not use that floating install. `.github/workflows/tests.yml` installs
+`uv==0.13.0` (with its hashes, `.github/requirements/uv.txt`) and runs `uv sync --locked --no-build --extra yaml --extra mcp`, which
 installs `uv.lock` (cryptography, PyYAML, the MCP SDK, and their dependencies) as wheels.
 Regenerate `uv.lock` with that uv when a dependency range changes, and
 commit the lock. Do not treat the lock as a release pin for consumers.
-Build, coverage, and bandit are pinned in their workflows, not in
-`pyproject.toml`.
+Build, coverage, bandit, and the publish tools are pinned with hashes in
+`.github/requirements/` (each `NAME.in` is compiled to `NAME.txt` by `compile.sh`
+there), not in `pyproject.toml`. CI installs them with `--require-hashes`.
 
 | Extra | Provides | When needed |
 | --- | --- | --- |
 | (none) | `cryptography>=41` | Ed25519, SHA-256, AES-256-GCM ledger |
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
-| `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0) |
+| `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0); `two-key config show`, `get`, `check`, `set`, and `undo`, and `two-key setup`, read and write the proxy config without the SDK (`setup` needs it only to read a schema digest from the server) |
 
-Index install: `pip install "two-key[yaml]==0.7.0"`.
-The unmoved tag is still `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"`.
+Index install: `pip install "two-key[yaml]==0.7.3"`.
+From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.3"`.
 
 ## Tests and docs
 
@@ -88,10 +96,26 @@ The unmoved tag is still `pip install "two-key[yaml] @ git+https://github.com/In
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
   `docs/SCOPE.md`, `docs/SIEM.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
+- A new setting (a key a loader accepts) gets a row in `two_key/settings.py`.
+  `docs/SETTINGS.md` is generated from it: run `python tests/test_settings_doc.py
+  --write`. The test fails on a key with no row and on a page that is not what
+  the catalogue renders. Do not edit the page by hand.
 - When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
   in the same release.
 - Keep [docs/HOWTO.md](docs/HOWTO.md) "Known trade-offs by configuration"
   accurate when a config trade-off changes.
+- The live harness (`tests/live/`) is test code and needs no network. A new
+  fail-closed default in this file gets a row in `tests/live/COVERAGE.md`
+  (`tests/test_live_harness.py` fails without one), and a check a live case
+  relies on can get a weakening in `tests/live/sabotage.py`, so the
+  harness's own sensitivity stays visible (`harness.py --sabotage all`).
+  Never commit `tests/live/state/`, `selftest/`, or `cases.jsonl`.
+- Diagrams are real Mermaid on `working` and `main`, never pictures. Follow
+  the house style in `tests/test_doc_diagrams.py`: it fails on a long label
+  line, a sequence diagram with more than five participants, a diagram with no
+  one-line italic caption under it, and the rest of the rules in its docstring.
+- New files open with the copyright header (copyright Insomniac-VibeLabs, author Stephan Busch,
+  `SPDX-License-Identifier: Apache-2.0`); `tests/test_file_headers.py` fails without it. See CONTRIBUTING.md.
 - Tables of contents are generated: after changing a heading, run
   `python tests/test_doc_toc.py --write` (`tests/test_doc_toc.py` fails
   while one is stale).
@@ -188,6 +212,24 @@ security findings privately, per [SECURITY.md](SECURITY.md).
 - The ledger's witness public key is pinned: a head or `witness.pem` that
   does not match the pin in the ledger, or the configured
   `witness_public_key`, is refused. It changes only by `rotate_witness`.
+- A ledger never goes back to an older constitution (live run 9x, C44;
+  `core.check_constitution_order`). The order is the principal's signed
+  `serial` in the rules file (v3 only; without one the envelope stays
+  byte-for-byte as before). Once a ledger has run serial N, a lower serial
+  (`constitution_rollback`), N again with other bytes
+  (`constitution_serial_reused`), and no serial (`constitution_serial_missing`)
+  refuse to start before anything is written, and `config undo` refuses to
+  put such a constitution back. The check runs again under the ledger's write
+  lock, on what other processes wrote, just before `constitution_loaded` is
+  recorded, so two proxies started at once on one ledger cannot both run one
+  serial (live run 9y, S6c). `setup`'s starter rules and `mcp-draft-specs`
+  start at serial 1, and `config set` on a signed setting signs the next.
+  There is no setting that turns it off; going back to older rules means
+  signing them again with a higher serial (`tests/test_constitution_serial.py`).
+- Each ledger write and the checkpoint that signs it happen in one hold of the
+  ledger's write lock (`Ledger.record`, `Ledger.exclusive`), so a process
+  sharing the ledger never reads entries the signed head does not cover yet
+  (`tests/test_ledger_shared.py`).
 - The gateway verifies only; it never mints.
 - The guard (`two_key/guard.py`) uses a fixed claim and proposal per tool,
   never the agent's; looks facts up before `authorize` and again before
@@ -231,6 +273,14 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   named, not passed. There is no setting that turns it off, and on POSIX a
   group write bit counts for every group but 0; do not add either. It runs
   before anything is written to the ledger (`tests/test_writable_paths.py`).
+  The MCP proxy adds the upstream server's files (#13,
+  `mcp_proxy/core.upstream_paths`): each absolute argument of
+  `upstream.command` that exists (a file with its folder) and each
+  `upstream.check_paths` entry (absolute; one that does not exist refuses,
+  `check_path_missing`). A launcher as `command[0]` with nothing named warns
+  `upstream_paths_unchecked` and refuses under `high_assurance`. Do not
+  follow a launcher to its target or guess at relative arguments
+  (`tests/test_upstream_paths.py`).
 - Agent account (0.7.0, `two_key/agent_access.py`): the MCP proxy reads the
   real user of its parent process (`_platform.parent_account`, never an
   environment variable) before it opens the ledger, and refuses to start
@@ -282,10 +332,30 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   `_platform`; do not widen that.
 - The gateway runs in the `TwoKey` process on the `TwoKey` ledger object
   (`TwoKey.gateway()`). A gateway in another process or host is not
-  supported (#45); do not add a gateway-only ledger role, remote gateway,
+  supported, by design ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)); do not add a gateway-only ledger role, remote gateway,
   or cross-process protocol without the operator. Do not describe
   verify-only as key isolation: the process holds the minting, principal,
   witness, and ledger keys, and the registered tools run there.
+
+- Configuration changes (`two_key/config_set.py`, `two_key/setup_cmd.py`):
+  `two-key config set`, `config undo`, and `two-key setup` refuse root and
+  any file they write, or its folder, that another account could change, or
+  that is a link; nothing is written until the whole changed config passes
+  `config check` (only the findings about the shell's own variables do
+  not block; a judge's missing key is a warning); a change `weaker()` names needs `--confirm-weaker` and `yes`
+  typed on a terminal, and no terminal is no; a signed setting needs the
+  principal key and a rules file that signs to exactly what is signed, and
+  the new envelope is verified before it is written; a literal for
+  `upstream.env.*` or `scan.env.*` never comes from argv; a key passphrase
+  comes from an owner-only file or a terminal prompt, never argv or the
+  environment, the proxy never prompts, and `config key-passphrase` keeps no
+  plain `.prev` of the key. Each change is a
+  `config_changed` ledger entry (setting names, file names, digests; never
+  a value) written before the files are renamed in; a ledger that does not
+  open refuses the change. Files are written owner-only beside the old ones
+  and renamed, with `<file>.prev` and `<config>.undo.json` for one-step
+  undo. There is no hot reload. Do not add a way past any of these, and do
+  not let a GUI or another front end skip them (`tests/test_config_set.py`).
 
 - SIEM export (0.7.0, `two_key/siem.py`, `two_key/siem_sinks.py`,
   `two_key/siem_export.py`): optional, and with no `siem=` nothing is sent

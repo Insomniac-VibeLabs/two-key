@@ -1,9 +1,14 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.7.0. Tag
-`v0.7.0` on `main` is the tagged release; `v0.6.0`, `v0.5.0` and `v0.4.0` are the ones before. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. Tag `v0.2.4` stays on `fc836bb`.
-Tag `v0.2.3` stays on `4a4352e`. Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
-is on `main`. `v0.1.6` stays on the previous tree.
+`two-key` is beta (pre-1.0). Package version 0.7.3, tag `v0.7.3` on `main`. What each release
+shipped is under "Shipped" in [ROADMAP.md](../ROADMAP.md); tags and branches are in
+[AGENTS.md](../AGENTS.md).
 
 It has:
 
@@ -34,7 +39,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
 - a capability key outside the ledger directory. The gateway verifies
   tokens with the public half only. It runs in the `TwoKey` process on the
   `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process
-  or on another host is not supported (#45), and there is no gateway-only
+  or on another host is not supported, by design ([why](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)), and there is no gateway-only
   ledger role
 - a single-use token and a gateway intended to be the only component that
   invokes registered tools; this does not stop an agent from calling a
@@ -90,6 +95,15 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   `two-key siem-verify` checks a file against the ledger. The gateway also
   counts tokens it refuses without a ledger entry, by class, rate-limited,
   with no token text (docs/SIEM.md). It is not a SIEM and it does not alert
+- in 0.7.3: `two-key setup` and `two-key config set`, `get`, `undo`, `show`
+  and `check` (docs/SETUP.md). A change is checked as a whole before it is
+  written, a weaker one needs a typed yes, a signed one needs the principal
+  key, and each is recorded in the ledger as `config_changed` with no
+  values. A principal key can be encrypted with a passphrase. A signed
+  `serial` orders constitutions: once a ledger has run one, it refuses an
+  older, reused, or missing serial. The start-up checks also look at the
+  upstream server's files named in `upstream.command` and
+  `upstream.check_paths` (#13)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),

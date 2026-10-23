@@ -1,0 +1,8 @@
+{
+  "name": "two-key-diagrams",
+  "private": true,
+  "description": "mermaid-cli for .github/workflows/diagrams.yml. package-lock.json pins every package with its integrity hash; the workflow installs it with npm ci.",
+  "dependencies": {
+    "@mermaid-js/mermaid-cli": "11.4.2"
+  }
+}

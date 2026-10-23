@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """#58 on the command line: --witness-public-key on authorize, rotate-witness, and audit."""
 
 import io
@@ -31,7 +34,7 @@ class CliWitness(unittest.TestCase):
         self.witness_pub = self.dir / "ledger.witness" / "witness.pub.pem"
         self.pin = self.dir / "pins" / "witness.pub.pem"     # the operator's copy, outside the ledger's reach
 
-    def cli(self, *argv):
+    def cli(self, *argv):  # skipcq: PYL-R0201 - test only
         judges = [FixedJudge("a", "yes", provider="p0"), FixedJudge("b", "yes", provider="p1")]
         out, err = io.StringIO(), io.StringIO()
         with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=2))), \

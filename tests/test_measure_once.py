@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Arguments are encoded once per authorize and once per gateway call; the cap still measures UTF-8 compact JSON."""
 
 import json
@@ -47,7 +50,7 @@ class EncodedOnce(unittest.TestCase):
                          verify_signed(env, key.public_key()), [FixedJudge("a", "yes")], private_key=key,
                          quorum=QuorumPolicy(required_yes=1), allow_test_doubles=True, monitored_agent=TEST_AGENT)
 
-    def count_arg_encodings(self, fn, args):
+    def count_arg_encodings(self, fn, args):  # skipcq: PYL-R0201 - test only
         real = canonical_mod.canonical_bytes
         seen = []
 

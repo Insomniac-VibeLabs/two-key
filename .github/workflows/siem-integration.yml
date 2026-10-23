@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 # The 0.7.0 SIEM copy against a real collector: Elasticsearch and Kibana in Docker, with the example
 # receiver in front of them (examples/siem/elastic/). Manual and weekly, never a required check: it
 # pulls two large images and depends on a registry, which a pull request must not.
@@ -24,9 +27,14 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - name: Install Two-Key
+      - name: Install Two-Key's dependencies from uv.lock
+        # With their hashes. Two-Key itself runs from the checkout (PYTHONPATH), so nothing is built.
         working-directory: .
-        run: pip install -e ".[yaml]"
+        run: |
+          pip install --require-hashes --only-binary :all: -r .github/requirements/uv.txt
+          uv export --quiet --locked --no-dev --extra yaml --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/runtime.txt"
+          pip install --require-hashes --only-binary :all: -r "$RUNNER_TEMP/runtime.txt"
+          echo "PYTHONPATH=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
       - name: Certificates
         run: sh make-certs.sh
       - name: Start Elasticsearch and Kibana

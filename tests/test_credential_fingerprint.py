@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Credential fingerprints: whitespace is stripped first, and the hash is an HMAC under a per-install key."""
 
 import hashlib

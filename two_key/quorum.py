@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """
 Two-Key: Path B, the multi-model intent quorum
 =====================================================
@@ -492,8 +495,9 @@ def convene(
         return result(False, "cloud_judge_reused_agent_session", counted=False)
     if any(getattr(j, "is_cloud", lambda: False)() for j in judges) and not agent_session:
         return result(False, "cloud_judge_session_required")
-    if any((b.error or "").startswith("cloud_judge_") for b in ballots):
-        return result(False, next(b.error for b in ballots if (b.error or "").startswith("cloud_judge_")))
+    cloud_error = next((b.error for b in ballots if (b.error or "").startswith("cloud_judge_")), None)
+    if cloud_error is not None:
+        return result(False, cloud_error)
     # Availability floor K (min_responding): below it, deny WITHOUT counting.
     if len(responding) < k_floor:
         return result(False, f"insufficient_responses:{len(responding)}<{k_floor}", counted=False)

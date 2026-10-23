@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Two-Key
 
 **AI agent authorization and MCP gateway — dual-path policy + judge approval, single-use capability tokens, and an encrypted ledger.**
@@ -62,14 +68,16 @@ What you get:
   that is down never blocks a decision.
 - **Keys you can recover.** Passphrase backup of every key, in three
   bundles.
-- **Small on purpose.** Python 3.10 or later, one required dependency
+- **Small on purpose.** Python 3.10 to 3.14, one required dependency
   (`cryptography`), Apache-2.0.
 
-**Status:** beta. 0.7.0 is the current release: it adds the SIEM export, a
-start-up check that refuses to run when the monitored agent is Two-Key's own
-account, and a count of the tokens the gateway refuses. 0.6.0 added Windows
-support, content scanning with your antivirus or DLP product, and a start-up
-check for paths another account could change.
+**Status:** beta. 0.7.3 is the current release: it adds `two-key setup` and
+`two-key config set`, `get`, `undo` and `check` for setting up and changing a
+deployment, a signed serial so a ledger never goes back to older rules, and
+start-up checks for the upstream server's files behind a launcher. 0.7.0
+added the SIEM export, a start-up check that refuses to run when the
+monitored agent is Two-Key's own account, and a count of the tokens the
+gateway refuses.
 Maintainer-reviewed and tested with live LLM agents and judges. Read
 [Known limits](#known-limits) and [docs/FIT.md](docs/FIT.md) before you rely
 on it.
@@ -93,14 +101,13 @@ on it.
 
 ## Quick start
 
-Install 0.7.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
+Install 0.7.3 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 
 ```bash
-pip install "two-key[yaml]==0.7.0"
+pip install "two-key[yaml]==0.7.3"
 ```
 
-Tag `v0.7.0` was not moved. It is the git snapshot from before this
-packaging, not a second release.
+Tag `v0.7.3` on `main` is the same code.
 
 Or run the offline demo from a clone. It uses test-double judges, so it
 needs no API keys:
@@ -122,7 +129,7 @@ around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp]==0.7.0"
+pip install "two-key[mcp]==0.7.3"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -146,7 +153,7 @@ flowchart LR
   hooks -. "look facts up" .-> sor
 ```
 
-`two-key mcp-draft-specs` drafts the tool specs from the server's own
+`two-key setup` writes a first deployment; `two-key config set`, `get`, and `undo` change one setting at a time, checked and recorded in the ledger, and `config key-passphrase` encrypts the principal key ([SETUP](docs/SETUP.md)). `two-key config check --config proxy.yaml` says whether the proxy would start, and `config show` prints the settings it resolves to; both are read-only (HOWTO "Look at a config without starting the proxy"). `two-key mcp-draft-specs` drafts the tool specs from the server's own
 schemas for you to review and sign. The walkthrough, with a worked
 example, is HOWTO
 ["Put Two-Key in front of an MCP server"](docs/HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).
@@ -166,6 +173,8 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [docs/FIT.md](docs/FIT.md) | Whether Two-Key is the right control for you |
 | [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
 | [docs/CONNECTING.md](docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
+| [docs/SETTINGS.md](docs/SETTINGS.md) | Every setting: its file, default, what `high_assurance` does to it, and who may change it |
+| [docs/SETUP.md](docs/SETUP.md) | `two-key setup` for a first deployment, `config set`, `get`, and `undo` to change one setting, and `config key-passphrase` to encrypt the principal key: who may run them, what they check, and what they refuse |
 | [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
 | [docs/SIEM.md](docs/SIEM.md) | Sending the ledger to a SIEM, and checking a copy against it (0.7.0) |
 | [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
@@ -175,6 +184,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [ROADMAP.md](ROADMAP.md) | The path to 1.0 |
 | [CHANGES.md](CHANGES.md) | Every change, with upgrade notes |
 | [SECURITY.md](SECURITY.md) | How to report a vulnerability |
+| [docs/UPGRADING.md](docs/UPGRADING.md) | Upgrading to a new version and keeping your keys and ledger |
 | [docs/PYPI.md](docs/PYPI.md) | Registering the package name and publishing a release |
 
 ## Components
@@ -183,7 +193,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 - **Policy Enforcer (Path A)**: Deterministic bytecode policy VM. It evaluates structured fields derived from the argument bytes according to the signed tool specs. It does not read free text or English.
 - **Judge (Path B)**: Trusted AI agent (local or cloud, preferably suited to the use case). It scores the normalized action record (and optionally the proposal). It has no direct access to any registered tool.
 - **Monitored Agent**: The untrusted agent under constraint. It proposes actions; it has no direct access to any registered tool.
-- **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported (#45). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
+- **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported, by design ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
 - **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
 - **MCP proxy** (0.5.0; the `mcp` extra): `two-key mcp-proxy` sits between an MCP client and one upstream MCP server. It shows the agent only the signed tools, pins their schemas, and runs every `tools/call` through both keys and the in-process gateway. `two-key mcp-draft-specs` drafts the tool specs for the principal to review and sign. See HOWTO "Put Two-Key in front of an MCP server".
 - **SIEM export** (0.7.0): the ledger can copy each entry, as
@@ -293,9 +303,9 @@ flowchart TD
   derive --> pathA["Path A<br/>Policy VM"]
   bytecode --> pathA
 
-  derive --> pbCheck{"derive_failed:<br/>and no<br/>tool_args_on_<br/>derive_deny?"}
-  pbCheck -->|yes| skipped["Path B<br/>skipped"]
-  pbCheck -->|no| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
+  derive --> pbCheck{"Unreadable call:<br/>do judges get the<br/>raw arguments?"}
+  pbCheck -->|"no"| skipped["Path B skipped<br/>= deny, no token"]
+  pbCheck -->|"yes, or the call<br/>was readable"| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
   judgeText --> pathB
 
   pathA --> gate{"Both paths<br/>allow?"}
@@ -315,6 +325,13 @@ flowchart TD
 
   ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
 ```
+
+A call that could not be read under its signed spec (`derive_failed:`) is already
+denied by Path A. Unless `tool_args_on_derive_deny` is set, the judges are not shown
+its raw arguments (nor when a scan flag withholds them and `tool_args_on_scan_flag`
+is not set), so they are not asked: Path B is skipped and ledgered as
+`skipped:derive_failed`. A skipped Path B counts as not passing, so the call is
+denied and no token is issued.
 
 `MonitoredAgent.complete` sends the constitution prose and the instruction.
 It does not receive Path A bytecode, judge credentials, or tool
@@ -447,8 +464,8 @@ sequenceDiagram
   end
   TwoKey->>PathA: structured fields (after optional scan / derive)
   PathA-->>TwoKey: allow or deny
-  alt derive_failed and not tool_args_on_derive_deny
-    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed)
+  alt unreadable call, judges get no arguments
+    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed), so the call is denied
     TwoKey->>Ledger: proposal, path_a, path_b skipped
   else
     TwoKey->>PathB: action record and binding hashes
@@ -497,8 +514,8 @@ or changed key refuses to start. Its fingerprint is recorded in
 
 The gateway runs in the `TwoKey` process, on the ledger object `TwoKey`
 uses. Build it with `TwoKey.gateway()`. A gateway in another process or on
-another host is not supported
-([#45](https://github.com/Insomniac-VibeLabs/two-key/issues/45)):
+another host is not supported, by design
+([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)):
 a `Ledger` opened elsewhere does not see tokens issued after it opened, so
 it refuses them, and it would hold the principal, witness, and ledger keys
 anyway. A gateway built on a ledger no `TwoKey` in the process opened emits
@@ -605,7 +622,8 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 The MCP adapter shipped in 0.5.0; Windows support, DLP and antivirus hooks,
 and judge connection reuse shipped in 0.6.0. The ledger export for a SIEM
-shipped in 0.7.0; a public review and the 1.0 release come next.
+shipped in 0.7.0, and the setup and change commands and the signed serial
+in 0.7.3; a public review and the 1.0 release come next.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
@@ -615,7 +633,8 @@ flowchart LR
   r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
   r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
-  r07 --> r10["1.0.0<br/>Review and release"]
+  r07 --> r073["0.7.3<br/>Setup and config<br/>commands<br/>Released"]
+  r073 --> r10["1.0.0<br/>Review and release"]
   r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
 ```
 
@@ -625,23 +644,28 @@ flowchart LR
 | 0.5.0 | MCP proxy and spec drafter, caller-supplied facts, the guard core | Released, tag `v0.5.0` |
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners (ClamAV, ICAP products, a command, Python); judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Released, tag `v0.7.0` |
+| 0.7.3 | `two-key setup` and `config set`, `get`, `undo`, `show` and `check`; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13) | Released, tag `v0.7.3` |
 | 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). Version 0.7.0 is on PyPI. It is this beta, not
-the 1.0 community review. Tag `v0.7.0` is not moved.
+three (HOWTO "Platforms"). Version 0.7.3 is on PyPI. It is this beta, not
+the 1.0 community review. Tags are not moved.
 
 ```bash
-pip install "two-key[yaml]==0.7.0"
+pip install "two-key[yaml]==0.7.3"
 ```
 
-`v0.7.0` adds the ledger export for a SIEM, a start-up check for the account
-the monitored agent runs as, and a count of the tokens the gateway refuses.
+`v0.7.3` adds `two-key setup` and the `config` commands, a principal key
+encrypted with a passphrase, a signed serial so a ledger never goes back to
+older rules, and start-up checks for the upstream server's files.
 `main` holds that release and the fixes merged since; `working` is where the
-next changes land. For the previous release, use `@v0.6.0`: Windows support,
+next changes land. `@v0.7.0` is the ledger export for a SIEM, a start-up
+check for the account the monitored agent runs as, and a count of the tokens
+the gateway refuses. PyPI's `0.7.1` and `0.7.2` are the 0.7.0 code,
+repackaged. For the release before, use `@v0.6.0`: Windows support,
 content scanning that calls your antivirus or DLP product (ClamAV, ICAP, a
 command, or Python), a start-up check for paths another account could
 change, and judge connection reuse. `@v0.5.0` is the MCP proxy, the spec
@@ -660,7 +684,7 @@ Upgrading from an older version: read the "Upgrading" notes in
   from 0.1.12" from older versions).
 - 0.2.4 writes a head anchor on the first open of an existing ledger and
   refuses a rolled-back ledger directory: "Upgrading from 0.2.3".
-- 0.3.0 adds key backup, custom Path A fields, and `TwoKey.gateway()` (#45).
+- 0.3.0 adds key backup, custom Path A fields, and `TwoKey.gateway()` ([why it stays in process](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
   Existing ledgers and constitutions open unchanged: "Upgrading from
   0.2.4". A constitution that declares custom fields signs as v2, which
   installs before 0.3.0 refuse: "Custom Path A fields" > "Upgrading".
@@ -686,12 +710,18 @@ Upgrading from an older version: read the "Upgrading" notes in
   refuses to start, and the proxy refuses to start when the monitored agent
   runs as Two-Key's own account or can change Two-Key's files. "Release
   v0.7.0" > "Upgrading from 0.6.0" in CHANGES.md.
+- 0.7.3 loads 0.7.0 constitutions, ledgers, keys, and `proxy.yaml` files
+  unchanged. Check before upgrading: the proxy now checks the upstream
+  server's files named in `upstream.command` and warns (under
+  `high_assurance`, refuses) when a launcher such as `sudo` or `npx` hides
+  them, and once a ledger has run a constitution with a `serial` it refuses
+  an older one. "Release v0.7.3" > "Upgrading from 0.7.0" in CHANGES.md.
 
 A clone installed with `pip install -e` follows the ranges in
 `pyproject.toml`. CI does not: it installs the versions in `uv.lock`
 (cryptography, PyYAML, the MCP SDK for the `mcp` extra, and their
 dependencies), wheels only. To match CI, use the uv version pinned in
-`.github/workflows/tests.yml`:
+`.github/requirements/uv.in`:
 
 ```bash
 pip install --only-binary :all: "uv==0.13.0"

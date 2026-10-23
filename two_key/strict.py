@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Strict parsers for every JSON and YAML document two-key reads.
 
 A repeated key is refused, never resolved last-one-wins: with two values,

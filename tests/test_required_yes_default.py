@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Re-review: required_yes defaults to None and resolves to min(2, n) in TwoKey and the loader,
 so one judge plus a timeout starts. parallel stays True."""
 

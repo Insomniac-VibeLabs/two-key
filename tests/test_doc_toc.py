@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Each long document has a table of contents that matches its headings, with GitHub's anchors.
 
 After adding, renaming, or moving a heading, regenerate them:
@@ -15,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # CONTRIBUTING) have none.
 DOCS = {"README.md": 2, "ROADMAP.md": 3, "CHANGES.md": 2, "AGENTS.md": 2, "docs/HOWTO.md": 3,
         "docs/THREAT_MODEL.md": 2, "docs/JUDGES_AND_QUORUM.md": 2, "docs/FIT.md": 2, "docs/SCANNERS.md": 2,
-        "docs/CONNECTING.md": 2, "docs/SIEM.md": 2}
+        "docs/CONNECTING.md": 2, "docs/SIEM.md": 2, "docs/SETTINGS.md": 2, "docs/SETUP.md": 3}
 TITLE = "Contents"
 START, END = "<!-- toc -->", "<!-- /toc -->"
 FENCE = re.compile(r"^\s*(```|~~~)")

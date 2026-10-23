@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The reference scanner adapters (0.6.0): clamd, ICAP, a command, and a Python hook.
 
 Fake clamd and ICAP servers run on 127.0.0.1 inside the tests; nothing leaves the machine. The EICAR test
@@ -80,6 +83,13 @@ class ClamdHandler(socketserver.BaseRequestHandler):
             data += recv_exact(sock, size)
             if len(data) > server.limit:
                 sock.sendall(b"INSTREAM size limit exceeded. ERROR\0")
+                # Read what the client is still sending before closing: on Windows, a socket closed with
+                # unread data resets the connection, and the reset can discard the reply before it is read.
+                sock.shutdown(socket.SHUT_WR)
+                sock.settimeout(5)
+                with contextlib.suppress(OSError):
+                    while sock.recv(65536):
+                        pass
                 return
         server.streams.append(data)
         if server.hang:
@@ -262,7 +272,7 @@ class Icap(unittest.TestCase):
         self.assertIn("X-Two-Key-Tool: send_email", lines)
         self.assertIn("X-Two-Key-Part: file:attachments[0].content", lines)
         offsets = dict(item.split("=") for item in
-                       next(x for x in lines if x.startswith("Encapsulated:"))[14:].split(", "))
+                       next(x for x in lines if x.startswith("Encapsulated:"))[14:].split(", "))  # skipcq: PTC-W0063 - test only
         http_head = rest[int(offsets["req-hdr"]):int(offsets["req-body"])]
         self.assertTrue(http_head.startswith(b"POST /two-key/send_email/"))
         self.assertTrue(http_head.endswith(b"Content-Length: 5\r\n\r\n"))

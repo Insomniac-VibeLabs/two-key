@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The SIEM sinks (0.7.0): syslog over UDP, TCP, and TLS, and an HTTPS webhook.
 
 Every collector here runs on 127.0.0.1 inside the test, with a throwaway certificate authority

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Paths another account could change, checked when Two-Key starts (0.6.0).
 
 Two-Key's process holds the minting, principal, witness, and ledger keys, and runs the code it imports:
@@ -9,8 +12,9 @@ at those paths, and the folders above them, and names each one an account other 
 
 This finds a setup mistake (a virtualenv, a checkout, or a config file the agent's user can write). It is
 not a defence against code that has already been changed, and it cannot see everything: the wrapper that
-started the process, the upstream server's own files behind ``sudo``, or a group whose members are only
-trusted accounts. A clean start is not proof; docs/CONNECTING.md is the checklist.
+started the process, the upstream server's files that no absolute argument of ``upstream.command`` or
+``upstream.check_paths`` names (the proxy passes those, #13), what is inside a named folder, or a group
+whose members are only trusted accounts. A clean start is not proof; docs/CONNECTING.md is the checklist.
 
 ``on_writable_paths``: ``warn`` (the default) names each path on stderr and starts; ``refuse`` does not
 start. ``high_assurance`` refuses, and does not accept ``warn``. There is no setting that turns it off.
@@ -126,14 +130,30 @@ def _import_path_targets(entry: object) -> list[tuple[str, str]]:
     return targets
 
 
+def _module_paths(module: object) -> list[object]:
+    """A loaded module's file and compiled file, as ``__file__`` and ``__cached__`` and as its spec names
+    them. Python 3.15 no longer sets ``__cached__``, so the compiled file is named only by
+    ``__spec__.cached`` there; reading both keeps a ``__pycache__`` folder from going unchecked."""
+    values = [getattr(module, "__file__", None), getattr(module, "__cached__", None)]
+    spec = getattr(module, "__spec__", None)
+    if spec is not None:
+        if getattr(spec, "has_location", False):
+            values.append(getattr(spec, "origin", None))
+        try:
+            values.append(spec.cached)
+        except (AttributeError, NotImplementedError):    # a spec that is not a ModuleSpec, or no cache tag
+            pass
+    return values
+
+
 def _module_targets(module: object) -> list[tuple[str, str]]:
     """A loaded module's file and compiled file, each with its folder."""
     targets: list[tuple[str, str]] = []
-    for attr in ("__file__", "__cached__"):
-        value = getattr(module, attr, None)
+    for value in _module_paths(module):
         if isinstance(value, str) and value:
-            targets.append((value, "file"))
-            targets.append((os.path.dirname(os.path.abspath(value)), "folder"))
+            for target in ((value, "file"), (os.path.dirname(os.path.abspath(value)), "folder")):
+                if target not in targets:
+                    targets.append(target)
     return targets
 
 

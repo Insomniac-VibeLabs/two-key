@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Regression: a local 'a' voting no plus a cloud 'a' voting yes was quorum_pass (ballots keyed by id)."""
 
 import tempfile

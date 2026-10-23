@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Open issues fixed in 0.2.3: #47, #48, #51, #52 (auth keys), #54, #57, #60 items 1 and 5.
 
 #52's merge keys are in test_strict_parsing.py; #56 is a workflow change.

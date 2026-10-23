@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """No raw bidirectional control characters in the repository's text files (Trojan Source, CVE-2021-42574).
 
 A test that needs one writes it as an escape (``"\\u202e"``), so the source reads the same in every editor and

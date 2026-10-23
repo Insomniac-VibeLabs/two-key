@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """save_envelope (sign-constitution --out) writes a new file and renames it over the target (0.6.0): a reader
 never sees half a constitution, and a link at the target is replaced, not written through."""
 

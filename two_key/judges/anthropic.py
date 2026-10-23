@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Anthropic Messages API judge (POST {base_url}/v1/messages).
 
 The static system prompt and the principal's constitution are marked with an
@@ -31,7 +34,8 @@ class AnthropicJudge(LLMJudge):
         h["anthropic-version"] = ANTHROPIC_VERSION
         return h
 
-    def _content(self, user: str) -> list:
+    @staticmethod
+    def _content(user: str) -> list:
         if _CONSTITUTION_END in user:
             trusted, rest = user.split(_CONSTITUTION_END, 1)
             trusted += _CONSTITUTION_END

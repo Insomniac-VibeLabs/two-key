@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """A call carries a set of data classes, not an invented one.
 
 public < personal < {financial, medical} < classified. financial and medical are kinds of personal data;

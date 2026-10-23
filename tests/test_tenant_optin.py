@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """allow_same_model_distinct_tenant: deprecated, no effect (2026-10-08).
 
 A judge is refused when it uses the monitored agent's credential, at any address, so nothing is left for the
@@ -40,7 +43,7 @@ class Compare(unittest.TestCase):
         os.environ["OPTIN_AGENT_KEY"] = "agent-key-K"
         self.addCleanup(os.environ.pop, "OPTIN_AGENT_KEY", None)
 
-    def verdict(self, agent, j, flag):
+    def verdict(self, agent, j, flag):  # skipcq: PYL-R0201 - test only
         a = AgentDeclaration.from_mapping(agent).resolve(fp_key=FP)
         return compare(a, judge_identity(j, FP), allow_same_model_distinct_tenant=flag)
 

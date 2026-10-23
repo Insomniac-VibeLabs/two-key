@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Guard: one call that authorizes and runs a tool through both keys, with caller-supplied facts.
 
 Usable from any agent loop (LangChain, the OpenAI Agents SDK, custom code) and used by the MCP proxy. For each
@@ -131,8 +134,7 @@ class Guard:
         """Append one ledger entry (an integration's own record, such as ``mcp_proxy_started``) under the
         guard's lock, so it never interleaves with a call."""
         with self._lock:
-            self.two_key.ledger.append_bounded(kind, body)
-            self.two_key.ledger.checkpoint()
+            self.two_key.ledger.record(kind, body)
 
     def tool(self, name: str, *, claim: str = "none", facts: Mapping[str, FactHook] | None = None,
              proposal: str | None = None):

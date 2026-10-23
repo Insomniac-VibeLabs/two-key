@@ -1,20 +1,16 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Threat model
 
-This is the design model for `two-key` 0.7.0. Tag `v0.7.0` on `main` is the tagged release; `v0.6.0` and `v0.5.0` are the ones before, and `v0.4.0` renamed the package and its formats. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`. 0.3.1 adds agent declines, a syntax-only agent vocabulary, and data classes that combine as a set. Tag `v0.2.4` stays on `fc836bb`. Tag `v0.2.3` stays on `4a4352e`. `v0.2.0` stays on `2f756ac`. 0.3.0 adds passphrase backup of this package's own keys, in three bundles. 0.2.4 adds a head anchor outside the ledger directory (#62) and `two-key recover` for an uncheckpointed tail (#49). 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
-0.7.0 adds the SIEM export (`two_key/siem.py`,
-`two_key/siem_sinks.py`, `two_key/siem_export.py`): an optional live copy of each ledger
-entry to a syslog or webhook collector, the `two-key siem-export` and `two-key siem-verify`
-commands, and a rate-limited count of tokens the gateway refuses without a ledger entry,
-all described below.
-0.6.0 adds Windows support (`two_key/_platform.py`), optional content scanning through the
-operator's antivirus or DLP product (`two_key/scan.py`), a start-up check for paths another
-account could change (`two_key/writable.py`), and judge connection reuse, described below.
-0.5.0 adds the MCP proxy (`two-key mcp-proxy`), the spec drafter
-(`two-key mcp-draft-specs`), caller-supplied facts (`source: caller`, constitution v3), and the
-guard core (`two_key/guard.py`), described below, and the run 6 follow-ups: every tool decides
-each field a rule reads (`not_applicable`), `case: exact` fields, `@domain` allow entries, no
-judges for a call that cannot be read, and warnings for one judge that can approve alone and
-for an undescribed payee or amount in a draft.
+This is the design model for `two-key` 0.7.3 (tag `v0.7.3` on `main`). What each
+release added to the model is under [Changes by release](#changes-by-release) at the end of
+this page. Tags and branches are in [AGENTS.md](../AGENTS.md), and the full history is
+[CHANGES.md](../CHANGES.md).
+
 It is not a penetration test and it is not an independent review. The package is
 beta (pre-1.0): maintainer-reviewed with live LLM testing and automated
 scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
@@ -36,13 +32,17 @@ the code wins, then this file should be corrected.
 - [Out of scope](#out-of-scope)
 - [Planned changes to this model](#planned-changes-to-this-model)
 - [What to re-check when the code changes](#what-to-re-check-when-the-code-changes)
+- [Changes by release](#changes-by-release)
 <!-- /toc -->
 
 ## Assets
 
 - The signed constitution and the two compilation hashes (bytecode and prose).
 - The principal signing key. It signs the constitution and the ledger head.
-  It does not sign capability tokens.
+  It does not sign capability tokens. It may be encrypted with a passphrase
+  (`two-key config key-passphrase`): then a copy of `principal.pem` alone
+  does not sign, but Two-Key's own account, which reads both the key and
+  `keys.passphrase_file` so the proxy can start unattended, still can.
 - The capability private key, outside the ledger directory
   (`<ledger>.capability/capability.pem`). `TwoKey` mints with it. The
   gateway's verifier holds only the public half. This is key separation
@@ -50,7 +50,7 @@ the code wins, then this file should be corrected.
   process on the `TwoKey` ledger object (`TwoKey.gateway()`), which holds
   the principal, witness, and ledger keys, and the minting key is in the
   same process. A gateway in another process or on another host is not
-  supported (#45).
+  supported, by design ([why](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
 - The ledger key and the witness key, both outside the ledger directory
   (`<ledger>.ledger-key` and `<ledger>.witness`).
 - The witness public key the operator keeps outside the ledger
@@ -93,8 +93,10 @@ the code wins, then this file should be corrected.
 - The SIEM cursor (`<ledger>.siem/cursor.json`, or `cursor_path=`), outside
   the ledger directory. It is not secret and it is not part of the hash
   chain. Whoever can change or delete it decides which entries are copied
-  again or not at all; a repeated or missing copy is still caught by
-  `two-key siem-verify` against the ledger.
+  again or, by deleting it, not at all; a repeated or missing copy is still caught by `two-key siem-verify`
+  against the ledger. A cursor past the ledger's last entry, or one that
+  names an entry this ledger does not have, is not trusted: the proxy warns
+  and sends the whole ledger again, marked `replay` (live run 9x, C140).
 - An exported event file (`two-key siem-export --out`). It is decrypted
   ledger metadata, written as a new owner-only file. It holds no argument
   value, no proposal text, and no key.
@@ -118,6 +120,33 @@ the code wins, then this file should be corrected.
   answer from it changes an authorization.
 
 ## Trust boundaries
+
+The picture shows who sits on which side of a boundary. The bullets below take each crossing in turn.
+
+```mermaid
+flowchart TD
+  subgraph untrusted["Untrusted"]
+    agent["Monitored agent<br/>and its host"]
+  end
+  subgraph tkzone["Two-Key account"]
+    tk["Two-Key<br/>Path A, Path B,<br/>ledger, gateway"]
+  end
+  subgraph services["Services Two-Key calls"]
+    judges["Judges<br/>their own credentials"]
+    scanner["AV or DLP scanner"]
+    siem["SIEM collector"]
+  end
+  subgraph toolzone["Tool zone"]
+    tool["Tool or upstream server<br/>holds the credential"]
+  end
+  agent -- "the only door:<br/>a tool call" --> tk
+  tk -- "after both keys" --> tool
+  tk -. "action record" .-> judges
+  tk -. "parts to scan" .-> scanner
+  tk -. "allowlisted copy" .-> siem
+```
+
+*In a correct deployment the agent reaches Two-Key and nothing else. The solid lines are what the agent's call sets in motion; the dashed lines are Two-Key's own calls to the judges, the scanner and the SIEM, which the agent must not be able to reach.*
 
 - Caller to the monitored agent. The agent gets the system prompt, the
   constitution prose, the instruction, and, only when the caller passes
@@ -259,6 +288,14 @@ the code wins, then this file should be corrected.
   one local judge, and a yes from a local judge;
   `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag
   is still not a skip. `min_distinct_providers` still defaults to 1.
+- An older constitution put back. A constitution signed by the principal
+  stays valid forever, so a copy of an older one (with fewer rules) would
+  start. With a signed `serial` in the rules file, a ledger that has run
+  serial N refuses a lower serial, N again with other rules, and a
+  constitution with no serial (live run 9x, C44), also when two proxies
+  start at once on one ledger (run 9y, S6c). It does not help a
+  deployment that has never signed a serial, nor an attacker who holds the
+  principal key, who can sign anything.
 - A judge is not the monitored agent: `TwoKey` refuses to start when a
   judge holds the agent's credential (the same API token, or the same
   username and password) at any address, whether or not either side sends
@@ -382,8 +419,12 @@ claims to close.
   Two-Key names, at start, each file or folder it runs or reads that
   another account could change (`writable_path`), and refuses under
   `high_assurance` or `on_writable_paths: refuse`. That catches a setup
-  mistake; it cannot see the wrapper that started it or the upstream's
-  files, and code already changed has already run.
+  mistake; it cannot see the wrapper that started it, the upstream's
+  files that no absolute argument of `upstream.command` or
+  `upstream.check_paths` names, or what is inside a named folder, and code
+  already changed has already run. A launcher (`sudo`, `npx`, and the like)
+  with nothing named warns `upstream_paths_unchecked`, and refuses under
+  `high_assurance`.
 - MCP proxy (0.5.0):
   - An agent that can reach the upstream server directly, or holds its
     credential, bypasses the proxy entirely. The proxy cannot see or stop
@@ -510,7 +551,7 @@ claims to close.
   key remains on the shared ledger object because the ledger head needs it.
   A token signed with the principal key fails `bad_signature`. The gateway
   is not a separate process or host, and a split gateway is not supported
-  (#45): it shares the `TwoKey` process and ledger object. Registered tools
+  by design ([why](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)): it shares the `TwoKey` process and ledger object. Registered tools
   run in that process, so a compromised tool or dependency can read the
   minting key and the principal, witness, and ledger keys. Do not treat the
   implementation as providing process-level isolation. A gateway built on a
@@ -525,7 +566,9 @@ claims to close.
   configured outside the ledger: the in-ledger pin is part of the chain, and
   those two keys can rewrite the chain from its first entry, pin included,
   under a new witness key. With the out-of-ledger pin, forging a head needs
-  the principal, witness, and ledger keys together (#58). There is no
+  the principal, witness, and ledger keys together (#58). An encrypted
+  principal key adds its passphrase to that list for a stolen copy of the
+  file, not for an attacker on Two-Key's account. There is no
   external anchor, so those keys are enough to rewrite a ledger that never
   leaves the machine.
 - Trust on first use: a ledger from 0.2.2 or earlier pins the witness key
@@ -644,7 +687,8 @@ claims to close.
   - A collector that is down never blocks a decision, so the copy can be
     minutes or hours behind, and an operator watching only the SIEM is
     watching a stale view. Delivery resumes from the cursor and marks late
-    events `replay`. A deleted cursor file re-sends or skips; a full queue
+    events `replay`. A deleted cursor file starts from `replay_from`; a cursor
+    ahead of the ledger, or from another ledger, re-sends it all; a full queue
     drops the oldest and says so on stderr.
   - The refused-token counts are in memory. A restart loses the current
     window, and the counts are a volume signal only: no source address, no
@@ -788,4 +832,47 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
 - `two_key/mcp_proxy/`: only `sdk.py` imports the MCP SDK. Each `tools/call` runs `authorize`, then `gateway.invoke` in the same process; the upstream call is the gateway's registered tool, with projected arguments. Only signed tools are shown, under their signed ids; any other name is `tool_not_offered`, ledgered. Caller-supplied paths are removed from the `inputSchema` shown. `mcp_proxy_started` is ledgered before serving; if that fails, the proxy does not start. Fact hooks load at start; one that does not import refuses to start. The schema digest covers exactly the fields shown, as the upstream lists them (before caller paths are removed); a mismatch refuses unless `on_schema_change: warn`. `unresolved_identity` refuses unless `allow_unresolved_identity: true`. The claim is the per-tool policy only (`floor`, a class, or none = classified). The child gets `upstream.env` plus the SDK's minimal set. Nothing but MCP goes to stdout. `draft.py`: placeholders that signing refuses, fact-like properties left out, server text in ASCII comments only. `undescribed_inputs` warns, never refuses, for each input Path A reads that the upstream schema does not describe.
 - `two_key/_platform.py`: POSIX does exactly what it did before 0.6.0 (mode 0600 and 0700, `O_NOFOLLOW`, `flock`, the same messages). On Windows a key is created with a protected access list for the current user only, in `CreateFileW` itself; a key is accepted only when its owner and every allow entry with more than metadata access are the current user, SYSTEM, Administrators, or OWNER RIGHTS; a reparse point as the last part is refused; locks are `LockFileEx`; descriptors are binary. Every key read and write in the package goes through it, and every text file Two-Key writes uses `newline="\n"` and a named encoding (`tests/test_text_io.py`).
+- `two_key/config_set.py`, `two_key/setup_cmd.py`: a change is refused as root, and when a file it writes or its folder can be changed by another account or is a link; the whole changed config passes `config check` before anything is written, so what `high_assurance` forbids stays forbidden; a weaker change needs `--confirm-weaker` and a typed yes on a terminal; a signed change needs the principal key and the exact signed rules file, and the new envelope is verified; `config_changed` (names and digests, never values) is ledgered before the files are renamed in. `config key-passphrase` keeps no plain copy of the key, and removing the passphrase counts as weaker.
+- `two_key/keys.py`: an encrypted principal key is PKCS8 under AES-256-GCM, its key from PBKDF2-SHA256 at 600,000 iterations (a file asking for fewer is refused), the header bound in as associated data. A passphrase comes from an owner-only file or a terminal prompt, never argv or the environment, and the proxy never prompts. PBKDF2 is not memory-hard, so a passphrase is only as good as its length: 12 bytes is the floor, and a generated one is advised. It does not stop an account that can write the files from editing them by hand, and it cannot tell an agent that runs as Two-Key's own account from the operator.
 - `two_key/backup.py`: three bundles; the ledger key and the witness key are never in one file; a wrong passphrase or a tampered bundle is a refusal; restore writes `head.anchor` from the same moment as the ledger and does not delete it. `--replace-ledger` is the only path that overwrites a different ledger, and it also overwrites a key file that differs. A missing anchor on a newer ledger is left missing; the next open adopts that head.
+
+## Changes by release
+
+What each release added to the model, newest first. Each is described where it applies below.
+
+- 0.7.3: `two-key setup` and `two-key config set`, `get`, `undo`, `show` and `check`
+  (`two_key/setup_cmd.py`, `two_key/config_set.py`, `two_key/config_cmd.py`), with the
+  `config_changed` ledger entry; a principal key encrypted with a passphrase
+  (`two_key/keys.py`); a signed constitution `serial` and the start-up check that refuses an
+  older one (`check_constitution_order`, run again under the ledger's write lock); one hold of
+  that lock for each write and the checkpoint that signs it, on a shared ledger; and the
+  upstream server's files in the start-up checks (`upstream.check_paths`, #13).
+- 0.7.0: the SIEM export (`two_key/siem.py`, `two_key/siem_sinks.py`, `two_key/siem_export.py`),
+  an optional live copy of each ledger entry to a syslog or webhook collector, the
+  `two-key siem-export` and `two-key siem-verify` commands, and a rate-limited count of tokens
+  the gateway refuses without a ledger entry. Also a start-up check
+  (`two_key/agent_access.py`) that refuses to start when the monitored agent runs as
+  Two-Key's own account or can write its files.
+- 0.6.0: Windows support (`two_key/_platform.py`), optional content scanning through the
+  operator's antivirus or DLP product (`two_key/scan.py`), a start-up check for paths another
+  account could change (`two_key/writable.py`), and judge connection reuse.
+- 0.5.0: the MCP proxy (`two-key mcp-proxy`), the spec drafter (`two-key mcp-draft-specs`),
+  caller-supplied facts (`source: caller`, constitution v3), and the guard core
+  (`two_key/guard.py`). The run 6 follow-ups: every tool decides each field a rule reads
+  (`not_applicable`), `case: exact` fields, `@domain` allow entries, no judges for a call that
+  cannot be read, and warnings for one judge that can approve alone and for an undescribed
+  payee or amount in a draft.
+- 0.4.0: renamed the package and its formats.
+- 0.3.1: agent declines, a syntax-only agent vocabulary, and data classes that combine as a set.
+- 0.3.0: passphrase backup of this package's own keys, in three bundles.
+- 0.2.4: a head anchor outside the ledger directory (#62) and `two-key recover` for an
+  uncheckpointed tail (#49).
+- 0.2.3: pins the ledger's witness public key in the ledger and, optionally, outside it (#58),
+  refuses a judge that holds the monitored agent's credential whether or not it is sent and in
+  either form (token or username and password), and removes the `vendor` / `min_vendors`
+  aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt.
+- 0.2.2: changed when a judge counts as the monitored agent and added HTTP Basic auth.
+
+Tags: `v0.7.3`, `v0.7.0`, `v0.6.0` and `v0.5.0` are on `main`, with `v0.4.0` before them. Tags `v0.3.1` and
+earlier are in the archived `two-key-concept` repository. There, `v0.3.0` stays on `e44be56`,
+`v0.2.4` on `fc836bb`, `v0.2.3` on `4a4352e` and `v0.2.0` on `2f756ac`.

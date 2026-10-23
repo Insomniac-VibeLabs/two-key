@@ -1,6 +1,9 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Command line for Two-Key.
 
-  two-key init-key DIR
+  two-key init-key DIR [--passphrase | --passphrase-file FILE]
   two-key sign-constitution --key KEY --prose FILE --rules FILE --out FILE [--envelope-format auto|v2|v3]
   two-key authorize --key KEY --ledger DIR --constitution FILE --judges FILE --tool NAME
                     [--facts FILE] [--agent-session-env NAME] [--ttl-seconds N] [--emit-token PATH]
@@ -22,6 +25,16 @@
                     [--format json|cef] [--from-seq N] [--to-seq N]
   two-key siem-verify --key KEY --ledger DIR --events FILE [--require-complete]
   two-key mcp-proxy --config FILE
+  two-key config show|check --config FILE
+  two-key config get --config FILE SETTING
+  two-key config set --config FILE SETTING (VALUE | --value-file FILE | --prompt | --unset)
+                    [--confirm-weaker] [--key KEY --rules FILE]
+  two-key config undo --config FILE [--confirm-weaker] [--key KEY]
+  two-key config key-passphrase --config FILE (--new-from FILE | --remove) [--confirm-weaker]
+  two-key setup --dir DIR [--answers FILE]
+
+Every command that takes --key also takes --key-passphrase-file FILE for an encrypted key; without it, it
+asks on the terminal (docs/SETUP.md).
   two-key mcp-draft-specs (--out DIR | --constitution FILE) [--tool NAME]... [--env NAME[=VALUE]]... -- COMMAND...
   two-key demo [--siem FILE]
 
@@ -68,10 +81,11 @@ import sys
 from pathlib import Path
 
 from . import _platform
-from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, encrypted_pass_notes, load_unsigned_with_fields,
-                           save_envelope, sign_constitution)
+from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, encrypted_pass_notes, load_serial,
+                           load_unsigned_with_fields, save_envelope, sign_constitution)
 from .fields import case_warnings, not_applicable_notes
-from .keys import generate_private_key, load_private_key_file, load_public_key, save_private_key, save_public_key
+from .keys import (check_new_passphrase, generate_private_key, load_private_key_file, load_public_key, passphrase_source,
+                   prompt_passphrase, read_passphrase_file, save_private_key, save_public_key)
 from .policy_vm import ConstitutionError
 from .siem import FORMATS, SCHEMAS
 
@@ -80,7 +94,16 @@ def _init_key(args) -> int:
     key = generate_private_key()
     dest = Path(args.dir)
     try:
-        save_private_key(dest / "principal.pem", key)
+        passphrase = None
+        if args.passphrase_file:
+            passphrase = check_new_passphrase(read_passphrase_file(args.passphrase_file))
+        elif args.passphrase:
+            passphrase = prompt_passphrase(str(dest / "principal.pem"), new=True)
+    except ValueError as e:
+        print(f"two-key: init-key: refused: {e}", file=sys.stderr)
+        return 1
+    try:
+        save_private_key(dest / "principal.pem", key, passphrase=passphrase)
     except FileExistsError:
         print(f"refusing to overwrite {dest / 'principal.pem'}", file=sys.stderr)
         return 1
@@ -89,10 +112,15 @@ def _init_key(args) -> int:
     return 0
 
 
+def _key_passphrase(args):
+    """The passphrase for an encrypted ``--key``: ``--key-passphrase-file``, else a prompt on the terminal."""
+    return passphrase_source(getattr(args, "key_passphrase_file", None))
+
+
 def _principal_key(args):
     """The principal private key named by ``--key``. A refusal is one line, not a traceback."""
     try:
-        return load_private_key_file(args.key)
+        return load_private_key_file(args.key, _key_passphrase(args))
     except ValueError as e:
         raise SystemExit(f"--key: {e}") from None
 
@@ -107,7 +135,8 @@ def _sign(args) -> int:
         return 1
     try:
         prose, rules, specs, fields = load_unsigned_with_fields(args.prose, args.rules)
-        envelope = sign_constitution(prose, rules, key, specs, fields=fields, envelope_format=args.envelope_format)
+        envelope = sign_constitution(prose, rules, key, specs, fields=fields, envelope_format=args.envelope_format,
+                                     serial=load_serial(args.rules))
     except ConstitutionError as e:      # the principal's own file: say what is wrong, no traceback
         print(f"two-key: sign-constitution: refused: {e}", file=sys.stderr)
         return 1
@@ -398,6 +427,41 @@ def _mcp_proxy(args) -> int:
     return sdk.run(config)
 
 
+def _config_show(args) -> int:
+    from .config_cmd import run_show
+    return run_show(args)
+
+
+def _config_check(args) -> int:
+    from .config_cmd import run_check
+    return run_check(args)
+
+
+def _config_get(args) -> int:
+    from .config_set import run_get
+    return run_get(args)
+
+
+def _config_set(args) -> int:
+    from .config_set import run_set
+    return run_set(args)
+
+
+def _config_undo(args) -> int:
+    from .config_set import run_undo
+    return run_undo(args)
+
+
+def _config_key_passphrase(args) -> int:
+    from .config_set import run_key_passphrase
+    return run_key_passphrase(args)
+
+
+def _setup(args) -> int:
+    from .setup_cmd import run
+    return run(args)
+
+
 def _draft_env(items: list[str] | None) -> dict[str, str]:
     """``--env NAME`` passes the variable from this environment; ``--env NAME=VALUE`` passes a literal."""
     from .mcp_proxy.config import ENV_NAME
@@ -523,7 +587,8 @@ def _backup_export(args) -> int:
     from .backup import BackupError, export_backup
     try:
         result = export_backup(args.ledger, args.key, args.out, _passphrase_env(args),
-                               witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args))
+                               witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args),
+                               key_passphrase=_key_passphrase(args))
     except BackupError as e:
         print(json.dumps({"ok": False, "error": str(e)}, indent=2), file=sys.stderr)
         return 1
@@ -534,7 +599,8 @@ def _backup_export(args) -> int:
 def _backup_verify(args) -> int:
     from .backup import BackupError, verify_backup
     try:
-        result = verify_backup(args.bundles, _passphrase_env(args), witness_public_key=_witness_pin(args))
+        result = verify_backup(args.bundles, _passphrase_env(args), witness_public_key=_witness_pin(args),
+                               key_passphrase=_key_passphrase(args))
     except BackupError as e:
         print(json.dumps({"ok": False, "error": str(e)}, indent=2), file=sys.stderr)
         return 1
@@ -547,7 +613,7 @@ def _backup_restore(args) -> int:
     try:
         result = restore_backup(args.ledger, args.key, args.bundles, _passphrase_env(args),
                                 witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args),
-                                replace_ledger=args.replace_ledger)
+                                replace_ledger=args.replace_ledger, key_passphrase=_key_passphrase(args))
     except BackupError as e:
         print(json.dumps({"ok": False, "error": str(e)}, indent=2), file=sys.stderr)
         return 1
@@ -555,7 +621,10 @@ def _backup_restore(args) -> int:
     return 0
 
 
+_PROXY_CONFIG_HELP = "the proxy config file (YAML or JSON)"
 _KEY_HELP = "the principal private key (principal.pem from init-key, mode 0600); not principal.pub.pem"
+_KEY_UNLOCK_HELP = ("for an encrypted --key: a file only you can read holding its passphrase; without it, "
+                        "the passphrase is asked for on the terminal")
 _PASSPHRASE_HELP = "name of the environment variable holding this bundle's passphrase; not the passphrase"
 
 
@@ -568,11 +637,20 @@ _ANCHOR_HELP = ("monotonic head anchor outside the ledger directory (default <le
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="two-key")
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    def _add_key(parser, help=_KEY_HELP):
+        parser.add_argument("--key", required=True, help=help)
+        parser.add_argument("--key-passphrase-file", default=None, metavar="FILE", help=_KEY_UNLOCK_HELP)
     init = sub.add_parser("init-key")
     init.add_argument("dir")
+    protect = init.add_mutually_exclusive_group()
+    protect.add_argument("--passphrase", action="store_true",
+                         help="encrypt principal.pem with a passphrase typed twice on the terminal")
+    protect.add_argument("--passphrase-file", default=None, metavar="FILE",
+                         help="encrypt principal.pem with the passphrase in this file (only you can read it)")
     init.set_defaults(func=_init_key)
     sign = sub.add_parser("sign-constitution")
-    sign.add_argument("--key", required=True, help=_KEY_HELP)
+    _add_key(sign)
     sign.add_argument("--prose", required=True)
     sign.add_argument("--rules", required=True)
     sign.add_argument("--envelope-format", choices=ENVELOPE_FORMATS, default="auto",
@@ -586,7 +664,7 @@ def main(argv: list[str] | None = None) -> int:
                            "over a signed constitution")
     sign.set_defaults(func=_sign)
     auth = sub.add_parser("authorize", help="run Path A and Path B; do not execute the tool")
-    auth.add_argument("--key", required=True, help=_KEY_HELP)
+    _add_key(auth)
     auth.add_argument("--ledger", required=True)
     auth.add_argument("--constitution", required=True)
     auth.add_argument("--judges", required=True)
@@ -615,20 +693,20 @@ def main(argv: list[str] | None = None) -> int:
     auth.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     auth.set_defaults(func=_authorize)
     rotate = sub.add_parser("rotate-witness", help="replace the ledger's witness key with a new one, ledgered")
-    rotate.add_argument("--key", required=True, help=_KEY_HELP)
+    _add_key(rotate)
     rotate.add_argument("--ledger", required=True)
     rotate.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     rotate.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     rotate.add_argument("--reason", default="", help="recorded in the witness_rotated entry (at most 200 characters)")
     rotate.set_defaults(func=_rotate_witness)
     audit = sub.add_parser("audit", help="verify the ledger and print its witness pins and digest checks")
-    audit.add_argument("--key", required=True, help=_KEY_HELP)
+    _add_key(audit)
     audit.add_argument("--ledger", required=True)
     audit.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     audit.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     audit.set_defaults(func=_audit)
     recover = sub.add_parser("recover", help="drop an uncheckpointed tail and record it; does not run on open")
-    recover.add_argument("--key", required=True, help=_KEY_HELP)
+    _add_key(recover)
     recover.add_argument("--ledger", required=True)
     recover.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     recover.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
@@ -638,7 +716,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--ledger-passphrase-env", required=True, metavar="NAME", help=_PASSPHRASE_HELP)
         parser.add_argument("--witness-passphrase-env", required=True, metavar="NAME", help=_PASSPHRASE_HELP)
     export = sub.add_parser("backup-export", help="write three passphrase-protected key bundles")
-    export.add_argument("--key", required=True, help=_KEY_HELP)
+    _add_key(export)
     export.add_argument("--ledger", required=True)
     export.add_argument("--out", required=True, help="directory for the three new bundle files")
     export.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
@@ -647,12 +725,13 @@ def main(argv: list[str] | None = None) -> int:
     export.set_defaults(func=_backup_export)
     verify = sub.add_parser("backup-verify", help="decrypt the bundles into a temporary ledger and check fingerprints")
     verify.add_argument("--bundles", required=True)
+    verify.add_argument("--key-passphrase-file", default=None, metavar="FILE", help=_KEY_UNLOCK_HELP)
     verify.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     _add_passphrases(verify)
     verify.set_defaults(func=_backup_verify)
     restore = sub.add_parser("backup-restore",
                              help="restore keys; ledger files and head.anchor are written together")
-    restore.add_argument("--key", required=True, help="where to put principal.pem")
+    _add_key(restore, help="where to put principal.pem")
     restore.add_argument("--ledger", required=True)
     restore.add_argument("--bundles", required=True)
     restore.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
@@ -664,7 +743,7 @@ def main(argv: list[str] | None = None) -> int:
     restore.set_defaults(func=_backup_restore)
     exporter = sub.add_parser("siem-export", help="verify and decrypt the ledger locally and write its "
                                                   "events for a SIEM, without argument values")
-    exporter.add_argument("--key", required=True, help=_KEY_HELP)
+    _add_key(exporter)
     exporter.add_argument("--ledger", required=True)
     exporter.add_argument("--out", default="-", metavar="FILE",
                           help="write to this new file (never an existing one); - writes to stdout (default)")
@@ -682,7 +761,7 @@ def main(argv: list[str] | None = None) -> int:
     exporter.set_defaults(func=_siem_export)
     siem_verify = sub.add_parser("siem-verify", help="check exported events (or events pulled back out of a "
                                                      "SIEM) against the ledger")
-    siem_verify.add_argument("--key", required=True, help=_KEY_HELP)
+    _add_key(siem_verify)
     siem_verify.add_argument("--ledger", required=True)
     siem_verify.add_argument("--events", required=True, metavar="FILE",
                              help="the native JSON Lines events to check")
@@ -693,8 +772,68 @@ def main(argv: list[str] | None = None) -> int:
     siem_verify.set_defaults(func=_siem_verify)
     proxy = sub.add_parser("mcp-proxy", help="serve an upstream MCP server's signed tools over stdio, through "
                                              "both keys (needs the mcp extra)")
-    proxy.add_argument("--config", required=True, help="the proxy config file (YAML or JSON)")
+    proxy.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
     proxy.set_defaults(func=_mcp_proxy)
+    cfg = sub.add_parser("config", help="show, check, or change a proxy config's settings")
+    cfg_sub = cfg.add_subparsers(dest="config_cmd", required=True)
+    for name, text in (("show", "print the effective settings as JSON, defaults filled in, no secret values"),
+                       ("check", "load every file the config names and report what would stop or warn at start; "
+                                 "writes nothing, opens no ledger")):
+        part = cfg_sub.add_parser(name, help=text)
+        part.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
+        part.set_defaults(func=_config_show if name == "show" else _config_check)
+    getter = cfg_sub.add_parser("get", help="print one setting: its value, file, tier, and default")
+    getter.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
+    getter.add_argument("setting", help="the setting's name, as docs/SETTINGS.md lists it (siem.sinks[0].port)")
+    getter.set_defaults(func=_config_get)
+    setter = cfg_sub.add_parser("set", help="change one setting: checked, recorded in the ledger, undoable; "
+                                            "takes effect at the next start")
+    setter.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
+    setter.add_argument("setting", help="the setting's name, as docs/SETTINGS.md lists it (siem.sinks[0].port)")
+    setter.add_argument("value", nargs="?", default=None,
+                        help="the new value: JSON (true, 120, [\"a\"], {\"env\": \"NAME\"}) or plain text; never a "
+                             "secret")
+    setter.add_argument("--value-file", default=None, metavar="FILE",
+                        help="read the value, as text, from this owner-only file (for a value that can be a secret)")
+    setter.add_argument("--prompt", action="store_true", help="read the value, as text, from a hidden prompt")
+    setter.add_argument("--unset", action="store_true", help="remove the setting, so its default applies")
+    setter.add_argument("--confirm-weaker", action="store_true",
+                        help="go ahead with a change that weakens what Two-Key enforces, after a typed yes")
+    setter.add_argument("--key", default=None, metavar="FILE",
+                        help="the principal private key, for a signed setting (hard_rules, tool_specs, fields)")
+    setter.add_argument("--rules", default=None, metavar="FILE",
+                        help="the rules file the constitution was signed from, for a signed setting")
+    setter.add_argument("--key-passphrase-file", default=None, metavar="FILE", help=_KEY_UNLOCK_HELP)
+    setter.set_defaults(func=_config_set)
+    undoer = cfg_sub.add_parser("undo", help="put back the files the last config set (or undo) replaced")
+    undoer.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
+    undoer.add_argument("--confirm-weaker", action="store_true",
+                        help="go ahead when putting the files back weakens what Two-Key enforces")
+    undoer.add_argument("--key", default=None, metavar="FILE",
+                        help="the principal private key, when the change being undone signed a constitution")
+    undoer.add_argument("--key-passphrase-file", default=None, metavar="FILE", help=_KEY_UNLOCK_HELP)
+    undoer.set_defaults(func=_config_undo)
+    phraser = cfg_sub.add_parser("key-passphrase",
+                                 help="encrypt the principal key with a passphrase from a file, change it, or remove "
+                                      "it; sets keys.passphrase_file to match, recorded in the ledger")
+    phraser.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
+    which = phraser.add_mutually_exclusive_group(required=True)
+    which.add_argument("--new-from", default=None, metavar="FILE",
+                       help="absolute path of a file only this account can read, holding the new passphrase "
+                            "(at least 12 bytes); keys.passphrase_file is set to it")
+    which.add_argument("--remove", action="store_true",
+                       help="store the key unencrypted again (weaker: needs --confirm-weaker)")
+    phraser.add_argument("--confirm-weaker", action="store_true",
+                         help="go ahead with --remove, after a typed yes")
+    phraser.add_argument("--key-passphrase-file", default=None, metavar="FILE",
+                         help="the file holding the CURRENT passphrase, when it is not keys.passphrase_file")
+    phraser.set_defaults(func=_config_key_passphrase)
+    setup = sub.add_parser("setup", help="write a new deployment's keys, rules, judges and proxy config, sign, "
+                                         "and check them")
+    setup.add_argument("--dir", required=True, help="a new folder for the files (never an existing one)")
+    setup.add_argument("--answers", default=None, metavar="FILE",
+                       help="read the answers from this YAML or JSON file instead of asking (docs/SETUP.md)")
+    setup.set_defaults(func=_setup)
     drafter = sub.add_parser("mcp-draft-specs", help="draft tool_specs and the schema digest from an upstream MCP "
                                                      "server, for the principal to review and sign (needs the mcp extra)")
     drafter.add_argument("--out", default=None, metavar="DIR",

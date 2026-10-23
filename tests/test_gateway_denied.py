@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Gateway refusals of an authenticated token are ledgered as gateway_denied: reason, jti, tool, size, digest."""
 
 import json

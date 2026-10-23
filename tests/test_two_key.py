@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Core invariants: both paths, ledger, token, agent hook, no execution."""
 
 import hashlib
@@ -238,12 +241,12 @@ class CoreTests(unittest.TestCase):
             led = Ledger(ledger, key)
             led.append("note", {"ok": True})
             led.checkpoint()
-            script = "from two_key.ledger import Ledger; from two_key.keys import load_private_key; " \
-                     "led = Ledger(%r, load_private_key(%r)); led.verify(); print(led.size())" % (str(ledger), str(Path(tmp, "principal.pem")))
+            script = ("from two_key.ledger import Ledger; from two_key.keys import load_private_key; "  # skipcq: PYL-C0209 - test only
+                      "led = Ledger(%r, load_private_key(%r)); led.verify(); print(led.size())" % (str(ledger), str(Path(tmp, "principal.pem"))))
             root = Path(__file__).resolve().parents[1]
             env = dict(os.environ)
             env["PYTHONPATH"] = str(root)
-            proc = subprocess.run([sys.executable, "-c", script], cwd=str(root), env=env,
+            proc = subprocess.run([sys.executable, "-c", script], cwd=str(root), env=env,  # skipcq: PYL-W1510 - test only
                                   capture_output=True, text=True)
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertEqual(proc.stdout.strip(), "2")      # witness_pinned, then the note
@@ -288,7 +291,7 @@ class CoreTests(unittest.TestCase):
         captured = {}
 
         class _Stopped:
-            def authorize(self, action, arguments, proposal, agent_session=None, origin=None):
+            def authorize(self, action, arguments, proposal, agent_session=None, origin=None):  # skipcq: PYL-R0201 - test only
                 captured["action"] = action
                 return Decision(False, "stopped", None, {}, {}, 0, None)
 

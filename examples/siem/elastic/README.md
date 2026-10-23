@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Two-Key to Elasticsearch and Kibana, end to end
 
 A local test of the 0.7.0 SIEM copy ([docs/SIEM.md](../../../docs/SIEM.md)): Two-Key sends each ledger

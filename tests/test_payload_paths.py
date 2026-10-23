@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Fix 11: payload paths may not overlap field paths; dropped keys are logged by name, never by value."""
 
 import json

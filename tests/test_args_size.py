@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Re-review: tool arguments and the proposal over MAX_ARGS_BYTES (UTF-8 bytes of their JSON) are denied
 before anything is derived, judged, or ledgered; the ledger keeps only the size and digest."""
 

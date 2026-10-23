@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """``two-key siem-export`` and ``two-key siem-verify`` (0.7.0).
 
 ``siem-export`` opens the ledger the way ``two-key audit`` does, so the chain, the signed head, and both

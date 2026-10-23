@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Reference scanner adapters (0.6.0): ClamAV ``clamd``, ICAP, an external command, and a Python hook.
 
 Each is an ``Inspector`` (scan.py): it sends each part of a call to an outside product and turns the answer

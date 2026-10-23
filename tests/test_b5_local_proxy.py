@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """B5: a local proxy or daemon serving the agent's exact model.
 
 Owner rule (2026-10-08): a judge is refused as the monitored agent when it holds the agent's credential, at any address,
@@ -44,7 +47,7 @@ class B5(unittest.TestCase):
         os.environ["B5_AGENT_KEY"] = "agent-key-K"
         self.addCleanup(os.environ.pop, "B5_AGENT_KEY", None)
 
-    def resolved(self, agent: dict, j):
+    def resolved(self, agent: dict, j):  # skipcq: PYL-R0201 - test only
         return AgentDeclaration.from_mapping(agent).resolve(fp_key=FP), judge_identity(j, FP)
 
     def verdict(self, agent: dict, j) -> str | None:
@@ -92,8 +95,9 @@ class B5(unittest.TestCase):
         # Tenant ids are scoped by provider family, so a proxy's p1 is OpenAI's p1 even on another model.
         j = judge("gpt-4o-mini", "http://localhost:4000", tenant={"project": "P1"}, upstream="api.openai.com")
         self.warned(agent, j, "shared_tenant")
-        [w] = separation_warnings(*self.resolved(agent, j))
-        self.assertEqual(w["detail"], "a shared tenant openai:project:p1")
+        warnings = separation_warnings(*self.resolved(agent, j))
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]["detail"], "a shared tenant openai:project:p1")
 
     def test_declared_upstream_on_a_remote_router_counts_as_an_endpoint(self):
         agent = dict(OPENAI_AGENT, base_url="https://llm-router.example.com/v1", upstream="api.openai.com")

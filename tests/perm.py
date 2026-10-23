@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """File-access helpers for tests on Linux, macOS, and Windows (0.6.0).
 
 POSIX tests set and read mode bits. Windows has no mode bits (Python reports 0o666 for every file), so

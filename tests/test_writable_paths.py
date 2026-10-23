@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Paths another account could change, checked when Two-Key starts (0.6.0, two_key/writable.py).
 
 Code and settings in such a path run with Two-Key's keys, so Two-Key names them on stderr, refuses to start
@@ -5,10 +8,13 @@ with on_writable_paths="refuse", and always refuses under high_assurance (which 
 """
 
 import contextlib
+import importlib.machinery
+import importlib.util
 import io
 import os
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -130,8 +136,31 @@ class WhatCounts(Fixture):
         targets = {os.path.normcase(os.path.abspath(p)) for p, _ in writable.runtime_targets()}
         self.assertIn(os.path.normcase(os.path.abspath(writable.__file__)), targets)
         self.assertIn(os.path.normcase(os.path.abspath(sys.executable)), targets)
-        if writable.__cached__:
-            self.assertIn(os.path.normcase(os.path.abspath(writable.__cached__)), targets)
+        if writable.__spec__.cached:
+            self.assertIn(os.path.normcase(os.path.abspath(writable.__spec__.cached)), targets)
+
+    def test_a_compiled_file_named_only_by_the_spec_is_looked_at(self):
+        # Python 3.15 sets no __cached__ on a module; its compiled file is named only by __spec__.cached.
+        open_cache = self.folder("__pycache__", 0o777)
+        compiled = open_cache / "mod.cpython-315.pyc"
+        module = types.ModuleType("mod")
+        module.__file__ = str(self.file("mod.py", mode=0o600))
+        module.__spec__ = importlib.util.spec_from_file_location("mod", module.__file__)
+        module.__spec__.cached = str(compiled)
+        self.assertFalse(hasattr(module, "__cached__"))
+        targets = writable._module_targets(module)
+        self.assertIn((str(compiled), "file"), targets)
+        self.assertIn((str(open_cache), "folder"), targets)
+        with mock.patch.dict(sys.modules, {"mod": module}):
+            found = [os.path.normcase(p) for p, _ in writable.check()]
+        self.assertIn(os.path.normcase(real(open_cache)), found)
+
+    def test_a_module_without_a_location_adds_nothing(self):
+        for spec in (None, importlib.machinery.ModuleSpec("built", None, origin="built-in"), object()):
+            module = types.ModuleType("built")
+            module.__spec__ = spec
+            with self.subTest(spec=spec):
+                self.assertEqual(writable._module_targets(module), [])
 
 
 class Modes(unittest.TestCase):
@@ -164,7 +193,7 @@ class AtStart(Fixture):
         self.con = verify_signed(sign_constitution("p", RULES, self.key, SPECS), self.key.public_key())
         self.n = 0
 
-    def start(self, judges=ONE, quorum=None, **kw):
+    def start(self, judges=ONE, quorum=None, **kw):  # skipcq: PYL-W0102 - test only
         self.n += 1
         self.ledger = Ledger(self.dir / f"ledger{self.n}", self.key)
         err = io.StringIO()
@@ -177,7 +206,7 @@ class AtStart(Fixture):
                 self.err = err.getvalue()
         return tk
 
-    def high(self):
+    def high(self):  # skipcq: PYL-R0201 - test only
         return QuorumPolicy.high_assurance(required_yes=2, timeout_seconds=10)
 
     @NO_RUNTIME

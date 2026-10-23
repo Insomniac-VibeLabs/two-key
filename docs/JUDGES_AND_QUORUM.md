@@ -1,7 +1,12 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
 
 # Judges and quorum
 
-This document describes judge and quorum behavior in `two-key` 0.7.0 (tag `v0.7.0` on `main`). It is not an independent review or a claim of formal verification. If this document disagrees with the implementation, the code wins; correct the document after verifying the intended behavior.
+This document describes judge and quorum behavior in `two-key` 0.7.3 (tag `v0.7.3` on `main`). It is not an independent review or a claim of formal verification. If this document disagrees with the implementation, the code wins; correct the document after verifying the intended behavior.
 
 See [THREAT_MODEL.md](THREAT_MODEL.md) for the threat register, [SCOPE.md](SCOPE.md) for the project's boundaries, and [FIT.md](FIT.md) for when this package is or is not suitable.
 
@@ -35,8 +40,8 @@ A judge endpoint that keeps its own memory across ballots (a persistent agent, o
 
 ```mermaid
 flowchart TD
-    A["Authorization request"] --> B["Build normalized action record"]
-    B --> C["Prepare configured judge input"]
+    A["Authorization request"] --> B["Build normalized<br/>action record"]
+    B --> C["Prepare configured<br/>judge input"]
     C --> D["Call judge adapter"]
     D --> E{"Usable ballot?"}
     E -->|Yes| F{"Vote"}
@@ -48,7 +53,7 @@ flowchart TD
     I --> J
 ```
 
-This diagram shows one judge's contribution, not the final authorization decision.
+*One judge's ballot becomes an affirmative, a negative or an abstention. It is not the final authorization decision.*
 
 The convenor checks ballot identity and binding. A ballot that reports inconsistent binding hashes becomes an abstention. With `ballot_binding="echo"`, a judge must also return the required binding information itself.
 
@@ -71,11 +76,13 @@ flowchart TD
     C --> E["Resolve min_responding"]
     D --> E
     E --> F["Collect and validate ballots"]
-    F --> G["Apply quorum and diversity requirements"]
+    F --> G["Apply quorum and<br/>diversity requirements"]
     G --> H{"All requirements met?"}
     H -->|Yes| I["Path B passes"]
     H -->|No| J["Path B denies"]
 ```
+
+*The threshold defaults to the smaller of 2 and the number of judges when `required_yes` is not set.*
 
 With the default policy:
 
@@ -143,8 +150,8 @@ Path A evaluates deterministic policy rules against the normalized structured ac
 
 ```mermaid
 flowchart TD
-    A["Well-formed request within limits"] --> B["Path A: deterministic policy VM"]
-    A --> C["Path B: configured judges and quorum"]
+    A["Well-formed request<br/>within limits"] --> B["Path A: deterministic<br/>policy VM"]
+    A --> C["Path B: configured<br/>judges and quorum"]
     B --> D{"Path A allows?"}
     C --> E{"Path B passes?"}
     D -->|No| F["Deny authorization"]
@@ -154,6 +161,8 @@ flowchart TD
     G -->|Yes| F
     G -->|No| H["Capability may be issued"]
 ```
+
+*Both paths must allow, and no other deny condition may remain, before a capability can be issued.*
 
 The final decision allows the action only if Path A allows, the quorum passes, and no other deny condition remains. Capability issuance can still fail, including when the issuer key is unavailable or a required ledger write fails.
 
@@ -174,7 +183,7 @@ A quorum pass means the configured Path B requirements were met for that authori
 - The deployment has been independently audited or formally verified.
 - The package is a FIPS 140-3 validated cryptographic module.
 
-The capability and gateway controls add restrictions but do not eliminate these limitations. The capability private key is separate from the gateway verifier's key, but the gateway shares the Two-Key process and ledger object; a gateway in another process or host is not supported (#45). There is no process-level isolation between them; see [THREAT_MODEL.md](THREAT_MODEL.md).
+The capability and gateway controls add restrictions but do not eliminate these limitations. The capability private key is separate from the gateway verifier's key, but the gateway shares the Two-Key process and ledger object; a gateway in another process or host is not supported, by design ([why](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)). There is no process-level isolation between them; see [THREAT_MODEL.md](THREAT_MODEL.md).
 
 ## Operator checklist
 

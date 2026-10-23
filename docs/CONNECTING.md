@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Connecting the monitored agent so it cannot go around Two-Key
 
 Two-Key can only stop the calls that go through it. This guide covers
@@ -51,25 +57,27 @@ the same rules. The `two-key` user is a service account, not a standard
 user ([Run Two-Key as a service account](#run-two-key-as-a-service-account)).
 
 ```mermaid
-flowchart LR
-  subgraph agentzone["Agent zone: agent user, container, or machine"]
+flowchart TD
+  subgraph agentzone["Agent zone"]
     agent["Monitored agent<br/>and its host"]
   end
-  subgraph tkzone["Two-Key zone: two-key user"]
-    tk["Two-Key<br/>Path A, Path B, ledger, gateway"]
-    trusted["Keys, ledger, constitution,<br/>proxy.yaml, judges.yaml,<br/>hook code, scanner config"]
+  subgraph tkzone["Two-Key zone"]
+    tk["Two-Key<br/>Path A, Path B,<br/>ledger, gateway"]
+    trusted["Keys, ledger,<br/>constitution, configs,<br/>hook code, scanner config"]
   end
-  subgraph toolzone["Tool zone: its own user"]
-    tool["Tool or upstream server<br/>holds the tool credential"]
+  subgraph toolzone["Tool zone"]
+    tool["Tool or upstream server<br/>holds the credential"]
   end
   agent -- "the only door:<br/>a tool call" --> tk
   tk -- "after both keys" --> tool
   tool --> sor["System of record"]
-  agent -. "closed: no credential,<br/>no network route" .-> sor
-  agent -. "closed: cannot read<br/>or write" .-> trusted
+  agent -. "closed" .-> sor
+  agent -. "closed" .-> trusted
   tk -. "verdict" .-> scanner["Scanner"]
   tk -. "record" .-> judges["Judges"]
 ```
+
+*Solid lines are the only paths that exist. Dashed lines marked closed are routes the agent must not have (no credential, no network route, no file access); the other dashed lines go to the optional scanner and the judges.*
 
 ## Pick your route
 
@@ -117,6 +125,15 @@ Two-Key checks what it can see of this when it starts, and names any file
 or folder another account could change
 ([What Two-Key checks for you](#what-two-key-checks-for-you)).
 
+**"Billing" is only an example.** The worked examples in this guide use a
+billing system (`mcp-billing`, `BILLING_TOKEN`, "Billing API") because
+they need some tool to point at. Two-Key does not care what the tool does
+or what kind of data it handles. Read "billing" as "whatever system your
+upstream tool reaches": a ticketing system, a file store, a database, a
+message service. Rename `mcp-billing` and `BILLING_TOKEN` to match, and
+keep the rules the same: one OS user per upstream, and the credential
+held only by that user.
+
 ## Route 1: an MCP client, through `two-key mcp-proxy`
 
 The agent host starts the proxy instead of the real server. The proxy
@@ -125,25 +142,27 @@ that both keys allowed. The full worked example is in
 [HOWTO](HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).
 
 ```mermaid
-flowchart LR
+flowchart TD
   subgraph agentuser["agent user"]
     host["Agent host<br/>MCP client"]
   end
   subgraph tkuser["two-key user"]
-    wrapper["run-proxy<br/>loads proxy.env"] --> proxy["two-key mcp-proxy<br/>Path A, Path B, gateway"]
-    secrets[("keys, ledger, constitution,<br/>proxy.yaml, judges.yaml,<br/>hook code, proxy.env")]
+    wrapper["run-proxy wrapper<br/>loads proxy.env"] --> proxy["two-key mcp-proxy<br/>Path A, Path B,<br/>gateway"]
+    secrets[("Keys, ledger,<br/>constitution, configs,<br/>hook code, proxy.env")]
     proxy --- secrets
   end
   subgraph upuser["mcp-billing user"]
     up["Upstream MCP server<br/>BILLING_TOKEN only"]
   end
-  host -- "sudo -n -u two-key run-proxy<br/>exact rule, no arguments" --> wrapper
-  proxy -- "after both keys<br/>sudo -n -u mcp-billing" --> up
+  host -- "sudo, one exact<br/>rule, no arguments" --> wrapper
+  proxy -- "after both keys" --> up
   up --> api["Billing API"]
   host -. "closed: no token,<br/>firewall" .-> api
-  host -. "closed: not in<br/>the client's list" .-> up
+  host -. "closed: not in the<br/>client's list" .-> up
   host -. "closed: file<br/>permissions" .-> secrets
 ```
+
+*The host starts the wrapper with `sudo -n -u two-key /opt/two-key/run-proxy` under one exact sudo rule, and the proxy starts the server with `sudo -n -u mcp-billing`. Solid lines are the call path; dashed lines are routes that stay closed.*
 
 1. **Three OS users.** `agent` runs the agent host. `two-key` runs the
    proxy and owns its keys, ledger, config, hook code, and secrets.
@@ -214,13 +233,13 @@ which carries stdio. Everything in Route 1 stays as it is; SSH takes the
 place of the agent user's local `sudo`.
 
 ```mermaid
-flowchart LR
+flowchart TD
   subgraph agentmachine["Agent machine"]
     host["Agent host<br/>MCP client"]
   end
   subgraph tkmachine["Two-Key machine"]
-    login["tk-agent<br/>SSH login, forced command"] -- "sudo -n -u two-key run-proxy<br/>exact rule, no arguments" --> proxy["two-key mcp-proxy<br/>Path A, Path B, gateway"]
-    secrets[("keys, ledger, constitution,<br/>proxy.yaml, judges.yaml,<br/>hook code, proxy.env")]
+    login["tk-agent<br/>SSH login,<br/>forced command"] -- "sudo, one exact<br/>rule, no arguments" --> proxy["two-key mcp-proxy<br/>Path A, Path B,<br/>gateway"]
+    secrets[("Keys, ledger,<br/>constitution, configs,<br/>hook code, proxy.env")]
     proxy --- secrets
     proxy -- "after both keys" --> up["Upstream MCP server<br/>mcp-billing user"]
   end
@@ -230,6 +249,8 @@ flowchart LR
   host -. "closed: no route" .-> api
   host -. "closed: no route" .-> judges
 ```
+
+*The forced command is `sudo -n -u two-key /opt/two-key/run-proxy`. The judges and the billing API sit outside both machines; the dashed lines from the agent machine to them stay closed.*
 
 1. **A login account for the agent, not `two-key`.** Make an account on
    the Two-Key machine, such as `tk-agent`, that plays the part of the
@@ -330,15 +351,15 @@ model's output is data; your code is trusted. See
 
 ```mermaid
 flowchart TD
-  model["Model<br/>untrusted text"] -- "proposed call:<br/>a tool name and arguments" --> app["Your agent loop<br/>trusted code"]
-  app -- "signed, guarded names only" --> guard["Guard<br/>authorize, then gateway.invoke"]
+  model["Model<br/>untrusted text"] -- "proposed call:<br/>tool name, arguments" --> app["Your agent loop<br/>trusted code"]
+  app -- "signed, guarded<br/>names only" --> guard["Guard<br/>authorize, then<br/>gateway.invoke"]
   hooks["Fact hooks<br/>look facts up by id"] --> guard
   guard -- "after both keys" --> fn["pay_vendor<br/>loads its own credential"]
   fn --> api["Billing API"]
-  model -. "never offered" .-> raw["The raw pay_vendor function"]
-  model -. "never offered" .-> general["Shell, code runner,<br/>HTTP, file, or browser tool"]
-  model -. "never executed" .-> evalx["eval or a shell built<br/>from model text"]
+  model -. "closed" .-> never["Never offered:<br/>the raw pay_vendor,<br/>a shell, code runner,<br/>HTTP, file or browser tool<br/>Never executed:<br/>eval, or a shell built<br/>from model text"]
 ```
+
+*The model reaches the billing API only through the guard. The dashed line is the route that stays closed.*
 
 - **Register only guarded functions with your framework.** The model must
   be offered `pay_vendor` the guarded wrapper, never the raw function,
@@ -373,7 +394,7 @@ what an agent would try, and what stops it.
 | Agent machine to the proxy over SSH | A login account that is not `two-key`, a root-owned `authorized_keys` entry with `restrict,command=` and a matching `ForceCommand`, and only SSH open from the agent machine | Running a shell or `sftp` instead of the proxy, forwarding a port to a judge or the tool's API, sending environment variables, or editing its own `authorized_keys` | The forced command and `restrict`, `sudo`'s `env_reset`, root owning the key file, and the firewall; Two-Key cannot see any of these ([An agent on another machine](#an-agent-on-another-machine-route-1-over-ssh)) |
 | Two-Key to the tool (upstream server, or the registered function) | The gateway is the only caller. The upstream runs as its own user with only its credential (`upstream.command` with `sudo -u mcp-billing` or a container) | Calling the tool's API directly; reading the proxy's keys through the upstream | The agent has no tool credential and no network route; the upstream's user cannot read the `two-key` user's files or `/proc` |
 | Tool credentials (`BILLING_TOKEN`, API keys) | In a file only `two-key` reads (`proxy.env`, mode 0600), passed to the upstream through `upstream.env` | Reading it from the environment, a file, a log, or the prompt | Separate users; never in the prompt, the instruction, or an argument |
-| Signed constitution and principal key | Owned by `two-key`; the key mode 0600 in an owner-only directory | Replacing the constitution, or signing a looser one | The constitution's signature is checked on every load; Two-Key refuses a key readable by others; the agent's user cannot write either file |
+| Signed constitution and principal key | Owned by `two-key`; the key mode 0600 in an owner-only directory, encrypted if you like, with `keys.passphrase_file` (mode 0600, kept away from the key) naming its passphrase | Replacing the constitution, or signing a looser one; copying the key file | The constitution's signature is checked on every load; Two-Key refuses a key or passphrase file readable by others, and one the agent can change (`on_agent_access`); the agent's user cannot write either file; an encrypted key copied on its own does not sign ([SETUP](SETUP.md#protecting-the-principal-key-with-a-passphrase)) |
 | `proxy.yaml`, `judges.yaml`, `agents.yaml`, `scan:` block, declared files | Owned by `two-key`, not writable by the agent | Turning a tool's scan off (declared files are not signed), adding a looser judge, pointing the scanner at its own server | File permissions. Which tools are scanned and the stance are signed; which arguments are files is not |
 | Fact hooks (`module:function`) | The module, and every directory on the proxy's `PYTHONPATH`, owned by root or `two-key` and not writable by the agent. Run the installed `two-key` command, not `python -m` from a directory the agent can write (Python imports from the current directory) | Planting a module that returns the fact it wants, or a `json.py` the proxy imports first | Two-Key names each such file or folder it finds writable at start (`writable_path`), and refuses under `high_assurance` or `on_writable_paths: refuse`; directory permissions and a fixed working directory. A hook looks facts up by id and never echoes an argument; the tool still checks |
 | Judges | Their own credentials, not the agent's (`judges.yaml` auth by `env`, `keyring`, or `callback`). Cloud judges over HTTPS. A local judge's model, server, and config owned by `two-key` or root | Holding a judge's key, pointing a judge at its own account, rewriting a local judge's system prompt or model, answering on a local judge's port | Two-Key refuses a judge with the agent's credential at any address and warns on other overlaps; HTTPS is verified; the rest is permissions and [Services on the same machine](#services-on-the-same-machine) |
@@ -385,7 +406,8 @@ what an agent would try, and what stops it.
 | Ledger and its key, witness, and capability directories | Owned by `two-key`; Two-Key creates them owner-only | Deleting or rewriting the history, or minting a token | AES-GCM, the hash chain, the signed and pinned head; the minting key never leaves this process; the agent cannot read the directories |
 | SIEM copy, syslog (`siem:` `type: syslog`, 0.7.0) | `transport: tls` to a collector whose certificate the host trusts (port 6514). Plaintext (`tcp`, `udp`) only on a network segment the agent cannot reach | Reading the copy on the wire, forging entries into the SIEM, or dropping them | TLS with the certificate and hostname always checked, and no setting that turns that off; plaintext warns at start and is refused under `high_assurance`; every event carries `seq` and `entry_hash`, so a gap or a forged event is caught by `two-key siem-verify` ([SIEM](SIEM.md)) |
 | SIEM copy, webhook (`siem:` `type: webhook`, 0.7.0) | An `https://` URL, with the token in a file only `two-key` reads (`auth_value_file`, mode 0600), and `hmac_key_file` where the collector checks a signature | Reading the token, pointing the copy at its own collector, or following a redirect to one | The token file is owner-only and its value never reaches an event, a log line, or the ledger; redirects are never followed; `siem_configured` records the destination in the ledger; the config and secret files are in the writable-path check |
-| SIEM sink files (`ca_file`, `cert_file`, `key_file`, `auth_value_file`, `hmac_key_file`) and the delivery cursor | Owned by `two-key`, not writable by the agent. The cursor is `<ledger>.siem/cursor.json`, which Two-Key creates owner-only beside the ledger | Changing a CA file so a forged collector is trusted, or moving the cursor back so the SIEM is flooded or skipped | The proxy names each of those files in the start-up writable-path check; a wrong cursor can only repeat or delay the copy, never change the ledger |
+| SIEM sink files (`ca_file`, `cert_file`, `key_file`, `auth_value_file`, `hmac_key_file`) and the delivery cursor | Owned by `two-key`, not writable by the agent. The cursor is `<ledger>.siem/cursor.json`, which Two-Key creates owner-only beside the ledger | Changing a CA file so a forged collector is trusted, or moving the cursor back so the SIEM is flooded or skipped | The proxy names each of those files in the start-up writable-path check; a wrong cursor can only repeat or delay the copy, never change the ledger; one ahead of the ledger, or from another ledger, is not trusted and the whole ledger is sent again, marked `replay` |
+| Settings changes (`two-key setup`, `config set`, `config undo`, `config key-passphrase`) | Run from an operator's shell as Two-Key's own account, never from the agent's account or as root; Two-Key's files and folders stay its own and not writable by others | Running `config set` to switch a check to `warn`, turn `high_assurance` off, or sign a looser rule | From another account, `config set` refuses to write Two-Key's files (`config_target_unsafe`), and it refuses root; a weaker change needs `--confirm-weaker` and `yes` typed on a terminal; what `high_assurance` forbids fails the check; a signed change needs the principal key; each change is a `config_changed` ledger entry that goes to the SIEM. An account that can write the files can still edit them by hand: file permissions and the start-up checks stop that ([SETUP](SETUP.md)) |
 | Tool results back to the agent | Nothing to wire | Text in a result that tells the agent to do something else | Not a way around Two-Key: each later call is judged on its own. Results are not scanned |
 
 ## Services on the same machine
@@ -402,13 +424,14 @@ sequenceDiagram
   participant TK as Two-Key
   participant AV as clamd on loopback port 3310
   participant Fake as Agent's program
-  Note over AV: clamd crashes or restarts, so port 3310 is free
+  Note over AV: clamd restarts, so port 3310 is free
   Fake->>Fake: listens on 127.0.0.1 port 3310
   TK->>Fake: INSTREAM, the call's parts
   Fake-->>TK: OK for every part
   Note over TK: verdict clean for a call nothing scanned
-  Note over TK,Fake: With clamd on a Unix socket in its own directory, or the agent<br/>in its own network namespace, the agent cannot take the address
 ```
+
+*While clamd is down, the agent's own program takes its port and answers OK for every part. The ways to close this follow.*
 
 Close it one of these ways:
 
@@ -424,7 +447,9 @@ Unix socket in a directory the agent cannot write, need none of this.
 
 ## What Two-Key checks for you
 
-At start and on every call, without any setup from you:
+At start and on every call, without any setup from you (the settings that
+tune these checks, `on_agent_access` and `on_writable_paths`, are in
+[SETTINGS.md](SETTINGS.md)):
 
 - The constitution's signature, on every load; a v1 or v2 envelope that
   carries a newer feature is refused.
@@ -464,7 +489,18 @@ At start and on every call, without any setup from you:
   above them. The proxy adds `proxy.yaml` and the files it names, the
   ledger folder, each fact hook's module, the folders of files sent by
   path, the upstream and scanner programs, and the folder the upstream
-  starts in. Each one that an account other than Two-Key's own (or root,
+  starts in. For the upstream server behind a launcher such as `sudo`, it
+  also adds each argument of `upstream.command` after the program that is
+  an absolute path to something that exists (a file with its folder, or a
+  folder), and each entry of `upstream.check_paths`, which must exist
+  (`check_path_missing`). Options and relative arguments are not read as
+  paths, a launcher is not followed to its target, and a named folder is
+  checked itself, not every file inside it. When `command[0]` is a
+  launcher (`sudo`, `doas`, `env`, `npx`, `uvx`, `pipx`, `cmd`,
+  `powershell`, or `pwsh`) and nothing names the server's files, the proxy
+  warns `upstream_paths_unchecked`, and `high_assurance` refuses to start.
+  The server's files count like Two-Key's own: owned by Two-Key's account
+  or root, not by the upstream's account. Each one that an account other than Two-Key's own (or root,
   SYSTEM, Administrators, or TrustedInstaller) could change is named:
   `two-key: WARNING: writable_path: <path>: <why>`. On Linux and macOS a
   group write bit counts for any group but 0, because Two-Key cannot list
@@ -475,7 +511,9 @@ At start and on every call, without any setup from you:
   off.
 
 What it cannot see: OS users and file permissions beyond the paths above
-(the wrapper that started it, the upstream server's files behind `sudo`),
+(the wrapper that started it, the upstream server's files that no absolute
+argument or `upstream.check_paths` entry names, what is inside a named
+folder),
 the network, the client's other tools, your framework's tool list, and
 whether a port it connects to is the service you meant. A start with no
 `writable_path` line is not proof the setup is safe, and code that was
@@ -506,6 +544,9 @@ checklist below.
 [ ] No tool credential is in the agent's environment, files, prompt, or arguments.
 [ ] The agent has no network route to the tool's API or the system of record.
 [ ] Each upstream server runs as its own user with only its own credential.
+[ ] Each upstream server's program, script, and package folder are given as absolute
+    arguments or in upstream.check_paths, are owned by root or two-key, and the proxy
+    starts with no upstream_paths_unchecked line.
 [ ] Judges use their own credentials; a local judge's model and server are not
     writable by the agent.
 [ ] The scanner is on a Unix socket in a directory the agent cannot write (mode 660,

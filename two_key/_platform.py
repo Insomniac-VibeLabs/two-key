@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Owner-only files, locks, and no-follow opens on Linux, macOS, and Windows (0.6.0).
 
 Two-Key keeps its keys in files only their owner can read, opens them without following a symlink,
@@ -485,7 +488,8 @@ if WINDOWS:  # pragma: no cover
     _RENAME_RIGHTS = 0x10000000 | 0x80000 | 0x40000 | 0x10000 | 0x40
 
 
-def _posix_account(uid: int) -> str:
+def posix_account(uid: int) -> str:
+    """``name (uid N)`` for a POSIX account, or ``uid N`` when it has no name."""
     try:
         import pwd
         return f"{pwd.getpwuid(uid).pw_name} (uid {uid})"
@@ -521,7 +525,7 @@ def parent_account() -> tuple[int | None, str]:
                 for line in fh:
                     if line.startswith("Uid:"):
                         uid = int(line.split()[1])
-                        return uid, _posix_account(uid)
+                        return uid, posix_account(uid)
         except (OSError, ValueError, IndexError) as e:
             return None, f"cannot read {status} ({getattr(e, 'strerror', None) or type(e).__name__})"
         return None, f"no Uid line in {status}"
@@ -532,7 +536,7 @@ def parent_account() -> tuple[int | None, str]:
         uid = int(done.stdout.strip())
     except (OSError, ValueError, subprocess.SubprocessError) as e:  # pragma: no cover
         return None, f"/bin/ps could not tell the parent's account ({type(e).__name__})"
-    return uid, _posix_account(uid)  # pragma: no cover
+    return uid, posix_account(uid)  # pragma: no cover
 
 
 def account_can_write(path, uid: int) -> str | None:
@@ -571,7 +575,7 @@ def write_problem(path, rule: str = "file") -> str | None:
     if not WINDOWS:
         st = os.stat(path)
         if st.st_uid not in (0, os.geteuid()):
-            return f"owned by {_posix_account(st.st_uid)}"
+            return f"owned by {posix_account(st.st_uid)}"
         if rule == "parent" and stat.S_ISDIR(st.st_mode) and st.st_mode & stat.S_ISVTX:
             return None
         if st.st_mode & stat.S_IWOTH:

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Shared machinery for LLM-backed Path B judges.
 
 Every connector:
@@ -250,7 +253,7 @@ class LLMJudge(Judge):
     def _extract_text(self, resp: dict) -> str:
         raise NotImplementedError
 
-    def _deoptimize(self, body: dict) -> dict | None:
+    def _deoptimize(self, body: dict) -> dict | None:  # NOSONAR  # skipcq: PYL-R0201 - a hook; the OpenAI, Gemini and Anthropic judges override it
         """Optional one-shot 400 fallback. Must not weaken the local ballot parser."""
         return None
 

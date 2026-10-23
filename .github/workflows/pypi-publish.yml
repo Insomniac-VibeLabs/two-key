@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 name: publish
 
 # Trusted publishing only. No PyPI token lives in this repository.
@@ -38,7 +41,7 @@ jobs:
           python-version: "3.12"
       - name: Install build tools
         run: |
-          pip install --only-binary :all: "build==1.6.1" "twine==7.0.0" "cyclonedx-bom==7.5.0"
+          pip install --require-hashes --only-binary :all: -r .github/requirements/publish.txt -r .github/requirements/uv.txt
       - name: Tag must be this version
         if: github.ref_type == 'tag'
         run: |
@@ -50,13 +53,17 @@ jobs:
             exit 1
           fi
       - name: Build sdist and wheel
-        run: python -m build
+        # No isolated build environment: the backend (setuptools) is the hashed one from publish.txt.
+        run: python -m build --no-isolation
       - name: Check metadata
         run: twine check --strict dist/*
       - name: Software bill of materials
         run: |
           python -m venv "$RUNNER_TEMP/sbom-venv"
-          "$RUNNER_TEMP/sbom-venv/bin/pip" install --only-binary :all: dist/*.whl
+          # The wheel's dependencies come from uv.lock, with their hashes, so the SBOM lists the locked versions.
+          uv export --quiet --locked --no-dev --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/runtime.txt"
+          "$RUNNER_TEMP/sbom-venv/bin/pip" install --require-hashes --only-binary :all: -r "$RUNNER_TEMP/runtime.txt"
+          "$RUNNER_TEMP/sbom-venv/bin/pip" install --no-deps dist/*.whl
           cyclonedx-py environment "$RUNNER_TEMP/sbom-venv/bin/python" \
             --pyproject pyproject.toml \
             --mc-type library \

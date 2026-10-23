@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """What the monitored agent is told: the data classes always, the signed tool vocabulary only when asked."""
 
 import json

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """B1: agent_id / hosting library metadata is typed and length-capped (fail closed)."""
 
 import json

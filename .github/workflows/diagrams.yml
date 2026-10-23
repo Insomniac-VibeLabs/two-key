@@ -1,0 +1,54 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
+name: diagrams
+
+# Draws every Mermaid diagram in the docs with a pinned mermaid-cli (.github/diagrams/package-lock.json,
+# every package with its integrity hash, installed with npm ci) and uploads the pictures, so a
+# reviewer can look at all of them in one place. Not a required check: tests/test_doc_diagrams.py is the
+# gate, and this job only shows what GitHub's renderer will roughly draw. Nothing here is committed;
+# the docs keep real Mermaid, not pictures.
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - "tests/test_doc_diagrams.py"
+      - ".github/workflows/diagrams.yml"
+      - ".github/diagrams/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Extract every Mermaid block
+        run: python tests/test_doc_diagrams.py --extract "$RUNNER_TEMP/diagrams/src"
+      - name: Install mermaid-cli
+        run: |
+          mkdir "$RUNNER_TEMP/mmdc"
+          cp .github/diagrams/package.json .github/diagrams/package-lock.json "$RUNNER_TEMP/mmdc/"
+          cd "$RUNNER_TEMP/mmdc"
+          npm ci --no-audit --no-fund
+          echo '{"args": ["--no-sandbox"]}' > puppeteer.json
+      - name: Draw each block at GitHub's page width
+        run: |
+          mkdir "$RUNNER_TEMP/diagrams/png"
+          cd "$RUNNER_TEMP/mmdc"
+          for src in "$RUNNER_TEMP"/diagrams/src/*.mmd; do
+            name="$(basename "$src" .mmd)"
+            npx mmdc -p puppeteer.json -i "$src" -o "$RUNNER_TEMP/diagrams/png/$name.png" -w 780 -b white
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: diagrams
+          path: ${{ runner.temp }}/diagrams/png
+          if-no-files-found: error

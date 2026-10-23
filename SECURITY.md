@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Security
 
 Status: beta (pre-1.0). The maintainer reviews changes with live LLM testing
@@ -5,13 +11,28 @@ Status: beta (pre-1.0). The maintainer reviews changes with live LLM testing
 Bandit, CodeQL). There has been no independent or paid audit, and no
 production use is claimed.
 
-Report a vulnerability privately: the repository's Security tab, "Report a
-vulnerability". State what the code does, what the docs claim, and how you
-checked. Hardening ideas and documentation errors that do not expose users
-are welcome as public issues.
+Report a vulnerability privately through GitHub's form:
+<https://github.com/Insomniac-VibeLabs/two-key/security/advisories/new>
+(the repository's Security tab, "Report a vulnerability"). Do not report a
+vulnerability in a public issue, a pull request, or a discussion. State what
+the code does, what the docs claim, and how you checked. Hardening ideas and
+documentation errors that do not expose users are welcome as public issues.
+
+The maintainer acknowledges a report within 7 days. A fix ships in a new
+release; earlier releases do not get backports.
 
 The threat model is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). This file
 is how to report a vulnerability. It is not the model.
+
+## Supported versions
+
+Only the latest release on [PyPI](https://pypi.org/project/two-key/) gets
+security fixes. Upgrade to it before reporting, if you can.
+
+| Version | Supported |
+| --- | --- |
+| Latest release | Yes |
+| Any earlier release | No |
 
 ## In scope
 
@@ -42,7 +63,10 @@ is how to report a vulnerability. It is not the model.
 - A start that does not name, or under `high_assurance` or
   `on_writable_paths: refuse` does not refuse, a file or folder Two-Key
   runs or reads that another account could change, where
-  docs/CONNECTING.md says it is checked (0.6.0)
+  docs/CONNECTING.md says it is checked (0.6.0), the upstream server's files
+  named by an absolute argument or `upstream.check_paths` included, or a
+  proxy that starts under `high_assurance` when `upstream.command` starts
+  with a launcher and nothing names the server's files (#13)
 - A proxy that starts, by default or under `high_assurance`, when the real
   account of the process that started it is Two-Key's own, is root, cannot
   be told, or can change a file or folder the proxy runs or reads
@@ -132,7 +156,7 @@ a symlink output directory, and a directory the group or others can write.
 
 The gateway runs in the `TwoKey` process, on the `TwoKey` ledger object
 (`TwoKey.gateway()`). A gateway in another process or on another host is
-not supported (#45). The gateway's verifier holds only the capability
+not supported, by design ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)). The gateway's verifier holds only the capability
 public key, so it cannot mint; that is an API property, not key isolation.
 The same process holds the capability minting key and, on the shared
 ledger object, the principal, witness, and ledger keys, and the registered

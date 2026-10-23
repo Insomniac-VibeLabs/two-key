@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # How to run Two-Key
 
 Whether this package is the right control is [FIT.md](FIT.md). What it is
@@ -7,9 +13,37 @@ leaves out is [SCOPE.md](SCOPE.md).
 
 Commands are from the repository root.
 
+## Start here
+
+This page is long. Pick the route that matches how your agent calls tools, then read
+the sections for that route in the order given. [CONNECTING.md](CONNECTING.md) says which
+accounts and network rules each route needs, and it is the place to start if you are not
+sure which route fits.
+
+| Your agent is | Route | Read, in order |
+| --- | --- | --- |
+| An MCP client, or code you do not control, in any language | **MCP proxy** (`two-key mcp-proxy`) | [Install](#install), [Create a principal key and sign a constitution](#create-a-principal-key-and-sign-a-constitution), [Data classes](#data-classes), [Designing a constitution](#designing-a-constitution), [Judges](#judges), [Quorum policy](#quorum-policy), then [Put Two-Key in front of an MCP server](#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy) |
+| A Python agent loop where your code decides which functions run (LangChain, the OpenAI Agents SDK, your own) | **Guard** | The same first six, then [Caller-supplied facts](#caller-supplied-facts) (it holds "The guard"), [Monitored agents](#monitored-agents), and [Redeem](#redeem) |
+| Python code that calls `TwoKey` directly | **Library** | The same first six, then [Authorize from Python](#authorize-from-python), [Monitored agents](#monitored-agents), and [Redeem](#redeem) |
+
+To write a first deployment in one go, run `two-key setup --dir DIR`: it asks for the route, the
+profile, the judges, the monitored agent, the rules to sign and, for the proxy, the upstream server,
+then writes every file owner-only, signs the constitution, creates the ledger, and checks the result.
+Later, `two-key config set` changes one setting without opening the files, and `config undo` puts it
+back. [SETUP.md](SETUP.md) says who may run them and what they refuse. They write the files for you;
+they do not decide the rules or the judges, so read the sections above for your route either way.
+
+Whichever route you take, read these before you let an agent run: [Back up the
+keys](#back-up-the-keys), [Known trade-offs by configuration](#known-trade-offs-by-configuration),
+and [Checklist before you let an agent run](CONNECTING.md#checklist-before-you-let-an-agent-run).
+Content scanning ([Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product))
+and the SIEM copy ([Send the ledger to a SIEM](#send-the-ledger-to-a-siem)) are optional on every
+route. The rest of the page is reference, for when a section above points to it.
+
 ## Contents
 
 <!-- toc -->
+- [Start here](#start-here)
 - [Install](#install)
   - [Platforms](#platforms)
 - [Create a principal key and sign a constitution](#create-a-principal-key-and-sign-a-constitution)
@@ -41,6 +75,7 @@ Commands are from the repository root.
   - [Install](#install-1)
   - [Worked example: a billing server](#worked-example-a-billing-server)
   - [`proxy.yaml`](#proxyyaml)
+  - [Look at a config without starting the proxy](#look-at-a-config-without-starting-the-proxy)
   - [What the proxy does](#what-the-proxy-does)
   - [What each refusal or warning means](#what-each-refusal-or-warning-means)
   - [Key custody](#key-custody)
@@ -67,22 +102,32 @@ On Windows, activate with `.venv\Scripts\activate` instead. Two-Key runs on
 Linux, macOS, and Windows (0.6.0); see "Platforms" below for how keys are
 protected on each.
 
-That follows the ranges in `pyproject.toml`. The same checkout's `uv.lock`
-is what CI installs (wheels only). To match it, install the uv version
-pinned in `.github/workflows/tests.yml`, then `uv sync --locked --no-build
---extra yaml --extra mcp --no-dev`, and run tests with `.venv/bin/python`. When a
-dependency range changes, regenerate `uv.lock` with that same uv and commit
-it. The lock is not a consumer pin: a git install still uses the ranges.
+That follows the ranges in `pyproject.toml`. CI installs from the same
+checkout's `uv.lock` instead (wheels only). To match it, install the uv
+version pinned in `.github/requirements/uv.in`, run `uv sync --locked
+--no-build --extra yaml --extra mcp --no-dev`, and run the tests with
+`.venv/bin/python`. When a dependency range changes, regenerate `uv.lock`
+with that same uv and commit it. The lock is not a consumer pin: a git
+install still uses the ranges.
 
-Version 0.7.0 is on PyPI. Tag `v0.7.0` is not moved. Install with
-`pip install "two-key[yaml]==0.7.0"` (the `mcp` extra for the proxy).
+Version 0.7.3 is on PyPI, and is tag `v0.7.3` on `main`. Install with
+`pip install "two-key[yaml]==0.7.3"` (the `mcp` extra for the proxy).
 The release steps are [PYPI.md](PYPI.md). A checkout install, above, is
 for working in this repository.
 
 ### Platforms
 
-Two-Key runs on Linux, macOS, and Windows, with Python 3.10 to 3.12; CI
-runs the tests, the demo, and a wheel install on all three.
+Two-Key runs on Linux, macOS, and Windows, with Python 3.10 to 3.14; CI
+runs the tests and the demo on each of those versions on all three, and a
+wheel install on all three.
+
+Python 3.15 is not supported yet. The `yaml` and `mcp` extras need PyYAML,
+which publishes no 3.15 wheel yet, so pip builds it from source: that works
+where a C compiler is installed (most Linux machines) and fails on Windows and
+on a Mac without one. Use Python 3.14 until PyYAML ships 3.15 wheels. CI runs
+a 3.15 job on Linux that builds PyYAML from source, but it does not block a
+change. `requires-python` has no upper bound: a bound would not stop pip, which
+would install an older Two-Key and hit the same PyYAML build.
 
 Key files (the principal key, the ledger key, the witness and capability
 keys, the fingerprint key, the head anchor, token files) must be readable
@@ -99,10 +144,10 @@ not (`*_insecure`), with the command that fixes it:
 
 A symlink (or, on Windows, a junction) in place of a key file is refused
 on every platform. Two-Key processes that share a ledger take a
-cross-process lock (`flock`, or `LockFileEx` on Windows) on the separate
-`<ledger>.lock` and `<ledger>.redeem-locks` files. In `proxy.yaml`,
-`upstream.command` can name `npx` on Windows: the proxy finds `npx.cmd`
-through `PATHEXT`, without a shell.
+cross-process lock on the separate `<ledger>.lock` and
+`<ledger>.redeem-locks` files (`flock`, or `LockFileEx` on Windows). In
+`proxy.yaml`, `upstream.command` can name `npx` on Windows. The proxy finds
+`npx.cmd` through `PATHEXT`, without a shell.
 
 ## Create a principal key and sign a constitution
 
@@ -123,6 +168,14 @@ take `--key` refuse a key file that the group or others can read
 key_file_public` (chmod would not help), and a file that is not a PEM
 private key is `key_file_invalid`. Each refusal is one line on stderr.
 
+To encrypt the key with a passphrase, give `init-key --passphrase` (asked
+twice on the terminal) or `--passphrase-file FILE` (an owner-only file, at
+least 12 bytes). Every command that takes `--key` then takes
+`--key-passphrase-file FILE`, or asks on the terminal; the proxy reads
+`keys.passphrase_file`. An existing deployment's key is encrypted with
+`two-key config key-passphrase`. What that protects and what it does not:
+[SETUP "Protecting the principal key with a passphrase"](SETUP.md#protecting-the-principal-key-with-a-passphrase).
+
 The signature covers the prose, the hard rules, `tool_specs`, and the
 custom-field registry (`fields:`) when there is one. A modified file will
 not load. `tool_specs` is required. A rules file with `fields:` signs as a
@@ -134,12 +187,14 @@ flowchart TD
   prose["Prose<br/>constitution.md"] --> sign["sign-constitution<br/>one signature"]
   rules["Hard rules<br/>hard_rules.yaml"] --> sign
   specs["tool_specs<br/>inside hard_rules.yaml"] --> sign
-  sign --> envelope["Signed envelope<br/>prose + hard_rules + tool_specs<br/>+ signature"]
+  sign --> envelope["Signed envelope<br/>prose, hard_rules,<br/>tool_specs, signature"]
   envelope --> load["verify_signed<br/>fail-closed on any change"]
   load --> compiled["CompiledConstitution<br/>bytecode + tool_specs"]
-  compiled --> pathA["Path A Policy VM<br/>uses bytecode + derived fields"]
-  compiled --> pathB["Path B judges<br/>see constitution prose + normalized action record"]
+  compiled --> pathA["Path A policy VM<br/>bytecode and<br/>derived fields"]
+  compiled --> pathB["Path B judges<br/>prose and the normalized<br/>action record"]
 ```
+
+*One signature covers the prose, the hard rules and the tool specs; any change to the envelope refuses to load.*
 
 A bare rule list, a missing
 key, `null`, and an empty mapping are refused. `examples/hard_rules.yaml`
@@ -496,8 +551,37 @@ python -m two_key sign-constitution ... --envelope-format v2     # at least v2
 python -m two_key sign-constitution ... --envelope-format v3     # always v3
 ```
 
+**The serial: a ledger never goes back.** An older constitution signed with
+the same key still verifies, so the signature alone cannot stop someone from
+putting it back. Give the rules file a `serial:` (a positive integer) and
+raise it each time you sign new rules:
+
+```yaml
+serial: 3
+hard_rules: [...]
+tool_specs: {...}
+```
+
+A constitution with a serial signs as v3. At start, Two-Key reads the serials
+the ledger has run. Once it has run serial N, it refuses a lower serial
+(`constitution_rollback`), N again with different rules
+(`constitution_serial_reused`), and a constitution with no serial
+(`constitution_serial_missing`), before anything is written. To go back to
+older rules, sign them again with a higher serial. `two-key setup` and
+`two-key mcp-draft-specs` write `serial: 1`, and `two-key config set` on a
+signed setting signs the next one for you. `setup` warns when the rules file
+you give it has no serial. A ledger that has never run a constitution with a
+serial accepts any, as before. Two proxies started at the same moment on one
+ledger are checked one after the other, so the second sees what the first
+recorded.
+
+Count up by one. The highest serial is 2^53 (9007199254740992): a ledger
+that has run it can never accept a newer constitution, so `config set` on a
+signed setting is refused from then on, and changing the rules needs a new
+ledger.
+
 In Python: `sign_constitution(prose, rules, key, specs, fields=fields,
-envelope_format="v2")`. `auto` writes v1 unless there are fields, and v3
+envelope_format="v2")`, with `serial=N` for a serial. `auto` writes v1 unless there are fields, and v3
 when a 0.5.0 feature is used. `v2` writes v2 even without fields; that
 loads the same way, and an older install refuses it. Loading accepts all
 three formats. A rules file with
@@ -1002,7 +1086,9 @@ with no local judge does not start
 another account could change a file or folder Two-Key runs or reads
 (`writable_path`; see
 [CONNECTING](CONNECTING.md#what-two-key-checks-for-you)), and it does not
-accept `on_writable_paths: warn`.
+accept `on_writable_paths: warn`. Under it, the MCP proxy also does not start
+when `upstream.command` starts with a launcher and nothing names the
+server's files (`upstream_paths_unchecked`).
 
 A judge's maker is who made the judge's model, as the operator labels it:
 the per-judge `maker:` key, or its `provider` when `maker:` is omitted. It
@@ -1091,7 +1177,7 @@ The ledger keeps only `tool_args_size`, `tool_args_digest`, and
 nested too deeply to encode are denied in `authorize` and at the gateway
 with `invalid_call:tool args are nested too deeply`; the ledger keeps
 `tool_args_omitted: true` and `tool_args_error`. Encoding runs before the
-size check, so the reason is the same on Python 3.10, 3.11, and 3.12.
+size check, so the reason is the same on every Python from 3.10 to 3.14.
 
 With a content scanner (0.6.0), the files a scanned tool's call carries are
 held to limits too, before the scanner and both paths and under every
@@ -1219,7 +1305,7 @@ from two_key.keys import load_private_key_file
 from two_key.ledger import Ledger
 import os
 
-key = load_private_key_file("keys/principal.pem")
+key = load_private_key_file("keys/principal.pem")   # encrypted: add passphrase_source("PASSPHRASE_FILE")
 judges, policy = load_config_file(Path("examples/judges.yaml"))
 agent = load_monitored_agent_file(Path("examples/judges.yaml"))
 ledger = Ledger("ledger", key)
@@ -1284,24 +1370,33 @@ the signed lists the agent never saw.
 
 ```mermaid
 sequenceDiagram
-  participant Signed as Signed constitution
   participant Caller as Caller (your app)
   participant TwoKey
   participant Agent as Monitored agent host
+  Caller->>TwoKey: agent_vocabulary(tools=[pay_bill])
+  Note over TwoKey: reads tool_specs and the field registry
+  TwoKey-->>Caller: vocabulary text, syntax only
+  Note over Caller: adds this task's exact values to the instruction
+  Caller->>Agent: system prompt, prose, vocabulary, instruction
+  Agent-->>Caller: JSON proposal (tool, arguments, data_class)
+```
+
+*The vocabulary carries the shape of a call. This task's values, for example paying power-co.example 64.12 USD, come only from the instruction.*
+
+Then Two-Key checks the proposal:
+
+```mermaid
+sequenceDiagram
+  participant Caller
+  participant TwoKey
   participant PathA as Path A VM
   participant PathB as Path B judges
   participant Ledger
-
-  Caller->>TwoKey: agent_vocabulary(tools=[pay_bill])
-  TwoKey->>Signed: read tool_specs and the field registry
-  Note over TwoKey: keeps tool ids, argument paths, value syntax, floors, data classes<br/>drops allow lists, enum values, bounds, rules, thresholds,<br/>blocked parties, descriptions, defaults, irreversible flags
-  TwoKey-->>Caller: vocabulary text, syntax only
-  Note over Caller: puts this task's exact values in the instruction,<br/>for example pay power-co.example 64.12 USD
-  Caller->>Agent: system prompt, prose, vocabulary, instruction
-  Agent-->>Caller: JSON proposal (tool, arguments, data_class)
   Caller->>TwoKey: authorize the proposal
-  TwoKey->>PathA: values from the argument bytes vs the signed allow lists and rules
+  TwoKey->>PathA: values from the argument bytes
+  PathA-->>TwoKey: allow or deny against the signed lists
   TwoKey->>PathB: prose and the action record
+  PathB-->>TwoKey: quorum pass or deny
   alt both paths allow
     TwoKey->>Ledger: decision and capability token
     TwoKey-->>Caller: single-use token for the gateway
@@ -1310,6 +1405,8 @@ sequenceDiagram
     TwoKey-->>Caller: deny, no token
   end
 ```
+
+*Path A checks the values against signed lists the agent never saw, so a guessed value is a ledgered deny.*
 
 `tk.agent_vocabulary()` describes syntax, never values. For each signed
 tool (or only those in `tools`) it gives the id, the `data_class_floor`,
@@ -1381,18 +1478,19 @@ without `private_key=` (`no_issuer_key:`). Constructing
 `ToolGateway(tk.ledger, tk.issuer.verifier(), tk.compiled, tools=...)`
 directly in the same process is equivalent; passing `tk.issuer` also works.
 The constructor keeps a verifier, so `gw.issuer.private_key` is `None` and
-`gw.issuer.issue(...)` raises `verifier_cannot_mint`. The minting key is `<ledger>.capability/capability.pem`,
-next to the ledger directory, not inside it. The public half is
-`capability.pub.pem` beside it. The key is created once with mode 0600 in a
-0700 directory. After a token has been issued it is never regenerated: a
-missing or different key refuses to start (`capability_key_missing`,
-`capability_key_changed`), and so does a ledger with issued tokens but no
-pinned key fingerprint (`capability_key_unpinned`). Once a `TwoKey` with
-`private_key=` has run on a ledger, a start without it is refused
-(`keyless_start_refused:`): it would record no capability key and block
-later keyed starts. A capability key equal to the principal key is
-refused. The principal key on the ledger signs the head. A token signed
-with that principal key does not redeem.
+`gw.issuer.issue(...)` raises `verifier_cannot_mint`.
+
+The minting key is `<ledger>.capability/capability.pem`, next to the ledger
+directory, not inside it. The public half is `capability.pub.pem` beside it.
+The key is created once with mode 0600 in a 0700 directory. After a token
+has been issued it is never regenerated. A missing or different key refuses
+to start (`capability_key_missing`, `capability_key_changed`), and so does a
+ledger with issued tokens but no pinned key fingerprint
+(`capability_key_unpinned`). Once a `TwoKey` with `private_key=` has run on a
+ledger, a start without it is refused (`keyless_start_refused:`), because it
+would record no capability key and block later keyed starts. A capability
+key equal to the principal key is refused. The principal key on the ledger
+signs the head, and a token signed with that principal key does not redeem.
 
 The gateway checks the signature, expiry, a lifetime no longer than the TTL
 (`ttl_too_long`), an issue time no more than 5 s ahead
@@ -1433,10 +1531,9 @@ the tool runs also blocks a retry.
 
 The gateway runs in the same process as `TwoKey`, on the ledger object
 `TwoKey` uses. Build it with `TwoKey.gateway()`. A gateway in another
-process or on another host is not supported
-([#45](https://github.com/Insomniac-VibeLabs/two-key/issues/45)),
-and this package has no gateway-only ledger role, remote gateway, or
-cross-process protocol.
+process or on another host is not supported, and this package has no
+gateway-only ledger role, remote gateway, or cross-process protocol. That
+is a security decision, not a missing feature; the reasons follow.
 
 Why:
 
@@ -1598,17 +1695,19 @@ every call through both keys before the server sees it. A refused call
 comes back to the agent as a tool error with a reason code.
 
 ```mermaid
-flowchart LR
-  host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
+flowchart TD
+  host["Agent host<br/>MCP client"] -- "tools/list and<br/>tools/call, stdio" --> tk
   subgraph proxy["two-key mcp-proxy, its own OS user"]
-    tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["TwoKey.authorize<br/>Path A and Path B"]
+    tk -- "token" --> gw["Gateway<br/>same process"]
   end
   tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
+  gw -- "projected arguments,<br/>stdio" --> up["Upstream MCP server<br/>child process,<br/>third OS user"]
   up --> sor["System of record"]
   hooks -. "look facts up" .-> sor
 ```
+
+*The agent host talks only to the proxy. Solid lines are the call path; dashed lines are the record sent to the judges and the hook's own lookups.*
 
 ```mermaid
 sequenceDiagram
@@ -1616,23 +1715,25 @@ sequenceDiagram
   participant Proxy as two-key mcp-proxy
   participant Judges
   participant Up as Upstream server
-  Note over Proxy,Up: At start the proxy launches the server, lists its tools, and checks schema_digest
+  Note over Proxy,Up: At start: launch, list tools, check schema_digest
   Host->>Proxy: tools/list
   Proxy-->>Host: the signed tools only
-  Host->>Proxy: tools/call pay_vendor with vendor, amount, invoice, memo
-  Proxy->>Proxy: fact hook looks the invoice up, po_matched comes from the system of record
-  Proxy->>Proxy: Path A on the form derived from the arguments, the facts, and the fixed claim
+  Host->>Proxy: tools/call pay_vendor with its arguments
+  Proxy->>Proxy: fact hook reads the system of record
+  Proxy->>Proxy: Path A on arguments, facts, fixed claim
   Proxy->>Judges: normalized record, with fact_fields
   Judges-->>Proxy: ballots
   alt both keys turn
-    Proxy->>Proxy: mint a token, run the fact hook again, the gateway checks both
-    Proxy->>Up: tools/call pay_vendor with vendor, amount, invoice, memo, and the hook's po_matched
+    Proxy->>Proxy: mint a token, run the hook again
+    Proxy->>Up: tools/call with the arguments and the facts
     Up-->>Proxy: result
     Proxy-->>Host: result
   else a key does not turn
-    Proxy-->>Host: tool error, two-key denied this call, then the reason code
+    Proxy-->>Host: tool error: denied, with the reason code
   end
 ```
+
+*The facts come from the proxy's own hook and the system of record, never from the agent. The upstream server sees a call only when both keys turn.*
 
 The proxy is a separate process, so it works with any MCP client and any
 agent language. It uses the official MCP Python SDK, installed with the
@@ -1642,7 +1743,7 @@ messages and decides nothing.
 ### Install
 
 ```bash
-pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.0"
+pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.3"
 pip install -e ".[mcp]"          # or from a checkout
 ```
 
@@ -1758,7 +1859,8 @@ agent_id: billing-agent                            # ledger metadata, not trust
 allow_unresolved_identity: false
 upstream:
   command: ["sudo", "-n", "-u", "mcp-billing", "--preserve-env=BILLING_TOKEN", "--",
-            "npx", "-y", "@example/billing-mcp@1.2.3"]
+            "/opt/billing-mcp/node_modules/.bin/billing-mcp"]
+  check_paths: [/opt/billing-mcp/node_modules/@example/billing-mcp]   # the server's package folder
   env: {BILLING_TOKEN: {env: BILLING_TOKEN}}
   schema_digest: "sha256:..."                       # from step 3
   on_schema_change: refuse
@@ -1770,6 +1872,17 @@ tools:
     facts: {po_matched: {hook: "billing_facts:po_matches"}}   # your code: (tool, arguments) -> value
   read_report: {claim: floor}
 ```
+
+The server is installed once, as root, with `npm install --prefix
+/opt/billing-mcp @example/billing-mcp@1.2.3`, so neither the agent nor
+`mcp-billing` can change it. At start, the proxy checks `command[0]`, each
+absolute argument after it that exists (a file together with its folder),
+and each `check_paths` entry, with every folder above them
+([CONNECTING](CONNECTING.md#what-two-key-checks-for-you)). It does not look
+inside a folder, so name the package folder, not only the program. With
+`"npx", "-y", "@example/billing-mcp@1.2.3"` instead, npm downloads the server
+into `mcp-billing`'s own cache, which nothing names, and the proxy warns
+`upstream_paths_unchecked` (under `high_assurance` it refuses to start).
 
 `billing_facts.po_matches` is your module, on the proxy's Python path:
 
@@ -1804,7 +1917,7 @@ or, with `on_writable_paths: refuse`, does not start.
 
 sudo keeps the caller's working directory, and the upstream server
 inherits the proxy's unless `upstream.cwd` is set. Left in the agent's
-folder, `npx` would look for the server in that folder's `node_modules`
+folder, a server started with `npx` would look for it in that folder's `node_modules`
 and read its `.npmrc` first, so the agent could plant a server that
 receives `BILLING_TOKEN`. Hence the `cd` to a folder the agent cannot
 write. Run the `two-key` command, not `python -m two_key`, which puts the
@@ -1816,7 +1929,10 @@ The proxy prints `two-key: mcp-proxy: serving 2 signed tool(s)
 ### `proxy.yaml`
 
 Read strictly: a repeated key, a YAML merge key, and an unknown key are
-refused. Relative paths are relative to the file.
+refused. Relative paths are relative to the file. The table below is the
+short version: every key of this file and of `judges.yaml`, with its default,
+what `high_assurance` does to it, and which file tier it is in, is in
+[SETTINGS.md](SETTINGS.md).
 
 | Key | Required | Meaning |
 | --- | --- | --- |
@@ -1837,6 +1953,7 @@ refused. Relative paths are relative to the file.
 | `upstream.schema_digest` | yes | `sha256:...` from `mcp-draft-specs` |
 | `upstream.on_schema_change` | no | `refuse` (default) or `warn` |
 | `upstream.call_timeout_seconds` | no | Per upstream call, at most 3600 (default 60) |
+| `upstream.check_paths` | no | Absolute paths (on Windows, with the drive: `C:\...`) of the server's own files and folders (its package folder, script, config) for the start-up checks, beside each absolute argument of `upstream.command` that exists, which is checked without being listed. At most 64. One that does not exist refuses to start (`check_path_missing`). A folder is checked itself, with the folders above it, not every file inside it. When `command[0]` is a launcher (`sudo`, `doas`, `env`, `npx`, `uvx`, `pipx`, `cmd`, `powershell`, `pwsh`) and nothing is named, the proxy warns `upstream_paths_unchecked`; `high_assurance` refuses ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you)) |
 | `tools.<id>.claim` | no | `floor` (the signed `data_class_floor`), a data class, or `none` (default: omitted, so `classified`) |
 | `tools.<id>.proposal` | no | Fixed proposal text (default `MCP tools/call <id>`); judges see it only with `judge_inputs: record_and_proposal` |
 | `tools.<id>.upstream_name` | no | The upstream's name for a signed tool whose name is not a lower-case id |
@@ -1849,6 +1966,33 @@ The claim is the only thing the proxy says about a call, and the agent
 writes none of it. Amount, counterparty, and irreversible are never
 claimed: they come from the argument bytes and the signed spec, as in
 `two-key authorize` with those options left out.
+
+### Look at a config without starting the proxy
+
+```
+two-key config show  --config proxy.yaml        # the effective settings as JSON, defaults filled in
+two-key config get   --config proxy.yaml NAME   # one setting: value, file, tier, default
+two-key config check --config proxy.yaml        # would it start? exit 1 on any FAIL
+```
+
+These are read-only. They write no file, open no ledger, start no process, and contact no judge, scanner, SIEM
+collector or upstream server. `show` prints a key file by path, a judge's key by the name of its environment
+variable, and an upstream literal value as `<literal>`; no secret value is printed. Each judge is shown with
+its type, `base_url`, and the names of the variables it reads. `check` loads the files
+the config names and reports one line each: the config parses (unknown and repeated keys refused), the
+principal key file loads, the constitution is signed by that key, every `tools:` entry is a signed tool, the
+judges and quorum load (with the single-judge and maker-diversity warnings), a `monitored_agent` is declared,
+every environment variable the proxy and its judges read is set (each missing one named, never a value:
+an upstream or agent variable is a `FAIL`, a judge's key a `WARN` because that judge would only abstain), every `upstream.check_paths` entry exists
+(`check_path_missing`), a launcher with nothing named (`upstream_paths_unchecked`, a `FAIL` under
+`high_assurance`), no path another account can change (`writable_path`, a
+`FAIL` under `on_writable_paths: refuse` or `high_assurance`), and a plaintext SIEM sink (a `FAIL` under
+`high_assurance`), and the `on_agent_access` setting (a `FAIL` for `warn` under `high_assurance`). It cannot
+check which account starts the proxy, and it does not compare the upstream's tools with `schema_digest`; the
+proxy does both at start. A variable that is set in your shell may not be set in the proxy's own environment,
+so a `FAIL` for a missing variable names the variable and says so. Every setting is listed in
+[SETTINGS](SETTINGS.md). To change one, `two-key config set` runs this same check on the changed files before
+it writes anything ([SETUP](SETUP.md)).
 
 ### What the proxy does
 
@@ -1879,7 +2023,7 @@ claimed: they come from the argument bytes and the signed spec, as in
   1. the fact hooks;
   2. `TwoKey.authorize` (origin `mcp-proxy`);
   3. the hooks again;
-  4. `gateway.invoke` in the same process (#45).
+  4. `gateway.invoke` in the same process ([why](#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
 
   The gateway's registered tool is the upstream `tools/call`, with the
   projected arguments only: an unnamed key never reaches the server, and a
@@ -1900,6 +2044,8 @@ on stderr and exits 1.
 | `TwoKeyConfigError: ...`, `JudgeConfigError: ...`, `LedgerError: ...` | Two-Key itself refused, as `two-key authorize` would | See the sections on judges, the monitored agent, and the ledger |
 | `AgentAccessError: agent_same_account: ...`, `agent_account_root`, `agent_account_unknown`, `agent_can_write: <path>: ...` | The account that started the proxy is Two-Key's own, root, unknown, or can change that path; `on_agent_access` is `refuse` (the default) or `high_assurance` is set | Start the proxy from the agent's own account through the `run-proxy` sudo rule (or SSH) and take its write access away ([CONNECTING](CONNECTING.md#route-1-an-mcp-client-through-two-key-mcp-proxy)). For a test under one account only: `on_agent_access: warn` |
 | `TwoKeyConfigError: writable_path: <path>: ...` | Another account could change a file or folder Two-Key runs or reads, and `on_writable_paths: refuse` or `high_assurance` is set | Make it owned by Two-Key's account (or root) and not writable by group or others ([CONNECTING](CONNECTING.md#run-two-key-as-a-service-account)) |
+| `upstream_paths_unchecked: upstream.command starts with <launcher> ...; high_assurance refuses to start` | `upstream.command[0]` is a launcher such as `sudo` or `npx`, no argument after it is an absolute path that exists, and `upstream.check_paths` is unset, so the checks cannot see the server. Without `high_assurance` this is a `WARNING` and the proxy starts | Give the server's program and script as absolute paths, or list its files and folders in `upstream.check_paths` |
+| `check_path_missing: upstream.check_paths[<n>]: <path> does not exist` | An entry names nothing | Fix the path, or remove the entry |
 | `unresolved_identity: ...` | Two-Key cannot tell who serves a judge or the agent (a local proxy serving an alias, an unrecognized host), so it cannot rule out a judge that is the agent | Declare `upstream:` for that side in `judges.yaml`, or set `allow_unresolved_identity: true` to accept the risk |
 | `tools: [...] are not tools in the signed constitution` | A `tools:` entry names an unsigned tool | Remove it, or sign the tool |
 | `upstream_unavailable: <type>: ...` | The child did not start, or did not speak MCP | Check the command and its user |
@@ -1959,7 +2105,7 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 - **The `two-key` user** holds the principal key, the ledger and its key,
   witness, and capability directories, `judges.yaml`, the judge keys, the
   agent session, and the upstream credential. As with the library, one
-  process holds all of them (#45).
+  process holds all of them ([why](#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
 - **The agent host's user** must not be able to read any of that, change
   `proxy.yaml` or the constitution, or reach the upstream server or its
   credential by another path. An agent that can call the upstream directly
@@ -2149,6 +2295,11 @@ function only. PBKDF2 slows guessing and is not memory-hard. A short
 passphrase, or two bundles that share a passphrase, is warned about. All
 three sharing one passphrase is warned about too. A bundle file over 64 MiB
 is refused.
+
+An encrypted `principal.pem` goes into the bundle as it is, still encrypted,
+and comes back that way on restore, so export, verify, and restore also need
+its own passphrase: `--key-passphrase-file FILE`, or a prompt on the
+terminal.
 
 Export copies the files while it holds the ledger lock, then opens that copy
 in a temporary directory before it writes a bundle. A copy that would not
@@ -2529,8 +2680,11 @@ names the setting or declaration that controls it.
   dry start.
 - A `ttl_seconds` out of range is reported with the prefix
   `ttl_out_of_range:`.
-- On Python 3.12, an agent reply nested past 62 levels parses and is
-  `invalid_call`. On 3.10 and 3.11 it is `malformed_proposal`. Both deny.
+- An agent reply whose arguments are nested past 62 levels parses and is
+  `invalid_call`. On Python 3.10 and 3.11, one nested close to 1,000 levels
+  (the interpreter's recursion limit) does not parse and is
+  `malformed_proposal`; on 3.12 and later it parses and is `invalid_call`.
+  Both deny.
 - `agent_session` is the session you pass. The named agent key is compared
   beside it. It is not added to that string, not sent to the judge, and not
   written down.

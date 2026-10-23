@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The judge-is-not-the-agent rule (owner decision, 2026-10-08).
 
 A judge must not be the monitored agent: TwoKey refuses to start when a judge holds the agent's credential (an API
@@ -284,7 +287,7 @@ class Basic(EnvVars):
             BasicAuthCredential("BA_USER", "BA_MISSING").get_token()
 
     def test_a_password_pair_is_fingerprinted_with_pbkdf2_and_a_token_with_hmac(self):
-        from two_key.identity import credential_fingerprint, password_fingerprint
+        from two_key.identity import password_fingerprint
         self.setenv(BA_USER="alice", BA_PASS="s3cret", RULE_AGENT_KEY="agent-key")
         basic = side("m", "https://h.example/v1", credential=BasicAuthCredential("BA_USER", "BA_PASS"))
         [fp] = judge_identity(basic, FP).credentials

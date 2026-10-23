@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Re-review: a ballot cannot claim another judge's identity. Ballots are paired with judges by
 position, judge_id and provider come from the judge object, and a mismatched judge_id abstains."""
 

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """The MCP proxy through the MCP SDK, against a fake upstream server started as a child process over stdio
 (tests/fixtures/fake_mcp_server.py). Network-free. Skipped without the mcp extra."""
 
@@ -91,7 +94,7 @@ class ThroughTheSdk(unittest.TestCase):
             with self.subTest(mode=mode):
                 (listed, ok, capped, hidden), tk = self.run_client(body, mode=mode)
                 self.assertEqual(sorted(t.name for t in listed.tools), ["env_names", "pay_vendor", "read_report"])
-                pay = next(t for t in listed.tools if t.name == "pay_vendor")
+                pay = next(t for t in listed.tools if t.name == "pay_vendor")  # skipcq: PTC-W0063 - test only
                 self.assertEqual(pay.description, "Pay a vendor invoice.")
                 self.assertTrue(pay.annotations.destructive_hint)
                 self.assertFalse(ok.is_error, ok)
@@ -223,9 +226,9 @@ class CommandLine(unittest.TestCase):
         (self.dir / "proxy.json").write_text(json.dumps(data))
         return self.dir / "proxy.json"
 
-    def run_proxy(self, config):
+    def run_proxy(self, config):  # skipcq: PYL-R0201 - test only
         env = child_env(TK_TEST_AGENT_KEY="agent-key", TK_TEST_JUDGE_KEY="judge-key", PYTHONPATH=str(ROOT))
-        return subprocess.run([sys.executable, "-m", "two_key", "mcp-proxy", "--config", str(config)],  # nosec B603
+        return subprocess.run([sys.executable, "-m", "two_key", "mcp-proxy", "--config", str(config)],  # nosec B603  # skipcq: PYL-W1510 - test only
                               capture_output=True, text=True, env=env, timeout=120, stdin=subprocess.DEVNULL)
 
     def test_unresolved_identity_refuses_to_start(self):

@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 # A throwaway certificate authority for the example in this folder: a CA, and a server certificate
 # for 127.0.0.1 and localhost that receiver.py presents. Thirty days, ECDSA P-256, nothing published.
 #

@@ -6,10 +6,10 @@ testing and automated scanners, not independently audited. Apache-2.0.
 
 Package: two-key
 Import: two_key
-Package version: 0.7.0 (the SIEM export, a start-up check for the account the monitored agent runs as, a count of refused gateway tokens). Tag v0.7.0 is on main; so are v0.6.0 (Windows support, content scanning through your antivirus or DLP product, a start-up check for writable paths), v0.5.0 (MCP proxy, caller-supplied facts, constitution v3) and v0.4.0 (package renamed from two-key-concept). Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
+Package version: 0.7.3 (two-key setup and config set, get, undo, show and check; a principal key with a passphrase; a signed constitution serial against older rules; the upstream server's files in the start-up checks). Tag v0.7.3 is on main; so are v0.7.0 (the SIEM export, a start-up check for the account the monitored agent runs as, a count of refused gateway tokens), v0.6.0 (Windows support, content scanning through your antivirus or DLP product, a start-up check for writable paths), v0.5.0 (MCP proxy, caller-supplied facts, constitution v3) and v0.4.0 (package renamed from two-key-concept). Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-0.7.0 is on PyPI. Distribution name two-key, import two_key, extras yaml and mcp. Install two-key[yaml]==0.7.0, or two-key[mcp]==0.7.0 for the proxy. Tag v0.7.0 was not moved. docs/PYPI.md is the release process: trusted publishing, no token in the repo.
-uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged.
+0.7.3 is on PyPI (0.7.1 and 0.7.2 are the 0.7.0 code, repackaged). Distribution name two-key, import two_key, extras yaml and mcp. Install two-key[yaml]==0.7.3, or two-key[mcp]==0.7.3 for the proxy. Tags are not moved. docs/PYPI.md is the release process: trusted publishing, no token in the repo.
+uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged. CI tools (uv, build, coverage, bandit, twine, cyclonedx-bom) are hash-pinned in .github/requirements/.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
 "Upgrading from 0.2.2" (then "Upgrading from 0.2.1" and "Upgrading from 0.1.12" for older).
@@ -31,6 +31,10 @@ cannot read is denied before the scanner and both paths under every stance. An e
 scanner cannot open is flagged, unless the tool's signed spec says encrypted: pass and encryption is
 the only finding (verdict encrypted).
 
+docs/SETTINGS.md lists every setting in proxy.yaml, judges.yaml, agents.yaml, the signed rules file and
+tool specs, with its default and what the high_assurance profile does to it; it is generated from
+two_key/settings.py and a test fails when a key the code accepts has no row.
+
 From 0.7.0: optional SIEM export (docs/SIEM.md). TwoKey(...,
 siem=SiemConfig(sinks=[...])), or the proxy.yaml siem: block, copies every ledger entry, after it is
 written and fsynced, to a syslog sink (transport tls on 6514 by default; tcp or udp on 514; every
@@ -42,7 +46,9 @@ data class, quorum counts, the scan verdict; never argument values, proposal or 
 derived amount, counterparties, custom field values, scanner threat names, or any credential. A
 collector that is down, slow, or gone never blocks or delays an authorization: entries queue on a
 sender thread, delivery resumes from the cursor (<ledger>.siem/cursor.json), and late events carry
-replay: true. TLS verifies the certificate and the host name with no setting to disable either; a
+replay: true. Constitution serial (rules file serial: N, signed, v3): once a ledger has run serial N, a lower serial
+(constitution_rollback), N with other rules (constitution_serial_reused) or no serial (constitution_serial_missing)
+refuse to start; setup signs 1, config set the next. A cursor ahead of the ledger, or from another ledger, warns and re-sends the whole ledger. TLS verifies the certificate and the host name with no setting to disable either; a
 plaintext sink is refused under high_assurance (siem_plaintext_refused) and warns at start
 otherwise. two-key siem-export writes the same events to a file (owner-only, never over an existing
 file, a signed summary last) and two-key siem-verify re-derives each event from the ledger offline
@@ -68,7 +74,8 @@ at start (lone_judge_warning) and does not refuse. QuorumPolicy.high_assurance
 label for who made a judge's model, not verified, never compared with the agent), 1 local judge,
 and a local yes. The old names vendor/min_vendors are refused (removed in 0.2.3). At start, TwoKey
 warns (writable_path) for each file or folder of the running Python, or of check_paths (the proxy
-passes proxy.yaml, the files it names, hook modules, the upstream program and folder), that another
+passes proxy.yaml, the files it names, hook modules, the upstream program and folder, each absolute
+upstream.command argument that exists, and upstream.check_paths), that another
 account could change; on_writable_paths: refuse refuses, and high_assurance always refuses (0.6.0).
 Run Two-Key as a service account (docs/CONNECTING.md). Each ballot is one
 stateless request at temperature 0; a judge endpoint that keeps memory across ballots carries agent text from one
@@ -107,7 +114,7 @@ reputation halt is on the roadmap after 1.0 and is not built.
 The token TTL default is 120 seconds, at most 300. It is signed by the capability key, not
 the principal key. The gateway verifies only. It runs in the TwoKey process on the
 TwoKey ledger object (TwoKey.gateway()); a gateway in another process or host is not
-supported (#45), and verify-only is not key isolation: that process also holds the
+supported, by design (docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process), and verify-only is not key isolation: that process also holds the
 minting, principal, witness, and ledger keys, and the registered tools. It binds the tool, the argument
 hash, the ledger root and size, the constitution hashes, spec_hash, and the
 derived form. tool_specs is required. A disagreeing claim is a deny.
@@ -173,7 +180,7 @@ when upstream.schema_digest does not match those fields (upstream_schema_changed
 on_schema_change: warn. It refuses an unresolved_identity warning unless allow_unresolved_identity:
 true (the library only warns). Each tools/call: authorize with the per-tool claim (claim: floor, a
 data class, or none = classified; amount, counterparty, irreversible never claimed; fixed proposal),
-then gateway.invoke in the same process (#45), whose tool is the upstream tools/call with projected
+then gateway.invoke in the same process (docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process), whose tool is the upstream tools/call with projected
 arguments only. tools.<id>.facts: {field: {hook: "module:function"}} runs a fact hook; caller
 paths are removed from the inputSchema shown. Other names are tool_not_offered (ledgered);
 mcp_proxy_started is ledgered at start. A deny is an MCP tool error "two-key
@@ -185,7 +192,15 @@ refuses) when the real account of its parent process is Two-Key's own (agent_sam
 (agent_account_root), unknown (agent_account_unknown, which includes Windows for now), or can change a
 path it runs or reads (agent_can_write). Processes sharing a ledger read and verify each other's entries
 under the lock before writing; a shorter file or a partial line is still refused. Remote agents are
-little tested (ROADMAP). two-key mcp-draft-specs --out DIR -- COMMAND
+little tested (ROADMAP). two-key config show|check --config proxy.yaml (read-only: effective settings; would it start).
+two-key setup --dir DIR writes a new deployment (keys, rules, judges, proxy.yaml), signs and checks it. two-key
+config get|set|undo --config proxy.yaml NAME [VALUE] reads or changes one setting by its docs/SETTINGS.md name:
+Two-Key's own account only (root and files another account can change are refused), the whole config must pass
+config check first, a weaker change needs --confirm-weaker and a typed yes, a signed setting needs --key and
+--rules and is re-signed and verified, env literals never come from argv, and each change is a config_changed
+ledger entry (names and digests, never values). No hot reload (docs/SETUP.md). config key-passphrase
+--config proxy.yaml --new-from FILE (or --remove, weaker) encrypts the principal key and sets keys.passphrase_file;
+every --key command takes --key-passphrase-file FILE or asks on a terminal; never argv or env. two-key mcp-draft-specs --out DIR -- COMMAND
 drafts tool_specs (signing refuses until each floor, amount unit, and allow list is decided;
 *_matched/*_verified/*_approved/... left out as caller-fact candidates) and prints the digest;
 it warns when a payee or amount it maps has no description in the upstream schema (the agent's only
@@ -195,3 +210,9 @@ An agent that can reach the upstream directly bypasses the proxy; run the upstre
 decision.reason names one cause (parse/limit/derive deny, then Path A, then Path B); read
 path_a.reason and path_b.reason too. judges.yaml and agents.yaml are trusted operator config:
 a callback auth entry imports the module it names.
+
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->

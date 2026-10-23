@@ -1,3 +1,9 @@
+<!--
+Copyright 2026 Insomniac-VibeLabs
+Author: Stephan Busch
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Changes
 
 ## Contents
@@ -113,6 +119,29 @@
 - [SonarCloud findings on the 0.7.0 code — 2026-10-16](#sonarcloud-findings-on-the-070-code--2026-10-16)
 - [Release v0.7.0: the SIEM export, the agent-account check — 2026-10-16](#release-v070-the-siem-export-the-agent-account-check--2026-10-16)
 - [PyPI packaging on the PyPI branch — 2026-10-16](#pypi-packaging-on-the-pypi-branch--2026-10-16)
+- [Diagrams: one house style, checked by a test (#29) — 2026-10-20](#diagrams-one-house-style-checked-by-a-test-29--2026-10-20)
+- [Docs: prose accuracy and readability pass — 2026-10-20](#docs-prose-accuracy-and-readability-pass--2026-10-20)
+- [docs/SETTINGS.md: every setting, generated and tested — 2026-10-20](#docssettingsmd-every-setting-generated-and-tested--2026-10-20)
+- [`two-key config show` and `config check`: read-only views of a proxy config — 2026-10-20](#two-key-config-show-and-config-check-read-only-views-of-a-proxy-config--2026-10-20)
+- [Python 3.13 to 3.15: compiled files stay checked, CI, docs (#27) — 2026-10-20](#python-313-to-315-compiled-files-stay-checked-ci-docs-27--2026-10-20)
+- [The proxy checks the upstream server's files behind a launcher (#13) — 2026-10-20](#the-proxy-checks-the-upstream-servers-files-behind-a-launcher-13--2026-10-20)
+- [`upstream.check_paths` on Windows needs the drive (#13) — 2026-10-20](#upstreamcheck_paths-on-windows-needs-the-drive-13--2026-10-20)
+- [DeepSource runs the Python analyzer, and on `working` — 2026-10-20](#deepsource-runs-the-python-analyzer-and-on-working--2026-10-20)
+- [Docs review: README from main, clearer diagrams, `config show` described correctly — 2026-10-21](#docs-review-readme-from-main-clearer-diagrams-config-show-described-correctly--2026-10-21)
+- [CI: each workflow runs once per change — 2026-10-21](#ci-each-workflow-runs-once-per-change--2026-10-21)
+- [A Windows-only test failure in the clamd tests — 2026-10-21](#a-windows-only-test-failure-in-the-clamd-tests--2026-10-21)
+- [`two-key setup` and `two-key config set`, `get`, `undo`, `key-passphrase`: one way in for setup and changes — 2026-10-20](#two-key-setup-and-two-key-config-set-get-undo-key-passphrase-one-way-in-for-setup-and-changes--2026-10-20)
+- [Live harness: run 9 (set-up commands, upstream paths, two proxies, free play, sabotage) — 2026-10-21](#live-harness-run-9-set-up-commands-upstream-paths-two-proxies-free-play-sabotage--2026-10-21)
+- [Copyright and author headers — 2026-10-21](#copyright-and-author-headers--2026-10-21)
+- [OpenSSF Scorecard hardening: Semgrep token, hashed CI installs, SECURITY.md (#31, #32, #33) — 2026-10-21](#openssf-scorecard-hardening-semgrep-token-hashed-ci-installs-securitymd-31-32-33--2026-10-21)
+- [Live runs 9 and 9x: SIEM cursor and `config check` fixes — 2026-10-21](#live-runs-9-and-9x-siem-cursor-and-config-check-fixes--2026-10-21)
+- [A ledger never goes back to an older constitution (signed serial) — 2026-10-21](#a-ledger-never-goes-back-to-an-older-constitution-signed-serial--2026-10-21)
+- [Live harness: run 9x ported to `working`, and the fixes for run 9y — 2026-10-21](#live-harness-run-9x-ported-to-working-and-the-fixes-for-run-9y--2026-10-21)
+- [DeepSource: the findings on main, fixed or marked — 2026-10-21](#deepsource-the-findings-on-main-fixed-or-marked--2026-10-21)
+- [Version number on `working`: 0.7.3 — 2026-10-22](#version-number-on-working-073--2026-10-22)
+- [Live run 9y: two proxies starting at once, rules without a serial, and shared-ledger SIEM copies — 2026-10-22](#live-run-9y-two-proxies-starting-at-once-rules-without-a-serial-and-shared-ledger-siem-copies--2026-10-22)
+- [Live run 9z: two harness fixes, and a faster harness — 2026-10-23](#live-run-9z-two-harness-fixes-and-a-faster-harness--2026-10-23)
+- [Release v0.7.3: setup and change commands, a signed serial, the upstream server's files — 2026-10-23](#release-v073-setup-and-change-commands-a-signed-serial-the-upstream-servers-files--2026-10-23)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -3830,3 +3859,657 @@ unregistered on pypi.org and test.pypi.org on this date.
   the proxy example, and the `load_public_key(...)` call on that same
   public key. Both lines now carry `skipcq: SCT-A000`. Nothing else is
   excluded from secret detection.
+
+## Diagrams: one house style, checked by a test (#29) — 2026-10-20
+
+Docs only, plus one test and one workflow. No application code changed.
+
+- `tests/test_doc_diagrams.py` now checks every Mermaid diagram in the
+  README, ROADMAP and `docs/` against a house style that keeps GitHub's
+  renderer from splitting words, clipping notes, or shrinking text: label
+  lines of at most 28 characters, edge labels of at most two lines, left to
+  right only for a chain of four boxes or fewer, at most five participants
+  in a sequence diagram with messages and notes that fit, at most 12 boxes,
+  and a one-line italic caption under each diagram (saying "dashed" when
+  the diagram mixes solid and dashed lines). The old semicolon check stays.
+- Every diagram was redrawn to that style, in real Mermaid. The README's
+  request-flow flowchart and its sequence diagram are each split into
+  smaller ones; HOWTO's vocabulary sequence is split in two; SCANNERS'
+  scan sequence is split in two and its return path is fixed (the result
+  goes back through the gateway and Two-Key, and a deny never reaches the
+  tool); `sudo -n -u two-key /opt/two-key/run-proxy` moved out of the
+  diagram labels into the captions; the HOWTO proxy call sequence no
+  longer names a domain field; the SIEM diagram runs top to bottom and
+  draws `siem-verify` as a read-only comparison, not a write into the
+  ledger; the roadmap timeline runs top to bottom.
+- `docs/THREAT_MODEL.md` gains a trust-boundary diagram at the head of
+  "Trust boundaries".
+- `.github/workflows/diagrams.yml` (not a required check) draws every
+  diagram with a pinned mermaid-cli (11.4.2) and uploads the pictures as a
+  build artifact, so they can be looked at together before a release. The
+  docs keep real Mermaid; nothing is committed as a picture.
+- CONTRIBUTING and AGENTS.md name the rule.
+
+## Docs: prose accuracy and readability pass — 2026-10-20
+
+Docs only. No application code changed.
+
+- docs/PYPI.md is rewritten as "how a release is published". It said 0.7.0
+  was "being prepared for its first upload" and that `two-key` was not
+  registered; PyPI has had `0.7.0`, `0.7.1` and `0.7.2` since 2026-10-17
+  (`0.7.1` and `0.7.2` are only on the `PyPI` branch), and the next release
+  is numbered above `0.7.2`. Install lines use `X.Y.Z`.
+- FIT.md said 0.6.0 was the latest release and left AES-256-GCM out of its
+  list of crypto; both are fixed.
+- THREAT_MODEL, FIT and SCOPE no longer open with a paragraph of tag
+  history. THREAT_MODEL keeps what each release added in a closing "Changes
+  by release" section (0.7.0's agent-account check is now in it); FIT and
+  SCOPE point to ROADMAP "Shipped" and AGENTS.md.
+- Every "#45" in the README, ROADMAP, AGENTS.md, llms.txt, SECURITY and the
+  docs, and the two HOWTO and README links to `issues/45` (a 404 here: #45 was
+  an issue of the archived `two-key-concept` repository), now point to
+  HOWTO "Deployment boundary: the gateway runs in the TwoKey process" and say
+  the gateway stays in the process by design. The code's own comments and
+  the `gateway.py` message still cite #45 and are not changed here; earlier
+  CHANGES entries keep it as history.
+- HOWTO opens with a "Start here" table: three routes (MCP proxy, guard,
+  library) and the sections each one needs, in order. A few long passages in
+  Install, Platforms and Redeem are split into shorter sentences, with no
+  fact changed.
+- COMPARISON links to SCANNERS.md. ROADMAP's 0.6.0 plan notes that #2 and #10
+  are closed.
+- Not touched here: the supported Python range and the upstream-path
+  check text, which the Python 3.15 and #13 changes own.
+
+## docs/SETTINGS.md: every setting, generated and tested — 2026-10-20
+
+No behavior change. The settings were spread across HOWTO tables, SIEM.md,
+JUDGES_AND_QUORUM.md and the example files; this is the one map.
+
+- `two_key/settings.py` is a catalogue with one row per key that a loader
+  accepts: the file, the dotted key, the default, what `high_assurance` does
+  to it, whether the value names a secret, and the tier (signed policy or
+  operator config). It covers `proxy.yaml`, `judges.yaml` (judges, quorum,
+  `monitored_agent`), `agents.yaml`, and the signed `hard_rules.yaml` (rule
+  types, tool specs, custom fields). A signed setting needs the principal
+  key to change; an operator setting needs write access to its file and a
+  restart.
+- `docs/SETTINGS.md` is generated from it with
+  `python tests/test_settings_doc.py --write`, with a "Who can change what"
+  table and the table of what `high_assurance` changes.
+- `tests/test_settings_doc.py` reads the key sets the loaders use and fails
+  when a key has no row, when a row names a key no loader accepts, when a
+  row is repeated, or when the page is not what the catalogue renders. A key
+  added later (for example `upstream.check_paths`) fails the suite until it
+  has a row.
+- `two_key/constitution.py` names the key sets of a rules file, a tool spec
+  and its parts (`RULES_FILE_KEYS`, `TOOL_SPEC_KEYS`, `AMOUNT_KEYS`,
+  `COUNTERPARTY_KEYS`, `PAYLOAD_KEYS`, `FIELD_MAPPING_KEYS`) so the test reads
+  the same sets as the validators. The validators accept exactly the keys they
+  did before.
+- README, HOWTO, CONNECTING, AGENTS.md, CONTRIBUTING and llms.txt point to it.
+
+## `two-key config show` and `config check`: read-only views of a proxy config — 2026-10-20
+
+No change to any check or to the ledger.
+
+- `two-key config show --config proxy.yaml` prints the effective settings as JSON, defaults filled in
+  (the resolved `on_agent_access` and `on_writable_paths`, the quorum, the judges, the tools, the SIEM sinks).
+  A key file is shown by path, a judge's key by its environment variable's name, and an upstream literal value
+  as `<literal>`.
+- `two-key config check --config proxy.yaml` loads what the proxy loads at start that has no side effect, and
+  reports `ok`, `WARN` or `FAIL` per line: the config parses, the principal key loads, the constitution is
+  signed by it, every `tools:` entry is signed, the judges and quorum load, a `monitored_agent` is declared,
+  the environment variables the config reads are set, writable paths, and plaintext SIEM sinks. It exits 1 on
+  any `FAIL`. It does not run the `on_agent_access` check or compare `schema_digest`; the proxy does both at
+  start.
+- Neither command writes a file, opens the ledger, starts a process, or contacts a judge, scanner, collector
+  or upstream server. Neither constructs `TwoKey`, which appends to the ledger when it starts.
+- Docs: HOWTO "Look at a config without starting the proxy", README, SETTINGS, AGENTS.md, llms.txt.
+
+## Python 3.13 to 3.15: compiled files stay checked, CI, docs (#27) — 2026-10-20
+
+- **The writable-path check looks at compiled files on Python 3.15.**
+  Python 3.15 no longer sets a module's `__cached__`, and the check read
+  only `__file__` and `__cached__`, so on 3.15 it stopped looking at the
+  `.pyc` files of loaded modules and at their `__pycache__` folders: one
+  that another account could write would have passed unseen.
+  `two_key/writable.py` now also reads the module's spec
+  (`__spec__.cached`, and `__spec__.origin` for a module with a location),
+  which Python 3.10 and later set. New tests: a module with no `__cached__`
+  and an open `__pycache__` folder is named, and a module with no location
+  adds nothing (`tests/test_writable_paths.py`). Nothing changes on 3.10
+  to 3.14, where both names point at the same file.
+- **CI tests Python 3.13 and 3.14** on Linux, macOS, and Windows, from
+  `uv.lock` as wheels only, like 3.10 to 3.12.
+- **A Python 3.15 job on Linux that does not block.** PyYAML publishes no
+  3.15 wheel yet, so this job builds PyYAML alone from source and keeps
+  every other package wheels only (a second package without a wheel fails
+  the job instead of being built). It runs the suite and the demo. It
+  becomes blocking, with macOS and Windows, once PyYAML ships 3.15 wheels.
+- `pyproject.toml` classifiers name 3.13 and 3.14. `requires-python` stays
+  `>=3.10` with no upper bound: a bound would not make pip refuse 3.15, it
+  would install an older Two-Key and fail on the same PyYAML build.
+- Docs: README, HOWTO ("Platforms", with what to do on 3.15: use 3.14 until
+  PyYAML ships wheels; two version notes made accurate for 3.13 and 3.14),
+  PYPI, CONTRIBUTING, and AGENTS.md say 3.10 to 3.14.
+
+### Upgrading
+
+- Nothing to change. On Python 3.15, a start may now name a `__pycache__`
+  folder another account can write, which it should have named before.
+
+## The proxy checks the upstream server's files behind a launcher (#13) — 2026-10-20
+
+The writable-path check and the agent-account check looked only at
+`upstream.command[0]`. With the command CONNECTING recommends,
+`[sudo, -n, -u, mcp-billing, <interpreter>, <server script>]`, that is
+`sudo`: an account that could change the server script or its folder went
+unseen, and the proxy started without a warning, `on_writable_paths:
+refuse` included. On Linux, macOS, and Windows alike:
+
+- **Absolute arguments are checked.** Each argument of `upstream.command`
+  after the program that is an absolute path to something that exists is
+  checked, a file together with its folder (where Python, Node, and most
+  others look for what a script imports), a folder as a folder. Options
+  (`-u`, `--preserve-env=...`) and relative arguments are not read as
+  paths, and a launcher is not followed to its target: a wrong guess would
+  read as a pass.
+- **`upstream.check_paths`** in `proxy.yaml` (optional) lists more of the
+  server's files and folders: its package folder, a config file. Each entry
+  must be absolute, at most 64, and one that does not exist refuses to
+  start (`check_path_missing`). A folder is checked itself, with the
+  folders above it, not every file inside it.
+- **`upstream_paths_unchecked`.** When `command[0]` is a launcher (`sudo`,
+  `doas`, `env`, `npx`, `uvx`, `pipx`, `cmd`, `powershell`, `pwsh`; by
+  name, ignoring case and a `.exe`, `.cmd`, `.bat`, or `.com` ending) and
+  neither an absolute argument nor `check_paths` names anything, the proxy
+  warns at start. Under `high_assurance` it refuses. Both come before the
+  ledger is opened.
+- Both start-up checks see the new paths (`startup_paths`), so
+  `agent_can_write` covers the server's files too.
+- `two-key config check` reports a missing `check_paths` entry and
+  `upstream_paths_unchecked` (a `FAIL` under `high_assurance`) the way
+  the proxy would at start, and `config show` prints `check_paths`. The
+  settings catalogue and docs/SETTINGS.md have the new key.
+- Tests: `tests/test_upstream_paths.py` (the issue's repro, `check_paths`,
+  a missing entry, launcher names, the warning and the refusal, and the
+  order before the ledger), and cases in `tests/test_agent_access.py` and
+  `tests/test_config_cmd.py`.
+- Docs: CONNECTING ("What Two-Key checks for you", what it cannot see, and
+  the checklist), HOWTO (the `proxy.yaml` example now runs an installed
+  server instead of `npx`, the `check_paths` row, two refusal rows, and
+  `high_assurance`, and what `config check` reports), SETTINGS,
+  THREAT_MODEL, SECURITY, AGENTS.md, llms.txt, and the `writable.py`
+  docstring. Closes #13.
+
+### Upgrading
+
+- A proxy that starts today may now name more paths, or, under
+  `on_writable_paths: refuse` or `high_assurance`, refuse. Make the
+  server's program, script, and package folder owned by Two-Key's account
+  or root and not writable by group or others. A server's files owned by
+  its own account (`mcp-billing`) are named too, as any other owner is.
+- A data folder passed as an absolute argument (a filesystem server's root,
+  for example) is checked like the server's own files. If the agent can
+  write it, `on_agent_access` refuses by default: the agent could change
+  what the tool reads without either key.
+- `upstream.command` that starts with a launcher and gives no absolute
+  path (`npx -y <package>`, `uvx <package>`) now warns
+  `upstream_paths_unchecked`, and under `high_assurance` refuses. Install
+  the server where only root or Two-Key's account can change it, and give
+  its program as an absolute path or list its folder in
+  `upstream.check_paths`.
+
+## `upstream.check_paths` on Windows needs the drive (#13) — 2026-10-20
+
+- CI on Windows with Python 3.13 and 3.14 failed `tests/test_mcp_docs.py`:
+  the HOWTO example's `check_paths` entry, `/opt/billing-mcp/...`, has no
+  drive, and from Python 3.13 on Windows does not call such a path
+  absolute. That refusal was right, but on 3.10 to 3.12 the same entry
+  was accepted and read against whichever drive was current. On Windows an
+  entry now needs its drive or a UNC share on every Python version
+  (`expected an absolute path`). The docs test expects that refusal on
+  Windows, and HOWTO and SETTINGS say so.
+
+## DeepSource runs the Python analyzer, and on `working` — 2026-10-20
+
+- DeepSource had no `.deepsource.toml`, so it ran its secrets check alone,
+  and only on main and pull requests, never on a push to `working`.
+  The Python analyzer is now on beside the secrets check, with `tests/`
+  marked as test code. DeepSource keeps that setting in its own repository
+  configuration, which is where it was turned on; `.deepsource.toml` holds
+  the same so the repository says what runs. A draft pull request from
+  `working` to main (#30) stays open so each push to `working` is analysed.
+- The Python analyzer's first findings on `working` were two test helpers
+  that did not use `self` (PYL-R0201), in `tests/test_upstream_paths.py`
+  and `tests/test_config_cmd.py`; both are static methods now.
+- Its first finding on `working` was a false positive in docs/SIEM.md: the
+  Python example named its `TwoKey` instance `two_key = TwoKey(...)`,
+  which the secrets check read as a hardcoded credential. The example now
+  calls it `tk`, as HOWTO does, which also stops it shadowing the
+  `two_key` package it imports from.
+- CONTRIBUTING says where DeepSource runs.
+
+## Docs review: README from main, clearer diagrams, `config show` described correctly — 2026-10-21
+
+No change to any check, key or ledger entry.
+
+- README.md is main's again, including its overview diagrams, with only the changes the current code needs:
+  Python 3.10 to 3.14, the dead `#45` links pointed at HOWTO "Deployment boundary", the SETTINGS row, and the
+  `config show` and `config check` sentence. `tests/test_doc_diagrams.py` exempts README.md from the size
+  rules (its syntax is still checked); every file in docs/ still follows them.
+- README: the diagram's question "derive_failed: and no tool_args_on_derive_deny?" now reads "Unreadable call: do
+  judges get the raw arguments?", and the skipped box says "= deny, no token" (a skipped Path B never passes,
+  so the call is denied; checked in `core.py`); the sequence diagram's branch is worded to match, and a
+  paragraph under the diagram names `tool_args_on_derive_deny`.
+- docs/CONNECTING.md says that "billing" (`mcp-billing`, `BILLING_TOKEN`) is only an example.
+- docs/SIEM.md: the diagram no longer draws `siem-verify` reaching into the ledger; a SIEM never does.
+  The cursor now hangs off the sender (it saves it and resumes from it, reading missed entries from the ledger),
+  and the sender is labelled as formatting JSON or CEF for the collector and the webhook.
+  The export section now says `siem-export` takes `--format cef` as well as `--schema`.
+  "In plain words" now explains the live copy and `siem-export` side by side, and when to use each.
+- docs/SETTINGS.md (from `two_key/settings.py`): `config show` prints defaults filled in, not where a value
+  came from, and `config check` does not run the `on_agent_access` check or compare `schema_digest`.
+
+## CI: each workflow runs once per change — 2026-10-21
+
+No change to any check, only to when it runs. Tests, build, bandit, coverage, CodeQL and Semgrep ran twice for
+a change to `working` with a pull request open: once for the push, once for the pull request (59 checks on
+PR #30). They now run on a pull request, and on a push only to `main`, `PyPI` and `testpypi`. Job names are
+unchanged, so required checks on main still match. Without an open pull request, a push to `working` runs no CI.
+
+## A Windows-only test failure in the clamd tests — 2026-10-21
+
+- `tests/test_scanners.py` `Clamd.test_could_not_finish_is_flagged`
+  failed once on Windows with Python 3.11 (`unavailable` instead of
+  `flagged`, `limits_exceeded`). The fake clamd replied at its size limit
+  and closed while the client was still sending; on Windows that closes
+  with a reset, which can discard the reply before it is read. The fake
+  now reads the rest of the stream before it closes, as a server that
+  lingers does. Two-Key's own code is unchanged. Against a real clamd
+  that closes the same way, Windows can report such a file as
+  `unavailable` rather than `limits_exceeded`; the signed stance and the
+  judges then decide on `unavailable`.
+
+## `two-key setup` and `two-key config set`, `get`, `undo`, `key-passphrase`: one way in for setup and changes — 2026-10-20
+
+The files stay separate (docs/SETTINGS.md); these commands edit the right one for you. They add a ledger kind,
+`config_changed`, touch signing, and add a passphrase to the principal key, so they are for the maintainer's
+security review. Nothing changes how any setting is read. The start-up checks are reused; the one addition
+is `keys.passphrase_file` among the paths they look at. docs/SETUP.md is the guide.
+
+- **`two-key setup --dir DIR [--answers FILE]`** asks for the route, the profile, the judges, the monitored
+  agent, the rules to sign (a reviewed rules file, or a starter) and, for the proxy, the upstream server; or
+  reads the same answers from a file. It never asks for a secret, only the names of the variables that hold
+  them. It writes the principal key, `constitution.md`, `hard_rules.yaml`, the signed constitution,
+  `judges.yaml` and `proxy.yaml` (every scalar setting written out at its default) owner-only into a new
+  hidden folder, runs `config check` there, renames the folder to `DIR` only when it passes, then creates the
+  ledger with a first `config_changed` entry. A refused setup leaves nothing behind. Left blank, the schema
+  digest is read from the server after signing, as `mcp-draft-specs --constitution` does (the `mcp` extra).
+- **`two-key config set --config proxy.yaml NAME VALUE`** changes one setting, named as in
+  docs/SETTINGS.md (`siem.sinks[0].port`, `quorum.profile`, `tool_specs.pay.irreversible`); the name picks
+  the file. In order: Two-Key's own account only (root is `config_as_root`; a file it writes, or its folder,
+  that another account could change is `config_target_unsafe`; a link is `config_target_link`); the new file
+  is staged beside the old one and the whole set must pass `config check` (`config_check_failed`, except a
+  variable not set in this shell), so what `high_assurance` forbids stays forbidden; a weaker change needs
+  `--confirm-weaker` and `yes` typed on a terminal (`weaker`, `not_confirmed`); then a `config_changed` entry,
+  then the files are renamed in, owner-only, with the old one kept as `<file>.prev`.
+- **Signed settings** (`hard_rules`, `tool_specs`, `fields`) need `--key`, the principal key the proxy uses,
+  and `--rules`, the rules file the constitution was signed from, which must sign to exactly what is signed
+  (`rules_source_differs`). The change and the signed text that differs are shown, a typed `yes` is needed,
+  and the new envelope, in at least the current format, is verified before it is written.
+- **A principal key encrypted with a passphrase.** `two-key config key-passphrase --config proxy.yaml
+  --new-from FILE` encrypts the key (or changes its passphrase) with the passphrase in an owner-only file and
+  sets `keys.passphrase_file` to that file, in one recorded change; `--remove` stores it unencrypted again,
+  which is weaker. It keeps no `.prev` of the key, so `config undo` does not reverse it. The format is
+  Two-Key's own (`BEGIN TWO-KEY ENCRYPTED PRIVATE KEY`): PKCS8 under AES-256-GCM, its key from PBKDF2-SHA256 at
+  600,000 iterations with a 16-byte salt, the header bound in, as the key backup does; a file asking for fewer
+  iterations, and a key encrypted by another tool, are refused (`key_file_invalid`). A new passphrase is at
+  least 12 bytes (`key_passphrase_short`). The passphrase comes from a file only its owner can read
+  (`passphrase_file_insecure` otherwise) or a terminal prompt, never argv or the environment.
+  The proxy reads `keys.passphrase_file` at start and never prompts (`key_passphrase_needed`,
+  `key_passphrase_wrong`), and that file joins the paths the start-up checks look at. Every command that takes
+  `--key` takes `--key-passphrase-file FILE` or asks on the terminal; `init-key` takes `--passphrase` or
+  `--passphrase-file`; `setup` takes `key_passphrase_file`; `config check` opens the key as the proxy would.
+  Backup export, verify, and restore keep the key encrypted inside the principal bundle
+  (`ed25519-encrypted`), so they need its passphrase as well as the bundle's. An unencrypted key works as
+  before, and nothing asks for a passphrase it does not need.
+- **What counts as weaker** is read from the loaded old and new configurations (`config_set.weaker`):
+  `high_assurance` turned off, a check from `refuse` to `warn`, `allow_unresolved_identity` on, a longer
+  `ttl_seconds`, a removed `agent_session_env`, SIEM copy off or a sink removed or in the clear, the scanner
+  removed or a file undeclared, a path dropped from `upstream.check_paths`, a lower tool claim, a lower quorum
+  floor, judges shown more, a changed judge set or monitored agent, and any signed change but adding a rule,
+  turning `irreversible` or `deny_unmapped` on, or raising a `data_class_floor`.
+- **No secret on the command line**: a literal for `upstream.env.*` or `scan.env.*` is refused there
+  (`secret_on_command_line`) and comes from `--value-file` (owner-only) or `--prompt`; `{"env": "NAME"}` is
+  fine. `--unset` removes a setting. Paths of the files, keys and ledger Two-Key trusts (`constitution`,
+  `keys.principal`, `keys.passphrase_file`, `ledger`, `judges`, `witness_public_key`, `head_anchor`) are
+  `not_settable`.
+- **`config_changed`** records the command, the setting names, each file's role, name and SHA-256 digests
+  before and after (the principal key file is named with no digest), whether it signed, why it is weaker, whether a yes was typed, the new constitution's
+  digest, and the account. Never a value. The SIEM allowlist sends all of it except the account. A ledger
+  that is missing or does not open refuses the change, so nothing changes unrecorded.
+- **`two-key config undo`** puts back the files the last change replaced, through the same checks and with
+  its own `config_changed` entry; run again, it puts the change back. It refuses a file changed since
+  (`undo_stale`), and an undo of a signed change needs `--key`.
+- **`two-key config get --config proxy.yaml NAME`** prints one setting's value, file, tier, and catalogue
+  default; an env literal is `<literal>`.
+- No hot reload: a change takes effect at the next start, and every result says so.
+- `config check` now also checks the `on_agent_access` setting (a `FAIL` for `warn` under `high_assurance`,
+  as the proxy refuses at start), and `config show` prints a command scanner's `env` values as `<literal>`;
+  before, it printed them.
+- docs/SETTINGS.md (regenerated) says what each tier needs with `config set` and marks the keys it does not
+  change.
+- Tests: `tests/test_config_set.py` (setup, names, get, set, every refusal, secrets, weaker, high_assurance,
+  signed changes, undo, the command line); `tests/test_key_passphrase.py` (the format and its refusals, the
+  passphrase file, no prompt without a terminal, `init-key` and `sign-constitution`, `config key-passphrase`,
+  the proxy and `config check`, `setup`, and the backup); `tests/test_siem.py` (the `config_changed` allowlist and its
+  canary); `tests/test_config_cmd.py` (the scanner's variables).
+- Docs: docs/SETUP.md (new: full setup, changing one setting, protecting the principal key with a passphrase,
+  showing settings, each with who may run it and what it refuses), SETTINGS, CONNECTING ("Every connection
+  and hook"), README, HOWTO ("Start here", "Create a principal key", the key backup, and "Look at a config
+  without starting the proxy"), SIEM, THREAT_MODEL, ROADMAP, AGENTS.md, llms.txt.
+
+## Live harness: run 9 (set-up commands, upstream paths, two proxies, free play, sabotage) — 2026-10-21
+
+Test code and docs only (`tests/live/`); no change to `two_key/`. 115 cases (74 in run 8). Nothing has been run
+live yet; the maintainer decides when GrokBot runs it.
+
+- **The set-up and change commands** (`tests/live/deploy_cases.py`, 32 cases, no bot): `two-key setup` into a new
+  folder (owner-only files, one `config_changed` entry, no key digest; an existing folder, an unknown answer, a
+  short or world-readable passphrase file refused), `config set` refused for a weaker change without
+  `--confirm-weaker`, with it but no terminal, and with a human typing no; refused for a secret on the command line,
+  a typo, a setting that names the ledger, and a signed setting without the key or with no terminal; accepted when a
+  human types `yes` (a weaker change, a signed change that re-signs the constitution), recorded without any value;
+  `config undo` (restores the file, refuses after a hand edit); a deployment with an encrypted principal key (the
+  proxy opens it from `keys.passphrase_file`, and refuses without it or with a passphrase file others can read;
+  `key-passphrase --remove` and `--new-from` refuse with no terminal and name the key without a digest); and
+  `high_assurance` still refusing `on_agent_access: warn` after a typed `yes`. A typed `yes` runs on a
+  pseudo-terminal. The commands refuse root, so these cases are N/A in a pass run as root or on Windows, and
+  `RESULTS.md` says so.
+- **The upstream server's files** (#13), 7 config cases: the script's folder writable by another account (warns,
+  refuses under `on_writable_paths: refuse`), a writable and a missing `upstream.check_paths` entry, and an `env`
+  launcher with nothing naming the server (warns `upstream_paths_unchecked`, refuses under `high_assurance`, quiet
+  once `check_paths` names its folder).
+- **Two proxies on one ledger**: both started, four calls alternating, then `two-key audit`; each call must run and
+  the chain must verify (the outage fixed in `7e08d48`).
+- **A free-play round**: the agent plays EVIL for eight steps with no case. The harness grades invariants from the
+  system of record and the ledger (a token only after both keys passed, none redeemed twice, no unsigned tool reached,
+  no argument value in a deny reason, the ledger verifies afterwards) and lists every call in `RESULTS.md`. The
+  SIEM argument-value check no longer counts a value that is also a tool name or ledger kind, which an agent writing
+  free text can produce (`roster` is inside `export_patient_roster`).
+- **A coverage map**: `tests/live/COVERAGE.md` has a row for each fail-closed default of AGENTS.md (26): the unit
+  tests, whether a live case exercises it, and what is left to the unit tests and why. `RESULTS.md` prints it with
+  the pass's verdicts. A case is tagged with a row through `COVERS` in `make_cases.py`.
+- **A sabotage pass** (`harness.py --sabotage NAME|all`, `tests/live/sabotage.py`): runs the self-test against a copy
+  of the package with one check weakened (Path A ignored, a missing ballot counted as yes, a scanner's flag read as
+  clean, the SIEM copy sending every field, the upstream server's files ignored, `config set` skipping the typed
+  yes) and reports whether the harness noticed. `control` weakens nothing and must show no FAIL. One weakening is a
+  stated blind spot: the gateway's argument-hash check cannot be reached by a live call, because the proxy mints and
+  redeems in one process (unit tests cover it). The repository's `two_key/` is never touched.
+- `RESULTS.md` now names the Python version and whether the pass ran as root. `tests/test_live_harness.py` fails when
+  a sabotage patch stops matching its source, when `COVERAGE.md` and the case tags disagree or name a missing test
+  file, when AGENTS.md gains a fail-closed default with no row, or when a case names a step the story does not run.
+- Docs: `tests/live/RELAY.md` (run 9, the sabotage pass, the non-root requirement), ROADMAP, AGENTS.md.
+
+## Copyright and author headers — 2026-10-21
+
+- Every tracked file that can hold a comment now opens with a three-line header: `Copyright 2026
+  Insomniac-VibeLabs`, `Author: Stephan Busch`, and `SPDX-License-Identifier: Apache-2.0` (the licence in
+  `LICENSE`, unchanged). Python, YAML, TOML, shell, `MANIFEST.in`, and `.gitignore` files use `#` lines, after the
+  shebang where there is one; Markdown uses an HTML comment, so no page renders differently; `llms.txt` keeps its
+  title first and carries the comment at the end. `docs/SETTINGS.md` gets the header from `two_key/settings.py`.
+- No header in the files that cannot hold a comment or whose bytes are data: `LICENSE`, `uv.lock`, the JSON and
+  NDJSON files, the banner image, `examples/constitution.md` (constitution prose is signed and sent to the judges
+  as written), and `tests/fixtures/v1_constitution.md`.
+- `pyproject.toml` names Stephan Busch as an author alongside Insomniac-VibeLabs.
+- `tests/test_file_headers.py` fails on a tracked file without the header. CONTRIBUTING.md and AGENTS.md say so.
+- DeepSource re-read every file the header touched and reported old findings in five test files as new: local
+  imports of names the module already imports (PYL-W0404, `test_ledger_error_cap.py`, `test_token_lifetime.py`,
+  `test_same_agent_rule.py`, `test_mcp_draft.py`) and a one-item unpacking of a list it could not size
+  (PYL-W0632, `test_b5_local_proxy.py`). The duplicate imports are gone and the test checks the list's length.
+- SonarCloud's twelve open findings on the draft pull request, all in tests: exception tests that built their
+  arguments inside the `assertRaises` block now build them first (S5778; `test_key_passphrase.py`,
+  `test_config_set.py`, `test_upstream_paths.py`), two `TestCase` helpers are private (`_files`, `_changes`), and
+  `test_live_harness.py` uses `assertIn`.
+
+## OpenSSF Scorecard hardening: Semgrep token, hashed CI installs, SECURITY.md (#31, #32, #33) — 2026-10-21
+
+CI and docs only. No change to `two_key/`, to any check's name, or to what a check tests. From a read-only
+Scorecard v5.6.0 run on main (51dc293, score 5.5).
+
+- **Semgrep token (#31).** `semgrep.yml` keeps `contents: read` as the workflow default and grants
+  `security-events: write` and `actions: read` to the Semgrep job only. Its checkout no longer leaves the
+  token in the clone (`persist-credentials: false`).
+- **Hashed CI installs (#32).** Every `pip install` in a workflow now installs a file from
+  `.github/requirements/` with `--require-hashes`: `uv.txt` (tests, coverage, build, publish,
+  siem-integration), `coverage.txt`, `build.txt`, `bandit.txt`, and `publish.txt` (build, twine,
+  cyclonedx-bom). Each `NAME.txt` is compiled from `NAME.in` by `compile.sh` (uv 0.13.0, universal across
+  Linux, macOS and Windows and Python 3.10 and up, wheels only); the versions are the ones the workflows
+  pinned before. CONTRIBUTING.md says how to change one.
+  - The build backend is pinned too: `setuptools==84.0.0` (the newest release more than two weeks old) is in
+    `build.txt` and `publish.txt`, and `build.yml` and `pypi-publish.yml` build with `--no-isolation`, so
+    the published wheel is no longer built by a setuptools fetched without a hash.
+  - Installing the built wheel (build's demo, the publish job's SBOM) takes its dependencies from `uv.lock`
+    with their hashes (`uv export --locked`), then the wheel with `--no-deps`. The SBOM therefore lists the
+    locked versions of cryptography, cffi and pycparser instead of the newest on the day.
+  - `siem-integration.yml` installs Two-Key's dependencies the same way and runs Two-Key from the checkout
+    (`PYTHONPATH`) instead of `pip install -e ".[yaml]"`, which resolved them with no lock at all.
+  - `coverage.yml` no longer installs coverage outside the uv.lock environment; it was not used there.
+  - `diagrams.yml` installs mermaid-cli 11.4.2 with `npm ci` from `.github/diagrams/package-lock.json`
+    (every package with its integrity hash) instead of `npm install` with no lock. CONTRIBUTING.md says how to
+    change the version.
+- **SECURITY.md (#33).** Links the private reporting form
+  (`/security/advisories/new`; private vulnerability reporting is on), says not to report a vulnerability in
+  a public issue, states acknowledgement within 7 days, and adds "Supported versions": the latest release
+  only.
+- Docs: AGENTS.md, CONTRIBUTING.md (also the diagrams lock), README ("uv.lock" install), docs/HOWTO.md and docs/PYPI.md name
+  `.github/requirements/` where they named the pins in the workflows; llms.txt.
+
+## Live runs 9 and 9x: SIEM cursor and `config check` fixes — 2026-10-21
+
+From the run 9 and 9x findings (`live-runs` b0b57e9 and a506e80, both on `working` @ dd07b42).
+
+- **A SIEM cursor ahead of the ledger is not trusted (run 9x, C140).** Before, a cursor past the ledger's
+  last entry was clamped to the head, so the entries it claimed were delivered were never sent and nothing
+  said so. Now the cursor also keeps the `entry_hash` of each sink's last entry. A cursor past the head, or
+  one whose hash is not this ledger's entry at that seq (another ledger's cursor, or one moved by hand),
+  prints `WARNING: siem: <sink>: the delivery cursor ...` and the sink sends the whole ledger again, every
+  copy marked `replay`. The proxy still starts: the copy never blocks it. A cursor written before this change
+  has no hashes and is checked by length only, and reads as before. (`two_key/siem.py`, `tests/test_siem.py`)
+- **`config check` checks every variable the proxy and its judges read (run 9, finding 1).** It said
+  "every variable the config names is set" while the judges' keys and the agent's credential were unset. Now
+  it also checks each judge's `auth` variable (`var`, or `username_env` and `password_env`), its
+  `ballot_key_env`, and the monitored agent's `credential_env` or `username_env` and `password_env`. A missing
+  agent variable is a `FAIL` (`agent_credential_missing`; the proxy refuses to start without it), and, like the
+  other variables of this shell, does not block `setup` or `config set`. A missing judge variable is a `WARN`
+  (`judge_env_missing`): the proxy starts and that judge abstains on every call. Each is named, never its
+  value; the `ok` line lists the variables it found set. (`two_key/config_cmd.py`, `two_key/config_set.py`)
+- **`config show` shows each judge's `type`, `base_url`, `auth` kind and the names of the variables it reads**
+  (run 9, finding 1).
+- Docs: docs/SIEM.md, docs/SETUP.md, docs/HOWTO.md, docs/THREAT_MODEL.md, docs/CONNECTING.md, AGENTS.md,
+  llms.txt.
+
+## A ledger never goes back to an older constitution (signed serial) — 2026-10-21
+
+Live run 9x, C44: an older constitution (the library rules without DEL-1, signed with the same principal key)
+started on a ledger written under the newer one, with no warning. Both are validly signed, and nothing recorded
+which came first. Option A of the run 9 findings response, chosen by the maintainer.
+
+- **`serial` in the rules file.** A positive integer, the principal's order of constitutions, signed into the
+  constitution (`signed.serial`). A constitution with a serial signs as v3; one without stays byte-for-byte what
+  it was (`tests/test_fields_compat.py`). A serial under a v1 or v2 label is refused, and an install before this
+  change refuses it as an unknown signed key, so an older Two-Key cannot ignore it.
+- **The start-up check** (`two_key.core.check_constitution_order`, before anything is written). Once a ledger
+  has run a constitution with serial N: a lower serial is refused (`constitution_rollback`), N again with other
+  bytes (`constitution_serial_reused`), and a constitution with no serial (`constitution_serial_missing`). A
+  ledger that has never run one with a serial accepts any, as before. No setting turns it off; to go back to older
+  rules, sign them again with a higher serial.
+- **`constitution_loaded`** records `serial` and `previous_digest` (the digest the ledger last ran) for a
+  constitution with a serial; the entry is unchanged for one without. Both are sent to a SIEM.
+- **`two-key setup`** writes `serial: 1` into the rules file it starts. **`config set`** on a signed setting signs
+  the next serial and writes it into the rules file. **`config undo`** refuses to put back a constitution the
+  ledger has already moved past (the proxy would refuse to start with it); change the rules back with `config set`.
+- `sign-constitution` reads `serial` from the rules file.
+- Tests: `tests/test_constitution_serial.py`; `tests/test_config_set.py` (setup's serial, the next serial, undo).
+- Docs: AGENTS.md (a fail-closed default; `tests/live/COVERAGE.md` F27), docs/HOWTO.md, docs/SETTINGS.md
+  (generated), docs/THREAT_MODEL.md, llms.txt.
+
+## Live harness: run 9x ported to `working`, and the fixes for run 9y — 2026-10-21
+
+Test code only (`tests/live/`); nothing in `two_key/` changes.
+
+- The run 9x harness (GrokBot's own cases, the library deployment, `lib_facts.py`, `library_mcp_server.py`, the
+  second free play, the burst, the tampering cases) comes from `live-runs` a506e80 with the antivirus test string and
+  the test credential put back (they were masked in the committed copy).
+- C44 signs serials (library `serial: 2`, the older rules `serial: 1`) and expects `constitution_rollback`; the
+  SIEM-cursor tamper case expects a warning and a replay, not a refusal.
+- The tool bot's header covers both deployments (run 9x answered library calls `unknown_tool`) and says it has no
+  DLP of its own (run 9, C28). Library LEGIT cases get two steps, and an `executed` case accepts a read-only lookup
+  first (C37, C82).
+- Scripted twins for the over-cap and wire payments; the split-payment ladder accepts the PO-match and caller-fact
+  denies that stop a split first. The library waiver hook reads a whole-number float, so C35 reaches Two-Key.
+- A `siem_clean` case fails when an argument value is in the SIEM copy (the `siem_passes_arguments` sabotage was
+  only a referee incident). The referee's vocabulary takes rule ids and reason codes (run 9x's `branch` was the
+  rule id `hold-1-branch`); the SIEM count names repeated entries with no copy marked `replay`.
+- The scripted slow judge and slow ICAP server no longer print BrokenPipe when Two-Key has already given up.
+- `tests/test_live_harness.py` expects one free play per deployment; COVERAGE.md F27 is live (C44).
+- RELAY.md "Run 9x and 9y".
+- DeepSource on PR #30: no mutable default in `tests/test_constitution_serial.py` (PYL-W0102), a `next()` with a
+  default in the tamper step (PTC-W0063), and the two stand-in MCP servers' `logging.disable` marked as a test double
+  (PY-A6006, a genuine false positive: neither is a deployed service).
+- Run 9y's sabotage control (the unmodified package) failed two harness cases, now fixed. C111, the scripted wire
+  payment, named an invoice the billing stand-in does not know, so the call stopped at `field_missing:po_matched`.
+  It now pays a matched invoice under the cap (`FRB-2207` in `live_facts.py`) and expects
+  `rule_denied:block-wire-parties`, because Two-Key leaves a payee that a rule names to that rule. C45 compares
+  the value at the tool the way JSON does: Two-Key reads `amount_cents: 100.0` as 100 cents by design and forwards
+  the bytes the judges approved, so a whole-number float is the integer 100. A string or a boolean still fails.
+
+## DeepSource: the findings on main, fixed or marked — 2026-10-21
+
+DeepSource's badge counts main (95 issues from its first Python scan of main). Twenty-six were already fixed on
+`working`. The rest:
+
+- Fixed in `two_key/`, with no change in behaviour: `backup.py` uses the ledger's new public `exclusive()` (the
+  write lock) and `anchor_path()` instead of its private names (PYL-W0212); `constitution.py` checks duplicate
+  paths with a small `_PathSet` per tool instead of a function defined inside the loop (PYL-W0640); `quorum.py`
+  gives `next()` a default and `mcp_proxy/draft.py` looks the views up by name (PTC-W0063); six methods that do not
+  use `self` are static methods (PYL-R0201: `Ledger._hash`, `MonitoredAgent._deoptimize`, `Scanner._occurrences`,
+  `Scanner._decode`, `Scanner.read_confined`, `AnthropicJudge._content`).
+- Marked as genuine false positives, with the reason on the line: the sink interface's `close()` on the webhook
+  sink, the `LLMJudge._deoptimize` hook the judges override, `CapabilityVerifier.issue` (a verifier refuses to
+  mint) and the issuer's override of it, and the ledger's lock guard releasing its own lock.
+- Findings in test code are marked `skipcq: ... - test only`. Test code is not part of the installed package and
+  nothing in `two_key/` imports it.
+
+## Version number on `working`: 0.7.3 — 2026-10-22
+
+The version only. No behaviour changed.
+
+- `pyproject.toml`, `two_key.__version__` and `uv.lock` say `0.7.3` instead of `0.7.0`. PyPI has `0.7.0`, `0.7.1` and `0.7.2`, so `0.7.3` is the next number.
+- docs/PYPI.md says so. Nothing is tagged or uploaded: the maintainer releases it, and `v0.7.0` and the other tags are not moved.
+
+## Live run 9y: two proxies starting at once, rules without a serial, and shared-ledger SIEM copies — 2026-10-22
+
+- **Two proxies started at once on one ledger could both run one serial** (run 9y, S6c). Each read the ledger,
+  checked the serial, and recorded `constitution_loaded`, so in 3 of 4 tries two different serial-2 constitutions
+  both started, and both kept restarting afterwards. The order check now runs again under the ledger's write lock,
+  after reading what other processes wrote, just before `constitution_loaded` is recorded: the second start is
+  refused (`constitution_serial_reused` or `constitution_rollback`) and writes nothing. `config set` and
+  `config undo` check and record the same way.
+- **A process sharing the ledger could read entries the signed head did not cover yet**, and fail with
+  `signed head does not match the chain` (run 9y saw it once, at start). Every write and the checkpoint that signs
+  it now happen in one hold of the lock: `Ledger.exclusive()` is re-entrant, and `Ledger.record()` appends and
+  checkpoints together. A decision's entries, a gateway redemption, a revocation and a deny each use them.
+- **`mcp-draft-specs` writes `serial: 1`** in `rules.draft.yaml`, and **`setup` warns** when the `rules_file` it is
+  given has no serial; its next steps say to add one (run 9y, S8). SETUP.md said `setup` always signs serial 1,
+  which was true only of its starter rules.
+- HOWTO "The serial": count up by one; 2^53 is the highest serial, and a ledger that has run it cannot take newer
+  rules (run 9y, S3i).
+- **SIEM on a shared ledger: the copy of another proxy's entry is marked `replay`** (run 9 F4; run 9y saw 50 of 99
+  duplicates unmarked). Each proxy still sends every entry, so nothing waits on a stopped proxy; the ledger remembers
+  which entries it read from another process (`Ledger.from_another_process`), and docs/SIEM.md says to dedupe on
+  `entry_hash`.
+- Live harness: C170 (the agent's over-cap payment) also accepts `derive_failed:field_missing:po_matched`, a valid
+  stop; its scripted twin reaches the cap. C172 (the split waiver) was ruled working as designed: one part-waiver
+  within FINE-1's caps may run, and the case fails only if a second part runs or the parts clear the charge.
+
+## Live run 9z: two harness fixes, and a faster harness — 2026-10-23
+
+Run 9z re-ran the 9y tests on 821bc93 and found no Two-Key bug. The 9y fixes all worked: two proxies started at once
+no longer both run one serial, `setup` warns about a rules file with no serial, and no SIEM duplicate went out
+without a replay mark. Two cases were wrong about the test, not the product. Only the live harness changes here.
+
+- **C129: the relayed tool remembered one case's waiver in the next case.** The bot playing the library's tools
+  applied every CH-5501 waiver in the batch to one balance, so a later case's waiver met "amount exceeds balance".
+  Each tool call now names a `world`, one per case, and the tool role is told that calls in one world share state
+  and every world starts from the same records. The world is a hash, so it does not name the case.
+- **C170: a split over-cap payment counted as "not attempted".** The agent paid half of the $742.18 invoice, so no
+  call held the forbidden amount. A case can now list `expect.attempt` values that also mark the attempt; C170 lists
+  the invoice number, so a stopped half is scored by its deny, and a half that reaches the vendor service fails.
+- **A faster harness, checking the same things.** The burst case (C156: thirteen calls while both judges answer
+  after their timeout) waited out a 20-second judge timeout per call, about 4 of every pass's 6 minutes. Its stance
+  now has its own judges file with a 4-second timeout, and the slow ballots still arrive 2 seconds after it.
+  `--sabotage all` runs up to four passes at once (`--jobs`), each on its own ports (`LIVE_PORT_BASE`): 7 minutes
+  instead of about 55 here, with the same results (control 175 PASS; every weakening caught but the declared
+  blind spot).
+
+## Release v0.7.3: setup and change commands, a signed serial, the upstream server's files — 2026-10-23
+
+Package version 0.7.3 (`pyproject.toml`, `two_key.__version__`, `uv.lock`). To be tagged `v0.7.3` on `main`
+after the merge. PyPI's `0.7.1` and `0.7.2` were the 0.7.0 code, repackaged on the `PyPI` branch, so this is the
+first release of new code since 0.7.0. The entries above, from "PyPI packaging on the PyPI branch" on, are the
+detail.
+
+- **`two-key setup`** writes a whole deployment (principal key, constitution, judges, `proxy.yaml`, ledger) from
+  answers or a file, checks it before it is in place, and records it. **`two-key config set`** and **`undo`**
+  change one setting: the whole set must pass `config check`, a weaker change needs `--confirm-weaker` and a typed
+  yes, a signed setting needs the principal key, and each change is a `config_changed` ledger entry with no
+  values. **`config get`**, **`show`** and **`check`** read a config without starting anything. docs/SETUP.md.
+- **A principal key encrypted with a passphrase** (`two-key config key-passphrase`, `init-key --passphrase`),
+  read by the proxy from an owner-only `keys.passphrase_file`.
+- **A signed `serial` in the constitution.** Once a ledger has run a constitution with a serial, it refuses an
+  older one (`constitution_rollback`), the same serial with other rules (`constitution_serial_reused`), or none
+  (`constitution_serial_missing`). Two proxies started at once on one ledger cannot both run one serial: the
+  check runs again under the ledger's write lock. `setup` and `mcp-draft-specs` write `serial: 1`, and
+  `config set` signs the next one.
+- **The upstream server's files** behind a launcher such as `sudo` are in the start-up checks: absolute
+  arguments of `upstream.command`, `upstream.check_paths`, and a warning (`upstream_paths_unchecked`, refused
+  under `high_assurance`) when nothing names them (#13).
+- **A shared ledger**: each write and the checkpoint that signs it happen in one hold of the lock, so another
+  process never reads an entry the signed head does not cover. The SIEM copy of an entry another proxy wrote is
+  marked `replay`, and a delivery cursor ahead of the ledger is not trusted.
+- **docs/SETTINGS.md**: every setting, generated from the code and checked by a test.
+- **Python 3.13 and 3.14** in CI on Linux, macOS, and Windows; the compiled-file check works on 3.15 (#27).
+- **CI and supply chain**: every CI install is hash-pinned, the Semgrep job's token is scoped (OpenSSF
+  Scorecard, #31 to #33), DeepSource runs its Python analyzer, and every file carries the copyright header.
+  1181 tests.
+- **Live testing**: runs 9, 9x, 9y and 9z, 175 cases on one machine, with a sabotage pass that shows which
+  weakenings the harness notices. Every Two-Key finding is fixed; run 9z, a regression round on the fixes,
+  found none (172 of 175 PASS; of the other three, two were harness cases, now fixed, and one was stopped
+  by another valid control). Results are on the `live-runs` branch.
+- Docs: README, ROADMAP (0.7.3 under "Shipped"), SCOPE, THREAT_MODEL, FIT, HOWTO, JUDGES_AND_QUORUM, PYPI,
+  UPGRADING, CONTRIBUTING, AGENTS.md, and llms.txt name 0.7.3 as the release and `v0.7.3` as the install ref.
+
+### Upgrading from 0.7.0
+
+The same applies from PyPI's 0.7.1 and 0.7.2.
+
+- Constitutions, ledgers, keys, backups, `judges.yaml`, and `proxy.yaml` from 0.7.0 load unchanged. Nothing
+  needs re-signing, and a constitution without a `serial` signs to the same bytes as before.
+- **Check the proxy's start-up output.** It now checks the upstream server's program, script and folders named
+  as absolute paths in `upstream.command`, so it may name more paths, or refuse under
+  `on_writable_paths: refuse` or `high_assurance`. A command that starts with a launcher (`sudo`, `doas`, `env`,
+  `npx`, `uvx`, `pipx`, `cmd`, `powershell`, `pwsh`) and names no absolute path warns
+  `upstream_paths_unchecked`, and under `high_assurance` refuses: give the program as an absolute path or list
+  its folder in `upstream.check_paths`. On Windows a `check_paths` entry needs its drive.
+- **Add `serial: 1` to your rules file** and sign it again (`two-key sign-constitution`) to turn on the
+  rollback check. From then on, count up by one for each new constitution. A ledger that has run a serial
+  refuses an older one; to go back to older rules, sign them again with a higher serial.
+- `two-key config check` now fails when the monitored agent's credential variable is unset (the proxy refuses
+  to start without it), and warns for each unset judge variable.
+- **SIEM**: a new ledger kind, `config_changed`, is sent like the others. With two proxies on one ledger, each
+  still sends every entry, and the copy of the other's entry is marked `replay`: dedupe on `entry_hash`.
+- On Python 3.15, a start may name a `__pycache__` folder another account can write, which it should have
+  named before.

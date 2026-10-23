@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """``case: exact`` string fields: compared, and passed to the tool, exactly as written (live run 6x, X19).
 
 A case-insensitive ASCII field is lower-cased, and the tool receives the value Path A checked, so a
@@ -35,7 +38,7 @@ SPECS = {"share_folder": {"irreversible": False, "data_class_floor": "personal",
 CLAIM = {"tool": "share_folder", "data_class": "personal", "irreversible": False}
 
 
-def signed(fields=EXACT, rules=RULES, specs=SPECS, **kw):
+def signed(fields=EXACT, rules=RULES, specs=SPECS, **kw):  # skipcq: PYL-W0102 - test only
     return sign_constitution("p", rules, generate_private_key(), specs, fields=fields, **kw)
 
 
@@ -102,7 +105,7 @@ class Calls(unittest.TestCase):
 
 
 class Warnings(unittest.TestCase):
-    def warnings(self, fields, rules):
+    def warnings(self, fields, rules):  # skipcq: PYL-R0201 - test only
         s = signed(fields, rules)["signed"]
         return case_warnings(s["hard_rules"], s["tool_specs"], s["fields"])
 

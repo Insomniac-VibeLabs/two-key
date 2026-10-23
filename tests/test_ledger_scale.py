@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """#49 torn last line, #50 Merkle prefix roots and the size check staying honest."""
 
 import hashlib
@@ -45,7 +48,7 @@ class KindIndex(unittest.TestCase):
                 led.append("note", {"n": 100 + i})
             led.append("revocation", {"reason": "stop"})
             led.checkpoint()
-            second = next(e.seq for e in led.entries if e.body.get("capability_key_fingerprint") == "sha256:second")
+            second = next(e.seq for e in led.entries if e.body.get("capability_key_fingerprint") == "sha256:second")  # skipcq: PTC-W0063 - test only
             self.assertEqual(led.last_before(second, "constitution_loaded").body["capability_key_fingerprint"],
                              "sha256:first")
             self.assertEqual(led.last_before(second + 1, "constitution_loaded").body["capability_key_fingerprint"],

@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Encrypted files (0.6.0): a tool passes them only when the principal signs ``encrypted: pass`` on its scan field,
 and only when encryption is the scanner's sole finding. Every other tool treats an encrypted file as flagged.
 

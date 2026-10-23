@@ -1,24 +1,32 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 name: Semgrep
 
 on:
   pull_request: {}
   push:
-    branches: [main, working]
+    branches: [main, PyPI, testpypi]
   workflow_dispatch: {}
 
 permissions:
-  actions: read            # upload-sarif reads the workflow run (needed in a private repository)
   contents: read
-  security-events: write   # so findings can appear in the Security tab
 
 jobs:
   semgrep:
     name: Semgrep Scan
     runs-on: ubuntu-latest
+    # Only this job gets the write scope; the workflow's default above stays read-only.
+    permissions:
+      actions: read            # upload-sarif reads the workflow run (needed in a private repository)
+      contents: read
+      security-events: write   # so findings can appear in the Security tab
     container:
       image: semgrep/semgrep
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Run Semgrep
         # Findings print to this log as text as well as going to the Security tab as SARIF, so they can be

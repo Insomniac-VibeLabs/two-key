@@ -1,3 +1,6 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
 """Every JSON and YAML document is parsed strictly: a repeated key is refused, never last-one-wins."""
 
 import tempfile
