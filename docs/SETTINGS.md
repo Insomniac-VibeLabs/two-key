@@ -277,8 +277,8 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `hard_rules[].deny_if.irreversible` | none |  | `true` or `false`. |
 | `hard_rules[].deny_if_irreversible_over` | one rule type per rule |  | A number: deny an irreversible call over this amount. |
 | `hard_rules[].deny_if_fields` | one rule type per rule |  | A condition over custom fields. The scan stance is one of these, over the `scan` field. |
-| `tool_specs.<tool>.irreversible` | required |  | `true` or `false`: whether the tool cannot be undone. |
-| `tool_specs.<tool>.data_class_floor` | required |  | The lowest data class a call to the tool can claim: `public`, `personal`, `medical`, `financial`, or `classified`. |
+| `tool_specs.<tool>.irreversible` | true |  | `true` or `false`: whether the tool cannot be undone. Left out, the tool counts as irreversible. |
+| `tool_specs.<tool>.data_class_floor` | classified |  | The lowest data class a call to the tool can claim: `public`, `personal`, `medical`, `financial`, or `classified`. |
 | `tool_specs.<tool>.amount` | none |  | Where Path A reads the amount. |
 | `tool_specs.<tool>.amount.json_path` | required with `amount` |  | The argument that holds the amount. |
 | `tool_specs.<tool>.amount.unit` | required with `amount` |  | `usd` or `cents`. |

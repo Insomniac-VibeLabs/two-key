@@ -220,6 +220,10 @@ use that pass to run the tool.
      up to 64; see [examples/custom_fields.yaml](examples/custom_fields.yaml)
      and HOWTO "Custom Path A fields"). A field's description is a signed
      note for people, never a rule.
+   - Only the tool's name is required. A tool spec may leave out
+     `irreversible` (then the tool counts as irreversible) and
+     `data_class_floor` (then it is `classified`), the safe defaults.
+     Amount and counterparty apply only to tools that set them.
    - If the VM faults, the answer is deny.
    - **Where the values come from.** The signed constitution must include
      `tool_specs`. Without them it will not sign and will not load. Two-Key
@@ -251,7 +255,8 @@ use that pass to run the tool.
    - **Errors.** A value that cannot be read (for example `10**400`) is
      denied as `derive_failed`. Any other error inside `authorize` is denied
      as `internal_error:`. Both are written to the ledger.
-2. **Path B: the judge panel (a quorum).**
+2. **Path B: the judges.** You configure one or more judges, and a set
+   number of them must vote yes.
    - Judges are hooks for xAI/Grok, OpenAI, Anthropic, Gemini, and Ollama.
      You need at least one judge. A judge may run any model from any vendor,
      but it must not be the monitored agent: never with the agent's

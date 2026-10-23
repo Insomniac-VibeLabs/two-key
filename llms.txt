@@ -118,6 +118,7 @@ supported, by design (docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-
 minting, principal, witness, and ledger keys, and the registered tools. It binds the tool, the argument
 hash, the ledger root and size, the constitution hashes, spec_hash, and the
 derived form. tool_specs is required. A disagreeing claim is a deny.
+In a spec only the tool id is required: irreversible defaults to true, data_class_floor to classified.
 deny_unmapped defaults off. An unnamed argument key does not reach the tool.
 Set the flag to deny the call instead. A counterparty path requires allow.
 The tool receives the canonical party. A payload path is not interpreted.

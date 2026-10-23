@@ -158,7 +158,13 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   local judge, and a local yes. Note that
   `QuorumPolicy.without_diversity_floors()` explicitly defaults
   `required_yes` to `2`.
-- `tool_specs` is required. A disagreeing claim is a deny.
+- `tool_specs` is required. A disagreeing claim is a deny. Inside a spec
+  only the tool id is required: `irreversible` defaults to `true` and
+  `data_class_floor` to `classified` (`two_key/constitution.py`
+  `validate_tool_specs`), and both defaults are written into the signed spec,
+  so leaving them out signs the same bytes as writing them
+  (`tests/test_optional_tool_spec_fields.py`). Do not default either to the
+  permissive value.
 - An omitted `data_class` is `classified`, before the floor. Do not
   default it to the tool's floor. Classes combine as a set
   (`join_data_class`): `financial` and `medical` replace `personal`,

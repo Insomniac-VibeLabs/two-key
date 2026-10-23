@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from . import _platform
-from .action import DATA_CLASSES
+from .action import DATA_CLASSES, DEFAULT_DATA_CLASS, DEFAULT_IRREVERSIBLE
 from .canonical import canonical_bytes, canonical_hash
 from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path, has_caller_fields,
                      has_exact_fields, is_caller, rule_fields, validate_fields)
@@ -277,7 +277,8 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
     """Canonical tool specs. Every allow-listed tool must have one.
 
     A spec says which argument paths Path A may read. It is not an English
-    scanner. ``amount.unit`` is ``usd`` or ``cents``. A currency path, when
+    scanner. Only the tool's name is required. ``irreversible`` defaults to
+    true and ``data_class_floor`` to ``classified``. ``amount.unit`` is ``usd`` or ``cents``. A currency path, when
     set, must be the string ``usd`` at authorization time or the call is
     denied. A counterparty path copies only values on its ``allow`` list.
     The tool receives that canonical value, not the raw spelling.
@@ -309,9 +310,12 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
         extra = set(spec) - allowed_keys
         if extra:
             raise ConstitutionError(f"tool_specs.{tool}: unknown key(s) {sorted(extra)}")
-        if "irreversible" not in spec or not isinstance(spec["irreversible"], bool):
+        # Both are optional. Left out, they take the fail-closed defaults, written into the signed spec,
+        # so a spec that leaves them out signs as if it had written them.
+        irreversible = spec.get("irreversible", DEFAULT_IRREVERSIBLE)
+        if not isinstance(irreversible, bool):
             raise ConstitutionError(f"tool_specs.{tool}.irreversible: expected a boolean")
-        floor = spec.get("data_class_floor")
+        floor = spec.get("data_class_floor", DEFAULT_DATA_CLASS)
         if not isinstance(floor, str) or floor.strip().casefold() not in DATA_CLASSES:
             raise ConstitutionError(
                 f"tool_specs.{tool}.data_class_floor: expected one of {list(DATA_CLASSES)}"
@@ -399,7 +403,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
                     raise ConstitutionError(f"{where}.max_length: expected a positive integer")
             payload_out.append({"json_path": path, "shape": shape, "max_length": limit})
         out[tool] = {
-            "irreversible": spec["irreversible"],
+            "irreversible": irreversible,
             "data_class_floor": floor.strip().casefold(),
             "amount": amount_out,
             "counterparties": party_out,

@@ -145,6 +145,7 @@ SPDX-License-Identifier: Apache-2.0
 - [After 0.7.3: the serial check split for readability — 2026-10-23](#after-073-the-serial-check-split-for-readability--2026-10-23)
 - [Dependabot: uv and the diagram tools updated — 2026-10-23](#dependabot-uv-and-the-diagram-tools-updated--2026-10-23)
 - [Live run 9s: two test-code fixes — 2026-10-23](#live-run-9s-two-test-code-fixes--2026-10-23)
+- [Optional tool spec fields, and README wording — 2026-10-23](#optional-tool-spec-fields-and-readme-wording--2026-10-23)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4554,3 +4555,19 @@ C170, the two cases fixed after run 9z, both passed live. It found two problems 
 - pytest collected `test_ca` (`tests/tls.py`), a helper that writes test certificates, as a test wherever a test
   module imported it, and reported an error. It is now marked as not a test. `unittest`, which CI uses, never
   collected it.
+
+## Optional tool spec fields, and README wording — 2026-10-23
+
+- **Only the tool's id is required in a tool spec.** `irreversible` and `data_class_floor` were required for
+  every tool. They are now optional: left out, `irreversible` is `true` and `data_class_floor` is
+  `classified`, the same fail-closed defaults Two-Key already uses for a call that leaves them out. The
+  defaults are written into the signed spec, so a spec that leaves them out signs exactly as one that writes
+  them, and every existing constitution signs and loads as before. A wrong type is still refused. A tool left
+  at the defaults is caught by a `deny_if` on `irreversible` or on `classified`, and judges see it as
+  irreversible and classified. `amount` and `counterparties` were already optional.
+  `tests/test_optional_tool_spec_fields.py` covers this; `docs/SETTINGS.md` shows the new defaults.
+  `two-key setup` already used these defaults for a starter tool, so it is unchanged; `docs/SETUP.md` now says
+  both are optional. `two-key mcp-draft-specs` still writes a placeholder data class that you must replace, so a
+  drafted spec is decided on purpose.
+- **README: "Dual-path authorization" in plain language.** The same facts, reworded into short labelled
+  points. Path B is now called "the judges" rather than "a quorum", since one judge is enough.
