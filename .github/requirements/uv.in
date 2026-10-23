@@ -3,4 +3,4 @@
 # SPDX-License-Identifier: Apache-2.0
 # uv, which installs uv.lock (tests, coverage, siem-integration) and exports its hashes for a wheel
 # install (build, publish). AGENTS.md and CONTRIBUTING.md name this version.
-uv==0.13.0
+uv==0.13.5

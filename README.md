@@ -724,7 +724,7 @@ dependencies), wheels only. To match CI, use the uv version pinned in
 `.github/requirements/uv.in`:
 
 ```bash
-pip install --only-binary :all: "uv==0.13.0"
+pip install --only-binary :all: "uv==0.13.5"
 uv sync --locked --no-build --extra yaml --extra mcp --no-dev
 .venv/bin/python -m unittest discover -s tests
 ```

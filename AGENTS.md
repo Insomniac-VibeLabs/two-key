@@ -70,7 +70,7 @@ python -m two_key demo
 ```
 
 CI does not use that floating install. `.github/workflows/tests.yml` installs
-`uv==0.13.0` (with its hashes, `.github/requirements/uv.txt`) and runs `uv sync --locked --no-build --extra yaml --extra mcp`, which
+`uv==0.13.5` (with its hashes, `.github/requirements/uv.txt`) and runs `uv sync --locked --no-build --extra yaml --extra mcp`, which
 installs `uv.lock` (cryptography, PyYAML, the MCP SDK, and their dependencies) as wheels.
 Regenerate `uv.lock` with that uv when a dependency range changes, and
 commit the lock. Do not treat the lock as a release pin for consumers.

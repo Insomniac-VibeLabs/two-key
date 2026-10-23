@@ -143,6 +143,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Live run 9z: two harness fixes, and a faster harness — 2026-10-23](#live-run-9z-two-harness-fixes-and-a-faster-harness--2026-10-23)
 - [Release v0.7.3: setup and change commands, a signed serial, the upstream server's files — 2026-10-23](#release-v073-setup-and-change-commands-a-signed-serial-the-upstream-servers-files--2026-10-23)
 - [After 0.7.3: the serial check split for readability — 2026-10-23](#after-073-the-serial-check-split-for-readability--2026-10-23)
+- [Dependabot: uv and the diagram tools updated — 2026-10-23](#dependabot-uv-and-the-diagram-tools-updated--2026-10-23)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4525,3 +4526,19 @@ and passes.
   of the ledger's lock guard, `two_key/ledger.py`, added with the re-entrant hold in run 9y. The guard is a class
   defined inside `Ledger._exclusive` and tracks that ledger's own lock depth, the same false positive already marked
   on the guard's other lines; both lines now carry the same `skipcq` with that reason.
+
+## Dependabot: uv and the diagram tools updated — 2026-10-23
+
+No change in Two-Key itself or in what it installs for users; only the tools CI uses. Dependabot opened six alerts.
+
+- **uv 0.13.0 → 0.13.5** (`.github/requirements/uv.in`, `uv.txt` recompiled with hashes; README and AGENTS.md
+  name the new version). uv before 0.13.4 trusts the emSign ECC Root CA - G3, whose intermediate keys were
+  compromised (GHSA-hq85-5cpj-mr62). CI uses uv to download packages, so someone able to intercept that
+  traffic and holding one of those keys could have posed as PyPI. `uv.lock` is unchanged and still checks.
+- **mermaid-cli 11.4.2 → 12.0.0** for the non-required `diagrams.yml` (`.github/diagrams/`). The old version
+  pulled in puppeteer 23 with `extract-zip` (symlink path traversal, two alerts) and `basic-ftp` (slow
+  directory-listing parse); 12.0.0 uses puppeteer 25, which has neither. An `overrides` entry gives
+  mermaid-cli KaTeX 0.18.10, the version mermaid already uses, which fixes the KaTeX prototype-pollution alert.
+  `npm audit` on the new lock finds nothing. 12.0.0 needs Node 22.13 or later, so the workflow now sets up
+  Node 22, and it dropped the `-w` option, so the 780-pixel page width is now the browser window's width.
+  All 27 diagrams in the docs drew without errors with the new version.
