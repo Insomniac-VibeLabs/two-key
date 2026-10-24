@@ -4464,7 +4464,9 @@ without a replay mark. Two cases were wrong about the test, not the product. Onl
 Package version 0.7.3 (`pyproject.toml`, `two_key.__version__`, `uv.lock`). To be tagged `v0.7.3` on `main`
 after the merge. PyPI's `0.7.1` and `0.7.2` were the 0.7.0 code, repackaged on the `PyPI` branch, so this is the
 first release of new code since 0.7.0. The entries above, from "PyPI packaging on the PyPI branch" on, are the
-detail.
+detail. The tag also carries the four sections after this one, written before 0.7.3 was tagged: the serial check
+split for readability, the CI tool updates from Dependabot, two test-code fixes from run 9s, and optional tool
+spec fields.
 
 - **`two-key setup`** writes a whole deployment (principal key, constitution, judges, `proxy.yaml`, ledger) from
   answers or a file, checks it before it is in place, and records it. **`two-key config set`** and **`undo`**
@@ -4484,15 +4486,19 @@ detail.
 - **A shared ledger**: each write and the checkpoint that signs it happen in one hold of the lock, so another
   process never reads an entry the signed head does not cover. The SIEM copy of an entry another proxy wrote is
   marked `replay`, and a delivery cursor ahead of the ledger is not trusted.
+- **Only the tool's id is required in a tool spec.** Left out, `irreversible` is `true` and
+  `data_class_floor` is `classified`, the fail-closed defaults; the defaults are written into the signed spec,
+  so existing constitutions sign to the same bytes. GrokBot's run 9t checked this live.
 - **docs/SETTINGS.md**: every setting, generated from the code and checked by a test.
 - **Python 3.13 and 3.14** in CI on Linux, macOS, and Windows; the compiled-file check works on 3.15 (#27).
 - **CI and supply chain**: every CI install is hash-pinned, the Semgrep job's token is scoped (OpenSSF
   Scorecard, #31 to #33), DeepSource runs its Python analyzer, and every file carries the copyright header.
-  1181 tests.
+  1187 tests.
 - **Live testing**: runs 9, 9x, 9y and 9z, 175 cases on one machine, with a sabotage pass that shows which
   weakenings the harness notices. Every Two-Key finding is fixed; run 9z, a regression round on the fixes,
   found none (172 of 175 PASS; of the other three, two were harness cases, now fixed, and one was stopped
-  by another valid control). Results are on the `live-runs` branch.
+  by another valid control). Regression runs 9s and 9t, on the later changes, found no Two-Key bugs (9t: 170
+  PASS, 5 inconclusive, none failed). Results are on the `live-runs` branch.
 - Docs: README, ROADMAP (0.7.3 under "Shipped"), SCOPE, THREAT_MODEL, FIT, HOWTO, JUDGES_AND_QUORUM, PYPI,
   UPGRADING, CONTRIBUTING, AGENTS.md, and llms.txt name 0.7.3 as the release and `v0.7.3` as the install ref.
 
@@ -4502,6 +4508,8 @@ The same applies from PyPI's 0.7.1 and 0.7.2.
 
 - Constitutions, ledgers, keys, backups, `judges.yaml`, and `proxy.yaml` from 0.7.0 load unchanged. Nothing
   needs re-signing, and a constitution without a `serial` signs to the same bytes as before.
+- A tool spec may now leave out `irreversible` and `data_class_floor`. Left out, they are `true` and
+  `classified`, the strict side: a tool that is reversible or carries lower-class data should still say so.
 - **Check the proxy's start-up output.** It now checks the upstream server's program, script and folders named
   as absolute paths in `upstream.command`, so it may name more paths, or refuse under
   `on_writable_paths: refuse` or `high_assurance`. A command that starts with a launcher (`sudo`, `doas`, `env`,
