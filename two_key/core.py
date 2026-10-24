@@ -114,6 +114,24 @@ class Decision:
         return rec
 
 
+def _serial_history(ledger) -> tuple[str | None, int | None, set]:
+    """From the ledger's ``constitution_loaded`` entries: the digest it last ran, the highest serial it has run
+    (None if none had a serial), and every digest it ran under that serial."""
+    last_digest, top, top_digests = None, None, set()
+    for entry in getattr(ledger, "entries", ()):
+        if entry.kind != "constitution_loaded":
+            continue
+        last_digest = entry.body.get("digest")
+        serial = entry.body.get("serial")
+        if not isinstance(serial, int) or isinstance(serial, bool):
+            continue
+        if top is None or serial > top:
+            top, top_digests = serial, set()
+        if serial == top:
+            top_digests.add(entry.body.get("digest"))
+    return last_digest, top, top_digests
+
+
 def check_constitution_order(ledger, constitution: Constitution) -> str | None:
     """Refuse a constitution older than one this ledger has run; return the digest the ledger last ran, if any.
 
@@ -124,17 +142,7 @@ def check_constitution_order(ledger, constitution: Constitution) -> str | None:
     one with a serial accepts any; there is no setting that turns the check off. To go back to older rules, sign
     them again with a higher serial.
     """
-    last_digest, top, top_digests = None, None, set()
-    for entry in getattr(ledger, "entries", ()):
-        if entry.kind != "constitution_loaded":
-            continue
-        last_digest = entry.body.get("digest")
-        serial = entry.body.get("serial")
-        if isinstance(serial, int) and not isinstance(serial, bool):
-            if top is None or serial > top:
-                top, top_digests = serial, set()
-            if serial == top:
-                top_digests.add(entry.body.get("digest"))
+    last_digest, top, top_digests = _serial_history(ledger)
     if top is None:
         return last_digest
     serial = constitution.serial

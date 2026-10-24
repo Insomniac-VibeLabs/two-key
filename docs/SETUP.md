@@ -84,7 +84,7 @@ The same keys go in an `--answers` file (YAML or JSON). An unknown key is refuse
 | `judges` | For each judge: `type`, `id`, `model`, `base_url` (for `openai_compatible` and `ollama`), `maker`, and `auth_env`, the name of the environment variable that holds its API key. Any other key of a judge in [SETTINGS](SETTINGS.md) can be given too | (asked) |
 | `monitored_agent` | `id`, `model`, `provider`, `base_url`, and `credential_env` (or `credential: none`) | (asked) |
 | `rules_file` | A rules file you reviewed. For the proxy, the `rules.draft.yaml` that `two-key mcp-draft-specs` drafted from the server | none |
-| `tools` | Without `rules_file`: the tools a starter allows, each with `id`, `irreversible`, and `data_class_floor` | (asked) |
+| `tools` | Without `rules_file`: the tools a starter allows, each with `id` and, optionally, `irreversible` (default `true`) and `data_class_floor` (default `classified`) | (asked) |
 | `prose_file` | The prose the judges read. Without it, a short starter you edit later | the starter |
 | `upstream` | Proxy only: `command` (a list; the wizard splits a line as a shell would, and the proxy runs it without a shell) and `schema_digest` | (asked) |
 | `agent_session_env` | Proxy only: the name of the variable that holds the agent's session | none |

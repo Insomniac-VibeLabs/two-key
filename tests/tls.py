@@ -113,3 +113,7 @@ def test_ca(directory: Path | str, common: str = "siem.test") -> Certificates:
     _write(paths.client_key, key=client_key)
     del other_key
     return paths
+
+
+# A helper, not a test: pytest would otherwise collect it wherever a test module imports it (run 9s).
+test_ca.__test__ = False

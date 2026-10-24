@@ -344,7 +344,7 @@ record of what each release did.
 
 Released as tag `v0.7.3` on `main`, and on PyPI. Not planned as a phase of
 its own: these came from the maintainer's request for one way into setup and
-changes, from issues #13 and #27, and from live runs 9 to 9z. CHANGES.md
+changes, from issues #13 and #27, and from live runs 9 to 9t. CHANGES.md
 "Release v0.7.3" lists them; [docs/SETUP.md](docs/SETUP.md) and
 [docs/SETTINGS.md](docs/SETTINGS.md) are the reference.
 
@@ -360,6 +360,8 @@ changes, from issues #13 and #27, and from live runs 9 to 9z. CHANGES.md
   checks, a warning for a launcher that hides them, and
   `upstream.check_paths` for the rest (#13).
 - Done: the compiled-file check on Python 3.15 (#27); CI on 3.13 and 3.14.
+- Done: only the tool's id is required in a tool spec; `irreversible` and
+  `data_class_floor` default to `true` and `classified`.
 
 ### 0.7.0: Ledger export for SIEM
 

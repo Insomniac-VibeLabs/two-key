@@ -142,6 +142,10 @@ SPDX-License-Identifier: Apache-2.0
 - [Live run 9y: two proxies starting at once, rules without a serial, and shared-ledger SIEM copies — 2026-10-22](#live-run-9y-two-proxies-starting-at-once-rules-without-a-serial-and-shared-ledger-siem-copies--2026-10-22)
 - [Live run 9z: two harness fixes, and a faster harness — 2026-10-23](#live-run-9z-two-harness-fixes-and-a-faster-harness--2026-10-23)
 - [Release v0.7.3: setup and change commands, a signed serial, the upstream server's files — 2026-10-23](#release-v073-setup-and-change-commands-a-signed-serial-the-upstream-servers-files--2026-10-23)
+- [After 0.7.3: the serial check split for readability — 2026-10-23](#after-073-the-serial-check-split-for-readability--2026-10-23)
+- [Dependabot: uv and the diagram tools updated — 2026-10-23](#dependabot-uv-and-the-diagram-tools-updated--2026-10-23)
+- [Live run 9s: two test-code fixes — 2026-10-23](#live-run-9s-two-test-code-fixes--2026-10-23)
+- [Optional tool spec fields, and README wording — 2026-10-23](#optional-tool-spec-fields-and-readme-wording--2026-10-23)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4460,7 +4464,9 @@ without a replay mark. Two cases were wrong about the test, not the product. Onl
 Package version 0.7.3 (`pyproject.toml`, `two_key.__version__`, `uv.lock`). To be tagged `v0.7.3` on `main`
 after the merge. PyPI's `0.7.1` and `0.7.2` were the 0.7.0 code, repackaged on the `PyPI` branch, so this is the
 first release of new code since 0.7.0. The entries above, from "PyPI packaging on the PyPI branch" on, are the
-detail.
+detail. The tag also carries the four sections after this one, written before 0.7.3 was tagged: the serial check
+split for readability, the CI tool updates from Dependabot, two test-code fixes from run 9s, and optional tool
+spec fields.
 
 - **`two-key setup`** writes a whole deployment (principal key, constitution, judges, `proxy.yaml`, ledger) from
   answers or a file, checks it before it is in place, and records it. **`two-key config set`** and **`undo`**
@@ -4480,15 +4486,19 @@ detail.
 - **A shared ledger**: each write and the checkpoint that signs it happen in one hold of the lock, so another
   process never reads an entry the signed head does not cover. The SIEM copy of an entry another proxy wrote is
   marked `replay`, and a delivery cursor ahead of the ledger is not trusted.
+- **Only the tool's id is required in a tool spec.** Left out, `irreversible` is `true` and
+  `data_class_floor` is `classified`, the fail-closed defaults; the defaults are written into the signed spec,
+  so existing constitutions sign to the same bytes. GrokBot's run 9t checked this live.
 - **docs/SETTINGS.md**: every setting, generated from the code and checked by a test.
 - **Python 3.13 and 3.14** in CI on Linux, macOS, and Windows; the compiled-file check works on 3.15 (#27).
 - **CI and supply chain**: every CI install is hash-pinned, the Semgrep job's token is scoped (OpenSSF
   Scorecard, #31 to #33), DeepSource runs its Python analyzer, and every file carries the copyright header.
-  1181 tests.
+  1187 tests.
 - **Live testing**: runs 9, 9x, 9y and 9z, 175 cases on one machine, with a sabotage pass that shows which
   weakenings the harness notices. Every Two-Key finding is fixed; run 9z, a regression round on the fixes,
   found none (172 of 175 PASS; of the other three, two were harness cases, now fixed, and one was stopped
-  by another valid control). Results are on the `live-runs` branch.
+  by another valid control). Regression runs 9s and 9t, on the later changes, found no Two-Key bugs (9t: 170
+  PASS, 5 inconclusive, none failed). Results are on the `live-runs` branch.
 - Docs: README, ROADMAP (0.7.3 under "Shipped"), SCOPE, THREAT_MODEL, FIT, HOWTO, JUDGES_AND_QUORUM, PYPI,
   UPGRADING, CONTRIBUTING, AGENTS.md, and llms.txt name 0.7.3 as the release and `v0.7.3` as the install ref.
 
@@ -4498,6 +4508,8 @@ The same applies from PyPI's 0.7.1 and 0.7.2.
 
 - Constitutions, ledgers, keys, backups, `judges.yaml`, and `proxy.yaml` from 0.7.0 load unchanged. Nothing
   needs re-signing, and a constitution without a `serial` signs to the same bytes as before.
+- A tool spec may now leave out `irreversible` and `data_class_floor`. Left out, they are `true` and
+  `classified`, the strict side: a tool that is reversible or carries lower-class data should still say so.
 - **Check the proxy's start-up output.** It now checks the upstream server's program, script and folders named
   as absolute paths in `upstream.command`, so it may name more paths, or refuse under
   `on_writable_paths: refuse` or `high_assurance`. A command that starts with a launcher (`sudo`, `doas`, `env`,
@@ -4513,3 +4525,57 @@ The same applies from PyPI's 0.7.1 and 0.7.2.
   still sends every entry, and the copy of the other's entry is marked `replay`: dedupe on `entry_hash`.
 - On Python 3.15, a start may name a `__pycache__` folder another account can write, which it should have
   named before.
+
+## After 0.7.3: the serial check split for readability — 2026-10-23
+
+No change in behaviour. SonarCloud rated `check_constitution_order` (`two_key/core.py`) above its cognitive
+complexity limit (18 against 15). The scan of the ledger's `constitution_loaded` entries is now its own helper,
+`_serial_history`, and the function keeps only the three refusals. `tests/test_constitution_serial.py` is unchanged
+and passes.
+- DeepSource's two open findings on main were PYL-W0212 (a protected member used from outside its class) on two lines
+  of the ledger's lock guard, `two_key/ledger.py`, added with the re-entrant hold in run 9y. The guard is a class
+  defined inside `Ledger._exclusive` and tracks that ledger's own lock depth, the same false positive already marked
+  on the guard's other lines; both lines now carry the same `skipcq` with that reason.
+
+## Dependabot: uv and the diagram tools updated — 2026-10-23
+
+No change in Two-Key itself or in what it installs for users; only the tools CI uses. Dependabot opened six alerts.
+
+- **uv 0.13.0 → 0.13.5** (`.github/requirements/uv.in`, `uv.txt` recompiled with hashes; README and AGENTS.md
+  name the new version). uv before 0.13.4 trusts the emSign ECC Root CA - G3, whose intermediate keys were
+  compromised (GHSA-hq85-5cpj-mr62). CI uses uv to download packages, so someone able to intercept that
+  traffic and holding one of those keys could have posed as PyPI. `uv.lock` is unchanged and still checks.
+- **mermaid-cli 11.4.2 → 12.0.0** for the non-required `diagrams.yml` (`.github/diagrams/`). The old version
+  pulled in puppeteer 23 with `extract-zip` (symlink path traversal, two alerts) and `basic-ftp` (slow
+  directory-listing parse); 12.0.0 uses puppeteer 25, which has neither. An `overrides` entry gives
+  mermaid-cli KaTeX 0.18.10, the version mermaid already uses, which fixes the KaTeX prototype-pollution alert.
+  `npm audit` on the new lock finds nothing. 12.0.0 needs Node 22.13 or later, so the workflow now sets up
+  Node 22, and it dropped the `-w` option, so the 780-pixel page width is now the browser window's width.
+  All 27 diagrams in the docs drew without errors with the new version.
+
+## Live run 9s: two test-code fixes — 2026-10-23
+
+No change in Two-Key. Run 9s (GrokBot, on 8b3fd76) passed 165 cases with 10 inconclusive and none failed. C129 and
+C170, the two cases fixed after run 9z, both passed live. It found two problems in the test code.
+
+- `tests/test_fail_closed.py` matched an error message with `\(` in a normal string. Python warns about that
+  escape and will later refuse it; the pattern is now a raw string, so the `skipcq` that hid the warning is gone.
+- pytest collected `test_ca` (`tests/tls.py`), a helper that writes test certificates, as a test wherever a test
+  module imported it, and reported an error. It is now marked as not a test. `unittest`, which CI uses, never
+  collected it.
+
+## Optional tool spec fields, and README wording — 2026-10-23
+
+- **Only the tool's id is required in a tool spec.** `irreversible` and `data_class_floor` were required for
+  every tool. They are now optional: left out, `irreversible` is `true` and `data_class_floor` is
+  `classified`, the same fail-closed defaults Two-Key already uses for a call that leaves them out. The
+  defaults are written into the signed spec, so a spec that leaves them out signs exactly as one that writes
+  them, and every existing constitution signs and loads as before. A wrong type is still refused. A tool left
+  at the defaults is caught by a `deny_if` on `irreversible` or on `classified`, and judges see it as
+  irreversible and classified. `amount` and `counterparties` were already optional.
+  `tests/test_optional_tool_spec_fields.py` covers this; `docs/SETTINGS.md` shows the new defaults.
+  `two-key setup` already used these defaults for a starter tool, so it is unchanged; `docs/SETUP.md` now says
+  both are optional. `two-key mcp-draft-specs` still writes a placeholder data class that you must replace, so a
+  drafted spec is decided on purpose.
+- **README: "Dual-path authorization" in plain language.** The same facts, reworded into short labelled
+  points. Path B is now called "the judges" rather than "a quorum", since one judge is enough.

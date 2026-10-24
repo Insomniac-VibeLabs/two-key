@@ -338,8 +338,9 @@ RULES = _rows(RULES_YAML, [
      "over this amount."),
     ("hard_rules[].deny_if_fields", _ONE_RULE_TYPE, "A condition over custom fields. The scan stance is "
      "one of these, over the `scan` field."),
-    ("tool_specs.<tool>.irreversible", "required", "`true` or `false`: whether the tool cannot be undone."),
-    ("tool_specs.<tool>.data_class_floor", "required", "The lowest data class a call to the tool can claim: "
+    ("tool_specs.<tool>.irreversible", "true", "`true` or `false`: whether the tool cannot be undone. Left out, "
+     "the tool counts as irreversible."),
+    ("tool_specs.<tool>.data_class_floor", "classified", "The lowest data class a call to the tool can claim: "
      "`public`, `personal`, `medical`, `financial`, or `classified`."),
     ("tool_specs.<tool>.amount", "none", "Where Path A reads the amount."),
     ("tool_specs.<tool>.amount.json_path", "required with `amount`", "The argument that holds the amount."),
