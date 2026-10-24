@@ -257,10 +257,7 @@ use that pass to run the tool.
      as `internal_error:`. Both are written to the ledger.
 2. **Path B: the judges.** You configure one or more judges, and a set
    number of them must vote yes.
-   - Judges are hooks for xAI/Grok, OpenAI, Anthropic, Gemini, and Ollama.
-     You need at least one judge. A judge may run any model from any vendor,
-     but it must not be the monitored agent: never with the agent's
-     credential, at any address.
+   - **Judges** are independent AI authorization endpoints. They can use models from xAI/Grok, OpenAI, Anthropic, Google Gemini, Ollama, or other providers. At least one judge is required. Each judge uses its own credentials and execution context and **must not be the monitored agent itself**—the agent's credentials and endpoints may never be reused as a judge.
    - A vote that is missing, malformed, errored, or timed out never counts
      as yes.
    - **How many yes votes are needed.** Two-Key does not create or choose
