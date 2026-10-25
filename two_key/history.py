@@ -310,18 +310,8 @@ class HistoryIndex:
             tool = subject.get("tool") if isinstance(subject.get("tool"), str) else None
             parties = frozenset(p for p in subject.get("counterparties") or () if isinstance(p, str))
             amount = _number(subject.get("amount_usd"))
-        else:      # before 0.8.0: the action_normalized entry of the same run, filtered by today's spec
-            tool, parties, amount = None, frozenset(), None
-            normalized = pending.get("action_normalized")
-            if isinstance(normalized, Mapping) and normalized.get("tool") in self.specs:
-                tool = normalized["tool"]
-                spec = self.specs[tool]
-                form = normalized.get("form")
-                if isinstance(form, Mapping):
-                    raw = form.get("counterparties") or []
-                    parties = frozenset(shown_parties(spec, raw if isinstance(raw, list) else [], self.blocked))
-                    if spec.get("amount"):
-                        amount = _number(form.get("amount_usd"))
+        else:
+            tool, parties, amount = self._legacy_subject(pending)
         if tool is not None and tool not in self.specs:
             tool = None          # a tool the running constitution no longer signs counts in all_tools only
         path_b = pending.get("path_b") if isinstance(pending.get("path_b"), Mapping) else {}
@@ -337,6 +327,21 @@ class HistoryIndex:
                       jti=issued.get("jti") if allowed and isinstance(issued.get("jti"), str) else None,
                       verdict=verdict)
         return rec
+
+    def _legacy_subject(self, pending: Mapping) -> tuple[str | None, frozenset, float | None]:
+        """Before 0.8.0: the tool, counterparties, and amount from the action_normalized entry of the same run,
+        filtered by today's spec."""
+        normalized = pending.get("action_normalized")
+        if not isinstance(normalized, Mapping) or normalized.get("tool") not in self.specs:
+            return None, frozenset(), None
+        tool = normalized["tool"]
+        spec = self.specs[tool]
+        form = normalized.get("form")
+        if not isinstance(form, Mapping):
+            return tool, frozenset(), None
+        raw = form.get("counterparties") or []
+        parties = frozenset(shown_parties(spec, raw if isinstance(raw, list) else [], self.blocked))
+        return tool, parties, _number(form.get("amount_usd")) if spec.get("amount") else None
 
     def _add(self, rec: _Record) -> Episode | None:
         if rec.at is not None:
@@ -429,18 +434,7 @@ class HistoryIndex:
     def _this_tool(self, now: float, tool: str, parties: frozenset, amount_mapped: bool, in_flight: int,
                    scanned: bool) -> dict:
         recs = self.matching(tool, parties)
-        last = []
-        for r in reversed(recs[-self.policy.max_items:]):
-            item: dict[str, Any] = ({"age": "before_upgrade"} if r.at is None
-                                    else {"age_hours": _round(max(0.0, now - r.at) / HOUR)})
-            item["outcome"] = "allowed" if r.allowed else "denied"
-            if r.allowed:
-                item["run"] = r.run
-            else:
-                item["reason"] = r.code
-            if amount_mapped and r.amount is not None:
-                item["amount_usd"] = r.amount
-            last.append(item)
+        last = [_last_item(r, now, amount_mapped) for r in reversed(recs[-self.policy.max_items:])]
         if not parties:
             shown = None
         elif len(parties) == 1:
@@ -466,11 +460,7 @@ class HistoryIndex:
             "in_flight": in_flight,
         }
         if scanned:
-            counts = {v: 0 for v in SCAN_VERDICTS}
-            for r in recs:
-                if r.verdict and r.at is not None and _within(now, r.at, 7 * DAY):
-                    counts[r.verdict] += 1
-            out["scan_verdicts_7d"] = counts
+            out["scan_verdicts_7d"] = _scan_counts(recs, now)
         return out
 
     def _counts(self, now: float, span: float) -> dict:
@@ -519,6 +509,29 @@ def _round(value: float) -> float:
 def _within(now: float, at: float | None, span: float) -> bool:
     """Inside the window. A time later than now (a clock that went back) counts as inside every window."""
     return at is not None and (at >= now or now - at <= span)
+
+
+def _last_item(r: _Record, now: float, amount_mapped: bool) -> dict:
+    """One entry of ``last_decisions``: its age, outcome, whether it ran or why it was denied, and its amount."""
+    item: dict[str, Any] = ({"age": "before_upgrade"} if r.at is None
+                            else {"age_hours": _round(max(0.0, now - r.at) / HOUR)})
+    item["outcome"] = "allowed" if r.allowed else "denied"
+    if r.allowed:
+        item["run"] = r.run
+    else:
+        item["reason"] = r.code
+    if amount_mapped and r.amount is not None:
+        item["amount_usd"] = r.amount
+    return item
+
+
+def _scan_counts(recs: Iterable[_Record], now: float) -> dict:
+    """Each scan verdict's count over the last seven days."""
+    counts = {v: 0 for v in SCAN_VERDICTS}
+    for r in recs:
+        if r.verdict and r.at is not None and _within(now, r.at, 7 * DAY):
+            counts[r.verdict] += 1
+    return counts
 
 
 def _total(recs: list[_Record], amount_mapped: bool) -> dict:

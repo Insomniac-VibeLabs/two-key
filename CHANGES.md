@@ -4624,3 +4624,6 @@ maintainer approved on 2026-10-25 (decisions D1 to D10). Issue #1.
   CONNECTING, ROADMAP, AGENTS.md, and the generated SETTINGS. Tests: `tests/test_judge_history.py`.
 - DeepSource (PR #37) flagged three methods that use no instance (PYL-R0201): `HistoryIndex.approved_after` and
   two test helpers. All three are now static methods; no change in behaviour.
+- Three new functions were split for readability, no change in behaviour: `HistoryIndex._record` (the pre-0.8.0
+  subject is now `_legacy_subject`), the summary's `this_tool` block (`_last_item`, `_scan_counts`), and
+  `check_history_digests` (`_history_basis_problem`, `_loaded_history_policy`, `_rebuilt_summary`).

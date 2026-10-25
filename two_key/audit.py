@@ -105,7 +105,7 @@ def check_history_digests(ledger, constitution) -> list[str]:
     """
     from .compiler import compile_both
     from .derive import blocked_from_rules
-    from .history import HistoryConfigError, HistoryIndex, JudgeHistoryPolicy, digest
+    from .history import HistoryIndex, digest
     compiled = compile_both(constitution.prose, constitution.hard_rules, constitution.tool_specs,
                             specs_enforced=True, fields=constitution.fields)
     blocked = blocked_from_rules(compiled.rules)
@@ -122,17 +122,10 @@ def check_history_digests(ledger, constitution) -> list[str]:
             continue
         start = loaded.get(body.get("policy_digest"))
         basis = body.get("history_basis")
-        if start is None or start.get("digest") != constitution.digest:
-            problems.append(f"seq {entry.seq}: not checked: decided under another constitution")
-            continue
-        if not isinstance(basis, Mapping) or not isinstance(basis.get("ledger_size"), int) \
-                or not isinstance(basis.get("now"), int) or not 0 <= basis["ledger_size"] <= entry.seq:
-            problems.append(f"seq {entry.seq}: history_digest without a usable history_basis")
-            continue
-        try:
-            policy = JudgeHistoryPolicy.from_value((start.get("quorum_policy") or {}).get("judge_history") or {})
-        except (HistoryConfigError, TypeError):
-            problems.append(f"seq {entry.seq}: constitution_loaded judge_history settings do not load")
+        problem = _history_basis_problem(start, basis, entry.seq, constitution.digest)
+        policy = None if problem is not None else _loaded_history_policy(start)
+        if policy is None:
+            problems.append(f"seq {entry.seq}: {problem or 'constitution_loaded judge_history settings do not load'}")
             continue
         ids = tuple(start.get("history_agent_ids") or ())
         key = canonical_hash({"policy": policy.to_record(), "ids": list(ids)})
@@ -140,13 +133,38 @@ def check_history_digests(ledger, constitution) -> list[str]:
         if index is None or index.seen > basis["ledger_size"]:
             index = indexes[key] = HistoryIndex(policy, compiled.tool_specs, blocked, ids)
         index.sync(entries[:basis["ledger_size"]])
-        subject = body.get("subject") if isinstance(body.get("subject"), Mapping) else {}
-        tool = subject.get("tool")
-        spec = compiled.tool_specs.get(tool) if isinstance(tool, str) else None
-        summary = index.summary(float(basis["now"]), tool=tool if spec is not None else None,
-                                parties=subject.get("counterparties") or (),
-                                amount_mapped=bool(spec and spec.get("amount")), agent=body.get("agent"),
-                                in_flight=basis.get("in_flight") or 0, scanned="scanner" in start)
-        if digest(summary) != body["history_digest"]:
+        if digest(_rebuilt_summary(index, body, basis, compiled.tool_specs, "scanner" in start)) \
+                != body["history_digest"]:
             problems.append(f"seq {entry.seq}: history_digest does not match the summary rebuilt from the ledger")
     return problems
+
+
+def _history_basis_problem(start, basis, seq: int, constitution_digest: str) -> str | None:
+    """Why a decision's history digest cannot be rebuilt, or None when it can."""
+    if start is None or start.get("digest") != constitution_digest:
+        return "not checked: decided under another constitution"
+    if not isinstance(basis, Mapping) or not isinstance(basis.get("ledger_size"), int) \
+            or not isinstance(basis.get("now"), int) or not 0 <= basis["ledger_size"] <= seq:
+        return "history_digest without a usable history_basis"
+    return None
+
+
+def _loaded_history_policy(start: Mapping[str, Any]):
+    """The judge history settings a constitution_loaded entry recorded, or None when they do not load."""
+    from .history import HistoryConfigError, JudgeHistoryPolicy
+    try:
+        return JudgeHistoryPolicy.from_value((start.get("quorum_policy") or {}).get("judge_history") or {})
+    except (HistoryConfigError, TypeError):
+        return None
+
+
+def _rebuilt_summary(index, body: Mapping[str, Any], basis: Mapping[str, Any], specs: Mapping[str, Any],
+                     scanned: bool) -> dict:
+    """The summary the judges were sent for one decision, rebuilt from its subject, agent, and basis."""
+    subject = body.get("subject") if isinstance(body.get("subject"), Mapping) else {}
+    tool = subject.get("tool")
+    spec = specs.get(tool) if isinstance(tool, str) else None
+    return index.summary(float(basis["now"]), tool=tool if spec is not None else None,
+                         parties=subject.get("counterparties") or (),
+                         amount_mapped=bool(spec and spec.get("amount")), agent=body.get("agent"),
+                         in_flight=basis.get("in_flight") or 0, scanned=scanned)
