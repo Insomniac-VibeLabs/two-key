@@ -232,7 +232,7 @@ class AcceptanceCases(Base):
         self.run_call(tk, note)
         self.run_call(tk, note)
         this = self.judge.last["this_tool"]
-        self.assertEqual(this["counterparty"], None)
+        self.assertIsNone(this["counterparty"])
         self.assertNotIn("amount_usd", json.dumps(this))
         self.assertEqual(this["allowed_totals"]["7d"], {"count": 1})
 
@@ -381,7 +381,7 @@ class Decisions(Base):
         self.assertEqual(this["approved_not_run"], {"count": 1, "amount_usd": 1200.0})
         self.assertEqual(this["allowed_totals"]["7d"]["count"], 0)
         self.assertIsNone(this["days_since_last_allowed"])
-        self.assertEqual(this["last_decisions"][0]["run"], False)
+        self.assertIs(this["last_decisions"][0]["run"], False)
         self.clock.now += 400       # past the longest token lifetime: no longer waiting to run
         self.run_call(tk, pay())
         self.assertEqual(self.judge.last["this_tool"]["approved_not_run"]["count"], 0)
@@ -502,7 +502,7 @@ class FailureAndEpisodes(Base):
         self.assertFalse(d.allowed)
         self.assertEqual(d.reason, "history_changed")
         self.assertIsNone(d.token)
-        self.assertEqual(self.entries(mine, "path_b")[-1]["passed"], True)
+        self.assertIs(self.entries(mine, "path_b")[-1]["passed"], True)
         # The retry is judged with the new history, and allowed by it.
         retry = mine.authorize(*pay(), "pay it")
         self.assertTrue(retry.allowed, retry.reason)
@@ -527,8 +527,9 @@ class OneProxyPerAgent(Base):
         first = self.start(ledger=self.ledger())
         hold_agent_lock(first, self.config())
         second = self.start(ledger=Ledger(self.dir / "ledger", self.key))
+        config = self.config()
         with self.assertRaisesRegex(ProxyConfigError, "agent_already_connected"):
-            quiet(hold_agent_lock, second, self.config())
+            quiet(hold_agent_lock, second, config)
         refused = [e.body for e in Ledger(self.dir / "ledger", self.key).entries
                    if e.kind == "agent_already_connected"]
         self.assertEqual(refused, [{"agent_id": "grok", "origin": "mcp-proxy"}])

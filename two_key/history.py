@@ -305,28 +305,28 @@ class HistoryIndex:
         return None
 
     def _record(self, seq: int, body: Mapping, pending: Mapping) -> _Record:
-        subject = body.get("subject")
-        if isinstance(subject, Mapping):
-            tool = subject.get("tool") if isinstance(subject.get("tool"), str) else None
-            parties = frozenset(p for p in subject.get("counterparties") or () if isinstance(p, str))
-            amount = _number(subject.get("amount_usd"))
-        else:
-            tool, parties, amount = self._legacy_subject(pending)
-        if tool is not None and tool not in self.specs:
-            tool = None          # a tool the running constitution no longer signs counts in all_tools only
-        path_b = pending.get("path_b") if isinstance(pending.get("path_b"), Mapping) else {}
-        abstains = path_b.get("abstain")
-        issued = pending.get("capability_issued") if isinstance(pending.get("capability_issued"), Mapping) else {}
-        scan = pending.get("scan") if isinstance(pending.get("scan"), Mapping) else {}
-        verdict = scan.get("verdict") if scan.get("verdict") in SCAN_VERDICTS else None
+        tool, parties, amount = self._subject(body, pending)
+        abstains = _part(pending, "path_b").get("abstain")
+        jti = _part(pending, "capability_issued").get("jti")
+        verdict = _part(pending, "scan").get("verdict")
         allowed = body.get("allowed") is True
-        rec = _Record(seq=seq, at=parse_time(body.get("at")), allowed=allowed,
-                      code="allowed" if allowed else reason_code(body.get("reason")), tool=tool, parties=parties,
-                      amount=amount, agent=self.agent_key(body.get("agent")),
-                      abstains=abstains if isinstance(abstains, int) and not isinstance(abstains, bool) else 0,
-                      jti=issued.get("jti") if allowed and isinstance(issued.get("jti"), str) else None,
-                      verdict=verdict)
-        return rec
+        return _Record(seq=seq, at=parse_time(body.get("at")), allowed=allowed,
+                       code="allowed" if allowed else reason_code(body.get("reason")), tool=tool, parties=parties,
+                       amount=amount, agent=self.agent_key(body.get("agent")),
+                       abstains=abstains if isinstance(abstains, int) and not isinstance(abstains, bool) else 0,
+                       jti=jti if allowed and isinstance(jti, str) else None,
+                       verdict=verdict if verdict in SCAN_VERDICTS else None)
+
+    def _subject(self, body: Mapping, pending: Mapping) -> tuple[str | None, frozenset, float | None]:
+        """The tool, counterparties, and amount a decision was about: its own subject, or before 0.8.0 the run's
+        action_normalized entry. A tool the running constitution no longer signs counts in all_tools only."""
+        subject = body.get("subject")
+        if not isinstance(subject, Mapping):
+            return self._legacy_subject(pending)
+        tool = subject.get("tool")
+        parties = frozenset(p for p in subject.get("counterparties") or () if isinstance(p, str))
+        return (tool if isinstance(tool, str) and tool in self.specs else None), parties, \
+            _number(subject.get("amount_usd"))
 
     def _legacy_subject(self, pending: Mapping) -> tuple[str | None, frozenset, float | None]:
         """Before 0.8.0: the tool, counterparties, and amount from the action_normalized entry of the same run,
@@ -511,6 +511,12 @@ def _within(now: float, at: float | None, span: float) -> bool:
     return at is not None and (at >= now or now - at <= span)
 
 
+def _part(pending: Mapping, kind: str) -> Mapping:
+    """The run's entry of one kind, or an empty mapping."""
+    body = pending.get(kind)
+    return body if isinstance(body, Mapping) else {}
+
+
 def _last_item(r: _Record, now: float, amount_mapped: bool) -> dict:
     """One entry of ``last_decisions``: its age, outcome, whether it ran or why it was denied, and its amount."""
     item: dict[str, Any] = ({"age": "before_upgrade"} if r.at is None
@@ -527,7 +533,7 @@ def _last_item(r: _Record, now: float, amount_mapped: bool) -> dict:
 
 def _scan_counts(recs: Iterable[_Record], now: float) -> dict:
     """Each scan verdict's count over the last seven days."""
-    counts = {v: 0 for v in SCAN_VERDICTS}
+    counts = dict.fromkeys(SCAN_VERDICTS, 0)
     for r in recs:
         if r.verdict and r.at is not None and _within(now, r.at, 7 * DAY):
             counts[r.verdict] += 1

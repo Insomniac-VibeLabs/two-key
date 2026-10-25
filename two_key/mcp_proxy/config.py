@@ -401,12 +401,7 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
     """A validated ``ProxyConfig`` from a parsed document. ``path`` is the file it came from."""
     base = path.parent
     top = _mapping(data, "proxy config", _TOP_KEYS)
-    for key in _REQUIRED_TOP:
-        if key not in top:
-            raise ProxyConfigError(f"{key}: required")
-    keys = _mapping(top["keys"], "keys", _KEY_KEYS)
-    if "principal" not in keys:
-        raise ProxyConfigError("keys.principal: required (the principal private key)")
+    keys = _required(top)
     meta = {}
     for key in ("agent_id", "hosting"):
         if key in top:
@@ -431,14 +426,28 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
         ttl_seconds=_ttl(top["ttl_seconds"]) if "ttl_seconds" in top else 120,
         agent_session_env=(_env_name(top["agent_session_env"], "agent_session_env")
                            if "agent_session_env" in top else None),
-        allow_unresolved_identity=(_bool(top["allow_unresolved_identity"], "allow_unresolved_identity")
-                                   if "allow_unresolved_identity" in top else False),
+        allow_unresolved_identity=_flag(top, "allow_unresolved_identity", False),
         on_writable_paths=_writable_mode(top["on_writable_paths"]) if "on_writable_paths" in top else None,
         on_agent_access=_agent_access_mode(top["on_agent_access"]) if "on_agent_access" in top else None,
-        one_proxy_per_agent=(_bool(top["one_proxy_per_agent"], "one_proxy_per_agent")
-                             if "one_proxy_per_agent" in top else True),
+        one_proxy_per_agent=_flag(top, "one_proxy_per_agent", True),
         **meta,
     )
+
+
+def _required(top: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Refuse a config without its required keys; return its ``keys:`` block."""
+    for key in _REQUIRED_TOP:
+        if key not in top:
+            raise ProxyConfigError(f"{key}: required")
+    keys = _mapping(top["keys"], "keys", _KEY_KEYS)
+    if "principal" not in keys:
+        raise ProxyConfigError("keys.principal: required (the principal private key)")
+    return keys
+
+
+def _flag(top: Mapping[str, Any], key: str, default: bool) -> bool:
+    """A true/false top-level setting, or its default when it is left out."""
+    return _bool(top[key], key) if key in top else default
 
 
 def load_proxy_config(path: Path | str) -> ProxyConfig:

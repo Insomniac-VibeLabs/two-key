@@ -4627,3 +4627,10 @@ maintainer approved on 2026-10-25 (decisions D1 to D10). Issue #1.
 - Three new functions were split for readability, no change in behaviour: `HistoryIndex._record` (the pre-0.8.0
   subject is now `_legacy_subject`), the summary's `this_tool` block (`_last_item`, `_scan_counts`), and
   `check_history_digests` (`_history_basis_problem`, `_loaded_history_policy`, `_rebuilt_summary`).
+- SonarCloud (PR #37) listed eight issues, all real; each is fixed with no change in behaviour. Cognitive complexity
+  over 15: `check_decision_digests` (27, from 0.3.x; now `_loaded_digests` and `_decision_digest_problems`),
+  `check_history_digests` (18; the per-decision check is `_HistoryRebuild.check`), `HistoryIndex._record` (16;
+  `_subject` and `_part`), and `parse_proxy_config` (16; `_required` and `_flag`). The scan verdict counts start
+  from `dict.fromkeys`. In `tests/test_judge_history.py`, three assertions name what they check (`assertIsNone`,
+  and `assertIs` for `True` and `False`, which stays as strict as the `assertEqual` it replaces), and the
+  `agent_already_connected` test builds its config outside the `assertRaisesRegex` block.
