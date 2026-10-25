@@ -4,6 +4,6 @@
 # pypi-publish.yml build job: the distribution (setuptools is its build backend, as in build.in), its metadata
 # check, and the SBOM.
 build==1.6.1
-setuptools==84.0.0
+setuptools==84.1.0
 twine==7.0.0
 cyclonedx-bom==7.5.0

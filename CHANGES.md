@@ -147,6 +147,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Live run 9s: two test-code fixes — 2026-10-23](#live-run-9s-two-test-code-fixes--2026-10-23)
 - [Optional tool spec fields, and README wording — 2026-10-23](#optional-tool-spec-fields-and-readme-wording--2026-10-23)
 - [0.8.0 work: judge history, ballot records, and one proxy per agent — 2026-10-25](#080-work-judge-history-ballot-records-and-one-proxy-per-agent--2026-10-25)
+- [Dependabot: setuptools 84.1.0 for CI builds — 2026-10-25](#dependabot-setuptools-8410-for-ci-builds--2026-10-25)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4634,3 +4635,12 @@ maintainer approved on 2026-10-25 (decisions D1 to D10). Issue #1.
   from `dict.fromkeys`. In `tests/test_judge_history.py`, three assertions name what they check (`assertIsNone`,
   and `assertIs` for `True` and `False`, which stays as strict as the `assertEqual` it replaces), and the
   `agent_already_connected` test builds its config outside the `assertRaisesRegex` block.
+
+## Dependabot: setuptools 84.1.0 for CI builds — 2026-10-25
+
+No change in Two-Key or in what it installs for users. Dependabot alerts #9 to #12 (Low): setuptools before 84.1.0
+lets a wheel's `namespace_packages.txt` write outside the destination on Windows during a legacy
+`setup_requires` install (GHSA-xmj3-9gf7-h52w). CI's build and publish jobs pin setuptools as the build backend,
+and `python -m build --no-isolation` never takes that path, but the fix is free: `.github/requirements/build.in`
+and `publish.in` now pin 84.1.0, and the `.txt` files are recompiled with hashes by the uv in `uv.in`, only
+setuptools upgraded. The sdist and wheel build with it.
