@@ -476,6 +476,7 @@ def _weaker_proxy(old: Posture, new: Posture) -> list[str]:
         (not a.allow_unresolved_identity and b.allow_unresolved_identity, "allow_unresolved_identity: turned on"),
         (b.ttl_seconds > a.ttl_seconds, "ttl_seconds: tokens live longer"),
         (a.agent_session_env and not b.agent_session_env, "agent_session_env: removed"),
+        (a.one_proxy_per_agent and not b.one_proxy_per_agent, "one_proxy_per_agent: turned off"),
     ]
     return [line for weaker_now, line in checks if weaker_now]
 
@@ -523,7 +524,26 @@ def _weaker_quorum(pa, pb) -> list[str]:
         (pa.heterogeneity_scope == "responding" and pb.heterogeneity_scope != "responding",
          "quorum.heterogeneity_scope: responding to selection"),
     ]
-    return out + [line for weaker_now, line in checks if weaker_now]
+    return out + [line for weaker_now, line in checks if weaker_now] + _weaker_history(pa.judge_history,
+                                                                                      pb.judge_history)
+
+
+def _weaker_history(ha, hb) -> list[str]:
+    """Judges see less history (0.8.0, D1 and D2): the summary turned off, a shorter window, fewer items, or a
+    call judged without its history when the summary cannot be built."""
+    if ha.enabled and not hb.enabled:
+        return ["quorum.judge_history.enabled: judges see no decision history"]
+    if not hb.enabled:
+        return []
+    checks = [
+        (hb.window_days < ha.window_days, "quorum.judge_history.window_days: lowered"),
+        (hb.max_items < ha.max_items, "quorum.judge_history.max_items: lowered"),
+        (ha.on_failure == "deny" and hb.on_failure != "deny",
+         "quorum.judge_history.on_failure: deny to judge_without_history"),
+        (hb.burst_denies > ha.burst_denies, "quorum.judge_history.burst_denies: more denies before an episode"),
+        (hb.burst_minutes < ha.burst_minutes, "quorum.judge_history.burst_minutes: a shorter burst window"),
+    ]
+    return [line for weaker_now, line in checks if weaker_now]
 
 
 def _judge_map(doc: Mapping) -> dict[str, Mapping]:

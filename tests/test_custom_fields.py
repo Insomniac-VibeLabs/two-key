@@ -184,7 +184,8 @@ class A2FailClosed(Harness, unittest.TestCase):
                 self.assertEqual(d.reason, reason)
                 self.assertEqual(len(self.judge.seen), before)                # unreadable: no judge is asked
                 self.assertEqual(self.entries("path_b")[-1], {"passed": False, "reason": "skipped:derive_failed",
-                                                              "yes": 0, "no": 0, "abstain": 0, "skipped": True})
+                                                              "yes": 0, "no": 0, "abstain": 0, "skipped": True,
+                                                  "ballots": []})
                 self.assertEqual(self.entries("action_normalized")[-1]["deny_reason"], reason)
 
     def test_huge_integer_is_invalid_call(self):

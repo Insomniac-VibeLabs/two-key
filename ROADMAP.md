@@ -15,6 +15,7 @@ promise: the order may change, and version numbers are targets, not dates.
 - [The path to 1.0](#the-path-to-10)
 - [Where we are (2026-10-23)](#where-we-are-2026-10-23)
 - [Ground rules](#ground-rules)
+- [0.8.0: Judge history and ballot records](#080-judge-history-and-ballot-records)
 - [1.0.0: Review and release](#100-review-and-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
   - [PKI and certificate recovery](#pki-and-certificate-recovery)
@@ -43,7 +44,8 @@ flowchart TD
   r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
   r07 --> r073["0.7.3<br/>Setup and config<br/>commands<br/>Released"]
-  r073 --> r10["1.0.0<br/>Review and release"]
+  r073 --> r08["0.8.0<br/>Judge history and<br/>ballot records<br/>In progress"]
+  r08 --> r10["1.0.0<br/>Review and release"]
   r10 -. "later" .-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
 ```
 
@@ -56,14 +58,15 @@ flowchart TD
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners; a start-up check for writable paths; judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
-| 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI | Planned |
+| 0.8.0 | Judge history summary (#1), per-judge ballot records, and one proxy per agent | Built on `working`, not released |
+| 1.0.0 | A public community review and release on PyPI | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
 antivirus hooks, then the SIEM export, then 1.0. PKI, post-quantum
 signatures, FIPS approved mode, and the local GUI move after 1.0. Judge
 connection reuse (#6) joins 0.6.0, and the judge history summary (#1) comes
-before the 1.0 review. Earlier
+before the 1.0 review; on 2026-10-25 it became its own release, 0.8.0. Earlier
 versions of this plan numbered the phases 0.4 to 0.11 in another order;
 CHANGES.md keeps that record. Released versions are under "Shipped" below.
 
@@ -98,10 +101,14 @@ in the same release.
   stated blind spot. Every Two-Key finding is fixed (CHANGES.md); run 9z, a
   regression round, found none. Results live on the `live-runs` branch,
   never on `working` or `main`.
-- **Issues**: #13 and #27 shipped in 0.7.3. #1 comes before 1.0, and #3
+- **0.8.0 is built on `working`** (2026-10-25), not released: the judge
+  history summary (#1), per-judge ballot records, and one proxy per agent,
+  from the design note the maintainer approved that day. It waits for a
+  live round before release.
+- **Issues**: #13 and #27 shipped in 0.7.3. #1 is built for 0.8.0, and #3
   (repository setup after the move) has maintainer settings left to confirm.
-- **Next**: the judge history summary (#1), then the public review and the
-  1.0 release.
+- **Next**: a live round on 0.8.0 and its release, then the public review
+  and the 1.0 release.
 - **Not yet tested enough: agents on another machine.** The maintainer
   expects an agent connecting from another machine to be the normal case,
   and the same machine an edge case for testing (2026-10-16). Today the
@@ -132,22 +139,31 @@ in the same release.
 - Keep the README's "Known limits" section current: no independent review,
   no external anchor, not FIPS validated, signatures not quantum resistant.
 
+## 0.8.0: Judge history and ballot records
+
+Built on `working` (2026-10-25), not released. The design note, decisions
+D1 to D10, was reviewed and approved by the maintainer before any code.
+
+- The judge history summary (#1): Path B judges get a summary of recent
+  allows, denies, and abstains, built by `TwoKey` from its own ledger and on
+  by default (`quorum.judge_history`), so a repeated bill, a split payment,
+  or a burst of denied attempts is visible to the next decision. Structured
+  fields and library reason codes only: no proposal text, no rationale, and
+  a counterparty or amount only when the spec signs it. A summary that
+  cannot be built denies by default, and a decision whose history changed
+  before the token is denied `history_changed`
+  ([JUDGES_AND_QUORUM](docs/JUDGES_AND_QUORUM.md#judge-history)).
+- Per-judge ballot records in the ledger (maintainer's decision after live
+  run 6): each judge's id, vote, confidence, and error class, and an HMAC
+  digest of its rationale, never the text, which is model output and may
+  quote arguments. A pass with one judge down can now be told from the
+  ledger.
+- One proxy per agent on a ledger, on by default (`one_proxy_per_agent`).
+- Before release: a live round that covers the three, and the release
+  steps in [PYPI.md](docs/PYPI.md).
+
 ## 1.0.0: Review and release
 
-- First, the judge history summary (#1): Path B judges get a summary of
-  recent allows, denies, and abstains, built by `TwoKey` from its own
-  ledger and on by default (opt-out in the quorum policy), so a repeated
-  bill, a split payment, or a burst of denied attempts is visible to the
-  next decision. Structured fields and library reason codes only: no
-  proposal text, no rationale, and a counterparty or tool name only when it
-  is signed. It changes what judges receive and reads the ledger during
-  authorization, so it gets its own maintainer security review before any
-  code. The design is in the issue.
-- With it, per-judge ballot records in the ledger (maintainer's decision
-  after live run 6): each judge's id, vote, confidence, and error class, and
-  a digest of its rationale, never the text, which is model output and may
-  quote arguments. Today the ledger keeps only the tally, so a pass with one
-  judge down cannot be told from the ledger alone. Reviewed with #1.
 - A time-boxed, public community review with a stated scope.
 - Release only with no unresolved Medium or higher findings from that review.
 - The first index upload is 0.7.0, from the `PyPI` branch, and it is not
@@ -563,7 +579,8 @@ in this plan, these win; nothing above is removed.
 - **Monitor mode** exists, for tuning before enforcing.
 - **What the judges get:** the scanner's decision for the call (verdict,
   finding categories, scanner label), never content. Recent scan verdicts
-  also go into the judge history summary (#1, before 1.0), designed then.
+  also go into the judge history summary (#1, built for 0.8.0) as counts
+  of each verdict over seven days.
 
 **Platforms, CI, and docs**
 

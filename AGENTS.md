@@ -388,5 +388,24 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   file and refuses to overwrite, and `two-key siem-verify` re-derives every
   event from the ledger (`tests/test_siem_export.py`). Keep the unit tests
   network-free: loopback only, with `tests/tls.py` for certificates.
+- The judge history summary (0.8.0, `two_key/history.py`) is on by default
+  and is built from the ledger, never from the agent's claim. It carries
+  library reason codes, ages, counts, and values the signed spec maps, never
+  proposal text, argument values, rationale, or an unsigned counterparty,
+  and it is sent with `untrusted_json` in its own `<decision_history>`
+  section (`tests/test_judge_history.py`). A summary that cannot be built
+  denies (`on_failure: deny`, `internal_error:history`, a
+  `judge_history_failed` entry); judging without it is a setting, and a
+  weaker one. Its digest is bound to every ballot (`history_hash`) and
+  recorded on the decision. Do not drop the re-check before the token: a
+  call whose history gained an allow on the same target is denied
+  `history_changed`.
+- Path B records each judge's ballot (0.8.0): id, vote, confidence, error
+  class, and an HMAC-SHA256 digest of its rationale under the fingerprint
+  key. Never the rationale or error text, in the ledger or the SIEM copy.
+- The MCP proxy allows one proxy per agent id on a ledger by default
+  (`one_proxy_per_agent`): a second refuses to start with
+  `agent_already_connected`, recorded in the ledger. Turning it off is a
+  weaker setting and warns at start.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

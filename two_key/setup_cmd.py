@@ -4,7 +4,8 @@
 """``two-key setup``: write a new deployment's files in one go, then check them (docs/SETUP.md).
 
 It asks for the route (``proxy``, ``guard`` or ``library``), the profile (``default`` or ``high_assurance``), the
-judges, the monitored agent, the rules to sign, and for the proxy the upstream server; or it reads the same
+judges, the monitored agent, the judge history settings, the rules to sign, and for the proxy the upstream server
+and whether one proxy at a time may serve the agent; or it reads the same
 answers from ``--answers FILE``. It never asks for a secret: a judge's key, the agent's credential and the
 agent session are named by environment variable, and their values stay out of every file. To encrypt the
 principal key, it takes the path of a passphrase file (``key_passphrase_file``), never the passphrase.
@@ -35,7 +36,7 @@ PROFILES = ("default", "high_assurance")
 JUDGE_TYPES = ("openai_compatible", "anthropic", "gemini", "ollama")
 DATA_CLASSES = ("public", "personal", "medical", "financial", "classified")
 ANSWER_KEYS = {"route", "profile", "judges", "monitored_agent", "rules_file", "prose_file", "tools", "upstream",
-               "agent_session_env", "key_passphrase_file"}
+               "agent_session_env", "key_passphrase_file", "judge_history", "one_proxy_per_agent"}
 
 # Use-case agnostic on purpose: what a call may do is the rules' business, and the principal writes the rest.
 STARTER_PROSE = """\
@@ -91,6 +92,7 @@ def interview(ask: Ask = input) -> dict:
         judges.append(_ask_judge(ask, len(judges) + 1))
     out["judges"] = judges
     out["monitored_agent"] = _ask_agent(ask)
+    out["judge_history"] = _ask_history(ask)
     _optional(out, "key_passphrase_file", ask,
               "Principal key: absolute path of a file only this account can read, holding a passphrase to "
               "encrypt the key with (blank: not encrypted): ")
@@ -105,6 +107,8 @@ def interview(ask: Ask = input) -> dict:
         out["upstream"] = {"command": command, "schema_digest": digest}
         _optional(out, "agent_session_env", ask,
                   "Name of the environment variable that holds the agent's session (blank: none): ")
+        out["one_proxy_per_agent"] = _yes(ask, "Let only one proxy at a time serve this agent on this ledger? "
+                                          "(no is weaker)", True)
     return out
 
 
@@ -137,6 +141,20 @@ def _ask_agent(ask: Ask) -> dict:
     env = ask("Monitored agent: name of the environment variable holding its credential (blank: none): ").strip()
     agent["credential_env" if env else "credential"] = env or "none"
     return agent
+
+
+def _ask_history(ask: Ask) -> dict:
+    """``quorum.judge_history`` (0.8.0): the defaults unless the operator changes them; every "less" is weaker."""
+    if not _yes(ask, "Show the judges a summary of recent decisions with each call? (no is weaker)", True):
+        return {"enabled": False}
+    on_failure = _ask(ask, "If that summary cannot be built: deny the call, or judge it without the summary "
+                      "(weaker)", "deny", ("deny", "judge_without_history"))
+    denies = _ask(ask, "Attempt episode: how many denied calls from the agent", "5")
+    minutes = _ask(ask, "Attempt episode: within how many minutes", "10")
+    try:
+        return {"enabled": True, "on_failure": on_failure, "burst_denies": int(denies), "burst_minutes": int(minutes)}
+    except ValueError:
+        raise SetupError("judge_history: the episode counts are whole numbers") from None
 
 
 def _ask_tools(ask: Ask) -> list[dict]:
@@ -177,9 +195,15 @@ def judges_doc(answers: Mapping) -> dict:
     judges = answers.get("judges")
     if not isinstance(judges, list) or not judges:
         raise SetupError("judges: at least one judge is needed")
+    quorum: dict[str, Any] = {"profile": answers.get("profile", "default")}
+    history = answers.get("judge_history")
+    if history is not None:
+        if not isinstance(history, Mapping):
+            raise SetupError("judge_history: expected a mapping (enabled, on_failure, burst_denies, ...)")
+        quorum["judge_history"] = dict(history)
     return {"monitored_agent": dict(answers.get("monitored_agent") or {}),
             "judges": [_judge(j) for j in judges],
-            "quorum": {"profile": answers.get("profile", "default")}}
+            "quorum": quorum}
 
 
 NO_SERIAL = ("until a constitution with a serial runs, this ledger accepts any constitution signed with this key, "
@@ -217,6 +241,10 @@ def proxy_doc(answers: Mapping, digest: str) -> dict:
     }
     if answers.get("agent_session_env"):
         doc["agent_session_env"] = answers["agent_session_env"]
+    if "one_proxy_per_agent" in answers:
+        if not isinstance(answers["one_proxy_per_agent"], bool):
+            raise SetupError("one_proxy_per_agent: expected true or false")
+        doc["one_proxy_per_agent"] = answers["one_proxy_per_agent"]
     return doc
 
 

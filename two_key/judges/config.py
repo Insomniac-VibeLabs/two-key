@@ -86,7 +86,7 @@ JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", 
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
                "min_makers", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
                "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "tool_args_on_scan_flag",
-               "profile",
+               "profile", "judge_history",
                "allow_same_provider_judge", "allow_same_model_distinct_tenant"}
 TOP_LEVEL_KEYS = {"judges", "quorum", "monitored_agent"}
 # default: one judge is enough. high_assurance: QuorumPolicy.high_assurance() (2 makers, 1 local, local yes).

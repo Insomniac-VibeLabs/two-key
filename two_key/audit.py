@@ -91,3 +91,62 @@ def witness_pins(ledger) -> list[dict]:
                          "old_fingerprint": witness_key_fingerprint(body["old_witness_public_key"]),
                          "fingerprint": witness_key_fingerprint(body["new_witness_public_key"])})
     return pins
+
+
+def check_history_digests(ledger, constitution) -> list[str]:
+    """Rebuild every judge history summary from the ledger and check each decision's ``history_digest`` (0.8.0).
+
+    ``constitution`` is the verified ``Constitution`` the decisions ran under; a decision made under another
+    constitution is reported as not checked, never as matching. For each decision with a digest, the summary is
+    rebuilt from the entries before ``history_basis.ledger_size``, with the judge history settings and agent ids of
+    the last ``constitution_loaded`` before it that carries the decision's ``policy_digest``, the decision's subject
+    and agent, and the basis's time and calls in flight. Returns a list of problems; empty when every digest
+    matches. ``two-key audit --check-history`` runs it.
+    """
+    from .compiler import compile_both
+    from .derive import blocked_from_rules
+    from .history import HistoryConfigError, HistoryIndex, JudgeHistoryPolicy, digest
+    compiled = compile_both(constitution.prose, constitution.hard_rules, constitution.tool_specs,
+                            specs_enforced=True, fields=constitution.fields)
+    blocked = blocked_from_rules(compiled.rules)
+    problems: list[str] = []
+    loaded: dict[str, Mapping[str, Any]] = {}       # policy_digest -> the last constitution_loaded with it
+    indexes: dict[str, HistoryIndex] = {}
+    entries = ledger.entries
+    for entry in entries:
+        body = entry.body
+        if entry.kind == "constitution_loaded" and isinstance(body.get("policy_digest"), str):
+            loaded[body["policy_digest"]] = body
+            continue
+        if entry.kind != "decision" or not body.get("history_digest"):
+            continue
+        start = loaded.get(body.get("policy_digest"))
+        basis = body.get("history_basis")
+        if start is None or start.get("digest") != constitution.digest:
+            problems.append(f"seq {entry.seq}: not checked: decided under another constitution")
+            continue
+        if not isinstance(basis, Mapping) or not isinstance(basis.get("ledger_size"), int) \
+                or not isinstance(basis.get("now"), int) or not 0 <= basis["ledger_size"] <= entry.seq:
+            problems.append(f"seq {entry.seq}: history_digest without a usable history_basis")
+            continue
+        try:
+            policy = JudgeHistoryPolicy.from_value((start.get("quorum_policy") or {}).get("judge_history") or {})
+        except (HistoryConfigError, TypeError):
+            problems.append(f"seq {entry.seq}: constitution_loaded judge_history settings do not load")
+            continue
+        ids = tuple(start.get("history_agent_ids") or ())
+        key = canonical_hash({"policy": policy.to_record(), "ids": list(ids)})
+        index = indexes.get(key)
+        if index is None or index.seen > basis["ledger_size"]:
+            index = indexes[key] = HistoryIndex(policy, compiled.tool_specs, blocked, ids)
+        index.sync(entries[:basis["ledger_size"]])
+        subject = body.get("subject") if isinstance(body.get("subject"), Mapping) else {}
+        tool = subject.get("tool")
+        spec = compiled.tool_specs.get(tool) if isinstance(tool, str) else None
+        summary = index.summary(float(basis["now"]), tool=tool if spec is not None else None,
+                                parties=subject.get("counterparties") or (),
+                                amount_mapped=bool(spec and spec.get("amount")), agent=body.get("agent"),
+                                in_flight=basis.get("in_flight") or 0, scanned="scanner" in start)
+        if digest(summary) != body["history_digest"]:
+            problems.append(f"seq {entry.seq}: history_digest does not match the summary rebuilt from the ledger")
+    return problems

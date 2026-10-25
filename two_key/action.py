@@ -121,6 +121,9 @@ class Action:
     # The content scan's summary for the judges' trusted <scan_result> section (scan.py). Set by Two-Key only,
     # never part of the record or its hash: the verdict itself is a field, and so already in both.
     scan: Mapping[str, Any] | None = field(default=None, compare=False, repr=False)
+    # The judge history summary for the judges' trusted <decision_history> section (history.py). Set by Two-Key
+    # only, never part of the record or its hash: its digest is bound to the round separately (history_hash).
+    history: Mapping[str, Any] | None = field(default=None, compare=False, repr=False)
 
     def field_value(self, name: str) -> Any:
         """A built-in field. Any other name is a ``KeyError``: ``raw`` is the agent's, never a field."""
@@ -145,6 +148,7 @@ class Action:
         else:
             del d["fact_fields"]
         del d["scan"]
+        del d["history"]
         return d
 
 

@@ -146,6 +146,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Dependabot: uv and the diagram tools updated — 2026-10-23](#dependabot-uv-and-the-diagram-tools-updated--2026-10-23)
 - [Live run 9s: two test-code fixes — 2026-10-23](#live-run-9s-two-test-code-fixes--2026-10-23)
 - [Optional tool spec fields, and README wording — 2026-10-23](#optional-tool-spec-fields-and-readme-wording--2026-10-23)
+- [0.8.0 work: judge history, ballot records, and one proxy per agent — 2026-10-25](#080-work-judge-history-ballot-records-and-one-proxy-per-agent--2026-10-25)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4579,3 +4580,45 @@ C170, the two cases fixed after run 9z, both passed live. It found two problems 
   drafted spec is decided on purpose.
 - **README: "Dual-path authorization" in plain language.** The same facts, reworded into short labelled
   points. Path B is now called "the judges" rather than "a quorum", since one judge is enough.
+
+## 0.8.0 work: judge history, ballot records, and one proxy per agent — 2026-10-25
+
+On `working`, not released; the version number stays 0.7.3 until the release. Built from the design note the
+maintainer approved on 2026-10-25 (decisions D1 to D10). Issue #1.
+
+- **Judge history summary** (`two_key/history.py`). Each judge's prompt gets a `<decision_history>` section,
+  built by `TwoKey` from its own ledger at each decision: the last decisions on the same tool and the same
+  signed counterparty (age in hours, outcome, whether an allowed call ran, the reason code, the amount when
+  the signed spec maps one), days since the last allow, totals over 7, 30 and 90 days of calls that were
+  allowed and redeemed, allowed calls that never ran, denies on this target in the last hour and day, calls
+  still in flight, scan verdicts over 7 days when a scanner is configured, and counts across all tools.
+  Library reason codes and signed values only: never proposal text, argument values, rationale, or a
+  counterparty the spec does not sign. A system-prompt sentence tells the judges what the section is and
+  that it is data. On by default; set under `quorum.judge_history` (`enabled`, `window_days`, `max_items`,
+  `on_failure`, `burst_denies`, `burst_minutes`). Decisions from before the upgrade show
+  `"age": "before_upgrade"`.
+- **Fail closed when it cannot be built** (D1). A summary that cannot be built denies the call
+  `internal_error:history` by default and records `judge_history_failed`, sent to the SIEM at WARNING.
+  `on_failure: judge_without_history` asks the judges without it instead. Turning history off, shortening it,
+  or judging without it is a weaker setting: start-up warns, `config set` asks for a typed yes, and
+  `two-key setup` offers it (D2).
+- **Re-checked before the token** (D7). If a decision on the same target is allowed between the summary and
+  the token, the call is denied `history_changed`, so two calls racing cannot both be judged on a history
+  that shows neither.
+- **Attempt episodes** (D4). `burst_denies` denies (default 5) from one agent within `burst_minutes`
+  (default 10) are recorded as one `attempt_episode`, sent to the SIEM at WARNING, and counted for the
+  judges. The agent is named only by the operator's agent id, otherwise `unnamed`.
+- **Bound to the ballot** (D3). The summary's digest is a fifth field of each judge's binding
+  (`history_hash`) and is stamped on each ballot; the decision records `history_digest`, the time `at`, the
+  `subject` it was built for, and `history_basis`. `two-key audit --check-history CONSTITUTION` rebuilds each
+  summary from the ledger and reports any digest that does not match. (The design note named this
+  `verify-ledger --check-history`; Two-Key has no such command, so it is an `audit` option.)
+- **Per-judge ballot records** (D8). Path B entries now record each judge's id, vote, confidence, error
+  class, and HTTP status, and an HMAC-SHA256 digest of its rationale keyed with the install's fingerprint
+  key (`hmac-sha256:` prefix; `ballot_digest_key_id` names the key). Never the rationale text. A pass with
+  one judge down can now be told from the ledger. The SIEM copy sends the records.
+- **One proxy per agent** (D10). `two-key mcp-proxy` takes a lock for its agent id beside the ledger and
+  refuses to start a second proxy for the same agent, recording `agent_already_connected`. On by default;
+  `one_proxy_per_agent: false` in `proxy.yaml` turns it off (a weaker setting), and `two-key setup` asks.
+- Docs: JUDGES_AND_QUORUM (judge history, ballot records), HOWTO, THREAT_MODEL, SCOPE, SIEM, UPGRADING,
+  CONNECTING, ROADMAP, AGENTS.md, and the generated SETTINGS. Tests: `tests/test_judge_history.py`.

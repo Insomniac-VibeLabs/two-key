@@ -231,6 +231,30 @@ def _config_files(body: Mapping[str, Any]) -> dict:
     return {"files": out}
 
 
+def _ballot_fields(body: Mapping[str, Any]) -> dict:
+    """Each judge's ballot record (0.8.0): id, vote, confidence, error class, HTTP status, and the keyed digest of
+    its rationale. Never the rationale or error text (the ledger does not hold them either)."""
+    ballots = body.get("ballots")
+    if not isinstance(ballots, (list, tuple)):
+        return {}
+    out = []
+    for item in ballots[:MAX_LIST_ITEMS]:
+        if not isinstance(item, Mapping):
+            continue
+        rec = {key: _scrub(item.get(key)) for key in ("judge_id", "vote", "confidence", "error_class")}
+        if "http_status" in item:
+            rec["http_status"] = _scrub(item.get("http_status"))
+        digest = item.get("rationale_digest")
+        rec["rationale_digest"] = digest if isinstance(digest, str) and _is_hmac_digest(digest) else None
+        out.append(rec)
+    return {"ballots": out}
+
+
+def _is_hmac_digest(value: str) -> bool:
+    rest = value[len("hmac-sha256:"):] if value.startswith("hmac-sha256:") else ""
+    return len(rest) == 64 and all(c in "0123456789abcdef" for c in rest)
+
+
 @dataclass(frozen=True)
 class KindSpec:
     """What an event carries for one ledger kind, and what it never carries."""
@@ -260,7 +284,7 @@ KINDS: dict[str, KindSpec] = {
         sent=("digest", "bytecode_hash", "nl_hash", "spec_hash", "policy_digest",
               "capability_key_fingerprint", "serial", "previous_digest"),
         excluded=("quorum_policy", "judge_agent_separation", "scanner", "same_model_tenant_optin",
-                  "same_model_tenant_optin_pairs"),
+                  "same_model_tenant_optin_pairs", "history_agent_ids"),
         extract=_constitution_fields),
     "proposal": KindSpec(sent=("tool",), hashed=("proposal",), excluded=("agent",),
                          extract=_agent_fields),
@@ -274,12 +298,22 @@ KINDS: dict[str, KindSpec] = {
     "scanner_unavailable": KindSpec(sent=("scanner", "error", "stance"), severity=WARNING),
     "scanner_available": KindSpec(sent=("scanner", "stance")),
     "path_a": KindSpec(sent=("allowed", "reason", "denied_by")),
-    "path_b": KindSpec(sent=("passed", "reason", "yes", "no", "abstain", "skipped")),
+    "path_b": KindSpec(sent=("passed", "reason", "yes", "no", "abstain", "skipped", "ballot_digest_key_id"),
+                       excluded=("ballots",), extract=_ballot_fields),
     "capability_issued": KindSpec(sent=("jti", "token_hash", "ledger_root")),
+    # subject (0.8.0) holds the counterparties and the amount, so it stays in the ledger; history_basis is for
+    # the audit rebuild of the summary (two_key.audit.check_history_digests).
     "decision": KindSpec(
-        sent=("allowed", "reason", "origin", "policy_digest", "identities_digest", "proposal_text_type"),
-        excluded=("agent", "decline", "detail", "got", "field", "value"),
+        sent=("allowed", "reason", "origin", "policy_digest", "identities_digest", "proposal_text_type", "at",
+              "history_digest"),
+        excluded=("agent", "decline", "detail", "got", "field", "value", "subject", "history_basis"),
         extract=_agent_fields),
+    # The judge history summary could not be built (0.8.0, D1): why, as a class, and what was done.
+    "judge_history_failed": KindSpec(sent=("error_class", "on_failure", "tool"), severity=WARNING),
+    # A burst of denied calls from one agent (0.8.0, D4): the operator sees it without the judges.
+    "attempt_episode": KindSpec(sent=("agent_id", "started", "denies", "reasons"), severity=WARNING),
+    # A second proxy for an agent already connected to this ledger refused to start (0.8.0, D10).
+    "agent_already_connected": KindSpec(sent=("agent_id", "origin"), severity=WARNING),
     "gateway_denied": KindSpec(sent=("reason", "jti", "tool"), severity=WARNING),
     "redemption_started": KindSpec(sent=("jti", "tool"), excluded=("dropped_keys",)),
     "redemption": KindSpec(sent=("jti", "tool")),
@@ -307,7 +341,8 @@ UNLEDGERED = {
 }
 
 _DENY_KINDS = frozenset({"gateway_denied", "tool_not_offered", "redemption_aborted", "gateway_token_refused",
-                         "scanner_unavailable"})
+                         "scanner_unavailable", "judge_history_failed", "attempt_episode",
+                         "agent_already_connected"})
 
 
 def spec_for(kind: str) -> KindSpec:

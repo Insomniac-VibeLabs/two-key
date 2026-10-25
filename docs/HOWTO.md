@@ -50,6 +50,7 @@ route. The rest of the page is reference, for when a section above points to it.
 - [Data classes](#data-classes)
 - [What Two-Key verifies, and what it does not](#what-two-key-verifies-and-what-it-does-not)
 - [Designing a constitution](#designing-a-constitution)
+  - [Describing normal activity for the judges](#describing-normal-activity-for-the-judges)
 - [Custom Path A fields](#custom-path-a-fields)
   - [Declare, map, and rule](#declare-map-and-rule)
   - [What happens to a call](#what-happens-to-a-call)
@@ -354,6 +355,17 @@ The commands above sign a constitution. They do not design one. The operator own
 9. Describe caller-supplied facts in plain words, not by field name. The prose goes to the agent too, and an agent that reads "the assistant must never supply `ticket_verified`" knows which key to try. Two-Key denies it (`caller_field_in_arguments`), but say "the help-desk system confirms the ticket; the assistant does not" instead. Judges still see the field names in the record (`fact_fields`).
 10. Without a scanner, content leaks rest on the judges. Path A reads structured fields, not a message body: a diagnosis, a card number, or a recovery code in free text was stopped in live run 6 only because both judges denied it. Connect your antivirus or DLP product (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)): Two-Key scans every call to a tool you mark, and a signed rule decides on the verdict. For a check of your own that is not a scanner, a [caller-supplied fact](#caller-supplied-facts) still works.
 11. Test allowed, denied, ambiguous, and adversarial examples before trusting the constitution. Confirm that Path A denies the cases the hard rules are meant to catch, that Path B receives the intended context, and that the gateway drops or denies unmapped keys as configured (`deny_unmapped` defaults off).
+
+### Describing normal activity for the judges
+
+Since 0.8.0 the judges get a summary of recent decisions with each call ([Judge history](JUDGES_AND_QUORUM.md#judge-history)): for the same tool and allow-listed counterparty, the last few decisions, the days since the last one that ran, and the totals over 7, 30 and 90 days; counts for all tools over the last hour and day; and the agent's recent bursts of denied calls. The summary only says what happened. Whether that is normal is for the constitution's prose to say, so describe it:
+
+- How often, and how much: "We pay acme-supplies once a month, about $1,200. A second payment to them in the same month needs a reason in the request."
+- What is never normal: "Never pay the same invoice twice." "Never split one payment into several smaller ones."
+- For a tool that is not a payment: "At most a handful of external emails an hour; a burst of them is not normal." "Deleting more than one project a day is never routine."
+- What the judges should not hold against a call: "Several small refunds on the same day are normal during a sale."
+
+Name parties by the same ids the signed allow lists use, so the judges can tie the prose to the summary. The summary never contains the agent's text, only signed names, reason codes, counts, amounts and times.
 
 The signed constitution remains the authority. A future GUI constitution maker (planned later) should help construct and validate choices, but the principal must still sign the resulting constitution. The GUI must not silently weaken the rules.
 
@@ -1949,6 +1961,7 @@ what `high_assurance` does to it, and which file tier it is in, is in
 | `agent_id`, `hosting` | no | Ledger metadata, at most 256 characters; not trust |
 | `allow_unresolved_identity` | no | `true` starts despite an `unresolved_identity` warning (default `false`) |
 | `on_agent_access` | no | `refuse` (default) does not start when the account that started the proxy (the agent host's, or the SSH login account's) is Two-Key's own (`agent_same_account`), is root (`agent_account_root`), cannot be told (`agent_account_unknown`, which includes Windows for now), or can change a file or folder the proxy runs or reads (`agent_can_write`); `warn` names it and starts, for a test on one machine under one account. `high_assurance` refuses either way and does not accept `warn` ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you), 0.7.0) |
+| `one_proxy_per_agent` | no | `true` (default): one running proxy per `agent_id` on this ledger (a proxy without one counts as the agent `unnamed`). A second proxy for the same agent refuses to start with `agent_already_connected`, which is ledgered and sent to the SIEM; the lock goes when the first proxy's process ends. `false` lets several run at once, warns at start, and is weaker in `config set`. Clients that open several sessions at once need one `agent_id` per session, or `false` ([Judge history](JUDGES_AND_QUORUM.md#judge-history), 0.8.0) |
 | `on_writable_paths` | no | `warn` (default) names each file or folder the proxy runs or reads that another account could change, and starts; `refuse` does not start. `high_assurance` refuses either way and does not accept `warn` ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you), 0.6.0) |
 | `upstream.command` | yes | Program and arguments, as a list; no shell |
 | `upstream.env` | no | Variables for the child: a literal, or `{env: NAME}` read from the proxy's environment (unset refuses to start) |
@@ -2519,6 +2532,20 @@ names the setting or declaration that controls it.
   stderr, where a background process can hide it. `refuse` stops that
   setup from running, at the cost of not starting where, for example, an
   admin group can write Python's folders. `high_assurance` always refuses.
+
+- The judge history summary (`quorum.judge_history`, on by default since 0.8.0). Cloud judges receive it on every
+  call: signed tool ids, allow-listed counterparties, amounts, counts and times, so that history is now at the
+  judge vendor. `enabled: false`, or local judges only, keeps it on your machine, at the cost of judges that see
+  each call alone and cannot spot a duplicate or a burst. `on_failure: judge_without_history` keeps calls going
+  when the summary cannot be built, at the cost of those calls being judged without it; `deny`, the default, stops
+  them. Calls decided by two proxies on one ledger at the same moment are caught by the re-check at mint
+  (`history_changed`): the cost is an extra deny when two legitimate calls to one party race.
+
+- `one_proxy_per_agent` (on by default since 0.8.0): a second `two-key mcp-proxy` for an agent that is already
+  connected refuses to start (`agent_already_connected`). An MCP client that opens several sessions at once then
+  needs one `agent_id` per session, or the setting off. A proxy whose SSH session died holds the lock until its
+  process ends: set sshd's `ClientAliveInterval` (for example 30, with `ClientAliveCountMax 3`) so such a proxy is
+  stopped.
 
 - `encrypted: pass` on a tool (default off): encrypted files the scanner
   cannot open reach that tool unscanned, so a malicious agent can carry

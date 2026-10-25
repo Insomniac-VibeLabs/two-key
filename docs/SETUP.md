@@ -88,6 +88,8 @@ The same keys go in an `--answers` file (YAML or JSON). An unknown key is refuse
 | `prose_file` | The prose the judges read. Without it, a short starter you edit later | the starter |
 | `upstream` | Proxy only: `command` (a list; the wizard splits a line as a shell would, and the proxy runs it without a shell) and `schema_digest` | (asked) |
 | `agent_session_env` | Proxy only: the name of the variable that holds the agent's session | none |
+| `judge_history` | Whether judges get a summary of recent decisions (`enabled`), what happens when it cannot be built (`on_failure`: `deny` or `judge_without_history`), and how many denies in how many minutes are an attempt episode (`burst_denies`, `burst_minutes`). Anything less than the default is recorded as weaker ([JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md#judge-history)) | on, `deny`, 5 in 10 |
+| `one_proxy_per_agent` | Proxy only: refuse a second proxy for the same agent on this ledger | `true` |
 | `key_passphrase_file` | The absolute path of a file only this account can read, holding a passphrase to encrypt the principal key with ([below](#protecting-the-principal-key-with-a-passphrase)). Never the passphrase itself | none: not encrypted |
 
 `schema_digest` is the `sha256:` digest that `two-key mcp-draft-specs --constitution` prints. Leave it blank
@@ -262,6 +264,8 @@ loaded the way the proxy loads them, not from the key you typed. Each of these i
 | `quorum.required_yes`, `min_responding`, `min_distinct_providers`, `min_makers`, `min_local_judges` | It is lowered |
 | `quorum.require_local_yes` | It is turned off |
 | `quorum.judge_inputs`, `tool_args_on_derive_deny`, `tool_args_on_scan_flag` | Judges see the proposal or the arguments |
+| `quorum.judge_history` | It is turned off, its `window_days` or `max_items` is lowered, `on_failure` becomes `judge_without_history`, `burst_denies` is raised, or `burst_minutes` is shortened |
+| `one_proxy_per_agent` | It is turned off |
 | `quorum.ballot_binding`, `heterogeneity_scope` | `echo` becomes `stamp`, `responding` becomes `selection` |
 | `judges` | A judge is added or removed, or any of its keys changes but `timeout`, `json_mode`, `max_tokens`, `response_format`, and `reasoning_effort` |
 | `monitored_agent` | It is removed or changed (judges are checked against it) |

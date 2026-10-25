@@ -19,6 +19,8 @@ See [THREAT_MODEL.md](THREAT_MODEL.md) for the threat register, [SCOPE.md](SCOPE
 - [YES, NO, and ABSTAIN](#yes-no-and-abstain)
 - [Diversity and local judges](#diversity-and-local-judges)
 - [How Path A and Path B combine](#how-path-a-and-path-b-combine)
+- [Judge history](#judge-history)
+- [Ballot records](#ballot-records)
 - [What a quorum pass means](#what-a-quorum-pass-means)
 - [Operator checklist](#operator-checklist)
 - [Implementation references](#implementation-references)
@@ -172,6 +174,101 @@ With a content scanner configured (0.6.0), a scanned call reaches the judges wit
 
 Malformed or oversized requests can be denied before either path runs.
 
+## Judge history
+
+Since 0.8.0, judges no longer see each call on its own. Before they are asked, Two-Key writes a short summary of
+recent decisions from its own ledger and adds it to their prompt in a `<decision_history>` section. A duplicate
+bill, a payment split into small pieces, or a burst of denied attempts can then look unusual even when each call
+looks normal by itself. It is on by default; `quorum.judge_history.enabled: false` turns it off, and then every
+judge prompt is byte for byte what 0.7.3 sent.
+
+```mermaid
+flowchart TD
+    A["Call well-formed,<br/>Path A evaluated"] --> B["Read other processes'<br/>new ledger entries"]
+    B --> C["Look up the index:<br/>tool, party, windows"]
+    C --> D["Add this process's<br/>calls in flight"]
+    D --> E["Build the summary from<br/>signed names and codes"]
+    E --> F["Bind its digest<br/>to the round"]
+    F --> G["Judges get<br/>decision_history"]
+    G --> H["Re-check at mint,<br/>under the ledger lock"]
+    H --> I["Ledger: decision with<br/>time and history_digest"]
+```
+
+*The summary is built from an in-memory index after Path A, and its digest is ledgered with the decision.*
+
+What the summary holds:
+
+- **For the call's tool and counterparty**: the last decisions (10 by default, newest first) with their age,
+  outcome, reason code and amount; the days since the last call that was allowed **and actually ran** (its token
+  was redeemed); the allowed totals over 7, 30 and 90 days; approved calls whose token has not been used yet
+  (`approved_not_run`, at most five minutes old, so a duplicate approved seconds ago is not invisible); denies in
+  the last hour and day by reason code; this process's other calls to the same tool and party still being decided
+  (`in_flight`); and, with a content scanner, the scan verdicts of the last 7 days. This part appears only for a
+  tool with a signed spec. The counterparty is shown only when it is on that tool's signed allow list: as itself
+  for an exact entry, or as the signed `@domain` entry an address matched. A call with no such party is compared
+  with every call to the tool (`"counterparty": null`). Amounts appear only for a tool whose spec maps one.
+- **For all tools**: allowed calls, denies by reason code, abstaining ballots, declines and malformed calls over
+  the last hour and the last day.
+- **For the agent**: its recent *attempt episodes*, bursts of at least `burst_denies` (5) denied calls within
+  `burst_minutes` (10). The agent is named only when its id is one the operator configured (`agent_id` in
+  `proxy.yaml`, or a monitored agent's id); any other agent is `unnamed`. Each episode is also written to the
+  ledger as `attempt_episode` and sent to the SIEM, so an operator sees it without the judges.
+- `now`, and `history_starts`, the time of the oldest dated decision, so a judge can tell "nothing in 90 days" from
+  "history began yesterday". A ledger upgraded from 0.7.3 shows its older decisions with `"age": "before_upgrade"`;
+  they count in no window, which fill up over the next 90 days.
+
+**The agent's text never reaches a judge through the summary.** Tool names, counterparties, arguments, proposals,
+decline text and error details are all agent-controlled, and none of them is copied in. Every string is a signed
+tool id, a signed allow entry, a reason code from a fixed list (`derive_failed:<detail>` loses its detail;
+`rule_denied:<id>` keeps the signed rule id), an operator-configured agent id or `unnamed`, a scan verdict, or a time
+Two-Key wrote. The section is escaped like the record, and the system prompt gains one sentence saying it is
+written by Two-Key and describes the past, not the principal's wishes.
+
+**Binding.** The digest of the summary (`history_hash`) is stamped on every ballot of the round, and the decision
+entry records it as `history_digest`, with the time and ledger size it was built from (`history_basis`).
+`two-key audit --check-history constitution.signed.json` rebuilds every summary from the ledger and checks each
+digest.
+
+**When the summary cannot be built** (`on_failure`): `deny` (the default) denies the call with
+`internal_error:history` without asking the judges; `judge_without_history` asks them without it. Either way a
+`judge_history_failed` entry names the error class, and it goes to the SIEM.
+
+**Two calls at once.** Calls still being decided in the same process count as `in_flight` for each other. Calls
+decided by two processes sharing one ledger cannot see each other in flight, so just before a token is issued,
+under the ledger lock and after reading what the other process wrote, Two-Key checks whether an approved call for
+the same signed tool and counterparty was written after this round's summary was built. If one was, this call is
+denied `history_changed` with no token, and the agent's retry is judged with the new history. The cost is a rare
+extra deny when two legitimate calls to one party race. `two-key mcp-proxy` also lets only one proxy serve an agent
+on a ledger at a time (`one_proxy_per_agent`, on by default): a second refuses to start with
+`agent_already_connected`.
+
+**What the judges need from you.** They decide what is normal from the constitution's prose, so say it there: "we
+pay acme-supplies once a month, about $1,200"; "never pay the same invoice twice"; "at most a handful of external
+emails an hour". See [HOWTO](HOWTO.md#describing-normal-activity-for-the-judges).
+
+Cloud judges receive the summary on every call: signed tool ids, allow-listed counterparties, amounts, counts and
+times. Turn it off, or use local judges, if that history should not leave your machine
+([HOWTO, Known trade-offs](HOWTO.md#known-trade-offs-by-configuration)).
+
+## Ballot records
+
+Since 0.8.0 the `path_b` ledger entry keeps one record per judge, in the configured order, besides the tally:
+
+```json
+{"judge_id": "local-llama", "vote": "yes", "confidence": 0.82, "error_class": null,
+ "rationale_digest": "hmac-sha256:5f1c..."}
+```
+
+So a pass with one judge down can be told from the ledger: `yes: 2, abstain: 1`, and the third record says
+`error_class: timeout`. The error class comes from a fixed list (`timeout`, `transport`, `http` with
+`http_status`, `credential`, `malformed_ballot`, `malformed_response`, `binding_mismatch`, `unbound_ballot`,
+`judge_id_mismatch`, `invalid_ballot`, `ballot_mac_mismatch`, `cloud_judge_session_required`,
+`cloud_judge_reused_agent_session`, `empty_constitution`, `other`), never the error text, which could quote an HTTP
+body. The rationale is never stored: `rationale_digest` is an HMAC-SHA256 of it under the install's fingerprint key
+(`ballot_digest_key_id` names the key), so a copy in a SIEM cannot be matched by guessing short rationales, while
+you, holding the key, can match one from a judge's own logs. A Path B round that never asked the judges records
+`ballots: []`.
+
 ## What a quorum pass means
 
 A quorum pass means the configured Path B requirements were met for that authorization attempt. It does not establish that:
@@ -197,12 +294,15 @@ Before relying on a deployment:
 6. Give each judge a fresh context for every ballot: turn off any memory its endpoint keeps across requests.
 7. Review `tool_args_on_derive_deny`; argument bytes are withheld by default after a derive deny, and a call that cannot be read is then not sent to the judges at all. With a content scanner, review `tool_args_on_scan_flag` the same way.
 8. Test timeout, malformed ballot, binding mismatch, insufficient response, and deny cases.
-9. Read [THREAT_MODEL.md](THREAT_MODEL.md) and [FIT.md](FIT.md) before deployment.
+9. Describe normal activity in the constitution's prose (how often, how much, to whom), so the judges can use the
+   decision history; decide whether cloud judges may receive it.
+10. Read [THREAT_MODEL.md](THREAT_MODEL.md) and [FIT.md](FIT.md) before deployment.
 
 ## Implementation references
 
 - [`two_key/quorum.py`](../two_key/quorum.py) — quorum policy, threshold resolution, ballot validation, response floors, and diversity requirements.
 - [`two_key/core.py`](../two_key/core.py) — Path A/Path B execution and final authorization decision.
+- [`two_key/history.py`](../two_key/history.py) — the judge history summary and its index.
 - [THREAT_MODEL.md](THREAT_MODEL.md) — threats, assumptions, and residual risks.
 - [SCOPE.md](SCOPE.md) — project boundaries.
 - [FIT.md](FIT.md) — intended users and reasons not to use this package.

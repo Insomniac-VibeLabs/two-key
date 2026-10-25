@@ -104,11 +104,23 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   older, reused, or missing serial. The start-up checks also look at the
   upstream server's files named in `upstream.command` and
   `upstream.check_paths` (#13)
+- in 0.8.0 (on `working`, not released): the judge history summary (#1,
+  `two_key/history.py`). Each judge's prompt gets a
+  `<decision_history>` section built from the ledger: recent decisions on
+  the same tool and signed counterparty, ages, totals of redeemed calls,
+  denies in the last hour and day, recent scan verdicts, and denial bursts
+  as attempt episodes. Reason codes and signed values only, never proposal
+  text or rationale. On by default (`quorum.judge_history`); a summary that
+  cannot be built denies by default, and a decision whose history changed
+  before the token is issued is denied `history_changed`. Each ballot is
+  recorded per judge with an HMAC digest of its rationale, never the text.
+  The MCP proxy allows one proxy per agent by default
+  (`one_proxy_per_agent`)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
 `two_key/strict.py` (duplicate-key JSON/YAML), `two_key/audit.py` (decision
-digest checks), `two_key/backup.py` (key backup), `two_key/siem.py` and
+digest checks), `two_key/history.py` (the judge history summary), `two_key/backup.py` (key backup), `two_key/siem.py` and
 `two_key/siem_sinks.py` (the SIEM field allowlist and sinks), and the per-install fingerprint key beside the ledger
 (`*.ledger-key/fingerprint.key`).
 
@@ -138,9 +150,10 @@ in the same release.
   tokens the gateway refused without a ledger entry (forged, expired, or
   malformed), kept outside the ledger (live run 7). What the collector
   stores, who can read it, and what it alerts on stay the operator's.
-- Judge history summary (#1, before 1.0): judges get a summary of recent
-  decisions built from the ledger, on by default, after its own security
-  review.
+- Judge history summary (#1, 0.8.0): shipped. Judges get a summary of
+  recent decisions built from the ledger (`two_key/history.py`), on by
+  default, with per-judge ballot records and one proxy per agent
+  ([JUDGES_AND_QUORUM.md](JUDGES_AND_QUORUM.md#judge-history)).
 
 After 1.0, not scheduled:
 

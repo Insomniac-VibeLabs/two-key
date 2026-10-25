@@ -470,15 +470,44 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
         witness = load_public_key(config.witness_public_key) if config.witness_public_key else None
         siem = siem_from_config(config.siem, config.path.parent) if config.siem is not None else None
         ledger = Ledger(config.ledger, key, witness_public_key=witness, anchor_path=config.head_anchor)
-        return TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
-                           private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
-                           scanner=scanner, on_writable_paths=config.on_writable_paths,
-                           check_paths=paths, siem=siem)
+        tk = TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
+                         private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
+                         scanner=scanner, on_writable_paths=config.on_writable_paths,
+                         check_paths=paths, siem=siem, known_agent_ids=[config.agent_id] if config.agent_id else ())
+        hold_agent_lock(tk, config)
+        return tk
     except ProxyConfigError:
         raise
     except (OSError, ValueError, JudgeConfigError, IdentityError, LedgerError, ConstitutionError,
             ConstitutionSignatureError, TwoKeyConfigError, ScanConfigError, SiemConfigError) as e:
         raise ProxyConfigError(f"{type(e).__name__}: {e}") from None
+
+
+def hold_agent_lock(tk: Any, config: ProxyConfig) -> None:
+    """One proxy per agent on a ledger (0.8.0, D10). Take this agent's lock and keep it for the life of the
+    process; if another running proxy holds it, ledger ``agent_already_connected`` (sent to the SIEM) and refuse.
+
+    The lock goes when the process exits, however it exits. A proxy with no ``agent_id`` counts as one agent,
+    ``unnamed``. With ``one_proxy_per_agent: false`` nothing is taken and a warning says so."""
+    from .. import _platform
+    agent = config.agent_id or "unnamed"
+    if not config.one_proxy_per_agent:
+        print("two-key: WARNING: one_proxy_per_agent: false: more than one proxy may serve this agent on this "
+              "ledger at once; only the re-check at mint (history_changed) keeps their judges' history in step",
+              file=sys.stderr)
+        return
+    fd = _platform.open_lock_file(tk.ledger.agent_lock_path(agent))
+    if _platform.try_lock(fd):
+        tk.agent_lock_fd = fd       # held until the process exits
+        return
+    os.close(fd)
+    try:
+        tk.ledger.record("agent_already_connected", {"agent_id": agent, "origin": ORIGIN})
+    finally:
+        tk.close()
+    raise ProxyConfigError(f"agent_already_connected: another two-key mcp-proxy is serving agent {agent!r} on this "
+                           "ledger; stop it first (a dead SSH session's proxy goes with sshd ClientAliveInterval), "
+                           "or give each session its own agent_id, or set one_proxy_per_agent: false")
 
 
 def _program(name: str) -> str | None:

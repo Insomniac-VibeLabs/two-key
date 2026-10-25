@@ -187,8 +187,10 @@ class Setup(Deployment):
 
     def test_the_interview_asks_for_names_never_secrets(self):
         replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "",
-                   "no", "agent", "some-model", "other", "https://agent.example/v1", "AGENT_KEY_VAR", "", "",
-                   "tool_a", "no", "public", "", "server --stdio", DIGEST, ""]
+                   "no", "agent", "some-model", "other", "https://agent.example/v1", "AGENT_KEY_VAR",
+                   "", "", "", "",          # judge history: on, deny on failure, 5 denies, 10 minutes
+                   "", "", "tool_a", "no", "public", "", "server --stdio", DIGEST, "",
+                   ""]                      # one proxy per agent: yes
         asked = []
 
         def ask(prompt):
@@ -198,6 +200,9 @@ class Setup(Deployment):
         answers, _, _ = quiet(setup_cmd.interview, ask)
         self.assertEqual(answers["upstream"], {"command": ["server", "--stdio"], "schema_digest": DIGEST})
         self.assertEqual(answers["tools"], [{"id": "tool_a", "irreversible": False, "data_class_floor": "public"}])
+        self.assertEqual(answers["judge_history"], {"enabled": True, "on_failure": "deny", "burst_denies": 5,
+                                                    "burst_minutes": 10})
+        self.assertIs(answers["one_proxy_per_agent"], True)
         for q in asked:
             self.assertNotRegex(q.lower(), r"password|token|secret", q)
             if "passphrase" in q.lower():
@@ -205,6 +210,20 @@ class Setup(Deployment):
             if re.search(r"api key|credential|session", q.lower()):
                 self.assertIn("name of the environment variable", q.lower())
         quiet(setup_cmd.build, answers, self.base / "asked", environ={})
+        self.assertIn("one_proxy_per_agent: true", (self.base / "asked" / "proxy.yaml").read_text(encoding="utf-8"))
+        self.assertIn("on_failure: deny", (self.base / "asked" / "judges.yaml").read_text(encoding="utf-8"))
+
+    def test_setup_offers_less_history_and_records_it(self):
+        """D1, D2 and D10: setup offers each 0.8.0 choice; what it writes loads as written."""
+        from two_key.judges.config import load_config_file
+        from two_key.mcp_proxy.config import load_proxy_config
+        answers = dict(ANSWERS, judge_history={"enabled": False}, one_proxy_per_agent=False)
+        quiet(setup_cmd.build, answers, self.base / "less", environ={})
+        _, policy = quiet(load_config_file, self.base / "less" / "judges.yaml")[0]
+        self.assertFalse(policy.judge_history.enabled)
+        self.assertFalse(load_proxy_config(self.base / "less" / "proxy.yaml").one_proxy_per_agent)
+        with self.assertRaisesRegex(setup_cmd.SetupError, "one_proxy_per_agent"):
+            quiet(setup_cmd.build, dict(ANSWERS, one_proxy_per_agent="yes"), self.base / "bad", environ={})
 
 
 class Names(unittest.TestCase):

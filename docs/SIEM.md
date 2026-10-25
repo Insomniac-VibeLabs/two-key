@@ -90,6 +90,7 @@ Sent, where the entry has it:
 | `allowed`, `reason`, `passed` | the outcome and the library's reason code |
 | `path_a.allowed`, `reason`, `denied_by` | Path A's verdict and the signed rule id that denied |
 | `yes`, `no`, `abstain`, `skipped` | Path B's counts (never a rationale) |
+| `ballots[]`, `ballot_digest_key_id` | each judge's ballot (0.8.0): `judge_id`, `vote`, `confidence`, `error_class`, `http_status` when there was one, and `rationale_digest`, an HMAC-SHA256 of the rationale under the install's fingerprint key, which `ballot_digest_key_id` names; never the rationale |
 | `tool` | the signed tool id (or `null` with a size and digest, when the caller sent something else) |
 | `data_class`, `irreversible` | the data class the call carries, and the signed irreversible flag |
 | `jti`, `token_hash`, `ledger_root` | the token's id and digest, and the root it was issued over |
@@ -99,12 +100,16 @@ Sent, where the entry has it:
 | `verdict`, `categories`, `scanner`, `stance`, `elapsed_ms`, `parts[]` | the content scan: its verdict and each part's size and digest |
 | `witness_fingerprint`, `source` | the witness key pinned or rotated, as a fingerprint |
 | `origin` | `library`, `cli`, `mcp-proxy`, or whatever the integration declared |
+| `at`, `history_digest` | when a decision was made (UTC, to the second), and the digest of the judge history summary the judges saw (0.8.0; `null` when none was sent) |
+| `error_class`, `on_failure` | `judge_history_failed` (0.8.0): why the summary could not be built, as a class, and whether the call was denied or judged without it |
+| `started`, `denies`, `reasons` | `attempt_episode` (0.8.0): a burst of denied calls from one agent, when it started, how many, and their reason codes |
 | `command`, `settings`, `files[]`, `weaker`, `confirmed`, `constitution_hash` | a configuration change (`config_changed`, from `two-key setup`, `config set`, and `config undo`): the setting names, each file's role, name, and digests before and after, and why it is weaker; never a value, and not the account ([SETUP](SETUP.md#what-the-ledger-records)) |
 
 Never sent, and there is no setting that sends them:
 
 - argument values, and the proposal text;
 - the derived amount, the counterparty, and every custom field value;
+- a decision's `subject` (its tool, counterparties, and amount, kept for the judge history) and `history_basis`;
 - a judge's rationale, and the agent's decline reason;
 - the operator's revocation or rotation reason (its size and digest go);
 - key names the agent wrote (`dropped_keys`);
@@ -362,7 +367,7 @@ but not tested in CI.
 
 ## Reason codes you will see
 
-These are the start-up refusals and warnings this feature adds.
+These are the start-up refusals and warnings this feature adds, and the WARNING kinds that 0.8.0 adds.
 
 | Code or line | What it means |
 | --- | --- |
@@ -373,4 +378,7 @@ These are the start-up refusals and warnings this feature adds.
 | `two-key: WARNING: siem: <label>: <why>` | the start-up check could not reach that collector; entries wait in the ledger |
 | `two-key: siem: <label>: unreachable: <why> (N entries behind)` | delivery is failing; the sender backs off and retries |
 | `two-key: siem: <label>: delivering again (N entries behind)` | the collector answers again; the catch-up is marked `replay` |
+| `judge_history_failed` | the judge history summary could not be built; with `on_failure: deny` (the default) the call was denied `internal_error:history` |
+| `attempt_episode` | one agent reached `burst_denies` denies within `burst_minutes`; the agent id is the operator's, or `unnamed` |
+| `agent_already_connected` | a second MCP proxy for an agent already connected to this ledger refused to start (`one_proxy_per_agent`) |
 | `two-key: gateway refused N token(s) that did not verify in T s: ...` | the refused-token count, also sent as `gateway_token_refused` |

@@ -58,6 +58,18 @@ most once an interval, on stderr and as a gateway_token_refused event marked led
 token text is kept and nothing is written to the ledger. Standard library only, no new dependency.
 Two-Key is not a SIEM: storing, searching, retaining, and alerting stay with the collector.
 
+0.8.0 (on the working branch, not released): judge history summary (#1, two_key/history.py). Each judge's
+prompt gets a <decision_history> section built by TwoKey from its own ledger: recent decisions on the same tool
+and signed counterparty (ages, outcomes, reason codes, signed amounts), totals of redeemed calls over 7/30/90
+days, allowed calls not run, denies in the last hour and day, scan verdicts over 7 days, and attempt episodes
+(burst_denies denies in burst_minutes, ledgered as attempt_episode). Never proposal text, argument values,
+rationale, or an unsigned counterparty. On by default (quorum.judge_history); a summary that cannot be built
+denies internal_error:history (on_failure: deny, judge_history_failed entry), and a decision whose history gained
+an allow on the same target before minting is denied history_changed. The summary digest is bound to each ballot
+(history_hash) and recorded on the decision; two-key audit --check-history CONSTITUTION rebuilds it. Path B entries
+record each judge's ballot (id, vote, confidence, error class, HMAC-SHA256 rationale digest, never the text). The
+MCP proxy allows one proxy per agent id on a ledger by default (one_proxy_per_agent; agent_already_connected).
+
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. docs/CONNECTING.md: how to connect the agent and every hook so
 it cannot go around Two-Key. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests

@@ -43,7 +43,7 @@ UPSTREAM_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
 _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "head_anchor", "ttl_seconds",
              "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools", "scan",
-             "on_writable_paths", "on_agent_access", "siem"}
+             "on_writable_paths", "on_agent_access", "siem", "one_proxy_per_agent"}
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
 _KEY_KEYS = {"principal", "passphrase_file"}
 _UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds",
@@ -134,6 +134,9 @@ class ProxyConfig:
     # The file holding the principal key's passphrase, when the key is encrypted (two_key/keys.py). The
     # proxy reads it at start; its stdin is the agent's channel, so it never prompts.
     principal_passphrase_file: Path | None = None
+    # One running proxy per agent on a ledger (0.8.0, D10): a second proxy for the same agent_id (or for no
+    # agent_id, "unnamed") refuses to start with agent_already_connected. False is weaker and warns at start.
+    one_proxy_per_agent: bool = True
 
     def tool_policy(self, tool: str) -> ToolPolicy:
         return self.tools.get(tool) or ToolPolicy()
@@ -432,6 +435,8 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
                                    if "allow_unresolved_identity" in top else False),
         on_writable_paths=_writable_mode(top["on_writable_paths"]) if "on_writable_paths" in top else None,
         on_agent_access=_agent_access_mode(top["on_agent_access"]) if "on_agent_access" in top else None,
+        one_proxy_per_agent=(_bool(top["one_proxy_per_agent"], "one_proxy_per_agent")
+                             if "one_proxy_per_agent" in top else True),
         **meta,
     )
 

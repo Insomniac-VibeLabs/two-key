@@ -310,6 +310,13 @@ flowchart TD
    proxy. Proxies can share a ledger (each reads what the others wrote
    before it writes), but a login account per agent keeps one agent from
    using another's key, and lets the ledger's `agent_id` tell them apart.
+   Since 0.8.0 a second proxy for the same `agent_id` on one ledger refuses
+   to start (`agent_already_connected`, `one_proxy_per_agent`), and a
+   proxy with no `agent_id` counts as one agent, `unnamed`; give each
+   agent its own `agent_id`. The proxy holds its lock until it exits, so
+   a session whose connection dropped keeps it until sshd notices: set
+   `ClientAliveInterval 30` and `ClientAliveCountMax 3` in `sshd_config`
+   so the agent can reconnect within a couple of minutes.
 6. **Record where the agent runs.** `agent_id` and `hosting` in
    `proxy.yaml` go into the ledger as metadata (not trust), for example
    `hosting: agent-machine over ssh`.

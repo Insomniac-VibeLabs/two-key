@@ -20,7 +20,7 @@
                     --principal-passphrase-env NAME --ledger-passphrase-env NAME \
                     --witness-passphrase-env NAME [--witness-public-key PEM] [--head-anchor PATH] \
                     [--replace-ledger]
-  two-key audit --key KEY --ledger DIR [--witness-public-key PEM]
+  two-key audit --key KEY --ledger DIR [--witness-public-key PEM] [--check-history CONSTITUTION]
   two-key siem-export --key KEY --ledger DIR [--out FILE] [--schema native|ecs|ocsf]
                     [--format json|cef] [--from-seq N] [--to-seq N]
   two-key siem-verify --key KEY --ledger DIR --events FILE [--require-complete]
@@ -293,9 +293,16 @@ def _audit(args) -> int:
         return 1
     witness = ledger.witness_report()       # opening verified the chain, the head, and both pins
     problems = check_decision_digests(ledger)
-    print(json.dumps({"ok": not problems, "size": ledger.size(), "witness": witness,
-                      "decision_digest_problems": problems}, indent=2))
-    return 0 if not problems else 1
+    report = {"ok": not problems, "size": ledger.size(), "witness": witness, "decision_digest_problems": problems}
+    if args.check_history:
+        from .audit import check_history_digests
+        from .constitution import load_envelope, verify_signed
+        history = check_history_digests(ledger, verify_signed(load_envelope(args.check_history), key.public_key()))
+        report["history_digest_problems"] = history
+        # A decision under another constitution is listed as not checked; it does not fail the audit.
+        report["ok"] = report["ok"] and all(": not checked:" in line for line in history)
+    print(json.dumps(report, indent=2))
+    return 0 if report["ok"] else 1
 
 
 def _siem_export(args) -> int:
@@ -704,6 +711,9 @@ def main(argv: list[str] | None = None) -> int:
     audit.add_argument("--ledger", required=True)
     audit.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     audit.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    audit.add_argument("--check-history", default=None, metavar="CONSTITUTION",
+                       help="also rebuild every judge history summary from the ledger and check its history_digest; "
+                            "CONSTITUTION is the signed constitution the decisions ran under")
     audit.set_defaults(func=_audit)
     recover = sub.add_parser("recover", help="drop an uncheckpointed tail and record it; does not run on open")
     _add_key(recover)

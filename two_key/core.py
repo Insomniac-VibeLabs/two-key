@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import time
 from dataclasses import dataclass, asdict, replace
 from typing import Any, Mapping
 
@@ -40,9 +41,11 @@ from .derive import (MAX_ACTION_BYTES, MAX_ARGS_BYTES, DeriveError, args_size, a
                      derive, disagreement, disallowed_party, dropped_keys, form_for, size_record)
 from .fields import defaults as field_defaults
 from .gateway import ToolGateway, mark_two_key_ledger
+from . import history as judge_history
+from .history import HistoryIndex, format_time, shown_parties, subject_record
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
-from .quorum import QuorumPolicy, check_judge_set, convene, lone_judge_warning, unmeetable_floor
+from .quorum import QuorumPolicy, ballot_records, check_judge_set, convene, lone_judge_warning, unmeetable_floor
 from .scan import CLIENT_BUDGET_SECONDS, FileDeniedError, Outcome, ScanConfigError, Scanner
 from .siem import RefusedTokens, SiemConfig, start_delivery as start_siem
 from .writable import WritablePathsError, check as check_writable, report as report_writable, resolve_mode
@@ -72,6 +75,19 @@ _DERIVE_DENIALS = {"amount_mismatch", "counterparty_mismatch", "irreversible_mis
 def _unmeasured(name: str) -> dict:
     """The ledger record for an input that stopped copying past its cap: no size or digest was computed."""
     return {f"{name}_size": -1, f"{name}_digest": None, f"{name}_omitted": True}
+
+
+# Why a judge history summary could not be built (judge_history_failed.error_class): a fixed set, never the
+# exception's text.
+HISTORY_ERRORS = {LedgerError: "ledger_error", RecursionError: "too_deep", MemoryError: "out_of_memory",
+                  EncodingError: "encoding_error"}
+
+
+def _history_error(exc: BaseException) -> str:
+    for kind, name in HISTORY_ERRORS.items():
+        if isinstance(exc, kind):
+            return name
+    return "build_error"
 
 
 def _derive_deny(reason: str | None) -> bool:
@@ -165,7 +181,7 @@ class TwoKey:
                  private_key=None, quorum: QuorumPolicy | None = None, ttl_seconds: int = 120,
                  allow_test_doubles: bool = False, clock=None, monitored_agent: Any = None,
                  scanner: Scanner | None = None, on_writable_paths: str | None = None, check_paths=(),
-                 siem: Any = None):
+                 siem: Any = None, known_agent_ids=()):
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
             raise ValueError("test-double judges refused; pass allow_test_doubles=True only for offline tests")
         if not constitution.specs_enforced:
@@ -205,9 +221,13 @@ class TwoKey:
         self.siem = self._check_siem(siem)
         self.delivery = None
         self.refused_tokens = None
+        self.agent_lock_fd: int | None = None     # a proxy's one-proxy-per-agent lock (mcp_proxy/core.py)
         lone = lone_judge_warning(self.judges, self.quorum)
         if lone:      # allowed, and recorded in quorum_policy; said once, so the operator sees it (run 6x, X03)
             print(f"two-key: WARNING: {lone}", file=sys.stderr)
+        for line in self.quorum.judge_history.less_than_default():
+            # Allowed, also under high_assurance, and recorded in quorum_policy (D2); said once at start.
+            print(f"two-key: WARNING: quorum.judge_history {line}", file=sys.stderr)
         # Judge != monitored agent, from operator configuration only (identity.py): refused on the agent's
         # credential at any address, or keyless on the agent's keyless address; likely accidents are warned on
         # stderr and recorded below.
@@ -248,10 +268,24 @@ class TwoKey:
                 raise TwoKeyConfigError(str(e)) from e
             self.issuer = CapabilityIssuer(cap_key, clock=clock, max_ttl_seconds=ttl_seconds)
         self._clock = clock
+        self._now = clock or time.time
         # The supported deployment: the gateway runs in this process on this ledger object (#45).
         mark_two_key_ledger(ledger)
+        ids = [getattr(a, "id", None) or getattr(a, "agent_id", None) for a in self._agent_sources]
+        # The agent ids a judge may see by name (D4); any other agent is "unnamed". Recorded in constitution_loaded.
+        self._history_agent_ids = sorted({a for a in (*ids, *known_agent_ids) if isinstance(a, str) and a})
         with self.ledger.exclusive():
             self._record_loaded(constitution, sep)
+            # The judge history index (history.py), built once from the ledger; each summary reads what was
+            # added since. Episodes found in entries already on disk were ledgered when they were found.
+            self._history = HistoryIndex(self.quorum.judge_history, self.compiled.tool_specs,
+                                         blocked_from_rules(self.compiled.rules), self._history_agent_ids)
+            self._history.sync(self.ledger.entries)
+        # Calls this process is still deciding, by (tool, counterparties), so a duplicate sent twice at once to
+        # one proxy shows each copy to the other's judges as in_flight.
+        self._in_flight: list[tuple[str, frozenset]] = []
+        self._in_flight_lock = threading.Lock()
+        self._flight = threading.local()
         self._start_siem()
 
     def _record_loaded(self, constitution: Constitution, sep: dict) -> None:
@@ -274,6 +308,8 @@ class TwoKey:
             # nothing now, so the pairs list is always empty; both keys stay so the entry keeps its shape.
             "same_model_tenant_optin": self.quorum.allow_same_model_distinct_tenant,
             "same_model_tenant_optin_pairs": list(self.separation.tenant_optin_pairs),
+            # The agent ids the judge history may name (0.8.0); for two_key.audit's rebuild of each summary.
+            "history_agent_ids": self._history_agent_ids,
             # Present only with a content scanner, so a setup without one records exactly what it did before.
             **({"scanner": self.scanner.to_record()} if self.scanner is not None else {}),
             # Present only for a constitution with a serial, for the same reason (live run 9x, C44).
@@ -338,7 +374,8 @@ class TwoKey:
             report=lambda counts: self.delivery.report("gateway_token_refused", counts))
 
     def close(self) -> None:
-        """Stop the SIEM sender, after a last pass. Idempotent; a ``TwoKey`` without one does nothing.
+        """Stop the SIEM sender, after a last pass, and let go of a proxy's agent lock. Idempotent; a ``TwoKey``
+        without either does nothing.
 
         Whatever has not gone out yet is still in the ledger, and the next start sends it from the cursor.
         """
@@ -346,6 +383,9 @@ class TwoKey:
             self.refused_tokens.flush()
         if self.delivery is not None:
             self.delivery.close()
+        fd, self.agent_lock_fd = self.agent_lock_fd, None
+        if fd is not None:      # the proxy's one-proxy-per-agent lock (mcp_proxy/core.hold_agent_lock)
+            os.close(fd)
 
     def _check_writable(self, mode: str | None, paths) -> None:
         """Paths another account could change (two_key/writable.py): this interpreter's program, import path,
@@ -489,6 +529,8 @@ class TwoKey:
                                    agent_session=agent_session, origin=origin, facts=facts)
         except Exception as e:  # fail closed: no exception reaches the caller as anything but a deny
             return self._deny(origin, f"internal_error:{type_tag(e)}", agent, None, None)
+        finally:
+            self._end_flight()
 
     def _authorize(self, action: dict, arguments: dict, proposal: str, *,
                    agent: dict | None = None,
@@ -575,6 +617,9 @@ class TwoKey:
         deny_reason = None
         scanned: Outcome | None = None
         scanner_change: tuple[str, dict] | None = None
+        # What the judge history and the decision's subject may show of this call (history.py): signed values only.
+        shown: list[str] = []
+        amount_seen: float | None = None
         if spec is not None:
             proposed: Mapping[str, Any] = claim if isinstance(claim, dict) else {}
             blocked = blocked_from_rules(self.compiled.rules)
@@ -601,7 +646,7 @@ class TwoKey:
                 # file's argument path, why, and sizes; the agent gets the code.
                 return self._deny(origin, exc.reason, agent, None, None,
                                   {"tool": normalized.tool, "file_denied": exc.record,
-                                   "tool_args_digest": f"sha256:{frozen_digest}"})
+                                   "tool_args_digest": f"sha256:{frozen_digest}"}, subject_tool=normalized.tool)
             except DeriveError as exc:
                 deny_reason = f"derive_failed:{cap_ledger_text(exc.reason)}"
                 # No custom field values were derived, so a deny_if_fields rule reaches LOAD_FIELD with
@@ -612,6 +657,9 @@ class TwoKey:
                 if mismatch:
                     deny_reason = mismatch
                 form = form_for(derived, claimed_data_class, blocked)
+                shown = shown_parties(spec, derived.counterparties, blocked)
+                if spec.get("amount"):
+                    amount_seen = derived.amount_usd
                 party = form["counterparty"] if derived.counterparties else normalized.counterparty
                 normalized = replace(
                     normalized,
@@ -645,6 +693,11 @@ class TwoKey:
         # the quorum policy opts in. The normalized record still goes to Path B.
         judge_args: Mapping | None = arguments
         judge_proposal = proposal
+        round_binding = binding
+        history_digest: str | None = None
+        history_failed: str | None = None
+        history_basis: dict | None = None
+        built_size: int | None = None
         judge_action = normalized
         if scanned is not None:
             # Files appear as their digest and size, never their content. Flagged: no arguments and no proposal
@@ -664,7 +717,7 @@ class TwoKey:
             # ledgered as skipped. With tool_args_on_derive_deny they see the arguments, and are asked.
             quorum_passed, quorum_reason = False, "skipped:derive_failed"
             path_b_rec = {"passed": False, "reason": quorum_reason, "yes": 0, "no": 0, "abstain": 0,
-                          "skipped": True}
+                          "skipped": True, "ballots": []}
         else:
             try:
                 # Re-read the named agent credential. A placeholder session must not hide it.
@@ -672,12 +725,31 @@ class TwoKey:
                 configured = configured_agent_secrets(self._agent_sources)
             except IdentityError:
                 return self._deny(origin, "agent_credential_unreadable", agent, path_a_rec, None)
-            quorum = convene(self.judges, self.compiled.judge_text, judge_action, judge_proposal,
-                             self.quorum, binding, judge_args, agent_session,
-                             configured_secrets=configured)
-            quorum_passed, quorum_reason = quorum.passed, quorum.reason
-            path_b_rec = {"passed": quorum.passed, "reason": quorum.reason,
-                          "yes": quorum.yes, "no": quorum.no, "abstain": quorum.abstain}
+            if self.quorum.judge_history.enabled:
+                summary, history_basis, history_failed = self._history_for(
+                    normalized.tool if spec is not None else None, shown, bool(spec and spec.get("amount")),
+                    agent, self.scanner is not None)
+                if summary is not None:
+                    built_size = history_basis["ledger_size"]
+                    history_digest = judge_history.digest(summary)
+                    judge_action = replace(judge_action, history=summary)
+                    round_binding = {**binding, "history_hash": history_digest}
+            if history_failed is not None and self.quorum.judge_history.on_failure == "deny":
+                # Never a call judged without its history, unless the operator chose that (D1).
+                quorum_passed, quorum_reason = False, "skipped:history_failed"
+                path_b_rec = {"passed": False, "reason": quorum_reason, "yes": 0, "no": 0, "abstain": 0,
+                              "skipped": True, "ballots": []}
+                deny_reason = deny_reason or "internal_error:history"
+            else:
+                quorum = convene(self.judges, self.compiled.judge_text, judge_action, judge_proposal,
+                                 self.quorum, round_binding, judge_args, agent_session,
+                                 configured_secrets=configured)
+                quorum_passed, quorum_reason = quorum.passed, quorum.reason
+                path_b_rec = {"passed": quorum.passed, "reason": quorum.reason,
+                              "yes": quorum.yes, "no": quorum.no, "abstain": quorum.abstain,
+                              # One record per judge (0.8.0): which judge said what, never the rationale text.
+                              "ballots": ballot_records(quorum.ballots, self._fp_key),
+                              "ballot_digest_key_id": fingerprint_key_id(self._fp_key)}
         allowed = bool(path_a.allowed and quorum_passed and deny_reason is None)
         if deny_reason:
             reason = deny_reason
@@ -686,9 +758,16 @@ class TwoKey:
         else:
             reason = path_a.reason if not path_a.allowed else quorum_reason
         token = None
+        subject = subject_record(normalized.tool if spec is not None else None, shown, amount_seen)
         try:
             with self.ledger.exclusive():       # the entries and the checkpoint over them in one hold (run 9y, S6c)
                 body_omitted = False
+                if allowed and built_size is not None and spec is not None and self._history.approved_after(
+                        self.ledger.entries, built_size, normalized.tool, frozenset(shown)):
+                    # The re-check at mint (D7): under the lock, after reading what other processes wrote. An
+                    # approved call for this tool and party landed after this round's summary was built, so the
+                    # judges did not see it. No token; the agent's retry is judged with the new history.
+                    allowed, reason = False, "history_changed"
 
                 def _bounded(kind: str, body: dict):
                     nonlocal body_omitted
@@ -716,6 +795,10 @@ class TwoKey:
                     _bounded("scan", scanned.ledger_record(self.scanner.stance))
                 _bounded("path_a", path_a_rec)
                 _bounded("path_b", path_b_rec)
+                if history_failed is not None:
+                    _bounded("judge_history_failed", {"error_class": history_failed,
+                                                      "on_failure": self.quorum.judge_history.on_failure,
+                                                      "tool": subject["tool"]})
                 # body_omitted is only for an already-decided DENY audit entry. If it would
                 # fire on a path about to issue a token, fail closed instead.
                 if allowed and body_omitted:
@@ -739,9 +822,13 @@ class TwoKey:
                         if body_omitted:
                             allowed, reason, token = False, REASON_LEDGER_BODY, None
                 _bounded("decision", {"allowed": allowed, "reason": reason, "agent": agent,
-                                      "origin": origin, **self._decision_context})
+                                      "origin": origin, **self._decision_context,
+                                      "at": format_time(self._now()), "subject": subject,
+                                      "history_digest": history_digest,
+                                      "history_basis": history_basis if history_digest else None})
                 if allowed and body_omitted:
                     allowed, reason, token = False, REASON_LEDGER_BODY, None
+                self._note_episodes()
                 self.ledger.checkpoint()
         except LedgerError as e:
             return Decision(False, f"ledger_failed:{cap_ledger_text(str(e))}", None, path_a_rec, path_b_rec, self.ledger.size(), agent)
@@ -797,12 +884,77 @@ class TwoKey:
         return self.authorize(action, arguments, proposal, agent_id=agent_id,
                               hosting=hosting, agent_session=agent_session, origin=origin, facts=resolved)
 
+    def _history_for(self, tool: str | None, shown: list[str], amount_mapped: bool, agent: Any,
+                     scanned: bool) -> tuple[dict | None, dict | None, str | None]:
+        """The judge history summary for one call: ``(summary, basis, error class)``. The basis (the time and
+        ledger size it was built from, and the calls in flight) is ledgered, so ``two_key.audit`` can rebuild it.
+
+        Takes the ledger lock briefly to read what other processes wrote, then releases it; judges never run
+        under it. A failure gives no summary and its error class (never the exception's text)."""
+        key = (tool, frozenset(shown)) if tool is not None else None
+        if key is not None and getattr(self._flight, "key", None) is None:
+            with self._in_flight_lock:
+                self._in_flight.append(key)
+            self._flight.key = key
+        try:
+            with self._in_flight_lock:
+                others = list(self._in_flight)
+            if key is not None:
+                others.remove(key)
+            in_flight = sum(1 for t, p in others if key is not None and t == tool
+                            and (not key[1] or not p or p & key[1]))
+            # Under the lock only so another thread does not change the index while it is read; it is a read of
+            # memory, short next to a judge round.
+            with self.ledger.exclusive():
+                if self._note_episodes():
+                    self.ledger.checkpoint()
+                built = self.ledger.size()
+                now = int(self._now())        # whole seconds, as the decisions' times are
+                summary = self._history.summary(float(now), tool=tool, parties=shown,
+                                                amount_mapped=amount_mapped, agent=agent, in_flight=in_flight,
+                                                scanned=scanned)
+            canonical_bytes(summary)      # what the judges and the digest read; it must encode
+            return summary, {"now": now, "ledger_size": built, "in_flight": in_flight}, None
+        except Exception as e:      # deny, or judge without it (on_failure); recorded either way
+            return None, None, _history_error(e)
+
+    def _end_flight(self) -> None:
+        key = getattr(self._flight, "key", None)
+        if key is not None:
+            with self._in_flight_lock:
+                try:
+                    self._in_flight.remove(key)
+                except ValueError:
+                    pass
+            self._flight.key = None
+
+    def _note_episodes(self) -> int:
+        """Read new ledger entries into the history index; ledger each attempt episode a decision this process
+        just wrote started (D4). The caller holds the ledger lock. Episodes found in other processes' entries are
+        theirs to ledger."""
+        index = getattr(self, "_history", None)
+        if index is None:
+            return 0
+        entries = self.ledger.entries
+        written = 0
+        for ep in index.sync(entries):
+            if self.ledger.from_another_process(ep.seq):
+                continue
+            body = ep.ledger_body()
+            if any(e.kind == "attempt_episode" and e.body == body for e in entries[ep.seq + 1:]):
+                continue            # another TwoKey on this ledger object wrote it already
+            self.ledger.append_bounded("attempt_episode", body)
+            written += 1
+        index.seen = len(entries)
+        return written
+
     def revoke(self, reason: str) -> None:
         with self.ledger.exclusive():
             self.ledger.append("revocation", {"reason": reason})
             self.ledger.checkpoint()
 
-    def _deny(self, origin: str | None, reason: str, agent, path_a, path_b, extra: dict | None = None) -> Decision:
+    def _deny(self, origin: str | None, reason: str, agent, path_a, path_b, extra: dict | None = None, *,
+              subject_tool: str | None = None) -> Decision:
         """Ledger a deny decision. ``origin`` is passed down by the caller, never stored on ``self``.
 
         ``origin`` may be ``None`` when the supplied origin itself failed validation
@@ -810,10 +962,15 @@ class TwoKey:
         """
         try:
             body = {"allowed": False, "reason": reason, "agent": agent,
-                    **(extra or {}), **self._decision_context}
+                    **(extra or {}), **self._decision_context,
+                    "at": format_time(self._now()), "subject": subject_record(subject_tool),
+                    "history_digest": None, "history_basis": None}
             if origin is not None:
                 body["origin"] = origin
-            self.ledger.record("decision", body)
+            with self.ledger.exclusive():
+                self.ledger.append_bounded("decision", body)
+                self._note_episodes()
+                self.ledger.checkpoint()
         except Exception as e:  # still a deny; say so, because the ledger now lacks this decision
             # Cap pieces before format so a huge str(e) is not built into one f-string then sliced.
             reason_bit = reason if len(reason) <= 200 else reason[:200]
