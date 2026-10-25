@@ -116,7 +116,8 @@ class Base(unittest.TestCase):
             self.assertTrue(gw.invoke(d.token, call[0]["tool"], call[1]).allowed)
         return d
 
-    def entries(self, tk, kind):
+    @staticmethod
+    def entries(tk, kind):
         return [e.body for e in tk.ledger.entries if e.kind == kind]
 
 
@@ -516,7 +517,8 @@ class FailureAndEpisodes(Base):
 
 
 class OneProxyPerAgent(Base):
-    def config(self, agent_id="grok", on=True):
+    @staticmethod
+    def config(agent_id="grok", on=True):
         return SimpleNamespace(agent_id=agent_id, one_proxy_per_agent=on)
 
     def test_d10_a_second_proxy_for_the_same_agent_refuses(self):

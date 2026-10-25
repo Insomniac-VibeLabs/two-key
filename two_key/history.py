@@ -489,7 +489,8 @@ class HistoryIndex:
                 "episodes": [e.record() for e in reversed(episodes[-self.policy.max_items:])],
                 "episodes_90d": sum(1 for e in (runs.episodes if runs else ()) if _within(now, e.ended, span))}
 
-    def approved_after(self, entries: list, start: int, tool: str, parties: frozenset) -> bool:
+    @staticmethod
+    def approved_after(entries: list, start: int, tool: str, parties: frozenset) -> bool:
         """Whether an approved decision for this tool and counterparty was written at or after ``start`` (the
         ledger size when the summary was built): the re-check at mint (D7)."""
         for entry in entries[start:]:

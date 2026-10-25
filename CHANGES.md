@@ -4622,3 +4622,5 @@ maintainer approved on 2026-10-25 (decisions D1 to D10). Issue #1.
   `one_proxy_per_agent: false` in `proxy.yaml` turns it off (a weaker setting), and `two-key setup` asks.
 - Docs: JUDGES_AND_QUORUM (judge history, ballot records), HOWTO, THREAT_MODEL, SCOPE, SIEM, UPGRADING,
   CONNECTING, ROADMAP, AGENTS.md, and the generated SETTINGS. Tests: `tests/test_judge_history.py`.
+- DeepSource (PR #37) flagged three methods that use no instance (PYL-R0201): `HistoryIndex.approved_after` and
+  two test helpers. All three are now static methods; no change in behaviour.
