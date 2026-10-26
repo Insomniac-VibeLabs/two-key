@@ -16,6 +16,7 @@ promise: the order may change, and version numbers are targets, not dates.
 - [Where we are (2026-10-23)](#where-we-are-2026-10-23)
 - [Ground rules](#ground-rules)
 - [0.8.0: Judge history and ballot records](#080-judge-history-and-ballot-records)
+- [0.9.0: Release candidate](#090-release-candidate)
 - [1.0.0: Review and release](#100-review-and-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
   - [PKI and certificate recovery](#pki-and-certificate-recovery)
@@ -45,7 +46,8 @@ flowchart TD
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
   r07 --> r073["0.7.3<br/>Setup and config<br/>commands<br/>Released"]
   r073 --> r08["0.8.0<br/>Judge history and<br/>ballot records<br/>In progress"]
-  r08 --> r10["1.0.0<br/>Review and release"]
+  r08 --> r09["0.9.0<br/>Release candidate"]
+  r09 --> r10["1.0.0<br/>Review and release"]
   r10 -. "later" .-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
 ```
 
@@ -59,7 +61,8 @@ flowchart TD
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, and one proxy per agent | Built on `working`, not released |
-| 1.0.0 | A public community review and release on PyPI | Planned |
+| 0.9.0 | Release candidate: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
+| 1.0.0 | A public community review of 0.9.0, then the release | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
@@ -107,8 +110,8 @@ in the same release.
   live round before release.
 - **Issues**: #13 and #27 shipped in 0.7.3. #1 is built for 0.8.0, and #3
   (repository setup after the move) has maintainer settings left to confirm.
-- **Next**: a live round on 0.8.0 and its release, then the public review
-  and the 1.0 release.
+- **Next**: a live round on 0.8.0 and its release, then the 0.9.0 release
+  candidate, then the public review and the 1.0 release.
 - **Not yet tested enough: agents on another machine.** The maintainer
   expects an agent connecting from another machine to be the normal case,
   and the same machine an edge case for testing (2026-10-16). Today the
@@ -122,7 +125,7 @@ in the same release.
   over SSH (connect, reconnect, a dropped connection, two agents at once,
   and the escape attempts `restrict` should stop: a shell, `sftp`, port
   forwarding, environment variables), the same on macOS and Windows hosts,
-  and a decision on a network transport.
+  and a decision on a network transport. This is planned for 0.9.0.
 
 ## Ground rules
 
@@ -162,9 +165,32 @@ D1 to D10, was reviewed and approved by the maintainer before any code.
 - Before release: a live round that covers the three, and the release
   steps in [PYPI.md](docs/PYPI.md).
 
+## 0.9.0: Release candidate
+
+Planned. Everything 1.0 will contain is in, tested on real deployments, and
+frozen, so the public review looks at the final shape.
+
+- An optional tool-side token check (#28): a way for a tool, or a thin
+  wrapper in front of it, to check that a call was authorized. Off by
+  default; the gateway stays in the `TwoKey` process and still verifies
+  only. It touches tokens and the gateway, so a design note and the
+  maintainer's security review come before any code.
+- A live run with the agent on another machine over SSH ("Where we are"
+  above), on machines the maintainer sets up. The network transport
+  question is answered with the standing decision: stdio only, remote
+  agents over SSH.
+- A ten-minute quickstart and a demo with a real MCP server.
+- A freeze for 1.0: what 1.0 keeps stable (constitution, rules and judge
+  configuration shapes, the ledger and token formats, the SIEM schema, the
+  CLI and its exit codes, the public Python API) is written in
+  [UPGRADING.md](docs/UPGRADING.md).
+- Before release: a live round across the full case list plus the new
+  cases.
+
 ## 1.0.0: Review and release
 
-- A time-boxed, public community review with a stated scope.
+- A time-boxed, public community review with a stated scope. 0.9.0 is what
+  is reviewed; fixes ship as 0.9.x.
 - Release only with no unresolved Medium or higher findings from that review.
 - The first index upload is 0.7.0, from the `PyPI` branch, and it is not
   this review. Later releases use the same workflow (docs/PYPI.md):
@@ -172,7 +198,6 @@ D1 to D10, was reviewed and approved by the maintainer before any code.
   metadata, `MANIFEST.in`, and `.github/workflows/pypi-publish.yml`
   (OpenID Connect, no token in the repository, PEP 740 attestations, and
   a CycloneDX SBOM kept as a workflow artifact).
-- A ten-minute quickstart and a demo with a real MCP server.
 - 1.0 is described as community-reviewed, not audited, and as not FIPS
   validated itself. A paid audit and any validation of this package are
   later goals.

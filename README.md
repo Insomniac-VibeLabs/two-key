@@ -667,7 +667,8 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 The MCP adapter shipped in 0.5.0; Windows support, DLP and antivirus hooks,
 and judge connection reuse shipped in 0.6.0. The ledger export for a SIEM
 shipped in 0.7.0, and the setup and change commands and the signed serial
-in 0.7.3; a public review and the 1.0 release come next.
+in 0.7.3. The judge history summary comes in 0.8.0 and a release
+candidate in 0.9.0; a public review and the 1.0 release come next.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
@@ -678,7 +679,9 @@ flowchart LR
   r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
   r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
   r07 --> r073["0.7.3<br/>Setup and config<br/>commands<br/>Released"]
-  r073 --> r10["1.0.0<br/>Review and release"]
+  r073 --> r08["0.8.0<br/>Judge history and<br/>ballot records"]
+  r08 --> r09["0.9.0<br/>Release candidate"]
+  r09 --> r10["1.0.0<br/>Review and release"]
   r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
 ```
 
@@ -689,7 +692,9 @@ flowchart LR
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners (ClamAV, ICAP products, a command, Python); judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and `config set`, `get`, `undo`, `show` and `check`; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13) | Released, tag `v0.7.3` |
-| 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
+| 0.8.0 | Judge history summary (#1), per-judge ballot records, and one proxy per agent | In progress |
+| 0.9.0 | Release candidate: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart, and formats frozen for 1.0 | Planned |
+| 1.0.0 | A public community review of 0.9.0, then the release. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions

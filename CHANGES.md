@@ -148,6 +148,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Optional tool spec fields, and README wording — 2026-10-23](#optional-tool-spec-fields-and-readme-wording--2026-10-23)
 - [0.8.0 work: judge history, ballot records, and one proxy per agent — 2026-10-25](#080-work-judge-history-ballot-records-and-one-proxy-per-agent--2026-10-25)
 - [Dependabot: setuptools 84.1.0 for CI builds — 2026-10-25](#dependabot-setuptools-8410-for-ci-builds--2026-10-25)
+- [Roadmap: 0.8.0 and 0.9.0 in the README and ROADMAP diagrams — 2026-10-26](#roadmap-080-and-090-in-the-readme-and-roadmap-diagrams--2026-10-26)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4644,3 +4645,12 @@ lets a wheel's `namespace_packages.txt` write outside the destination on Windows
 and `python -m build --no-isolation` never takes that path, but the fix is free: `.github/requirements/build.in`
 and `publish.in` now pin 84.1.0, and the `.txt` files are recompiled with hashes by the uv in `uv.in`, only
 setuptools upgraded. The sdist and wheel build with it.
+
+## Roadmap: 0.8.0 and 0.9.0 in the README and ROADMAP diagrams — 2026-10-26
+
+Docs only. The roadmap diagrams and tables in the README and ROADMAP.md went from 0.7.3 straight to 1.0.0. At
+the maintainer's request every release now has its own step: 0.8.0 (judge history, ballot records, one proxy per
+agent; in progress) and 0.9.0 (release candidate: the optional tool-side token check #28, the remote-agent live
+run, the quickstart and demo, and the 1.0 freeze), then 1.0.0, a public review of 0.9.0. ROADMAP.md gains a
+0.9.0 section; the quickstart and demo move there from 1.0.0. The README's 1.0.0 row no longer lists #1 and the
+ballot records, which are 0.8.0's.
