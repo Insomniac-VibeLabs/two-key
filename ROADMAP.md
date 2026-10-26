@@ -16,8 +16,8 @@ promise: the order may change, and version numbers are targets, not dates.
 - [Where we are (2026-10-23)](#where-we-are-2026-10-23)
 - [Ground rules](#ground-rules)
 - [0.8.0: Judge history and ballot records](#080-judge-history-and-ballot-records)
-- [0.9.0: Release candidate](#090-release-candidate)
-- [1.0.0: Review and release](#100-review-and-release)
+- [0.9.0: Tool-side token check and remote agents](#090-tool-side-token-check-and-remote-agents)
+- [1.0.0: First stable release](#100-first-stable-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
   - [PKI and certificate recovery](#pki-and-certificate-recovery)
   - [Post-quantum signatures](#post-quantum-signatures)
@@ -41,17 +41,18 @@ promise: the order may change, and version numbers are targets, not dates.
 
 ```mermaid
 flowchart TD
-  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
-  r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
-  r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
-  r07 --> r073["0.7.3<br/>Setup and config<br/>commands<br/>Released"]
-  r073 --> r08["0.8.0<br/>Judge history and<br/>ballot records<br/>In progress"]
-  r08 --> r09["0.9.0<br/>Release candidate"]
-  r09 --> r10["1.0.0<br/>Review and release"]
-  r10 -. "later" .-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
+  subgraph done["Released (betas)"]
+    direction LR
+    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"]
+  end
+  subgraph next["Next"]
+    direction LR
+    r08["0.8.0<br/>Judge history<br/>(in progress)"] --> r09["0.9.0<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+  end
+  done --> next
 ```
 
-*Each release builds on the one above it. The dashed line leads to work planned after 1.0.*
+*Every release so far is a beta; 1.0.0 is the first stable one. The dashed line leads to work after 1.0.*
 
 | Version | What | Status |
 | --- | --- | --- |
@@ -61,8 +62,8 @@ flowchart TD
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, and one proxy per agent | Built on `working`, not released |
-| 0.9.0 | Release candidate: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
-| 1.0.0 | A public community review of 0.9.0, then the release | Planned |
+| 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
+| 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
@@ -110,8 +111,8 @@ in the same release.
   live round before release.
 - **Issues**: #13 and #27 shipped in 0.7.3. #1 is built for 0.8.0, and #3
   (repository setup after the move) has maintainer settings left to confirm.
-- **Next**: a live round on 0.8.0 and its release, then the 0.9.0 release
-  candidate, then the public review and the 1.0 release.
+- **Next**: a live round on 0.8.0 and its release, then 0.9.0, the last
+  beta, then the public review and the first stable release, 1.0.
 - **Not yet tested enough: agents on another machine.** The maintainer
   expects an agent connecting from another machine to be the normal case,
   and the same machine an edge case for testing (2026-10-16). Today the
@@ -165,9 +166,9 @@ D1 to D10, was reviewed and approved by the maintainer before any code.
 - Before release: a live round that covers the three, and the release
   steps in [PYPI.md](docs/PYPI.md).
 
-## 0.9.0: Release candidate
+## 0.9.0: Tool-side token check and remote agents
 
-Planned. Everything 1.0 will contain is in, tested on real deployments, and
+Planned, the last beta. Everything 1.0 will contain is in, tested on real deployments, and
 frozen, so the public review looks at the final shape.
 
 - An optional tool-side token check (#28): a way for a tool, or a thin
@@ -187,7 +188,7 @@ frozen, so the public review looks at the final shape.
 - Before release: a live round across the full case list plus the new
   cases.
 
-## 1.0.0: Review and release
+## 1.0.0: First stable release
 
 - A time-boxed, public community review with a stated scope. 0.9.0 is what
   is reviewed; fixes ship as 0.9.x.

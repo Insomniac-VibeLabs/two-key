@@ -149,6 +149,7 @@ SPDX-License-Identifier: Apache-2.0
 - [0.8.0 work: judge history, ballot records, and one proxy per agent — 2026-10-25](#080-work-judge-history-ballot-records-and-one-proxy-per-agent--2026-10-25)
 - [Dependabot: setuptools 84.1.0 for CI builds — 2026-10-25](#dependabot-setuptools-8410-for-ci-builds--2026-10-25)
 - [Roadmap: 0.8.0 and 0.9.0 in the README and ROADMAP diagrams — 2026-10-26](#roadmap-080-and-090-in-the-readme-and-roadmap-diagrams--2026-10-26)
+- [Roadmap diagrams redrawn, and no "release candidate" — 2026-10-26](#roadmap-diagrams-redrawn-and-no-release-candidate--2026-10-26)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4654,3 +4655,12 @@ agent; in progress) and 0.9.0 (release candidate: the optional tool-side token c
 run, the quickstart and demo, and the 1.0 freeze), then 1.0.0, a public review of 0.9.0. ROADMAP.md gains a
 0.9.0 section; the quickstart and demo move there from 1.0.0. The README's 1.0.0 row no longer lists #1 and the
 ballot records, which are 0.8.0's.
+
+## Roadmap diagrams redrawn, and no "release candidate" — 2026-10-26
+
+Docs only. The roadmap diagrams in the README and ROADMAP.md had text that did not fit its boxes on GitHub (a
+nine-box chain in one row, and lines GitHub wrapped mid-phrase). Both are now the same two rows: the released
+betas 0.4.0 to 0.7.3, then 0.8.0, 0.9.0, 1.0.0 and after 1.0, with no label line longer than 14 characters.
+Every release so far is a beta, so 0.9.0 is "the last beta" (tool-side token check and remote agents), not a
+release candidate, and 1.0.0 is "the first stable release", not "review and release". The tables, the ROADMAP
+headings and the sentences around them say the same.
