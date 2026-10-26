@@ -141,14 +141,14 @@ from your own hook, never from the agent. A refused call comes back to the
 agent as a tool error with a reason code.
 
 ```mermaid
-flowchart LR
-  host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
+flowchart TD
+  host["Agent host<br/>MCP client"] -- "tools/list and<br/>tools/call, stdio" --> tk
   subgraph proxy["two-key mcp-proxy, its own OS user"]
-    tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["TwoKey.authorize<br/>Path A and Path B"]
+    tk -- "token" --> gw["Gateway<br/>same process"]
   end
   tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
+  gw -- "projected arguments,<br/>stdio" --> up["Upstream<br/>MCP server<br/>child process,<br/>third OS user"]
   up --> sor["System of record"]
   hooks -. "look facts up" .-> sor
 ```
@@ -675,13 +675,13 @@ are targets, not dates. The detail, and what comes after 1.0, is in
 
 ```mermaid
 flowchart TD
-  subgraph done["Released (betas)"]
+  subgraph done["Released betas"]
     direction LR
     r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"]
   end
-  subgraph next["Next"]
+  subgraph next["Next: two betas, then 1.0.0"]
     direction LR
-    r08["0.8.0<br/>Judge history<br/>(in progress)"] --> r09["0.9.0<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+    r08["0.8.0 beta<br/>Judge history<br/>(in progress)"] --> r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
   end
   done --> next
 ```

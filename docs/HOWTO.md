@@ -1717,7 +1717,7 @@ flowchart TD
     tk -- "token" --> gw["Gateway<br/>same process"]
   end
   tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected arguments,<br/>stdio" --> up["Upstream MCP server<br/>child process,<br/>third OS user"]
+  gw -- "projected arguments,<br/>stdio" --> up["Upstream<br/>MCP server<br/>child process,<br/>third OS user"]
   up --> sor["System of record"]
   hooks -. "look facts up" .-> sor
 ```

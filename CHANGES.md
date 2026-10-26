@@ -150,6 +150,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Dependabot: setuptools 84.1.0 for CI builds — 2026-10-25](#dependabot-setuptools-8410-for-ci-builds--2026-10-25)
 - [Roadmap: 0.8.0 and 0.9.0 in the README and ROADMAP diagrams — 2026-10-26](#roadmap-080-and-090-in-the-readme-and-roadmap-diagrams--2026-10-26)
 - [Roadmap diagrams redrawn, and no "release candidate" — 2026-10-26](#roadmap-diagrams-redrawn-and-no-release-candidate--2026-10-26)
+- [README: the MCP proxy diagram, and 0.8.0 and 0.9.0 marked as betas — 2026-10-26](#readme-the-mcp-proxy-diagram-and-080-and-090-marked-as-betas--2026-10-26)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4664,3 +4665,11 @@ betas 0.4.0 to 0.7.3, then 0.8.0, 0.9.0, 1.0.0 and after 1.0, with no label line
 Every release so far is a beta, so 0.9.0 is "the last beta" (tool-side token check and remote agents), not a
 release candidate, and 1.0.0 is "the first stable release", not "review and release". The tables, the ROADMAP
 headings and the sentences around them say the same.
+
+## README: the MCP proxy diagram, and 0.8.0 and 0.9.0 marked as betas — 2026-10-26
+
+Docs only. The README's diagram under "Put Two-Key in front of an MCP server" ran left to right, and on GitHub its
+two dashed labels ("look facts up", "normalized record") lay on top of each other. It is now the top-to-bottom
+version HOWTO already uses, where every label has its own place; in both, the upstream server's box breaks its
+name so no word wraps. In the roadmap diagrams 0.8.0 and 0.9.0 now say "beta", and the second row is titled
+"Next: two betas, then 1.0.0".

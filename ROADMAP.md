@@ -41,13 +41,13 @@ promise: the order may change, and version numbers are targets, not dates.
 
 ```mermaid
 flowchart TD
-  subgraph done["Released (betas)"]
+  subgraph done["Released betas"]
     direction LR
     r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"]
   end
-  subgraph next["Next"]
+  subgraph next["Next: two betas, then 1.0.0"]
     direction LR
-    r08["0.8.0<br/>Judge history<br/>(in progress)"] --> r09["0.9.0<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+    r08["0.8.0 beta<br/>Judge history<br/>(in progress)"] --> r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
   end
   done --> next
 ```
