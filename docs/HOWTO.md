@@ -1713,12 +1713,12 @@ comes back to the agent as a tool error with a reason code.
 flowchart TD
   host["Agent host<br/>MCP client"] -- "tools/list and<br/>tools/call, stdio" --> tk
   subgraph proxy["two-key mcp-proxy, its own OS user"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["TwoKey.authorize<br/>Path A and Path B"]
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["TwoKey<br/>.authorize<br/>Path A and B"]
     tk -- "token" --> gw["Gateway<br/>same process"]
   end
   tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected arguments,<br/>stdio" --> up["Upstream<br/>MCP server<br/>child process,<br/>third OS user"]
-  up --> sor["System of record"]
+  gw -- "projected args,<br/>stdio" --> up["Upstream<br/>MCP server<br/>child process,<br/>third OS user"]
+  up --> sor["System<br/>of record"]
   hooks -. "look facts up" .-> sor
 ```
 

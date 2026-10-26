@@ -4673,3 +4673,6 @@ two dashed labels ("look facts up", "normalized record") lay on top of each othe
 version HOWTO already uses, where every label has its own place; in both, the upstream server's box breaks its
 name so no word wraps. In the roadmap diagrams 0.8.0 and 0.9.0 now say "beta", and the second row is titled
 "Next: two betas, then 1.0.0".
+
+GitHub then clipped the widest lines in the same diagram ("TwoKey.authorize", "Path A and Path B"). Its box
+and edge labels now break into lines of 14 characters or fewer, as the roadmap's do, in README and HOWTO.
