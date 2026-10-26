@@ -51,8 +51,8 @@ is written to an encrypted, hash-chained ledger with a signed head.
 What you get:
 
 - **Works with the agent you have.** Grok, ChatGPT, Claude, Gemini, or a
-  local Ollama model proposes the call as data; Two-Key decides.
-- **Judges you choose.** xAI, OpenAI, Anthropic, Gemini, or Ollama. One
+  local model (i.e. Ollama) proposes the call as data; Two-Key decides.
+- **Judges you choose.** xAI, OpenAI, Anthropic, Gemini, or a local model. One
   judge is enough to start; the `high_assurance` profile asks for judges
   from two makers and a yes from a local one.
 - **In front of any MCP server** (0.5.0). `two-key mcp-proxy` shows the
