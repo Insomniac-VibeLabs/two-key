@@ -421,10 +421,22 @@ def _write_text(path: Path, text: str) -> None:
             os.unlink(tmp)
 
 
+def _write_sources(paths: Mapping[str, Path], draft: Draft, refused: str) -> None:
+    """Write the prose and the rules file. A folder or file that cannot be written is an ``EditorError``."""
+    try:
+        _write_text(paths["prose"], draft.prose)
+        _write_text(paths["rules"], rules_text(draft, paths["rules"].suffix.lower() == ".json"))
+    except OSError as e:
+        raise EditorError(f"{refused}: {e}") from None
+
+
 def same_from_files(paths: Mapping[str, Path], signed: Mapping) -> None:
     """The prose and rules files read back as ``two-key sign-constitution`` reads them sign the same body."""
-    prose, rules, specs, fields = load_unsigned_with_fields(paths["prose"], paths["rules"])
-    _, again = signed_body(prose, rules, specs, fields=fields or None, serial=load_serial(paths["rules"]))
+    try:
+        prose, rules, specs, fields = load_unsigned_with_fields(paths["prose"], paths["rules"])
+        _, again = signed_body(prose, rules, specs, fields=fields or None, serial=load_serial(paths["rules"]))
+    except (OSError, ValueError) as e:
+        raise EditorError(f"the files written do not read back ({e}); the signed file was not written") from None
     if canonical_hash(again) != canonical_hash(signed):
         raise EditorError("the rules file written does not read back as what was signed; the signed file was not "
                           "written")
@@ -451,10 +463,12 @@ def sign_and_save(draft: Draft, private_key, folder: Path | str, names: Mapping[
                                  copy.deepcopy(draft.tool_specs), fields=copy.deepcopy(draft.fields) or None,
                                  envelope_format=draft.envelope_format, serial=draft.serial)
     verify_signed(json.loads(json.dumps(envelope)), private_key.public_key())
-    _write_text(paths["prose"], draft.prose)
-    _write_text(paths["rules"], rules_text(draft, paths["rules"].suffix.lower() == ".json"))
+    _write_sources(paths, draft, "not signed")
     same_from_files(paths, envelope["signed"])
-    save_envelope(paths["signed"], envelope)
+    try:
+        save_envelope(paths["signed"], envelope)
+    except OSError as e:
+        raise EditorError(f"not signed: {e}") from None
     return Saved(str(paths["prose"]), str(paths["rules"]), str(paths["signed"]), canonical_hash(envelope["signed"]),
                  envelope["fingerprint"], envelope["format"], report.notes)
 
@@ -468,8 +482,7 @@ def save_sources(draft: Draft, folder: Path | str, names: Mapping[str, str] | No
     there = existing(wanted)
     if there and not overwrite:
         raise EditorError(f"not saved: {', '.join(there)} already there; tick Replace to write over them")
-    _write_text(wanted["prose"], draft.prose)
-    _write_text(wanted["rules"], rules_text(draft, wanted["rules"].suffix.lower() == ".json"))
+    _write_sources(wanted, draft, "not saved")
     return [str(p) for p in wanted.values()]
 
 

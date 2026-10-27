@@ -308,6 +308,25 @@ class Signing(unittest.TestCase):
             ce.target_paths(self.dir, unknown)
         self.assertEqual(ce.target_paths(self.dir, {"prose": ""})["prose"].name, "constitution.md")
 
+    def test_a_folder_that_cannot_be_written_is_refused_in_words(self):
+        draft = draft_with_tools()
+        denied = PermissionError(13, "Permission denied")
+        with mock.patch.object(ce, "_write_text", side_effect=denied), \
+                self.assertRaisesRegex(ce.EditorError, "not signed: .*Permission denied"):
+            ce.sign_and_save(draft, self.key, self.dir)
+        with mock.patch.object(ce, "_write_text", side_effect=denied), \
+                self.assertRaisesRegex(ce.EditorError, "not saved: .*Permission denied"):
+            ce.save_sources(draft, self.dir)
+        with mock.patch.object(ce, "save_envelope", side_effect=denied), \
+                self.assertRaisesRegex(ce.EditorError, "not signed: .*Permission denied"):
+            ce.sign_and_save(draft, self.key, self.dir, overwrite=True)
+        self.assertFalse((self.dir / "constitution.signed.json").exists())
+
+    def test_files_that_do_not_read_back_are_refused_in_words(self):
+        paths = ce.target_paths(self.dir)
+        with self.assertRaisesRegex(ce.EditorError, "do not read back"):
+            ce.same_from_files(paths, {"prose": "x"})
+
     def test_rules_that_do_not_read_back_the_same_are_refused_before_the_signed_file(self):
         draft = draft_with_tools()
         paths = ce.target_paths(self.dir)

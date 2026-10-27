@@ -162,6 +162,22 @@ class Window(unittest.TestCase):
         self.assertEqual(list(editor.tools.get_children()), ["pay_vendor"])
         self.assertEqual(editor.tool_id.get(), "")
 
+    def test_the_applied_note_stays_and_new_clears_the_selection(self):
+        editor = self.editor()
+        self.add_tools(editor)
+        self.top.update()       # the select events that refresh_tools and refresh_rules queue
+        self.assertEqual(editor.tool_note.cget("text"), "pay_vendor applied")
+        self.assertEqual(editor.rule_note.cget("text"), "rule 2 applied")
+        editor.edit_tool(None)
+        editor.edit_rule(None)
+        self.assertEqual(editor.tools.selection(), ())
+        self.assertEqual(editor.rules.selection(), ())
+        editor.tools.selection_set("pay_vendor")
+        editor.rules.selection_set("1")
+        self.top.update()       # a click on the row it was editing before still opens it
+        self.assertEqual(editor.tool_id.get(), "pay_vendor")
+        self.assertEqual(editor.rule_id.get(), "spend-cap")
+
     def test_rules_change_move_and_go(self):
         editor = self.editor()
         self.add_tools(editor)
@@ -244,6 +260,8 @@ class Window(unittest.TestCase):
         self.add_tools(editor)
         editor.sign()
         self.assertIn("Signed (two-key-constitution-v3", editor.sign_text())
+        # The note lives in the Review and sign tab, so the notebook does not draw over it.
+        self.assertTrue(editor.sign_note.winfo_parent().startswith(str(editor.notebook.tabs()[-1])))
         envelope = load_envelope(self.dir / "out" / "constitution.signed.json")
         self.assertEqual(verify_signed(envelope, self.key.public_key()).serial, 1)
         editor.sign()
@@ -334,6 +352,7 @@ class Show(unittest.TestCase):
                 mock.patch("builtins.print") as printed:
             self.assertEqual(show(), 1)
         self.assertIn("--check", printed.call_args.args[0])
+        self.assertIs(printed.call_args.kwargs.get("file"), sys.stderr, "the message goes to stderr")
 
     def test_the_command_opens_the_window_on_the_files_given(self):
         from two_key import cli

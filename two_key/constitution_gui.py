@@ -19,6 +19,7 @@ The status line under the tabs always says whether the draft signs, and if not, 
 
 from __future__ import annotations
 
+import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, ttk
@@ -86,7 +87,6 @@ class ConstitutionEditor:
         self.passphrase, self.passphrase_file = tk.StringVar(master=root), tk.StringVar(master=root)
         self.names = {role: tk.StringVar(master=root, value=name) for role, name in FILE_NAMES.items()}
         self.overwrite = tk.BooleanVar(master=root, value=False)
-        self.sign_note = ttk.Label(root, padding=(0, 6), wraplength=1000, justify="left")
         self._menu(root)
         self.status = ttk.Label(root, padding=8, anchor="w")
         self.status.pack(side="bottom", fill="x")       # first, so a small window never hides it
@@ -224,7 +224,7 @@ class ConstitutionEditor:
             self.tools.heading(name, text=text)
             self.tools.column(name, width=width, stretch=name == "maps")
         self.tools.pack(fill="x")
-        self.tools.bind("<<TreeviewSelect>>", lambda _e: self.edit_tool(self._selected_tool()))
+        self.tools.bind("<<TreeviewSelect>>", lambda _e: self._tool_clicked())
         form = ttk.Frame(tab, padding=(0, 8, 0, 0))
         form.pack(fill="both", expand=True)
         self.tool_id = tk.StringVar()
@@ -256,6 +256,11 @@ class ConstitutionEditor:
         chosen = self.tools.selection()
         return chosen[0] if chosen else None
 
+    def _tool_clicked(self) -> None:
+        # refresh_tools selects the row being edited again; that is no new choice, and keeps its note.
+        if self._selected_tool() != self.tool_selected:
+            self.edit_tool(self._selected_tool())
+
     def refresh_tools(self) -> None:
         self.tools.delete(*self.tools.get_children())
         for name in tool_names(self.draft):
@@ -280,6 +285,8 @@ class ConstitutionEditor:
         self.floor.set(known.get("data_class_floor", DEFAULT_DATA_CLASS))
         self.deny_unmapped.set(bool(known.get("deny_unmapped", False)))
         _set_text(self.mappings, dump_value(rest))
+        if name is None:            # a new tool: no row stays selected, so a click on any row edits it
+            self.tools.selection_remove(*self.tools.selection())
         self.say(self.tool_note, "")
 
     def apply_tool(self) -> None:
@@ -319,7 +326,7 @@ class ConstitutionEditor:
             self.rules.heading(name, text=text)
             self.rules.column(name, width=width, stretch=name == "body")
         self.rules.pack(fill="x")
-        self.rules.bind("<<TreeviewSelect>>", lambda _e: self.edit_rule(self._selected_rule()))
+        self.rules.bind("<<TreeviewSelect>>", lambda _e: self._rule_clicked())
         form = ttk.Frame(tab, padding=(0, 8, 0, 0))
         form.pack(fill="both", expand=True)
         self.rule_id, self.rule_kind = tk.StringVar(), tk.StringVar(value="deny_if")
@@ -347,6 +354,10 @@ class ConstitutionEditor:
         chosen = self.rules.selection()
         return int(chosen[0]) if chosen else None
 
+    def _rule_clicked(self) -> None:
+        if self._selected_rule() != self.rule_selected:
+            self.edit_rule(self._selected_rule())
+
     def refresh_rules(self) -> None:
         self.rules.delete(*self.rules.get_children())
         for i, rule in enumerate(self.draft.rules):
@@ -367,6 +378,8 @@ class ConstitutionEditor:
             self.rule_id.set("")
             self.rule_kind.set("deny_if")
             _set_text(self.rule_body, "")
+        if index is None:
+            self.rules.selection_remove(*self.rules.selection())
         self.say(self.rule_note, "")
 
     def rule_template(self) -> None:
@@ -489,6 +502,9 @@ class ConstitutionEditor:
         keys = ttk.Frame(tab)
         keys.pack(side="bottom", fill="x")      # before the panes, so they give up room first
         self._build_key_rows(keys, key_path, folder)
+        # Under the buttons, and a child of the tab, so the notebook never draws over it.
+        self.sign_note = ttk.Label(keys, padding=(0, 6), wraplength=1000, justify="left")
+        self.sign_note.pack(fill="x")
         panes = ttk.Panedwindow(tab, orient="horizontal")
         panes.pack(fill="both", expand=True, pady=6)
         self.review = _text(panes, 10, state=SHOWN_ONLY)
@@ -522,7 +538,6 @@ class ConstitutionEditor:
         ttk.Checkbutton(buttons, text="Replace files that are there", variable=self.overwrite).pack(side="left")
         ttk.Button(buttons, text="Sign and save", command=self.sign).pack(side="left", padx=8)
         ttk.Button(buttons, text="Save prose and rules only (unsigned)", command=self.save_unsigned).pack(side="left")
-        self.sign_note.pack(in_=tab, fill="x")
 
     def show_review(self, report) -> None:
         if report.ok:
@@ -633,7 +648,8 @@ def show(draft: Draft | None = None, **kwargs) -> int:
     try:
         root = tk.Tk()
     except tk.TclError as e:
-        print(f"two-key constitution-editor: cannot open a window ({e}); use --check, or two-key sign-constitution")
+        print(f"two-key constitution-editor: cannot open a window ({e}); use --check, or two-key sign-constitution",
+              file=sys.stderr)
         return 1
     root.geometry("1200x860")
     ConstitutionEditor(root, draft, **kwargs)

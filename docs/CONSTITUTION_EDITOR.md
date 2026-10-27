@@ -114,9 +114,10 @@ file only you can read), and the folder. **Sign and save** then:
 5. writes the signed constitution (`constitution.signed.json`) last.
 
 It refuses, with nothing written, when a file is already there and **Replace files that are there** is not
-ticked (`sign-constitution`'s `--force`). The passphrase box is emptied after every try, and the key is not
-kept once the files are written. **Save prose and rules only (unsigned)** writes the first two files, to
-review or sign later.
+ticked (`sign-constitution`'s `--force`). A folder or file it cannot write is reported under the buttons, as
+every refusal is, and `constitution.signed.json` is written only after both sources were. The passphrase box
+is emptied after every try, and the key is not kept once the files are written. **Save prose and rules only
+(unsigned)** writes the first two files, to review or sign later.
 
 The rules file is what `two-key config set --rules` needs to change a signed setting later, and it signs to
 the same digest with `two-key sign-constitution`.

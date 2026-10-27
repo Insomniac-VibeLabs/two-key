@@ -159,6 +159,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Setup asks for the quorum numbers; a cloud judge needs the agent's session — 2026-10-27](#setup-asks-for-the-quorum-numbers-a-cloud-judge-needs-the-agents-session--2026-10-27)
 - [Regression pass: ledger-view and setup fixes — 2026-10-27](#regression-pass-ledger-view-and-setup-fixes--2026-10-27)
 - [Constitution editor: `two-key constitution-editor` — 2026-10-27](#constitution-editor-two-key-constitution-editor--2026-10-27)
+- [Regression pass: constitution editor fixes — 2026-10-27](#regression-pass-constitution-editor-fixes--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4865,3 +4866,25 @@ prose every judge reads, the tools and their specs, the hard rules, the custom f
   llms.txt name the command.
 - Helpers that use no instance state are static methods (DeepSource PYL-R0201); repeated string literals are
   named constants.
+
+## Regression pass: constitution editor fixes — 2026-10-27
+
+The regression pass drove `two-key constitution-editor` by hand: every tab, Sign and save against
+`two-key sign-constitution` (the same signed body), Replace, an encrypted key typed and from a file, an unsigned
+save, a signed constitution opened with and without its public key, and `--check`.
+
+- **Fixed: the Review and sign message could not be seen.** The line under Sign and save was made before the tabs
+  and drawn under them, so "Signed ...", "already there" and every key or folder problem were set but hidden. It
+  is now part of the tab.
+- **Fixed: a folder that cannot be written crashed the button.** A read-only folder (or full disk) raised an
+  uncaught `PermissionError` to the terminal and the window said nothing. Sign and save and Save prose and rules
+  only now say `not signed: ...` or `not saved: ...` under the buttons, and source files that do not read back
+  are refused the same way; the signed file is still written last.
+- **Fixed: the "applied" note on Tools and Rules was cleared at once.** Apply re-selects the row it edited, and
+  that select event cleared the note (and filled the form again). Selecting the row already being edited now
+  does nothing. **New tool** and **New rule** clear the row selection, so a click on the row edited before
+  opens it again.
+- The no-display message now goes to stderr, as `ledger-view`'s does.
+- docs/CONSTITUTION_EDITOR.md: a folder that cannot be written.
+- Tests: `tests/test_constitution_editor.py` (a folder that cannot be written; files that do not read back),
+  `tests/test_constitution_gui.py` (where the message lives, the applied notes and selection, stderr).
