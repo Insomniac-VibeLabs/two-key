@@ -489,6 +489,20 @@ claims to close.
     windows fill up over 90 days.
   - The summary carries no agent text, but it does carry the agent id when
     the operator configured it; any other id is shown as `unnamed`.
+- Ledger audit window (0.8.0, `two-key ledger-view`, `two_key/ledger_view.py`,
+  `two_key/ledger_gui.py`). New audience: whoever can see the screen. It
+  shows every field of every entry decrypted, including proposal text,
+  derived amounts and counterparties, and custom field values, which the SIEM
+  export leaves out; a judge's rationale is not in the ledger, so it cannot
+  show that. It opens the ledger as `two-key audit` does (chain, signed head,
+  witness pins, head anchor) and refuses one that does not verify, and it
+  holds the principal private key in memory while the window is open, so
+  Reload can open the ledger again. No new boundary: it is a tkinter window
+  of the operator's own process, with no network port, no server, and no
+  export; `--print` writes to standard output only. It never appends to the
+  ledger (`tests/test_ledger_view.py` checks every file is unchanged). A
+  regular expression in a filter runs on the operator's own machine against
+  their own ledger, capped at 500 characters.
 - One proxy per agent (0.8.0, `one_proxy_per_agent`, on by default). A
   second proxy for an agent already connected to the ledger refuses
   (`agent_already_connected`). A proxy whose client died but whose process
@@ -828,7 +842,10 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
     cover the rest of the host. How a hybrid signature is treated in approved
     mode depends on what the validated module supports, and is decided when
     the mode is built.
-  - Local GUI. New boundary: browser to a local server. It is
+  - Local GUI. The read-only audit view shipped in 0.8.0 as a tkinter
+    window instead (`two-key ledger-view`, under "Residual risks"), with no
+    local server; what follows is the plan for the configuration part. New
+    boundary: browser to a local server. It is
     meant to bind to loopback only and to require a per-session token, which
     is meant to address other local pages, cross-site requests, and DNS
     rebinding. It is the first place decrypted ledger content is displayed, so

@@ -94,7 +94,7 @@ From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-Vib
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
+  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
 - A new setting (a key a loader accepts) gets a row in `two_key/settings.py`.
   `docs/SETTINGS.md` is generated from it: run `python tests/test_settings_doc.py
@@ -407,5 +407,12 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   (`one_proxy_per_agent`): a second refuses to start with
   `agent_already_connected`, recorded in the ledger. Turning it off is a
   weaker setting and warns at start.
+- `two-key ledger-view` (0.8.0) only reads: it opens the ledger the way
+  `two-key audit` does and must never append, write a file, or open a port
+  (`tests/test_ledger_view.py`, `tests/test_ledger_gui.py`). The filtering
+  and sorting live in `two_key/ledger_view.py` so they run without a
+  display; `two_key/ledger_gui.py` is only the tkinter window. The window
+  tests skip without tkinter or a display; CI's coverage job runs them
+  under `xvfb-run`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

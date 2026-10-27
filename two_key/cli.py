@@ -21,6 +21,8 @@
                     --witness-passphrase-env NAME [--witness-public-key PEM] [--head-anchor PATH] \
                     [--replace-ledger]
   two-key audit --key KEY --ledger DIR [--witness-public-key PEM] [--check-history CONSTITUTION]
+  two-key ledger-view --key KEY --ledger DIR [--witness-public-key PEM] [--search TEXT]
+                    [--where FIELD OP [VALUE]]... [--any] [--sort FIELD[:desc]]... [--print | --fields]
   two-key siem-export --key KEY --ledger DIR [--out FILE] [--schema native|ecs|ocsf]
                     [--format json|cef] [--from-seq N] [--to-seq N]
   two-key siem-verify --key KEY --ledger DIR --events FILE [--require-complete]
@@ -55,6 +57,10 @@ head anchor (``<ledger>.ledger-key/head.anchor``, or ``--head-anchor``) refuses
 a rollback or a wipe of the ledger directory. Creating a ledger at a new path
 warns on stderr. Opening a ledger made before 0.2.3 pins its witness key
 (trust on first use), whichever command opens it.
+
+``ledger-view`` opens the ledger the way ``audit`` does and shows its entries in a window (tkinter) to
+search, filter, and sort for an audit; ``--print`` writes the matching entries to stdout as JSON Lines
+instead, and ``--fields`` lists every field name a filter can use. It never appends to the ledger.
 
 ``siem-export`` verifies the ledger, decrypts it locally, and writes one event per
 line for a SIEM: digests, sizes, and reason codes, never argument values, the proposal
@@ -303,6 +309,44 @@ def _audit(args) -> int:
         report["ok"] = report["ok"] and all(": not checked:" in line for line in history)
     print(json.dumps(report, indent=2))
     return 0 if report["ok"] else 1
+
+
+def _ledger_view(args) -> int:
+    from .ledger_view import ViewError, field_names, integrity, print_rows, query_from_args, rows_from_entries, select
+    try:
+        query = query_from_args(args)
+    except ViewError as e:
+        raise SystemExit(f"ledger-view: {e}") from None
+    if args.max_rows < 1:
+        raise SystemExit("ledger-view: --max-rows must be at least 1")
+    key = _principal_key(args)
+    ledger = _open_ledger(args, key)        # opening verified the chain, the head, and both witness pins
+    if ledger is None:
+        return 1
+    rows = rows_from_entries(e.to_json() for e in ledger.entries)
+    if args.fields:
+        print("\n".join(field_names(rows)))
+        return 0
+    if args.print:
+        try:
+            print_rows(select(rows, query), sys.stdout)
+        except ViewError as e:
+            raise SystemExit(f"ledger-view: {e}") from None
+        return 0
+    try:
+        from .ledger_gui import show
+    except ImportError:
+        print("two-key ledger-view: the window needs tkinter, which this Python does not have (on Debian and "
+              "Ubuntu: apt install python3-tk); use --print to list the entries instead", file=sys.stderr)
+        return 1
+
+    def reload():
+        again = _open_ledger(args, key)
+        if again is None:
+            raise ViewError("see the terminal for the reason")
+        return rows_from_entries(e.to_json() for e in again.entries), integrity(again)
+    return show(rows, title=str(args.ledger), report=integrity(ledger), reload=reload, query=query,
+                max_rows=args.max_rows)
 
 
 def _siem_export(args) -> int:
@@ -715,6 +759,27 @@ def main(argv: list[str] | None = None) -> int:
                        help="also rebuild every judge history summary from the ledger and check its history_digest; "
                             "CONSTITUTION is the signed constitution the decisions ran under")
     audit.set_defaults(func=_audit)
+    viewer = sub.add_parser("ledger-view", help="search, filter, and sort the ledger's entries in a window "
+                                                "(or print them); read-only")
+    _add_key(viewer)
+    viewer.add_argument("--ledger", required=True)
+    viewer.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    viewer.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    viewer.add_argument("--search", default="", metavar="TEXT", help="keep entries with TEXT in any field")
+    viewer.add_argument("--where", action="append", nargs="+", default=None, metavar="FIELD OP [VALUE]",
+                        help="keep entries where FIELD passes the test (repeatable); OP is contains, not-contains, "
+                             "equals, not-equals, starts-with, ends-with, regex, gt, ge, lt, le, empty, or not-empty; "
+                             "FIELD * means any field")
+    viewer.add_argument("--any", action="store_true", help="keep entries that pass any --where (default: all)")
+    viewer.add_argument("--sort", action="append", default=None, metavar="FIELD[:desc]",
+                        help="sort by FIELD (repeatable; the first decides first); default seq")
+    shown = viewer.add_mutually_exclusive_group()
+    shown.add_argument("--print", action="store_true",
+                       help="write the matching entries to stdout as JSON Lines instead of opening a window")
+    shown.add_argument("--fields", action="store_true", help="list every field name a filter or sort can use")
+    viewer.add_argument("--max-rows", type=int, default=10000, metavar="N",
+                        help="list at most N matching entries in the window (default 10000); the count shows all")
+    viewer.set_defaults(func=_ledger_view)
     recover = sub.add_parser("recover", help="drop an uncheckpointed tail and record it; does not run on open")
     _add_key(recover)
     recover.add_argument("--ledger", required=True)

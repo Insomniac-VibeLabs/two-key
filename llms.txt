@@ -69,6 +69,11 @@ an allow on the same target before minting is denied history_changed. The summar
 (history_hash) and recorded on the decision; two-key audit --check-history CONSTITUTION rebuilds it. Path B entries
 record each judge's ballot (id, vote, confidence, error class, HMAC-SHA256 rationale digest, never the text). The
 MCP proxy allows one proxy per agent id on a ledger by default (one_proxy_per_agent; agent_already_connected).
+two-key ledger-view (two_key/ledger_view.py, two_key/ledger_gui.py) opens the ledger as two-key audit does and shows
+one row per entry in a read-only tkinter window: every field (seq, kind, and each body value under a dotted path,
+lists as name[]) searchable, filterable (contains, equals, starts-with, ends-with, regex, gt/ge/lt/le, empty, and
+negations; all or any), and sortable on several keys. --print writes the matches as JSON Lines; --fields lists the
+names. No network port, no export, never appends (docs/LEDGER_VIEW.md).
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. docs/CONNECTING.md: how to connect the agent and every hook so

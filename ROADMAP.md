@@ -61,7 +61,7 @@ flowchart TD
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners; a start-up check for writable paths; judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
-| 0.8.0 | Judge history summary (#1), per-judge ballot records, and one proxy per agent | Built on `working`, not released |
+| 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, and a read-only ledger audit window (`two-key ledger-view`) | Built on `working`, not released |
 | 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
@@ -163,7 +163,14 @@ D1 to D10, was reviewed and approved by the maintainer before any code.
   quote arguments. A pass with one judge down can now be told from the
   ledger.
 - One proxy per agent on a ledger, on by default (`one_proxy_per_agent`).
-- Before release: a live round that covers the three, and the release
+- A ledger audit window, `two-key ledger-view` (maintainer's request,
+  2026-10-27; [LEDGER_VIEW.md](docs/LEDGER_VIEW.md)): one row per entry,
+  every field searchable, filterable, and sortable, alone and together. It
+  is the ledger-auditing part of the local GUI below, brought forward and
+  read-only: a tkinter window with no network port, opened the way
+  `two-key audit` opens the ledger, and `--print` for the same search
+  without a window.
+- Before release: a live round that covers the first three, and the release
   steps in [PYPI.md](docs/PYPI.md).
 
 ## 0.9.0: Tool-side token check and remote agents
@@ -300,6 +307,13 @@ module in approved mode", never "FIPS compliant" or "FIPS validated".
 A graphical front end so the package can be configured and audited without
 hand-editing YAML and reading JSON. It is built last, on top of the stable
 CLI and file formats, so it adds no new logic of its own.
+
+The read-only ledger audit part came first, in 0.8.0, as `two-key ledger-view`
+(above): a tkinter window, not a browser page, so it has no local port to
+guard with a token, and it shows every field decrypted, because the
+maintainer asked for every field to be searchable. It holds the principal
+key while open, as `two-key audit` does, because opening the ledger needs it.
+The bullets below are still the plan for the rest.
 
 - Runs locally only. It binds to loopback, requires a per-session token, and
   is not a hosted or multi-user service.

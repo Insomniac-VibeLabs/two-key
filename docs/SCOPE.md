@@ -114,6 +114,11 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   cannot be built denies by default, and a decision whose history changed
   before the token is issued is denied `history_changed`. Each ballot is
   recorded per judge with an HMAC digest of its rationale, never the text.
+  `two-key ledger-view` shows the ledger in a read-only window (tkinter, no
+  network port) to search, filter, and sort every field of every entry for an
+  audit, or prints the matches as JSON Lines (`--print`); it opens the ledger
+  the way `two-key audit` does and writes nothing
+  ([LEDGER_VIEW.md](LEDGER_VIEW.md))
   The MCP proxy allows one proxy per agent by default
   (`one_proxy_per_agent`)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
@@ -174,7 +179,8 @@ After 1.0, not scheduled:
   Running on a validated module is not the same as this package being
   validated or compliant, and the docs will not describe it that way.
 - Local GUI: a loopback-only interface for configuration and
-  ledger auditing, built on the CLI and the existing file formats. It does not
+  ledger auditing, built on the CLI and the existing file formats. The
+  read-only audit view shipped early as `two-key ledger-view` (0.8.0, above). It does not
   hold the principal key, and it is not a hosted or multi-user service.
   Filtering by judge uses the per-judge ballot records planned for 1.0
   (judge id, vote, confidence, error class, and a rationale digest, never

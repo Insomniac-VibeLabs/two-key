@@ -81,6 +81,7 @@ route. The rest of the page is reference, for when a section above points to it.
   - [What each refusal or warning means](#what-each-refusal-or-warning-means)
   - [Key custody](#key-custody)
   - [Limits](#limits)
+- [Search the ledger for an audit](#search-the-ledger-for-an-audit)
 - [Send the ledger to a SIEM](#send-the-ledger-to-a-siem)
 - [If the ledger will not open after a crash](#if-the-ledger-will-not-open-after-a-crash)
 - [Back up the keys](#back-up-the-keys)
@@ -2173,6 +2174,25 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 - **Results are not read.** An upstream result can carry injected text back
   to the agent. Two-Key judges each later call on its own terms; it does not
   scan the result.
+
+## Search the ledger for an audit
+
+`two-key ledger-view` opens the ledger in a window as a table, one row per entry, to search, filter, and sort
+for an audit. [docs/LEDGER_VIEW.md](LEDGER_VIEW.md) is the reference; this is the short version.
+
+```bash
+two-key ledger-view --key keys/principal.pem --ledger ledger --where kind equals decision --where allowed equals false
+```
+
+- It opens the ledger the way `two-key audit` does, so a ledger that does not verify is not shown, and it
+  also checks each decision's digests. It never adds an entry or writes a file, and it opens no network port.
+- Every field is a column you can show, search, filter, and sort: `seq`, `kind`, and every value in the body
+  under a dotted path (`subject.tool`, `ballots[].vote`). Filters combine with "all" or "any", and the search
+  box applies with either.
+- It shows every field decrypted, including the proposal text and argument-derived values, to whoever runs
+  it; the SIEM export leaves those out.
+- `--print` writes the matching entries as JSON Lines instead of opening a window, and `--fields` lists the
+  field names. The window needs tkinter (on Debian and Ubuntu, `apt install python3-tk`); `--print` does not.
 
 ## Send the ledger to a SIEM
 

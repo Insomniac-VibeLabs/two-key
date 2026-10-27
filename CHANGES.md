@@ -154,6 +154,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Diagrams: plain words for code names — 2026-10-27](#diagrams-plain-words-for-code-names--2026-10-27)
 - [Docs checked against the code — 2026-10-27](#docs-checked-against-the-code--2026-10-27)
 - [Regression pass: the audit on a shared ledger, and 0.8.0 checks in the live harness — 2026-10-27](#regression-pass-the-audit-on-a-shared-ledger-and-080-checks-in-the-live-harness--2026-10-27)
+- [Ledger audit window: `two-key ledger-view` — 2026-10-27](#ledger-audit-window-two-key-ledger-view--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4720,3 +4721,32 @@ SIEM export and verify in every schema and format, backup export, verify and res
   `history_digest_unbound`; the harness catches each, and every earlier patch. COVERAGE: F28 and F29 are
   `partly`, F30 `yes`. RELAY.md says what the 0.8.0 checks are, and the case count is 177.
 - JUDGES_AND_QUORUM says how the audit treats a ledger two proxies share.
+
+## Ledger audit window: `two-key ledger-view` — 2026-10-27
+
+The maintainer asked for a program that makes the ledger easy to search for an audit, with every field
+searchable, sortable and filterable, alone and together. `two-key ledger-view` opens the ledger the way
+`two-key audit` does (chain, signed head, witness pins, head anchor, then each decision's digests) and shows
+it in a window as a table, one row per entry ([docs/LEDGER_VIEW.md](docs/LEDGER_VIEW.md)).
+
+- **Every field.** A row's fields are `seq`, `kind`, `prev`, `entry_hash`, and every body value under a dotted
+  path (`subject.tool`, `history_basis.ledger_size`); a list keeps every element under `name[]`
+  (`ballots[].judge_id`, `ballots[].vote`), and a filter matches when any element does. **Columns** picks
+  which fields the table shows; every field can be searched and filtered either way.
+- **Search, filter, sort.** A search box across all fields; filter lines with contains, not-contains, equals,
+  not-equals, starts-with, ends-with, regex, gt, ge, lt, le, empty and not-empty, combined with "all" or
+  "any"; click a heading to sort and Shift-click to add a sort key. Right-click a cell to filter on its value
+  or copy it. Select a row to see all its fields and the entry as JSON. **Reload** opens and checks the
+  ledger again and keeps the view.
+- **Without a window.** `--search`, `--where FIELD OP [VALUE]`, `--any` and `--sort FIELD[:desc]` fill in the
+  window, and with `--print` they write the matching entries to stdout as JSON Lines instead; `--fields`
+  lists the field names.
+- **Read-only, no port.** It is a tkinter window (Python's standard library; no new dependency). It never
+  appends to the ledger, writes no file, has no export, and opens no network port. It shows every field
+  decrypted, more than the SIEM export sends, and holds the principal key while open, as `two-key audit`
+  does. ROADMAP, SCOPE and THREAT_MODEL say so: this is the read-only audit part of the after-1.0 local GUI,
+  brought forward as a window instead of a loopback web page.
+- New: `two_key/ledger_view.py` (rows, filters, sort; no display needed), `two_key/ledger_gui.py` (the
+  window), `tests/test_ledger_view.py`, `tests/test_ledger_gui.py` (skipped without tkinter or a display).
+  The coverage workflow runs the suite under `xvfb-run` so the window tests run there. HOWTO has a short
+  section; AGENTS.md and llms.txt name the command.
