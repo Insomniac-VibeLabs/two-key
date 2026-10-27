@@ -563,7 +563,15 @@ class ConstitutionEditor:
     def _key(self):
         from .keys import load_private_key_file, read_passphrase_file
         typed, file = self.passphrase.get(), self.passphrase_file.get().strip()
-        source = typed.encode("utf-8") if typed else (lambda _p: read_passphrase_file(file)) if file else None
+
+        def from_file(_path):       # read only if the key is encrypted
+            return read_passphrase_file(file)
+
+        source = None
+        if typed:
+            source = typed.encode("utf-8")
+        elif file:
+            source = from_file
         try:
             return load_private_key_file(self.key_path.get().strip(), source)
         except (OSError, ValueError) as e:
@@ -638,7 +646,7 @@ class ConstitutionEditor:
         try:
             public = load_public_key(public_path) if public_path else None
             draft, said = open_signed(path, public)
-        except (EditorError, OSError, ValueError) as e:
+        except (OSError, ValueError) as e:       # EditorError is a ValueError
             self.say(self.status, f"Not opened: {e}", bad=True)
             return
         self.folder.set(str(Path(path).parent))

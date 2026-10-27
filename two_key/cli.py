@@ -365,7 +365,7 @@ def _ledger_view(args) -> int:
 
 def _editor_draft(args):
     """The draft ``constitution-editor`` starts from, its window title, and a line on where it came from."""
-    from .constitution_editor import EditorError, new_draft, open_signed, open_sources
+    from .constitution_editor import new_draft, open_signed, open_sources
     if bool(args.prose) != bool(args.rules):
         raise SystemExit("constitution-editor: give --prose and --rules together")
     if args.signed and args.prose:
@@ -377,7 +377,7 @@ def _editor_draft(args):
             return draft, args.signed, f"Opened {args.signed}: {said}."
         if args.prose:
             return open_sources(args.prose, args.rules), args.rules, f"Opened {args.prose} and {args.rules}."
-    except (EditorError, OSError, ValueError) as e:
+    except (OSError, ValueError) as e:       # EditorError is a ValueError
         raise SystemExit(f"constitution-editor: {e}") from None
     return new_draft(), "new constitution", ""
 

@@ -340,8 +340,9 @@ class Signing(unittest.TestCase):
         written = ce.save_sources(ce.new_draft(), self.dir)
         self.assertEqual(sorted(Path(p).name for p in written), ["constitution.md", "hard_rules.yaml"])
         self.assertFalse((self.dir / "constitution.signed.json").exists())
+        again = ce.new_draft()
         with self.assertRaises(ce.EditorError):
-            ce.save_sources(ce.new_draft(), self.dir)
+            ce.save_sources(again, self.dir)
         self.assertEqual(len(ce.save_sources(ce.new_draft(), self.dir, overwrite=True)), 2)
 
 

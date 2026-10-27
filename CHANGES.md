@@ -4890,3 +4890,6 @@ save, a signed constitution opened with and without its public key, and `--check
   `tests/test_constitution_gui.py` (where the message lives, the applied notes and selection, stderr).
 - Tests: the selection test calls the row-click handlers itself, as a click's select event does; Tk on macOS
   sends no event to the test's hidden window, so it failed on macOS CI.
+- SonarCloud: `EditorError` is a `ValueError`, so it is no longer named beside it in two `except` clauses; the
+  passphrase source in the window is plain `if` statements, not a nested conditional; a test's `assertRaises`
+  holds one call.
