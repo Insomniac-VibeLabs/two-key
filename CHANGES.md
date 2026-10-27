@@ -4752,3 +4752,7 @@ it in a window as a table, one row per entry ([docs/LEDGER_VIEW.md](docs/LEDGER_
   section; AGENTS.md and llms.txt name the command.
 - The selected entry stays selected (and its details shown) when the filters change, as long as it is still
   listed; opening with filters from the command line no longer clears the first selection a moment later.
+- The window tests first open and close a window in a child process. On the macOS CI runner Tk stopped the
+  test process outright (exit code 133, no Python error) instead of raising `TclError`; where the child
+  process fails like that, the window tests are skipped with its exit code instead of taking the suite down.
+  They still run under `xvfb-run` in the coverage job.

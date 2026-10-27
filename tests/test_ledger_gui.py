@@ -5,11 +5,17 @@
 
 Each test builds the window on a real Tk display, changes the search, filters, sort, or columns through the
 same methods the controls call, and reads the table back. Skipped where Python has no tkinter or there is no
-display to open a window on (a Linux job without ``xvfb-run``).
+display to open a window on (a Linux job without ``xvfb-run``). A child process first opens and closes a
+window the same way; where Tk ends that process (a CI runner without a usable window server, where Tk stops
+the whole interpreter instead of raising ``TclError``), the window tests are skipped with its exit code.
 """
 
+import functools
+import subprocess  # nosec B404 - runs this Python with a fixed script
+import sys
 import time
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -40,6 +46,43 @@ ENTRIES = [
           note="x" * 300),
 ]
 OK = {"ok": True, "size": 5, "decision_digest_problems": []}
+ROOT = Path(__file__).resolve().parent.parent
+# What the tests below do with Tk, in a child process: a hidden root, a viewer in a Toplevel, a menu, the
+# clipboard, the Columns window, then a second root that runs its main loop until closed.
+PROBE = """
+import tkinter as tk
+from two_key.ledger_gui import LedgerViewer
+from two_key.ledger_view import rows_from_entries
+root = tk.Tk()
+root.withdraw()
+top = tk.Toplevel(root)
+view = LedgerViewer(top, rows_from_entries([{"seq": 0, "prev": "", "kind": "k", "body": {"a": [1, 2]},
+                                             "entry_hash": "h"}]), reload=lambda: None)
+top.update()
+view.menu_for("0", "a")
+view.copy("x")
+top.clipboard_get()
+view.choose_columns().destroy()
+top.destroy()
+root.destroy()
+again = tk.Tk()
+again.after(50, again.destroy)
+again.mainloop()
+"""
+
+
+@functools.lru_cache(maxsize=None)
+def tk_problem():
+    """None when a child process can open and close windows as the tests do; otherwise why not."""
+    try:
+        done = subprocess.run([sys.executable, "-c", PROBE], cwd=ROOT, capture_output=True, text=True,
+                              timeout=120, check=False)  # nosec B603 - this Python, a fixed script
+    except subprocess.TimeoutExpired:
+        return "opening a window did not finish in 120 seconds"
+    if done.returncode != 0:
+        last = (done.stderr.strip().splitlines() or ["no message"])[-1]
+        return f"Tk cannot open windows here (exit code {done.returncode}: {last})"
+    return None
 
 
 def _find(widget, kind, text):
@@ -57,6 +100,8 @@ def _find(widget, kind, text):
 class Window(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if tk_problem():
+            raise unittest.SkipTest(tk_problem())
         try:
             cls.root = tk.Tk()
         except tk.TclError as e:
@@ -320,11 +365,8 @@ class Show(unittest.TestCase):
         self.assertIn("--print", printed.call_args[0][0])
 
     def test_opens_and_returns_when_closed(self):
-        try:
-            probe = tk.Tk()
-        except tk.TclError as e:
-            self.skipTest(f"no display: {e}")
-        probe.destroy()
+        if tk_problem():
+            self.skipTest(tk_problem())
         real = tk.Tk
 
         def closing_soon():
