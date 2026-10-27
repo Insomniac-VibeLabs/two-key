@@ -7,8 +7,9 @@ It uses tkinter from Python's standard library, so it adds no dependency, opens 
 no file. It only reads: the rows come from a ledger that ``two-key ledger-view`` opened and verified the way
 ``two-key audit`` does, and the filtering and sorting are two_key/ledger_view.py's.
 
-- The search box matches any field. Each filter row tests one field (or ``*``, any field) and the filters
-  combine with "all" or "any"; the search always applies too.
+- The search box matches any field's value, and field names too when "Also match field names" is ticked.
+  Each filter row tests one field (or ``*``, any field) and the filters combine with "all" or "any"; the
+  search always applies too.
 - Click a column heading to sort by it, again to reverse it; Shift-click adds it as the next sort key.
 - Select a row to see every field and the whole entry below the table. Right-click a cell to filter on its
   value or copy it. "Columns" picks which fields the table shows; every field can be filtered either way.
@@ -100,6 +101,7 @@ class LedgerViewer:
         self.pending = None
         self.search = tk.StringVar(value=query.search)
         self.match_any = tk.BooleanVar(value=query.match_any)
+        self.search_names = tk.BooleanVar(value=query.search_names)
         root.title(f"Two-Key ledger: {title}" if title else "Two-Key ledger")
         self._build_toolbar()
         self.filter_frame = ttk.Frame(root, padding=(8, 0))
@@ -112,6 +114,7 @@ class LedgerViewer:
             self.add_filter(f.name, f.op, f.value)
         self.search.trace_add("write", self.changed)
         self.match_any.trace_add("write", self.changed)
+        self.search_names.trace_add("write", self.changed)
         root.bind("<Control-f>", lambda _e: self.search_entry.focus_set())
         self.show_report(report or {})
         self.refresh()
@@ -124,6 +127,8 @@ class LedgerViewer:
         ttk.Label(bar, text="Search all fields:").pack(side="left")
         self.search_entry = ttk.Entry(bar, textvariable=self.search, width=40)
         self.search_entry.pack(side="left", padx=4, fill="x", expand=True)
+        ttk.Checkbutton(bar, text="Also match field names", variable=self.search_names).pack(
+            side="left", padx=(0, 8))
         ttk.Radiobutton(bar, text="Match all filters", variable=self.match_any, value=False).pack(side="left")
         ttk.Radiobutton(bar, text="Match any filter", variable=self.match_any, value=True).pack(side="left", padx=4)
         ttk.Button(bar, text="Add filter", command=self.add_filter).pack(side="left")
@@ -177,7 +182,7 @@ class LedgerViewer:
     def query(self) -> Query:
         filters = tuple(f for f in (row.filter() for row in self.filters) if f is not None)
         return Query(search=self.search.get(), filters=filters, match_any=self.match_any.get(),
-                     sort=tuple(self.sort))
+                     sort=tuple(self.sort), search_names=self.search_names.get())
 
     def changed(self, *_args) -> None:
         """Filter again shortly after the last change, so typing is not slowed by each key."""

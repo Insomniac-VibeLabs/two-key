@@ -163,6 +163,13 @@ class Filters(unittest.TestCase):
         either = (Filter("kind", "equals", "proposal"), Filter("kind", "equals", "decision"))
         self.assertEqual(self.keep(*either, match_any=True, search="ADA"), [0, 4])
 
+    def test_search_names_also_matches_field_names(self):
+        self.assertEqual(self.keep(search="confidence"), [])
+        names = Query(search="CONFIDENCE", search_names=True)
+        self.assertEqual(seqs(select(self.rows, names)), [1, 3])
+        either = Query(search="ada", search_names=True)
+        self.assertEqual(seqs(select(self.rows, either)), [0, 4], "values still match")
+
     def test_booleans_and_null_match_their_json_spelling(self):
         self.assertEqual(self.keep(Filter("passed", "equals", "true")), [1])
         self.assertEqual(self.keep(Filter("agent", "equals", "null")), [0])
@@ -292,6 +299,12 @@ class Command(unittest.TestCase):
         self.assertEqual({e["kind"] for e in either}, {"proposal", "decision"})
         searched = self.printed("--search", "wire it")
         self.assertEqual([e["kind"] for e in searched], ["proposal"])
+
+    def test_print_search_names(self):
+        self.assertEqual(self.printed("--search", "required_yes"), [])
+        named = self.printed("--search", "required_yes", "--search-names")
+        self.assertTrue(named)
+        self.assertTrue(all("quorum_policy" in e["body"] for e in named))
 
     def test_print_by_agent(self):
         """The ledger records the agent as a mapping, so its id is the field ``agent.id``."""

@@ -22,7 +22,8 @@
                     [--replace-ledger]
   two-key audit --key KEY --ledger DIR [--witness-public-key PEM] [--check-history CONSTITUTION]
   two-key ledger-view --key KEY --ledger DIR [--witness-public-key PEM] [--search TEXT]
-                    [--where FIELD OP [VALUE]]... [--any] [--sort FIELD[:desc]]... [--print | --fields]
+                    [--search-names] [--where FIELD OP [VALUE]]... [--any] [--sort FIELD[:desc]]...
+                    [--print | --fields]
   two-key constitution-editor [--prose FILE --rules FILE | --signed FILE [--public-key PEM]] [--key KEY]
                     [--dir DIR] [--check]
   two-key siem-export --key KEY --ledger DIR [--out FILE] [--schema native|ecs|ocsf]
@@ -823,7 +824,9 @@ def main(argv: list[str] | None = None) -> int:
     viewer.add_argument("--ledger", required=True)
     viewer.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     viewer.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
-    viewer.add_argument("--search", default="", metavar="TEXT", help="keep entries with TEXT in any field")
+    viewer.add_argument("--search", default="", metavar="TEXT", help="keep entries with TEXT in any field's value")
+    viewer.add_argument("--search-names", action="store_true",
+                        help="--search also matches field names, such as tools.pay_bill.irreversible")
     viewer.add_argument("--where", action="append", nargs="+", default=None, metavar="FIELD OP [VALUE]",
                         help="keep entries where FIELD passes the test (repeatable); OP is contains, not-contains, "
                              "equals, not-equals, starts-with, ends-with, regex, gt, ge, lt, le, empty, or not-empty; "

@@ -160,6 +160,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Regression pass: ledger-view and setup fixes — 2026-10-27](#regression-pass-ledger-view-and-setup-fixes--2026-10-27)
 - [Constitution editor: `two-key constitution-editor` — 2026-10-27](#constitution-editor-two-key-constitution-editor--2026-10-27)
 - [Regression pass: constitution editor fixes — 2026-10-27](#regression-pass-constitution-editor-fixes--2026-10-27)
+- [`ledger-view`: the search can match field names — 2026-10-27](#ledger-view-the-search-can-match-field-names--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4893,3 +4894,17 @@ save, a signed constitution opened with and without its public key, and `--check
 - SonarCloud: `EditorError` is a `ValueError`, so it is no longer named beside it in two `except` clauses; the
   passphrase source in the window is plain `if` statements, not a nested conditional; a test's `assertRaises`
   holds one call.
+
+## `ledger-view`: the search can match field names — 2026-10-27
+
+The maintainer asked for the option after the regression pass found that a few entries hold a name only as a
+field name: `mcp_proxy_started` lists its tools as `tools.<tool id>.*`, so a search for a tool id did not find
+that entry.
+
+- **Also match field names** (the window, beside the search box) and `--search-names` (the command line) make
+  the search keep a row whose field names contain the text, as well as one whose values do. It is off by
+  default, because words such as `agent` or `reason` are part of a field name in nearly every decision.
+  Filters still test values only.
+- `Query.search_names` in `two_key/ledger_view.py`; docs/LEDGER_VIEW.md and the usage line say so.
+- Tests: `tests/test_ledger_view.py` (the option on fixed entries and with `--print` on a real ledger),
+  `tests/test_ledger_gui.py` (the checkbox).

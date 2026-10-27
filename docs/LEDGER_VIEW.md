@@ -75,7 +75,11 @@ Select a row to see all of its fields, and the whole entry as JSON, below the ta
 
 ## Search, filter, and sort
 
-- **Search all fields** keeps the rows that contain the text in any field. It ignores case.
+- **Search all fields** keeps the rows that contain the text in any field's value. It ignores case.
+  **Also match field names** keeps a row whose field names contain the text too. A few entries hold a name
+  only as a field name: `mcp_proxy_started` lists its tools as `tools.<tool id>.*`, so a search for
+  `pay_bill` finds that entry only with this ticked. It is off by default, because a word such as `agent` or
+  `reason` is part of a field name in nearly every decision. Filters always test values.
 - **Add filter** adds a line: a field (or `*` for any field), a test, and a value. A line with no value yet
   does nothing, so the table does not empty while you type.
 - **Match all filters** keeps a row only when every filter line passes; **Match any filter** keeps a row when
@@ -127,7 +131,8 @@ two-key ledger-view --key keys/principal.pem --ledger ledger --print \
 
 | Option | What it does |
 | --- | --- |
-| `--search TEXT` | keep entries with TEXT in any field |
+| `--search TEXT` | keep entries with TEXT in any field's value |
+| `--search-names` | `--search` also matches field names (the window's **Also match field names**) |
 | `--where FIELD OP [VALUE]` | keep entries where FIELD passes the test; repeat it for more filters; FIELD `*` is any field; the value's words are joined with spaces |
 | `--any` | keep entries that pass any `--where`, instead of all of them |
 | `--sort FIELD[:desc]` | sort by FIELD (`:asc` is the default); repeat it for more keys, the first deciding first; without it, ledger order (`seq`) |

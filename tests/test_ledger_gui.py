@@ -163,6 +163,14 @@ class Window(unittest.TestCase):
         view.refresh()
         self.assertEqual(view.shown_seqs(), [3, 4])
 
+    def test_search_can_match_field_names(self):
+        view = self.viewer(query=Query(search="judge_id"))
+        self.assertEqual(view.shown_seqs(), [])
+        view.search_names.set(True)
+        view.refresh()
+        self.assertEqual(view.shown_seqs(), [1, 3])
+        self.assertIs(view.query().search_names, True)
+
     def test_a_filter_line_without_a_value_does_nothing_yet(self):
         view = self.viewer()
         line = view.add_filter("reason")

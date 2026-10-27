@@ -206,11 +206,13 @@ class _Compiled:
 
 @dataclass(frozen=True)
 class Query:
-    """What to show: ``search`` across every field, ``filters`` combined with all (or ``match_any``), and the
-    sort as ``(field, descending)`` pairs, the first one deciding first."""
+    """What to show: ``search`` across every field's value (and, with ``search_names``, its name too),
+    ``filters`` combined with all (or ``match_any``), and the sort as ``(field, descending)`` pairs, the first
+    one deciding first."""
     search: str = ""
     filters: Sequence[Filter] = ()
     match_any: bool = False
+    search_names: bool = False
     sort: Sequence[tuple[str, bool]] = field(default_factory=lambda: (("seq", False),))
 
 
@@ -235,13 +237,25 @@ def sort_rows(rows: Sequence[Row], sort: Sequence[tuple[str, bool]]) -> list[Row
     return out
 
 
+def _search_test(query: Query) -> Callable[[Row], bool] | None:
+    """The search as a test on one row, or None for an empty search box."""
+    if not query.search:
+        return None
+    values = Filter(ANY_FIELD, "contains", query.search).compiled()
+    if not query.search_names:
+        return values.matches
+    # A name such as tools.pay_bill.irreversible holds a tool id that no value does.
+    wanted = query.search.casefold()
+    return lambda row: values.matches(row) or any(wanted in name.casefold() for name in row.values)
+
+
 def select(rows: Sequence[Row], query: Query) -> list[Row]:
     """The rows ``query`` keeps, in its order. Raises ``ViewError`` for a filter that cannot be applied."""
     tests = [f.compiled() for f in query.filters]
-    search = Filter(ANY_FIELD, "contains", query.search).compiled() if query.search else None
+    search = _search_test(query)
     combine = any if query.match_any else all
     kept = [r for r in rows
-            if (search is None or search.matches(r)) and (not tests or combine(t.matches(r) for t in tests))]
+            if (search is None or search(r)) and (not tests or combine(t.matches(r) for t in tests))]
     return sort_rows(kept, query.sort)
 
 
@@ -270,10 +284,11 @@ def parse_sort(text: str) -> tuple[str, bool]:
 
 
 def query_from_args(args) -> Query:
-    """The ``Query`` that ``ledger-view``'s --search, --where, --any, and --sort describe."""
+    """The ``Query`` that ``ledger-view``'s --search, --search-names, --where, --any, and --sort describe."""
     filters = tuple(parse_where(parts) for parts in args.where or ())
     sort = tuple(parse_sort(s) for s in args.sort or ()) or (("seq", False),)
-    return Query(search=args.search or "", filters=filters, match_any=args.any, sort=sort)
+    return Query(search=args.search or "", filters=filters, match_any=args.any, sort=sort,
+                 search_names=args.search_names)
 
 
 def integrity(ledger) -> dict:
