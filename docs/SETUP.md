@@ -216,7 +216,7 @@ flowchart TD
   acct --> stage["New files staged<br/>beside the old ones"]
   stage --> check["config check passes<br/>on the staged files?"]
   check --> weak["Weaker, or signed?<br/>--confirm-weaker, yes"]
-  weak --> led["config_changed<br/>in the ledger"]
+  weak --> led["Change recorded<br/>in the ledger"]
   led --> swap["Old kept as .prev,<br/>new renamed in"]
   acct -. "no" .-> stop["Refused,<br/>nothing written"]
   check -. "FAIL" .-> stop

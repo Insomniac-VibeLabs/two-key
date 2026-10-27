@@ -69,7 +69,7 @@ key, whatever the stance.
 flowchart TD
   agent["Monitored agent<br/>untrusted"] -- "tool call, with<br/>its files" --> tk
   subgraph process["The Two-Key process"]
-    tk["TwoKey.authorize"] <-- "1. parts to scan<br/>2. verdict back" --> scanner["Scanner adapter<br/>clamd, ICAP,<br/>command, or Python"]
+    tk["Two-Key<br/>checks the call"] <-- "1. parts to scan<br/>2. verdict back" --> scanner["Scanner adapter<br/>clamd, ICAP,<br/>command, or Python"]
     tk -- "3. form with the<br/>verdict" --> pathA["Path A<br/>signed rules"]
     tk -- "4. record, digests,<br/>trusted scan section" --> pathB["Path B<br/>judges"]
     tk -- "5. token binds the<br/>verdict and digests" --> gw["Gateway<br/>re-checks files"]

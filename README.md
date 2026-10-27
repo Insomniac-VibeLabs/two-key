@@ -337,7 +337,7 @@ flowchart TD
   instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
   agent -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>Authorize"]
 
-  authorize --> early{"Early deny?<br/>malformed / size<br/>agent_declined<br/>file limits"}
+  authorize --> early{"Early deny?<br/>malformed / size<br/>agent declined<br/>file limits"}
   early -->|yes| ledger["Encrypted<br/>Ledger"]
   early -->|no| derive["Derive fields"]
 

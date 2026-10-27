@@ -43,7 +43,7 @@ The ledger stays the record. The SIEM gets a copy.
 
 ```mermaid
 flowchart TD
-  auth["authorize / gateway"] -- "append" --> ledger[("Encrypted ledger<br/>(the record)")]
+  auth["Two-Key decisions<br/>and tool runs"] -- "append" --> ledger[("Encrypted ledger<br/>(the record)")]
   ledger -- "after the entry<br/>is on disk" --> filter["Allowlist<br/>no argument values"]
   filter --> queue["Bounded queue"]
   queue --> sender["Sender thread<br/>formats JSON or CEF"]

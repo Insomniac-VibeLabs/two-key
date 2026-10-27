@@ -187,10 +187,10 @@ v2 constitution; see [Custom Path A fields](#custom-path-a-fields) and
 flowchart TD
   prose["Prose<br/>constitution.md"] --> sign["sign-constitution<br/>one signature"]
   rules["Hard rules<br/>hard_rules.yaml"] --> sign
-  specs["tool_specs<br/>inside hard_rules.yaml"] --> sign
+  specs["Tool specs<br/>inside hard_rules.yaml"] --> sign
   sign --> envelope["Signed envelope<br/>prose, hard_rules,<br/>tool_specs, signature"]
-  envelope --> load["verify_signed<br/>fail-closed on any change"]
-  load --> compiled["CompiledConstitution<br/>bytecode + tool_specs"]
+  envelope --> load["Signature checked<br/>any change refused"]
+  load --> compiled["Compiled rules<br/>and tool specs"]
   compiled --> pathA["Path A policy VM<br/>bytecode and<br/>derived fields"]
   compiled --> pathB["Path B judges<br/>prose and the normalized<br/>action record"]
 ```
@@ -1388,7 +1388,7 @@ sequenceDiagram
   participant Caller as Caller (your app)
   participant TwoKey
   participant Agent as Monitored agent host
-  Caller->>TwoKey: agent_vocabulary(tools=[pay_bill])
+  Caller->>TwoKey: ask for the vocabulary for pay_bill
   Note over TwoKey: reads tool_specs and the field registry
   TwoKey-->>Caller: vocabulary text, syntax only
   Note over Caller: adds this task's exact values to the instruction

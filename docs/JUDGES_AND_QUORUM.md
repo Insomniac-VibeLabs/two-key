@@ -72,10 +72,10 @@ The quorum policy separates the affirmative threshold (`required_yes`) from the 
 
 ```mermaid
 flowchart TD
-    A["Configured judges: N"] --> B{"required_yes set?"}
+    A["Configured judges: N"] --> B{"Yes-vote count set?"}
     B -->|Yes| C["Use configured threshold"]
-    B -->|No| D["Use min(2, N)"]
-    C --> E["Resolve min_responding"]
+    B -->|No| D["Use 2, or N<br/>if fewer judges"]
+    C --> E["How many judges<br/>must answer"]
     D --> E
     E --> F["Collect and validate ballots"]
     F --> G["Apply quorum and<br/>diversity requirements"]
@@ -189,9 +189,9 @@ flowchart TD
     C --> D["Add this process's<br/>calls in flight"]
     D --> E["Build the summary from<br/>signed names and codes"]
     E --> F["Bind its digest<br/>to the round"]
-    F --> G["Judges get<br/>decision_history"]
+    F --> G["Judges get the<br/>history summary"]
     G --> H["Re-check at mint,<br/>under the ledger lock"]
-    H --> I["Ledger: decision with<br/>time and history_digest"]
+    H --> I["Ledger: decision with<br/>time and history<br/>fingerprint"]
 ```
 
 *The summary is built from an in-memory index after Path A, and its digest is ledgered with the decision.*

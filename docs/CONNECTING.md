@@ -359,7 +359,7 @@ model's output is data; your code is trusted. See
 ```mermaid
 flowchart TD
   model["Model<br/>untrusted text"] -- "proposed call:<br/>tool name, arguments" --> app["Your agent loop<br/>trusted code"]
-  app -- "signed, guarded<br/>names only" --> guard["Guard<br/>authorize, then<br/>gateway.invoke"]
+  app -- "signed, guarded<br/>names only" --> guard["Two-Key guard<br/>decides, then<br/>runs the tool"]
   hooks["Fact hooks<br/>look facts up by id"] --> guard
   guard -- "after both keys" --> fn["pay_vendor<br/>loads its own credential"]
   fn --> api["Billing API"]

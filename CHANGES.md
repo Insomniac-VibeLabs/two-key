@@ -151,6 +151,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Roadmap: 0.8.0 and 0.9.0 in the README and ROADMAP diagrams — 2026-10-26](#roadmap-080-and-090-in-the-readme-and-roadmap-diagrams--2026-10-26)
 - [Roadmap diagrams redrawn, and no "release candidate" — 2026-10-26](#roadmap-diagrams-redrawn-and-no-release-candidate--2026-10-26)
 - [README: the MCP proxy diagram, and 0.8.0 and 0.9.0 marked as betas — 2026-10-26](#readme-the-mcp-proxy-diagram-and-080-and-090-marked-as-betas--2026-10-26)
+- [Diagrams: plain words for code names — 2026-10-27](#diagrams-plain-words-for-code-names--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4678,3 +4679,12 @@ GitHub then clipped the widest lines in the same diagram ("TwoKey.authorize", "P
 and edge labels now break into lines of 14 characters or fewer, as the roadmap's do, in README and HOWTO.
 The decision box's code name ("TwoKey.authorize, Path A and B") is now plain words: "Two-Key checks
 policy, asks judges".
+
+## Diagrams: plain words for code names — 2026-10-27
+
+Docs only. Diagram boxes that named code now say what the step does, so a reader new to the project can follow
+them: SCANNERS ("Two-Key checks the call"), CONNECTING ("Two-Key guard decides, then runs the tool"), HOWTO
+(signature checked, compiled rules and tool specs, asking for the vocabulary), SETUP ("Change recorded in the
+ledger"), SIEM ("Two-Key decisions and tool runs"), JUDGES_AND_QUORUM (yes-vote count, how many judges must
+answer, the history summary and its fingerprint) and the README flow diagram ("agent declined"). Names a reader
+types, such as commands, account names and the clamd and ICAP protocol messages, stay as they are.
