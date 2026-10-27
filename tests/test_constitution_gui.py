@@ -174,10 +174,10 @@ class Window(unittest.TestCase):
         self.assertEqual(editor.rules.selection(), ())
         editor.tools.selection_set("pay_vendor")
         editor.rules.selection_set("1")
-        # A click on the row it was editing before still opens it. The select event is sent here, as a click
-        # sends it, because Tk on macOS does not send it for a selection made in code.
-        editor.tools.event_generate("<<TreeviewSelect>>")
-        editor.rules.event_generate("<<TreeviewSelect>>")
+        # A click on the row it was editing before still opens it. The handlers are called here, as a click's
+        # select event calls them: Tk on macOS sends no event to the test's hidden window.
+        editor.tool_clicked()
+        editor.rule_clicked()
         self.assertEqual(editor.tool_id.get(), "pay_vendor")
         self.assertEqual(editor.rule_id.get(), "spend-cap")
 

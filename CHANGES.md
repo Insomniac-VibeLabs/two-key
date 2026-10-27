@@ -4888,5 +4888,5 @@ save, a signed constitution opened with and without its public key, and `--check
 - docs/CONSTITUTION_EDITOR.md: a folder that cannot be written.
 - Tests: `tests/test_constitution_editor.py` (a folder that cannot be written; files that do not read back),
   `tests/test_constitution_gui.py` (where the message lives, the applied notes and selection, stderr).
-- Tests: the selection test sends the row-select event itself, as a click does; Tk on macOS sends none for a
-  selection made in code, so it failed on macOS CI.
+- Tests: the selection test calls the row-click handlers itself, as a click's select event does; Tk on macOS
+  sends no event to the test's hidden window, so it failed on macOS CI.

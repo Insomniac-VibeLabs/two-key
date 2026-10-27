@@ -224,7 +224,7 @@ class ConstitutionEditor:
             self.tools.heading(name, text=text)
             self.tools.column(name, width=width, stretch=name == "maps")
         self.tools.pack(fill="x")
-        self.tools.bind("<<TreeviewSelect>>", lambda _e: self._tool_clicked())
+        self.tools.bind("<<TreeviewSelect>>", lambda _e: self.tool_clicked())
         form = ttk.Frame(tab, padding=(0, 8, 0, 0))
         form.pack(fill="both", expand=True)
         self.tool_id = tk.StringVar()
@@ -256,8 +256,9 @@ class ConstitutionEditor:
         chosen = self.tools.selection()
         return chosen[0] if chosen else None
 
-    def _tool_clicked(self) -> None:
-        # refresh_tools selects the row being edited again; that is no new choice, and keeps its note.
+    def tool_clicked(self) -> None:
+        """Edit the tool whose row was picked. refresh_tools selects the row being edited again; that is no new
+        choice, and keeps its note."""
         if self._selected_tool() != self.tool_selected:
             self.edit_tool(self._selected_tool())
 
@@ -326,7 +327,7 @@ class ConstitutionEditor:
             self.rules.heading(name, text=text)
             self.rules.column(name, width=width, stretch=name == "body")
         self.rules.pack(fill="x")
-        self.rules.bind("<<TreeviewSelect>>", lambda _e: self._rule_clicked())
+        self.rules.bind("<<TreeviewSelect>>", lambda _e: self.rule_clicked())
         form = ttk.Frame(tab, padding=(0, 8, 0, 0))
         form.pack(fill="both", expand=True)
         self.rule_id, self.rule_kind = tk.StringVar(), tk.StringVar(value="deny_if")
@@ -354,7 +355,8 @@ class ConstitutionEditor:
         chosen = self.rules.selection()
         return int(chosen[0]) if chosen else None
 
-    def _rule_clicked(self) -> None:
+    def rule_clicked(self) -> None:
+        """Edit the rule whose row was picked, unless it is the one being edited."""
         if self._selected_rule() != self.rule_selected:
             self.edit_rule(self._selected_rule())
 
