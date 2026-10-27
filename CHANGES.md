@@ -161,6 +161,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Constitution editor: `two-key constitution-editor` — 2026-10-27](#constitution-editor-two-key-constitution-editor--2026-10-27)
 - [Regression pass: constitution editor fixes — 2026-10-27](#regression-pass-constitution-editor-fixes--2026-10-27)
 - [`ledger-view`: the search can match field names — 2026-10-27](#ledger-view-the-search-can-match-field-names--2026-10-27)
+- [Setup: an owner-only ledger, and the agent's id in `proxy.yaml` — 2026-10-27](#setup-an-owner-only-ledger-and-the-agents-id-in-proxyyaml--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4908,3 +4909,22 @@ that entry.
 - `Query.search_names` in `two_key/ledger_view.py`; docs/LEDGER_VIEW.md and the usage line say so.
 - Tests: `tests/test_ledger_view.py` (the option on fixed entries and with `--print` on a real ledger),
   `tests/test_ledger_gui.py` (the checkbox).
+
+## Setup: an owner-only ledger, and the agent's id in `proxy.yaml` — 2026-10-27
+
+Both were found in a live walkthrough of setting up with the new windows (setup, `constitution-editor`,
+`ledger-view`), and the maintainer asked for both to be fixed.
+
+- **Fixed: setup's ledger followed the shell's umask.** The files setup writes itself were owner-only, but the
+  ledger, its key and witness folders and the public keys were created with the shell's umask. Under Ubuntu's
+  default 002 the ledger folder and its files were group-writable, and `config check` warned `writable_path`
+  on the deployment setup had just written. `setup_cmd.build` now runs under umask 077 and puts the caller's
+  umask back.
+- **Fixed: the monitored agent's id did not reach `proxy.yaml`.** The wizard asks for the agent's id and wrote
+  it only to `judges.yaml`, so the proxy ran with no `agent_id`: every decision recorded `agent = null`, and the
+  judges' history and `one_proxy_per_agent` called the agent `unnamed`. Setup now writes `agent_id` with that
+  id.
+- docs/SETUP.md (what setup writes) and docs/SETTINGS.md (`agent_id`) say so.
+- Tests: `tests/test_config_set.py` (setup under umask 002 leaves nothing writable by the group or others and
+  restores the umask; the proxy config names the agent). An undo test that appended `agent_id` by hand appends
+  `hosting` instead, since setup now writes `agent_id`.

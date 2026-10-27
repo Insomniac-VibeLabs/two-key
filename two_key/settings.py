@@ -106,7 +106,8 @@ PROXY = _rows(PROXY_YAML, [
     ("ttl_seconds", "120", "Token lifetime in seconds, 1 to 300."),
     ("agent_session_env", "none", "Name of the environment variable that holds the agent's session, read once at "
      "start. Unset or empty refuses to start.", {"secret": True}),
-    ("agent_id", "none", "Ledger metadata, at most 256 characters. Not trust."),
+    ("agent_id", "none", "Ledger metadata, at most 256 characters. Not trust. `two-key setup` writes the monitored "
+                 "agent's `id` here."),
     ("hosting", "none", "Ledger metadata, at most 256 characters. Not trust."),
     ("allow_unresolved_identity", "false", "`true` starts despite an `unresolved_identity` warning."),
     ("on_writable_paths", "warn", "`warn` names each file or folder the proxy runs or reads that another account "

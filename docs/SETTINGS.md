@@ -91,7 +91,7 @@ Tier: operator config. The MCP proxy's own settings (`two-key mcp-proxy --config
 | `head_anchor` | none |  | Path to a head anchor file outside the ledger directory (as `--head-anchor`). **Not changed by `config set`.** |
 | `ttl_seconds` | 120 |  | Token lifetime in seconds, 1 to 300. |
 | `agent_session_env` | none |  | Name of the environment variable that holds the agent's session, read once at start. Unset or empty refuses to start. **Names a secret.** |
-| `agent_id` | none |  | Ledger metadata, at most 256 characters. Not trust. |
+| `agent_id` | none |  | Ledger metadata, at most 256 characters. Not trust. `two-key setup` writes the monitored agent's `id` here. |
 | `hosting` | none |  | Ledger metadata, at most 256 characters. Not trust. |
 | `allow_unresolved_identity` | false |  | `true` starts despite an `unresolved_identity` warning. |
 | `on_writable_paths` | warn | always refuses; `warn` is refused | `warn` names each file or folder the proxy runs or reads that another account could change, and starts. `refuse` does not start. |

@@ -26,6 +26,7 @@ that another account could change.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shlex
@@ -378,6 +379,11 @@ def proxy_doc(answers: Mapping, digest: str) -> dict:
     }
     if answers.get("agent_session_env"):
         doc["agent_session_env"] = answers["agent_session_env"]
+    agent = answers.get("monitored_agent")
+    if isinstance(agent, Mapping) and agent.get("id"):
+        # The ledger names the agent by the proxy's agent_id; without it every decision records no agent and
+        # the judges' history calls it "unnamed" (live walkthrough, 2026-10-27).
+        doc["agent_id"] = str(agent["id"])
     if "one_proxy_per_agent" in answers:
         if not isinstance(answers["one_proxy_per_agent"], bool):
             raise SetupError("one_proxy_per_agent: expected true or false")
@@ -421,10 +427,29 @@ def _schema_digest(command: list[str], envelope: Mapping) -> str:
     return digest
 
 
+@contextlib.contextmanager
+def _owner_only_umask():
+    """Close what setup creates without an explicit mode (the ledger, its key and witness folders, the public
+    keys) to the group and others, whatever the shell's umask. Under Ubuntu's 002 the ledger was left
+    group-writable and ``config check`` warned ``writable_path`` (live walkthrough, 2026-10-27)."""
+    old = os.umask(0o077)
+    try:
+        yield
+    finally:
+        os.umask(old)
+
+
 def build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] | None = None, out=None,
           confirm_weaker: bool = False, confirm: Confirm = terminal_confirm) -> dict:
     """Write and check every file in a new folder, rename it to ``target``, then create the ledger. Weaker
-    answers need ``confirm_weaker`` and a yes from ``confirm``, as ``config set`` does."""
+    answers need ``confirm_weaker`` and a yes from ``confirm``, as ``config set`` does. Nothing it creates is
+    writable by the group or others."""
+    with _owner_only_umask():
+        return _build(answers, target, environ=environ, out=out, confirm_weaker=confirm_weaker, confirm=confirm)
+
+
+def _build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] | None, out, confirm_weaker: bool,
+           confirm: Confirm) -> dict:
     from .keys import generate_private_key, save_private_key, save_public_key
     out = sys.stdout if out is None else out
     try:

@@ -149,7 +149,10 @@ what `mcp-draft-specs` drafts ([HOWTO](HOWTO.md#put-two-key-in-front-of-an-mcp-s
 ### What it writes, and where
 
 Everything goes in the `--dir` folder. Each file is owner-only from its first byte (mode 0600, or on Windows
-an access list for your account only), except the public key, which is not a secret.
+an access list for your account only), except the public key, which is not a secret. On Linux and macOS setup
+also runs under umask 077, so nothing it creates, the ledger and its folders included, is writable by the group
+or others whatever your shell's umask (until 0.8.0, Ubuntu's default 002 left the ledger group-writable, and
+`config check` warned `writable_path`).
 
 | File | What it is |
 | --- | --- |
@@ -159,7 +162,7 @@ an access list for your account only), except the public key, which is not a sec
 | `hard_rules.yaml` | The rules Path A runs, with the tool specs, and `serial: 1` (see below) |
 | `constitution.signed.json` | Both, signed with the principal key |
 | `judges.yaml` | The judges, the quorum `profile` and the numbers you gave, and the `monitored_agent` |
-| `proxy.yaml` | Proxy only. Every scalar setting at its default, written out: `ttl_seconds: 120`, `allow_unresolved_identity: false`, `on_agent_access: refuse`, `on_writable_paths: warn` (`refuse` under `high_assurance`, which does not accept `warn`), and `upstream.on_schema_change: refuse` with `call_timeout_seconds: 60` |
+| `proxy.yaml` | Proxy only. `agent_id` set to the monitored agent's `id`, so the ledger names the agent in every decision and the judges' history (until 0.8.0 it was left out, and the agent showed as `unnamed`). Every scalar setting at its default, written out: `ttl_seconds: 120`, `allow_unresolved_identity: false`, `on_agent_access: refuse`, `on_writable_paths: warn` (`refuse` under `high_assurance`, which does not accept `warn`), and `upstream.on_schema_change: refuse` with `call_timeout_seconds: 60` |
 | `ledger/` | The ledger, with its key and witness folders beside it (`ledger.ledger-key/`, `ledger.witness/`) |
 
 It writes all of this into a new hidden folder beside `--dir`, checks it there, and renames that folder to

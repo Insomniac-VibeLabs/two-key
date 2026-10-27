@@ -169,6 +169,25 @@ class Setup(Deployment):
                 self.assertEqual("rules_file has no serial" in err, warned)
                 self.assertEqual(any(step.startswith("add serial: 1") for step in result["next"]), warned)
 
+    def test_the_proxy_names_the_monitored_agent(self):
+        """Live walkthrough, 2026-10-27: the agent id the wizard asked for never reached proxy.yaml, so every
+        decision recorded no agent and the judges' history called it "unnamed"."""
+        from two_key.mcp_proxy.config import load_proxy_config
+        self.assertEqual(load_proxy_config(self.proxy).agent_id, "agent")
+
+    @unittest.skipUnless(POSIX, "a umask is POSIX only")
+    def test_nothing_is_group_writable_under_a_loose_umask(self):
+        """Live walkthrough, 2026-10-27: under Ubuntu's umask 002 setup left the ledger group-writable."""
+        target = self.base / "loose"
+        old = os.umask(0o002)
+        try:
+            quiet(setup_cmd.build, dict(ANSWERS), target, environ={})
+        finally:
+            restored = os.umask(old)
+        self.assertEqual(restored, 0o002, "setup did not put the caller's umask back")
+        loose = [str(p) for p in (target, *target.rglob("*")) if p.stat().st_mode & 0o022]
+        self.assertEqual(loose, [])
+
     def test_the_library_route_writes_no_proxy_config(self):
         quiet(setup_cmd.build, dict(ANSWERS, route="library"), self.base / "lib", environ={})
         self.assertFalse((self.base / "lib" / "proxy.yaml").exists())
@@ -679,7 +698,7 @@ class Undo(Deployment):
 
     def test_a_file_changed_since_is_not_overwritten(self):
         self.set("ttl_seconds", 60)
-        self.proxy.write_bytes(self.proxy.read_bytes() + b"agent_id: by-hand\n")
+        self.proxy.write_bytes(self.proxy.read_bytes() + b"hosting: by-hand\n")
         with self.assertRaisesRegex(ConfigChangeError, "undo_stale"):
             self.undo()
 
