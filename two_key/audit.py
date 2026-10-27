@@ -108,10 +108,12 @@ def check_history_digests(ledger, constitution) -> list[str]:
 
     ``constitution`` is the verified ``Constitution`` the decisions ran under; a decision made under another
     constitution is reported as not checked, never as matching. For each decision with a digest, the summary is
-    rebuilt from the entries before ``history_basis.ledger_size``, with the judge history settings and agent ids of
-    the last ``constitution_loaded`` before it that carries the decision's ``policy_digest``, the decision's subject
-    and agent, and the basis's time and calls in flight. Returns a list of problems; empty when every digest
-    matches. ``two-key audit --check-history`` runs it.
+    rebuilt from the entries before ``history_basis.ledger_size``, with the decision's subject and agent, the basis's
+    time and calls in flight, and the judge history settings and agent ids of a ``constitution_loaded`` before it
+    that carries the decision's ``policy_digest``. A ledger several processes share (two proxies, each for its own
+    agent) has one such entry per process, and a decision does not say which process made it, so each distinct
+    one is tried, newest first; the digest is confirmed when one rebuilds it. Returns a list of problems; empty
+    when every digest matches. ``two-key audit --check-history`` runs it.
     """
     from .compiler import compile_both
     from .derive import blocked_from_rules
@@ -119,13 +121,17 @@ def check_history_digests(ledger, constitution) -> list[str]:
                             specs_enforced=True, fields=constitution.fields)
     rebuild = _HistoryRebuild(ledger.entries, compiled.tool_specs, blocked_from_rules(compiled.rules))
     problems: list[str] = []
-    loaded: dict[str, Mapping[str, Any]] = {}       # policy_digest -> the last constitution_loaded with it
+    # policy_digest -> each distinct constitution_loaded with it, by the settings a rebuild reads
+    loaded: dict[str, dict[str, Mapping[str, Any]]] = {}
     for entry in rebuild.entries:
         body = entry.body
         if entry.kind == "constitution_loaded" and isinstance(body.get("policy_digest"), str):
-            loaded[body["policy_digest"]] = body
+            starts = loaded.setdefault(body["policy_digest"], {})
+            key = _start_key(body)
+            starts.pop(key, None)                   # re-inserted last: the newest is tried first
+            starts[key] = body
         elif entry.kind == "decision" and body.get("history_digest"):
-            problem = rebuild.check(entry, loaded.get(body.get("policy_digest")), constitution.digest)
+            problem = rebuild.check_any(entry, loaded.get(body.get("policy_digest")) or {}, constitution.digest)
             if problem is not None:
                 problems.append(f"seq {entry.seq}: {problem}")
     return problems
@@ -137,6 +143,17 @@ class _HistoryRebuild:
     def __init__(self, entries, specs: Mapping[str, Any], blocked) -> None:
         self.entries, self.specs, self.blocked = entries, specs, blocked
         self.indexes: dict[str, Any] = {}
+
+    def check_any(self, entry, starts: Mapping[str, Mapping[str, Any]], constitution_digest: str) -> str | None:
+        """None when the settings of any of ``starts`` (newest first) rebuild the decision's digest; otherwise the
+        problem the newest one found."""
+        first = None
+        for start in reversed(list(starts.values())):
+            problem = self.check(entry, start, constitution_digest)
+            if problem is None:
+                return None
+            first = first or problem
+        return first or self.check(entry, None, constitution_digest)
 
     def check(self, entry, start, constitution_digest: str) -> str | None:
         """Why one decision's ``history_digest`` was not confirmed, or None when the rebuilt summary matches."""
@@ -157,6 +174,12 @@ class _HistoryRebuild:
         if digest(_rebuilt_summary(index, body, basis, self.specs, "scanner" in start)) != body["history_digest"]:
             return "history_digest does not match the summary rebuilt from the ledger"
         return None
+
+
+def _start_key(start: Mapping[str, Any]) -> str:
+    """What a history rebuild reads from a constitution_loaded entry, as one key."""
+    return canonical_hash({"digest": start.get("digest"), "quorum_policy": start.get("quorum_policy"),
+                           "history_agent_ids": start.get("history_agent_ids"), "scanned": "scanner" in start})
 
 
 def _history_basis_problem(start, basis, seq: int, constitution_digest: str) -> str | None:

@@ -227,7 +227,8 @@ written by Two-Key and describes the past, not the principal's wishes.
 **Binding.** The digest of the summary (`history_hash`) is stamped on every ballot of the round, and the decision
 entry records it as `history_digest`, with the time and ledger size it was built from (`history_basis`).
 `two-key audit --check-history constitution.signed.json` rebuilds every summary from the ledger and checks each
-digest.
+digest. On a ledger two proxies share, each loaded with its own agent ids, a decision is confirmed when the settings
+of any of them rebuild its digest.
 
 **When the summary cannot be built** (`on_failure`): `deny` (the default) denies the call with
 `internal_error:history` without asking the judges; `judge_without_history` asks them without it. Either way a

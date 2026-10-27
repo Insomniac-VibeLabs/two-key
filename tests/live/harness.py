@@ -1467,12 +1467,24 @@ async def run_two_proxies(results, config):
         raise SystemExit("no twoproxy case in cases.jsonl")
     CURRENT["case"], CURRENT["step"] = case["id"], 0
     log("case_start", case=case["id"], case_kind="twoproxy")
-    calls = []
+    # 0.8.0 (one_proxy_per_agent): one running proxy per agent_id on a ledger, so the second proxy serves a second
+    # agent; a third for the first agent must refuse to start (agent_already_connected).
+    second = config.with_name("proxy1.json")
+    cfg = json.loads(config.read_text())
+    cfg["agent_id"] = f"{cfg.get('agent_id') or 'unnamed'}-2"
+    second.write_text(json.dumps(cfg))
+    calls, lock = [], None
     async with contextlib.AsyncExitStack() as stack:
         clients = []
-        for i in (0, 1):
+        for i, path in ((0, config), (1, second)):
+            p = StdioServerParameters(command=params.command, args=[*params.args[:-1], str(path)], env=params.env,
+                                      cwd=params.cwd)
             errlog = stack.enter_context((config.parent / f"proxy{i}.stderr").open("w"))
-            clients.append(await stack.enter_async_context(Client(stdio_client(params, errlog=errlog), cache=None)))
+            clients.append(await stack.enter_async_context(Client(stdio_client(p, errlog=errlog), cache=None)))
+        if case["expect"].get("lock"):
+            third = await asyncio.to_thread(cli, "mcp-proxy", "--config", str(config), env=base_env(),
+                                            stdin=subprocess.DEVNULL)
+            lock = {"rc": third.returncode, "stderr": third.stderr[-1500:]}
         set_task = None
         for i, c in enumerate(case["calls"]):
             via = i % 2
@@ -1488,10 +1500,36 @@ async def run_two_proxies(results, config):
                 stdin=subprocess.DEVNULL)
     results[case["id"]] = {"calls": calls, "audit": {"rc": audit.returncode, "stdout": audit.stdout[-1500:],
                                                       "stderr": audit.stderr[-1500:]}}
+    if lock is not None:
+        results[case["id"]]["lock"] = lock
     if set_r is not None:
         results[case["id"]]["set"] = {"rc": set_r.returncode, "stderr": set_r.stderr[-1500:]}
     log("case_result", case=case["id"], **results[case["id"]])
     CURRENT["case"] = None
+
+
+def run_history_audits(results, stances):
+    """0.8.0 (F28): `two-key audit --check-history` on the pass's ledger and each stance's, with the constitution each
+    ran, after every proxy has exited. Every judge history digest must rebuild from its ledger."""
+    case = next((c for c in CASES if c["kind"] == "history_audit"), None)
+    if case is None:
+        return
+    audits = {}
+    for name in ("", *stances):
+        d = STATE / f"stance_{name}" if name else STATE
+        if not (d / "ledger").is_dir():
+            continue
+        con = d / "constitution.signed.json"
+        a = cli("audit", "--ledger", str(d / "ledger"), "--key", str(STATE / "keys" / "principal.pem"),
+                "--check-history", str(con if con.exists() else STATE / "constitution.signed.json"),
+                stdin=subprocess.DEVNULL)
+        try:
+            problems = json.loads(a.stdout).get("history_digest_problems")
+        except ValueError:
+            problems = None
+        audits[name or "main"] = {"rc": a.returncode, "problems": problems, "stderr": a.stderr[-600:]}
+    results[case["id"]] = {"audits": audits}
+    log("case_result", case=case["id"], **results[case["id"]])
 
 
 async def run_mcp_cases(prose, results, config=None, stance=None):
@@ -1730,6 +1768,7 @@ def main():
                     results[case["id"]]["audit"] = {"rc": a.returncode, "stdout": a.stdout[-1500:],
                                                     "stderr": a.stderr[-1500:]}
         run_tamper_cases(results)               # run 9x: on copies, after every proxy has exited
+        run_history_audits(results, stances)     # 0.8.0: every judge history digest rebuilds from its ledger
     finally:
         time.sleep(2)           # the SIEM sender's last pass runs as the proxy exits; let it land
         for s in servers:

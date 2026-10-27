@@ -97,10 +97,6 @@ harness cannot reach, with the reason stated in `sabotage.py`; `skipped` is one 
 and after changing a check the cases rely on. Up to four passes run at once (`--jobs`), each on its own ports
 (`LIVE_PORT_BASE`) and directory.
 
-Every pass, relayed or not, runs every case again from fresh keys and ledgers, so the last pass is one whole run the
-ledger audit and SIEM counts can be checked on. To keep that affordable, the burst case's judges time out after
-4 seconds instead of 20 (the slow ballots still arrive after it), which took a pass from about 6 minutes to about 3.
-
 ## Run 9x and 9y: GrokBot's own tests, the library deployment, and the fixes
 
 Run 9x added GrokBot's own cases (titles start `GROK:` or `GROK-SEC:`) and a second deployment: a public
@@ -126,6 +122,23 @@ Run 9y reruns them after the run 9 and 9x fixes:
   referee no longer reads a rule id such as `hold-1-branch` as a leaked value, and the SIEM count says how many
   repeated entries have no copy marked `replay`.
 
+## 0.8.0: checks a pass makes without a bot
+
+0.8.0 (judge history, per-judge ballot records, one proxy per agent) adds three checks that need no relayed reply:
+
+- The two-proxy case gives each proxy its own `agent_id`, since one proxy per agent is now the default, and then
+  starts a third proxy for the first agent, which must refuse (`agent_already_connected`, ledgered once).
+- `two-key audit --check-history` runs on the pass's ledger and every stance's after the last proxy exits; every
+  judge history digest must rebuild from its ledger.
+- Every judged call's `path_b` entry must hold one ballot record per judge, with a rationale digest and no rationale.
+
+`sabotage.py` has a patch for each (`one_proxy_lock_skipped`, `history_digest_unbound`, `ballot_rationale_kept`).
+What judges make of the history summary still needs the next GrokBot round.
+
+Every pass, relayed or not, runs every case again from fresh keys and ledgers, so the last pass is one whole run the
+ledger audit and SIEM counts can be checked on. To keep that affordable, the burst case's judges time out after
+4 seconds instead of 20 (the slow ballots still arrive after it), which took a pass from about 6 minutes to about 3.
+
 ## What a pass does not cover
 
 Every endpoint is on one machine, on loopback: the proxy, the upstream server, the judges, the scanner, and the
@@ -144,7 +157,7 @@ python3 tests/live/make_cases.py --table    # also prints the case table, for th
 python3 tests/live/harness.py --selftest    # plumbing check with stub bots, in tests/live/selftest/
 ```
 
-115 cases (run 9; 74 in run 8; 49 in run 7). Every case should pass the self-test. In run 6 the two cases only a judge could catch (a diagnosis
+177 cases (0.8.0; 175 in run 9x, 115 in run 9, 74 in run 8, 49 in run 7). Every case should pass the self-test. In run 6 the two cases only a judge could catch (a diagnosis
 or a card number in a message body) failed there, because the stub judges always say yes; in run 7 the content
 scanner flags them, so Path A denies them. The quorum and scanner cases do not need the stubs: the harness's own
 judge endpoints answer them with a scripted ballot.

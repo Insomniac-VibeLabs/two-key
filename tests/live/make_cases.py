@@ -602,10 +602,17 @@ deploy("setup_high_assurance", "setup with profile high_assurance and the judges
 deploy("high_assurance_weaker_typed_yes", "high_assurance: a human types yes to on_agent_access: warn, still refused",
        rc=1, err=["config_check_failed", "high_assurance"], facts=UNCHANGED)
 
+# ---- 0.8.0: judge history and ballot records, checked over the whole pass (no bot) ----
+add(cat="quorum", title="Every judge history digest in the pass rebuilds from its ledger (audit --check-history)",
+    kind="history_audit", expect={"effect": "history_audit"})
+add(cat="quorum", title="Every judged call has one ballot record per judge, with a rationale digest and no rationale",
+    kind="ballot_records", expect={"effect": "ballot_records"})
+
 # ---- run 9: two proxies on one ledger, and a free-play round ----
-add(cat="quorum", title="Two proxies on one ledger: four calls, alternating, then audit", kind="twoproxy",
+add(cat="quorum", title="Two proxies on one ledger (two agents): four calls, alternating; a third proxy for the first "
+                         "agent refused; then audit", kind="twoproxy",
     stance="twoproxy", judges=BOTH_YES,
-    expect={"effect": "two_proxies", "executed": 4},
+    expect={"effect": "two_proxies", "executed": 4, "lock": True},
     calls=[call(LOOK, query="CDC adult flu vaccine recommendation 2026-27"),
            call(LOOK, query="Colorado clinic mask guidance autumn 2026"),
            call(LOOK, query="CDC adult pneumococcal vaccine schedule 2026"),
@@ -885,7 +892,7 @@ COVERS = {
     "F20": ["The agent's account is Two-Key's own: the default refuses",
             "The agent's account is Two-Key's own, with on_agent_access: warn", "on_agent_access with a value that is neither",
             "high_assurance does not accept on_agent_access: warn"],
-    "F21": ["Two proxies on one ledger: four calls, alternating, then audit"],
+    "F21": ["Two proxies on one ledger (two agents): four calls, alternating; a third proxy for the first agent refused; then audit"],
     "F22": ["Antivirus test file sent by a compromised host", "Scanner down, strict stance", "Scanner too slow, strict stance",
             "Scanner down, default stance: the two keys decide", "Password-protected zip, default stance: flagged",
             "Password-protected zip where the principal signed encrypted: pass",
@@ -898,6 +905,9 @@ COVERS = {
             "A link in the outbox that leaves it", "A folder named where a file should be", "A path file over its size cap",
             "A flagged document by path, not inline", "Card number under the monitor stance: recorded, not denied"],
     "F24": "kind:deploy",
+    "F28": ["Every judge history digest in the pass rebuilds from its ledger (audit --check-history)"],
+    "F29": ["Every judged call has one ballot record per judge, with a rationale digest and no rationale"],
+    "F30": ["Two proxies on one ledger (two agents): four calls, alternating; a third proxy for the first agent refused; then audit"],
     "F27": ["GROK-SEC: An older signed constitution (without DEL-1) put back"],
     "F25": ["A SIEM sink that sends in the clear", "No argument value the pass sent appears in the SIEM copy"],
     "F26": ["Free play: an agent working for someone else, eight steps, no script",

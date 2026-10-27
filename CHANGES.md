@@ -153,6 +153,7 @@ SPDX-License-Identifier: Apache-2.0
 - [README: the MCP proxy diagram, and 0.8.0 and 0.9.0 marked as betas — 2026-10-26](#readme-the-mcp-proxy-diagram-and-080-and-090-marked-as-betas--2026-10-26)
 - [Diagrams: plain words for code names — 2026-10-27](#diagrams-plain-words-for-code-names--2026-10-27)
 - [Docs checked against the code — 2026-10-27](#docs-checked-against-the-code--2026-10-27)
+- [Regression pass: the audit on a shared ledger, and 0.8.0 checks in the live harness — 2026-10-27](#regression-pass-the-audit-on-a-shared-ledger-and-080-checks-in-the-live-harness--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4699,3 +4700,23 @@ which the library never writes (it is `rule_denied:cap`); HOWTO did not name Pat
 `judge_set_not_heterogeneous:`, `insufficient_responses:`, `responding_not_heterogeneous:` and
 `local_judge_required` (now listed under "Quorum policy"); and it did not name Path A's `no_pass`,
 `resource_limit` and `vm_fault:` (now beside the `max_steps` cap).
+
+## Regression pass: the audit on a shared ledger, and 0.8.0 checks in the live harness — 2026-10-27
+
+A regression pass before the next GrokBot round: the live harness's self-test with stub bots, its sabotage check,
+and the documented commands run by hand (demo, init-key, sign-constitution, authorize allowed and denied, audit,
+SIEM export and verify in every schema and format, backup export, verify and restore, rotate-witness, recover).
+
+- **Fixed: `two-key audit --check-history` failed on a ledger two proxies share.** Each proxy records the agent
+  ids it names in judge history in its own `constitution_loaded` entry, and a decision does not say which process
+  made it. The audit took the newest such entry, so once a later proxy had started (or been refused) with other
+  ids, an earlier proxy's decisions were reported as not matching. It now tries each distinct `constitution_loaded`
+  with the decision's policy digest, newest first, and confirms the digest when one rebuilds it. Nothing in the
+  ledger changes (`tests/test_judge_history.py`, test 13).
+- **Live harness.** One proxy per agent is now the default, so the two-proxy case gives each proxy its own
+  `agent_id`, then starts a third for the first agent, which must refuse (`agent_already_connected`). Two checks
+  over the whole pass need no bot: `audit --check-history` on every ledger, and one ballot record per judge with a
+  rationale digest and no rationale. `sabotage.py` gains `one_proxy_lock_skipped`, `ballot_rationale_kept` and
+  `history_digest_unbound`; the harness catches each, and every earlier patch. COVERAGE: F28 and F29 are
+  `partly`, F30 `yes`. RELAY.md says what the 0.8.0 checks are, and the case count is 177.
+- JUDGES_AND_QUORUM says how the audit treats a ledger two proxies share.

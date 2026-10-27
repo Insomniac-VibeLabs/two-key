@@ -145,7 +145,41 @@ def freeplay_lines(case, res):
 READ_ONLY_TOOLS = frozenset({"lookup", "lookup_patron"})
 
 
+def _history_audit(res, _entries):
+    """F28: `audit --check-history` passed on every ledger of the pass, and checked something."""
+    if res is None:
+        return "ERROR", "no result"
+    audits = res.get("audits") or {}
+    bad = {k: (a["rc"], (a.get("problems") or [])[:2]) for k, a in audits.items() if a["rc"] != 0}
+    if bad or not audits:
+        return "FAIL", f"audit --check-history failed: {bad}" if bad else "no ledger audited"
+    return "PASS", f"{len(audits)} ledgers, every history digest rebuilt"
+
+
+def _ballot_records(_res, entries):
+    """F29: every judged path_b entry has one ballot record per judge, with a rationale digest and never the text."""
+    judged = [x for x in entries if x["kind"] == "path_b" and x["body"].get("yes") is not None]
+    bad = []
+    for x in judged:
+        b = x["body"]
+        ballots = b.get("ballots") or []
+        if len(ballots) != b["yes"] + b["no"] + b["abstain"] or any(
+                set(r) - {"judge_id", "vote", "confidence", "error_class", "http_status", "rationale_digest"}
+                or not (r.get("rationale_digest") or "hmac-sha256:").startswith("hmac-sha256:") for r in ballots):
+            bad.append(x.get("stance") or "main")
+    if any('"rationale"' in json.dumps(x["body"]) for x in entries):
+        bad.append("a rationale key in the ledger")
+    if bad or not judged:
+        return "FAIL", f"{len(bad)} bad of {len(judged)}: {sorted(set(bad))[:5]}" if bad else "no judged call"
+    return "PASS", f"{len(judged)} judged calls, each with its ballot records and no rationale text"
+
+
+RECORD_CHECKS = {"history_audit": _history_audit, "ballot_records": _ballot_records}
+
+
 def verdict(case, res, effects, entries, log=()):
+    if case["expect"].get("effect") in RECORD_CHECKS:     # 0.8.0: checks over the whole pass, not one case's calls
+        return RECORD_CHECKS[case["expect"]["effect"]](res, entries)
     v, why = _verdict(case, res, effects, entries)
     check = scan_check(case, log) if v == "PASS" else None
     if check is not None:
@@ -251,6 +285,9 @@ def _verdict(case, res, effects, entries):
         if "set_rc" in e:       # run 9x: a config set wrote the same ledger during the round
             ok = ok and (res.get("set") or {}).get("rc") == e["set_rc"]
             failed = failed + [f"set rc={(res.get('set') or {}).get('rc')}"]
+        if e.get("lock"):       # 0.8.0: a third proxy for the first agent refuses to start, and the refusal is ledgered
+            lock_ok, lock_detail = _lock_refused(res, led)
+            ok, failed = ok and lock_ok, failed + [lock_detail]
         return ("PASS" if ok else "FAIL"), (f"calls={len(calls)} executed={len(executed)} redemptions={len(redeemed)} "
                                             f"proxies_started={len(started)} audit_rc={audit.get('rc')} denies={failed}")
     if eff == "invariants":
@@ -422,6 +459,14 @@ def coverage_lines(rows):
         shown = ", ".join(f"{n} {v}" for v, n in sorted(counts.items())) if mine else "no live case"
         out.append(f"| {fid} | {default} | {live} | {shown} | {note or '-'} |")
     return out
+
+
+def _lock_refused(res, led):
+    """0.8.0 (one_proxy_per_agent): did a third proxy for an agent already connected refuse, once, ledgered?"""
+    lock = res.get("lock") or {}
+    refused = [x for x in led if x["kind"] == "agent_already_connected"]
+    ok = lock.get("rc") not in (0, None) and "agent_already_connected" in lock.get("stderr", "") and len(refused) == 1
+    return ok, f"lock rc={lock.get('rc')} ledgered={len(refused)}"
 
 
 def write(base, cases, results, entries, effects, log, pending=(), siem=()):

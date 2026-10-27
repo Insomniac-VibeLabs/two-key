@@ -332,6 +332,17 @@ class AcceptanceCases(Base):
         self.assertEqual(len(problems), 1)
         self.assertIn("does not match", problems[0])
 
+    def test_13_the_audit_checks_two_processes_on_one_ledger(self):
+        # Two proxies on one ledger, each for its own agent, load with different agent ids; a decision does not say
+        # which process made it. Live run (2026-10-27): a third load after both made the audit pick the wrong one.
+        first = self.start(known_agent_ids=["agent-1"])
+        second = self.start(ledger=Ledger(self.dir / "ledger", self.key), known_agent_ids=["agent-1", "agent-2"])
+        self.start(ledger=Ledger(self.dir / "ledger", self.key), known_agent_ids=["agent-1"]).close()
+        for tk, agent in ((first, "agent-1"), (second, "agent-2"), (first, "agent-1"), (second, "agent-2")):
+            self.clock.now += 60
+            self.assertTrue(self.run_call(tk, pay(), agent_id=agent).allowed)
+        self.assertEqual(check_history_digests(Ledger(self.dir / "ledger", self.key), self.con), [])
+
 
 class Decisions(Base):
     def test_every_decision_is_dated_and_carries_its_subject(self):
