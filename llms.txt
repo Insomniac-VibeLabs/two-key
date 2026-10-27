@@ -74,6 +74,11 @@ one row per entry in a read-only tkinter window: every field (seq, kind, and eac
 lists as name[]) searchable, filterable (contains, equals, starts-with, ends-with, regex, gt/ge/lt/le, empty, and
 negations; all or any), and sortable on several keys. --print writes the matches as JSON Lines; --fields lists the
 names. No network port, no export, never appends (docs/LEDGER_VIEW.md).
+two-key constitution-editor (two_key/constitution_editor.py, two_key/constitution_gui.py) writes, checks, and signs a
+constitution in a tkinter window: prose, tools and specs, hard rules, custom fields, serial. It checks with the code
+sign_constitution runs, tries one call on a throwaway key and ledger with a stand-in judge (Path A's decision and the
+judge prompt), and writes constitution.md, hard_rules.yaml and constitution.signed.json; --check prints whether
+files sign (docs/CONSTITUTION_EDITOR.md).
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. docs/CONNECTING.md: how to connect the agent and every hook so

@@ -503,6 +503,21 @@ claims to close.
   ledger (`tests/test_ledger_view.py` checks every file is unchanged). A
   regular expression in a filter runs on the operator's own machine against
   their own ledger, capped at 500 characters.
+- Constitution editor (0.8.0, `two-key constitution-editor`,
+  `two_key/constitution_editor.py`, `two_key/constitution_gui.py`). No new
+  boundary and no new signed format: it is a tkinter window of the
+  principal's own process, with no network port, and it signs with
+  `sign_constitution` and verifies with `verify_signed`, unchanged. It reads
+  the principal key only when Sign and save is pressed, and empties the
+  passphrase box after each try. It writes the prose and rules owner-only and
+  the signed file last, after the written rules read back as the same body,
+  and refuses to write over a file unless told to. A trial call signs the
+  draft with a throwaway key and runs on a temporary ledger with a stand-in
+  test-double judge, so it can never reach a real judge, ledger, or tool.
+  Residual: whoever can see the screen sees the draft; signing a new
+  constitution into a deployment folder is not a `config_changed` entry,
+  exactly as with `sign-constitution --force` (the next start records
+  `constitution_loaded`, and the serial still refuses an older one).
 - One proxy per agent (0.8.0, `one_proxy_per_agent`, on by default). A
   second proxy for an agent already connected to the ledger refuses
   (`agent_already_connected`). A proxy whose client died but whose process

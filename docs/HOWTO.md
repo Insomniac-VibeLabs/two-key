@@ -48,6 +48,7 @@ route. The rest of the page is reference, for when a section above points to it.
 - [Install](#install)
   - [Platforms](#platforms)
 - [Create a principal key and sign a constitution](#create-a-principal-key-and-sign-a-constitution)
+- [Write and sign a constitution in a window](#write-and-sign-a-constitution-in-a-window)
 - [Data classes](#data-classes)
 - [What Two-Key verifies, and what it does not](#what-two-key-verifies-and-what-it-does-not)
 - [Designing a constitution](#designing-a-constitution)
@@ -276,6 +277,27 @@ the spec is a deny. Pass `--data-class public` only when that class is
 allowed after the floor, and pass `--no-irreversible` only for a tool the
 spec marks reversible.
 
+
+## Write and sign a constitution in a window
+
+`two-key constitution-editor` puts the whole constitution in one window: the prose the judges read, the
+tools and their specs, the hard rules, the custom fields, and the serial.
+[docs/CONSTITUTION_EDITOR.md](CONSTITUTION_EDITOR.md) is the reference; this is the short version.
+
+```bash
+two-key constitution-editor --prose constitution.md --rules hard_rules.yaml --key keys/principal.pem
+```
+
+- It checks the draft as you type, with the same code `sign-constitution` uses, and lists every warning and
+  note `sign-constitution` would print.
+- **Try a call** runs one call through the draft with a throwaway key, a temporary ledger, and a stand-in
+  judge, and shows what Path A decides and the exact prompt a judge is sent.
+- **Sign and save** signs with the principal key and writes `constitution.md`, `hard_rules.yaml`, and
+  `constitution.signed.json`; the rules file signs to the same digest with `sign-constitution`. It refuses
+  to write over a file unless you tick Replace.
+- `--signed FILE` opens a signed constitution as its next version (serial one higher); `--check` prints
+  whether files sign, without a window. The window needs tkinter (on Debian and Ubuntu,
+  `apt install python3-tk`).
 
 ## Data classes
 

@@ -61,7 +61,7 @@ flowchart TD
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners; a start-up check for writable paths; judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
-| 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, and a read-only ledger audit window (`two-key ledger-view`) | Built on `working`, not released |
+| 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Built on `working`, not released |
 | 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
@@ -170,6 +170,12 @@ D1 to D10, was reviewed and approved by the maintainer before any code.
   read-only: a tkinter window with no network port, opened the way
   `two-key audit` opens the ledger, and `--print` for the same search
   without a window.
+- A constitution editor, `two-key constitution-editor` (maintainer's
+  request, 2026-10-27; [CONSTITUTION_EDITOR.md](docs/CONSTITUTION_EDITOR.md)):
+  the prose, tools and specs, hard rules, custom fields, and serial in one
+  window, checked as they are typed, a trial call that shows Path A's
+  decision and the judge prompt, and signing with the principal key. It
+  signs with the same code as `sign-constitution` and adds no format.
 - Before release: a live round that covers the first three, and the release
   steps in [PYPI.md](docs/PYPI.md).
 
@@ -313,6 +319,7 @@ The read-only ledger audit part came first, in 0.8.0, as `two-key ledger-view`
 guard with a token, and it shows every field decrypted, because the
 maintainer asked for every field to be searchable. It holds the principal
 key while open, as `two-key audit` does, because opening the ledger needs it.
+The constitution part came next, also in 0.8.0, as `two-key constitution-editor`, a tkinter window too.
 The bullets below are still the plan for the rest.
 
 - Runs locally only. It binds to loopback, requires a per-session token, and

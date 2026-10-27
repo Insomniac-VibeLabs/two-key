@@ -158,6 +158,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Listing on the official MCP Registry — 2026-10-27](#listing-on-the-official-mcp-registry--2026-10-27)
 - [Setup asks for the quorum numbers; a cloud judge needs the agent's session — 2026-10-27](#setup-asks-for-the-quorum-numbers-a-cloud-judge-needs-the-agents-session--2026-10-27)
 - [Regression pass: ledger-view and setup fixes — 2026-10-27](#regression-pass-ledger-view-and-setup-fixes--2026-10-27)
+- [Constitution editor: `two-key constitution-editor` — 2026-10-27](#constitution-editor-two-key-constitution-editor--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4831,3 +4832,34 @@ driven by real mouse and keyboard events. Fixes:
 - Tests: `tests/test_ledger_view.py` (the agent field on a real ledger; Reload with no ledger, an unreadable
   file, and a cut ledger), `tests/test_ledger_gui.py` (agent records as the ledger writes them, Columns order,
   the Reload message, stderr), `tests/test_config_set.py` (the next steps).
+
+## Constitution editor: `two-key constitution-editor` — 2026-10-27
+
+The maintainer asked for a window that does all the constitution's policy and prompt writing and signs
+everything that is signed with it. `two-key constitution-editor` holds the whole signed body in one window: the
+prose every judge reads, the tools and their specs, the hard rules, the custom fields, and the serial
+([docs/CONSTITUTION_EDITOR.md](docs/CONSTITUTION_EDITOR.md)).
+
+- **Six tabs.** Judges' text (the prose, with the starter text a button away); Tools (the allow list and each
+  tool's spec: irreversible, lowest data class, `deny_unmapped`, and the argument mappings as YAML); Rules (the
+  hard rules in order, a template for each type, Up and Down); Custom fields (the registry as YAML); Try a call;
+  Review and sign. The status line always says whether the draft signs, and why not.
+- **Checked as typed, with the signing code.** `constitution.signed_body` is new: the checks and the body
+  `sign_constitution` signs, without the key. `sign_constitution` now calls it, so what it signs is unchanged
+  byte for byte. The editor shows every warning and note `sign-constitution` prints.
+- **Try a call.** One call through the draft on a throwaway key and a temporary ledger, through
+  `TwoKey.authorize`, with a stand-in judge that votes yes and keeps its prompt: Path A's decision and reason,
+  and the exact system and user prompt a judge is sent. Nothing real is touched.
+- **Sign and save.** Signs with the principal key (a passphrase typed or from a file; the box is emptied after
+  each try), verifies the envelope, writes `constitution.md` and `hard_rules.yaml` owner-only, checks that they
+  sign to the same body with `sign-constitution`, then writes `constitution.signed.json`. It refuses to write
+  over a file unless Replace is ticked. Save prose and rules only writes the two sources unsigned.
+- **Open.** Prose and rules files, or a signed constitution (its signature checked with `--public-key`) as its
+  next version: the signed defaults (`amount: null`, `payload: []`) are left out and the serial goes up by one.
+  `--check` prints whether files sign, with every note, without a window.
+- No security-relevant change: no new signed key or format, and nothing in authorization, tokens, the gateway,
+  the ledger, or the judge-identity checks changed. THREAT_MODEL lists the window and its residual risks.
+- New: `two_key/constitution_editor.py` (no display needed), `two_key/constitution_gui.py` (the window),
+  `tests/test_constitution_editor.py`, `tests/test_constitution_gui.py` (skipped without tkinter or a display;
+  the coverage job runs them under `xvfb-run`). HOWTO has a short section; ROADMAP, SCOPE, AGENTS.md and
+  llms.txt name the command.

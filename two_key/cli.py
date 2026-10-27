@@ -23,6 +23,8 @@
   two-key audit --key KEY --ledger DIR [--witness-public-key PEM] [--check-history CONSTITUTION]
   two-key ledger-view --key KEY --ledger DIR [--witness-public-key PEM] [--search TEXT]
                     [--where FIELD OP [VALUE]]... [--any] [--sort FIELD[:desc]]... [--print | --fields]
+  two-key constitution-editor [--prose FILE --rules FILE | --signed FILE [--public-key PEM]] [--key KEY]
+                    [--dir DIR] [--check]
   two-key siem-export --key KEY --ledger DIR [--out FILE] [--schema native|ecs|ocsf]
                     [--format json|cef] [--from-seq N] [--to-seq N]
   two-key siem-verify --key KEY --ledger DIR --events FILE [--require-complete]
@@ -359,6 +361,50 @@ def _ledger_view(args) -> int:
         return rows_from_entries(e.to_json() for e in again.entries), integrity(again)
     return show(rows, title=str(args.ledger), report=integrity(ledger), reload=reload, query=query,
                 max_rows=args.max_rows)
+
+
+def _editor_draft(args):
+    """The draft ``constitution-editor`` starts from, its window title, and a line on where it came from."""
+    from .constitution_editor import EditorError, new_draft, open_signed, open_sources
+    if bool(args.prose) != bool(args.rules):
+        raise SystemExit("constitution-editor: give --prose and --rules together")
+    if args.signed and args.prose:
+        raise SystemExit("constitution-editor: give --prose and --rules, or --signed, not both")
+    try:
+        if args.signed:
+            public = load_public_key(args.public_key) if args.public_key else None
+            draft, said = open_signed(args.signed, public)
+            return draft, args.signed, f"Opened {args.signed}: {said}."
+        if args.prose:
+            return open_sources(args.prose, args.rules), args.rules, f"Opened {args.prose} and {args.rules}."
+    except (EditorError, OSError, ValueError) as e:
+        raise SystemExit(f"constitution-editor: {e}") from None
+    return new_draft(), "new constitution", ""
+
+
+def _editor_check(draft) -> int:
+    from .constitution_editor import check
+    report = check(draft)
+    for level, line in report.notes:
+        print(f"{level}: {line}")
+    print(f"signs as {report.envelope_format}, digest {report.digest}" if report.ok else
+          f"does not sign: {report.error}")
+    return 0 if report.ok else 1
+
+
+def _constitution_editor(args) -> int:
+    draft, title, opened = _editor_draft(args)
+    if args.check:
+        return _editor_check(draft)
+    try:
+        from .constitution_gui import show
+    except ImportError:
+        print("two-key constitution-editor: the window needs tkinter, which this Python does not have (on Debian and "
+              "Ubuntu: apt install python3-tk); use --check, or two-key sign-constitution", file=sys.stderr)
+        return 1
+    source = args.signed or args.rules
+    folder = args.dir or str(Path(source).resolve().parent if source else Path.cwd())
+    return show(draft, title=title, key_path=args.key or "", folder=folder, opened=opened)
 
 
 def _siem_export(args) -> int:
@@ -792,6 +838,21 @@ def main(argv: list[str] | None = None) -> int:
     viewer.add_argument("--max-rows", type=int, default=10000, metavar="N",
                         help="list at most N matching entries in the window (default 10000); the count shows all")
     viewer.set_defaults(func=_ledger_view)
+    editor = sub.add_parser("constitution-editor", help="write, check, try, and sign a constitution (prose, rules, "
+                                                       "tool specs, fields, serial) in a window")
+    editor.add_argument("--prose", default=None, metavar="FILE", help="start from this prose (with --rules)")
+    editor.add_argument("--rules", default=None, metavar="FILE", help="start from this rules file (with --prose)")
+    editor.add_argument("--signed", default=None, metavar="FILE",
+                        help="start from a signed constitution, as its next version (the serial goes up by one)")
+    editor.add_argument("--public-key", default=None, metavar="PEM",
+                        help="check --signed against this public key before opening it")
+    editor.add_argument("--key", default=None, help="fill in the principal key to sign with (asked for in the window "
+                                                    "otherwise)")
+    editor.add_argument("--dir", default=None, metavar="DIR", help="the folder to write into (default: the folder of "
+                                                                    "--rules or --signed, else this one)")
+    editor.add_argument("--check", action="store_true",
+                        help="print whether the files sign, with every warning, instead of opening a window")
+    editor.set_defaults(func=_constitution_editor)
     recover = sub.add_parser("recover", help="drop an uncheckpointed tail and record it; does not run on open")
     _add_key(recover)
     recover.add_argument("--ledger", required=True)

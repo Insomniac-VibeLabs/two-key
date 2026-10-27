@@ -483,17 +483,10 @@ def _load_rules_document(path: Path) -> tuple[list, Mapping, Any, Any]:
     raise ConstitutionError("hard rules must be a list")
 
 
-def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = None, *,
-                      fields: Any = None, envelope_format: str = "auto", serial: int | None = None) -> dict:
-    """Sign prose, hard rules, tool specs, and the optional custom-field registry.
-
-    ``envelope_format`` is the principal's choice at signing time. ``auto`` (the default) writes
-    ``v1``, byte for byte as before, when there are no custom fields, ``v2`` when there are, and ``v3`` when
-    a field is caller-supplied (``source: caller``) or ``case: exact``, or a tool marks one
-    ``not_applicable``, or the constitution has a ``serial``. ``v2`` always writes at least ``v2``, and ``v3``
-    always writes ``v3``. None of those can be signed as ``v2``. An install older than custom fields refuses a ``v2`` envelope; one before 0.5.0
-    refuses ``v3``.
-    """
+def signed_body(prose: str, rules: list, tool_specs: Any = None, *, fields: Any = None,
+                envelope_format: str = "auto", serial: int | None = None) -> tuple[str, dict]:
+    """The envelope format and the body ``sign_constitution`` signs, checked the same way and not signed: what
+    ``two-key constitution-editor`` shows before it signs."""
     if envelope_format not in ENVELOPE_FORMATS:
         raise ConstitutionError(f"envelope_format must be one of {list(ENVELOPE_FORMATS)}")
     try:
@@ -524,6 +517,21 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
         fmt = FORMAT_V2
     else:
         fmt = FORMAT_V1
+    return fmt, signed
+
+
+def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = None, *,
+                      fields: Any = None, envelope_format: str = "auto", serial: int | None = None) -> dict:
+    """Sign prose, hard rules, tool specs, and the optional custom-field registry.
+
+    ``envelope_format`` is the principal's choice at signing time. ``auto`` (the default) writes
+    ``v1``, byte for byte as before, when there are no custom fields, ``v2`` when there are, and ``v3`` when
+    a field is caller-supplied (``source: caller``) or ``case: exact``, or a tool marks one
+    ``not_applicable``, or the constitution has a ``serial``. ``v2`` always writes at least ``v2``, and ``v3``
+    always writes ``v3``. None of those can be signed as ``v2``. An install older than custom fields refuses a ``v2`` envelope; one before 0.5.0
+    refuses ``v3``.
+    """
+    fmt, signed = signed_body(prose, rules, tool_specs, fields=fields, envelope_format=envelope_format, serial=serial)
     signature = sign(private_key, canonical_bytes(signed))
     return {
         "format": fmt,

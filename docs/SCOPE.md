@@ -118,7 +118,12 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   network port) to search, filter, and sort every field of every entry for an
   audit, or prints the matches as JSON Lines (`--print`); it opens the ledger
   the way `two-key audit` does and writes nothing
-  ([LEDGER_VIEW.md](LEDGER_VIEW.md))
+  ([LEDGER_VIEW.md](LEDGER_VIEW.md)).
+  `two-key constitution-editor` writes, checks, and signs a constitution
+  (prose, hard rules, tool specs, custom fields, serial) in a window
+  (tkinter, no network port), and runs a trial call on a throwaway key and
+  ledger to show Path A's decision and a judge's prompt; it signs with the
+  same code as `sign-constitution` ([CONSTITUTION_EDITOR.md](CONSTITUTION_EDITOR.md))
   The MCP proxy allows one proxy per agent by default
   (`one_proxy_per_agent`)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
@@ -180,8 +185,9 @@ After 1.0, not scheduled:
   validated or compliant, and the docs will not describe it that way.
 - Local GUI: a loopback-only interface for configuration and
   ledger auditing, built on the CLI and the existing file formats. The
-  read-only audit view shipped early as `two-key ledger-view` (0.8.0, above). It does not
-  hold the principal key, and it is not a hosted or multi-user service.
+  read-only audit view shipped early as `two-key ledger-view` (0.8.0, above), and the
+  constitution part as `two-key constitution-editor` (0.8.0, above); both are tkinter windows and hold the
+  principal key while they use it. It is not a hosted or multi-user service.
   Filtering by judge uses the per-judge ballot records planned for 1.0
   (judge id, vote, confidence, error class, and a rationale digest, never
   the rationale text); the ledger does not hold them today.

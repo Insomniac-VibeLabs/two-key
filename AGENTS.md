@@ -94,7 +94,7 @@ From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-Vib
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
+  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/CONSTITUTION_EDITOR.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
 - A new setting (a key a loader accepts) gets a row in `two_key/settings.py`.
   `docs/SETTINGS.md` is generated from it: run `python tests/test_settings_doc.py
@@ -414,5 +414,14 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   display; `two_key/ledger_gui.py` is only the tkinter window. The window
   tests skip without tkinter or a display; CI's coverage job runs them
   under `xvfb-run`.
+- `two-key constitution-editor` (0.8.0) signs only through
+  `constitution.sign_constitution` and checks only through
+  `constitution.signed_body`, the checks `sign_constitution` itself runs;
+  keep it that way, so the window can never sign something
+  `sign-constitution` would refuse. Its trial call runs on a throwaway key,
+  a temporary ledger, and a test-double judge. Logic in
+  `two_key/constitution_editor.py`, the window in
+  `two_key/constitution_gui.py` (`tests/test_constitution_editor.py`,
+  `tests/test_constitution_gui.py`).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.
