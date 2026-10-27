@@ -152,6 +152,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Roadmap diagrams redrawn, and no "release candidate" — 2026-10-26](#roadmap-diagrams-redrawn-and-no-release-candidate--2026-10-26)
 - [README: the MCP proxy diagram, and 0.8.0 and 0.9.0 marked as betas — 2026-10-26](#readme-the-mcp-proxy-diagram-and-080-and-090-marked-as-betas--2026-10-26)
 - [Diagrams: plain words for code names — 2026-10-27](#diagrams-plain-words-for-code-names--2026-10-27)
+- [Docs checked against the code — 2026-10-27](#docs-checked-against-the-code--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4688,3 +4689,13 @@ them: SCANNERS ("Two-Key checks the call"), CONNECTING ("Two-Key guard decides, 
 ledger"), SIEM ("Two-Key decisions and tool runs"), JUDGES_AND_QUORUM (yes-vote count, how many judges must
 answer, the history summary and its fingerprint) and the README flow diagram ("agent declined"). Names a reader
 types, such as commands, account names and the clamd and ICAP protocol messages, stay as they are.
+
+## Docs checked against the code — 2026-10-27
+
+Docs only. Every `two-key` command and flag in the docs, the keyword arguments in the Python examples, the
+proxy config keys, the YAML examples, the limit constants, and the links were compared with the code. They
+match, with three exceptions, now fixed: SIEM's syslog example showed a decision reason `path_a_deny:cap`,
+which the library never writes (it is `rule_denied:cap`); HOWTO did not name Path B's denies `no_judges`,
+`judge_set_not_heterogeneous:`, `insufficient_responses:`, `responding_not_heterogeneous:` and
+`local_judge_required` (now listed under "Quorum policy"); and it did not name Path A's `no_pass`,
+`resource_limit` and `vm_fault:` (now beside the `max_steps` cap).

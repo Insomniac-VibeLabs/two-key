@@ -836,6 +836,10 @@ The 256 KiB argument cap, the 62-level nesting cap, and the 4,096
 instruction cap on the compiled program (`max_steps`) still apply; a very
 large rule set is refused by that last one.
 
+Path A denies with `rule_denied:<rule id>`. A program that ends without
+passing denies `no_pass`, one that runs past `max_steps` denies
+`resource_limit`, and an internal fault denies `vm_fault:`.
+
 These are not configuration settings. A limit inside the signed file
 could be raised by the same file it is meant to constrain. To change one:
 
@@ -1123,6 +1127,14 @@ that errors, abstains, times out, or returns anything but a valid ballot is
 not a yes. Ballots are paired with judges by position, and the judge id and
 provider on the record come from the judge, not the ballot. A ballot that
 names another judge abstains (`judge_id_mismatch`).
+
+Path B's other deny reasons: `no_judges` (an empty judge list),
+`judge_set_not_heterogeneous:` (the judges selected for the call are below
+`min_makers` or the local-judge floors), `insufficient_responses:N<K` (fewer
+valid ballots than `min_responding`; nothing is counted),
+`responding_not_heterogeneous:` (with `heterogeneity_scope: responding`, the
+judges that answered are below those floors), `insufficient_yes:N<K`, and
+`local_judge_required` (`require_local_yes` and no local judge voted yes).
 
 Without a local judge, the constitution prose, the action record, and any
 attached tool arguments go to the cloud judges' vendors.

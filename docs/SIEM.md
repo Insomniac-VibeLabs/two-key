@@ -222,7 +222,7 @@ A message is RFC 5424, with the ledger kind as the MSGID and the rendered
 event as the message:
 
 ```
-<132>1 2026-10-16T03:04:05.678Z host1 two-key 4242 decision - {"allowed":false,"entry_hash":"...","kind":"decision","reason":"path_a_deny:cap","seq":17,...}
+<132>1 2026-10-16T03:04:05.678Z host1 two-key 4242 decision - {"allowed":false,"entry_hash":"...","kind":"decision","reason":"rule_denied:cap","seq":17,...}
 ```
 
 Severity: an allow is informational (6), a deny, a gateway refusal, or a
