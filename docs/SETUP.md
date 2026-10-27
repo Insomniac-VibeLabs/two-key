@@ -135,12 +135,29 @@ The other quorum settings (`require_local_yes`, `judge_inputs`, `ballot_binding`
 
 ### A cloud judge needs the agent's session
 
-A judge that runs in the cloud (not on this host, or a `:cloud` model) refuses to vote on a call that comes
-without the monitored agent's session, and the quorum then denies the call
-(`cloud_judge_session_required`, [HOWTO](HOWTO.md#the-monitored-agent-and-the-judge-is-not-the-agent-rule)).
-The proxy reads that session from `agent_session_env`, so with a cloud judge the wizard names the cloud
-judges and asks until you give the variable's name, and `config check` fails without it. Until 0.8.0, a blank
-answer passed setup and `config check`, and then every call was denied.
+**In short:** if any judge runs somewhere other than this machine, tell the proxy where to find the
+monitored agent's session (`agent_session_env`). Without it the proxy refuses to start.
+
+**Which judges count.** For this rule, a judge counts as a cloud judge when its `base_url` is not this
+machine's own address (`127.0.0.1`, `::1` or `localhost`), or when its model is a `:cloud` or `-cloud`
+model. That includes a judge on another machine in your own network, such as Ollama on `192.168.1.20`, even
+though such a judge still counts as local for `min_local_judges`. A judge on this machine is not a cloud
+judge, and an all-local setup needs no session.
+
+**Why.** Before a cloud judge votes, Two-Key checks that the judge is not using the agent's own credential, so
+the agent cannot vote on its own calls through it. That check needs the agent's session. Without it the cloud
+judge does not vote, and the call is denied (`cloud_judge_session_required`,
+[HOWTO](HOWTO.md#the-monitored-agent-and-the-judge-is-not-the-agent-rule)). One such judge is enough: the whole
+call is denied, even when the local judges say yes. A proxy set up that way could never approve anything.
+
+**What happens.** The wizard names the cloud judges and asks until you give the name of the variable that holds
+the session. `config check` reports a `FAIL`, and `two-key mcp-proxy` refuses to start with
+`cloud_judge_session_required: judge(s) ... are not on this machine, and agent_session_env is not set`. That
+catches a `proxy.yaml` edited by hand too. Until 0.8.0, a blank answer passed setup and `config check`, the
+proxy started, and then every call was denied.
+
+**To fix it**, add `agent_session_env: NAME` to `proxy.yaml` (or `two-key config set --config proxy.yaml
+agent_session_env NAME`), and set `NAME` in the proxy's own environment to the agent's session.
 
 A starter rules file allows the tools you name and maps no argument. An argument a spec does not name is
 dropped before the tool sees it, so a starter is for trying Two-Key out. For a real MCP server, review and sign
@@ -498,7 +515,8 @@ no judge, scanner, collector, or upstream server.
   parses, the principal key opens (encrypted, with `keys.passphrase_file`, as at start) and signed the
   constitution, each `tools:` entry is signed, the judges and
   quorum load (with a `WARN` for a quorum that could be too lenient), a cloud judge has the agent's session
-  (`cloud_judge_session_required` is a `FAIL`: that proxy starts, but denies every call), a monitored agent is
+  (`cloud_judge_session_required` is a `FAIL`, and the proxy refuses to start;
+  [above](#a-cloud-judge-needs-the-agents-session)), a monitored agent is
   declared, every variable the proxy and its judges read is set here (each
   missing one is named: an upstream or agent variable is a `FAIL`, since the proxy would not start or the
   upstream would not get it; a judge's key is a `WARN`, since that judge would abstain on every call), the writable-path

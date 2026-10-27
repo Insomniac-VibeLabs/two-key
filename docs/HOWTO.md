@@ -1073,6 +1073,8 @@ from `two_key.canonical` (SHA-256 of sorted-key, compact, ASCII JSON).
 
 At call time, a judge that is not on a loopback host makes the round deny
 when `authorize` gets no `agent_session` (`cloud_judge_session_required`).
+The MCP proxy gets the session only from `agent_session_env`, so it refuses
+to start with such a judge and no `agent_session_env`.
 A judge whose credential equals that session (whitespace stripped, a
 username and password compared as their pair, a key it holds but never
 sends included) abstains with
@@ -2036,8 +2038,8 @@ principal key file loads, the constitution is signed by that key, every `tools:`
 judges and quorum load (with a warning for a quorum that could be too lenient: one judge, one judge approving
 while the others are down, a minority approving, or one provider or maker for every judge; see
 [JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md#warnings-about-a-lenient-quorum)), a cloud judge has the agent's
-session (`cloud_judge_session_required`, a `FAIL`: without `agent_session_env` the proxy starts but denies every
-call that judge sees), a `monitored_agent` is declared,
+session (`cloud_judge_session_required`, a `FAIL`: without `agent_session_env` the proxy refuses to start,
+[SETUP](SETUP.md#a-cloud-judge-needs-the-agents-session)), a `monitored_agent` is declared,
 every environment variable the proxy and its judges read is set (each missing one named, never a value:
 an upstream or agent variable is a `FAIL`, a judge's key a `WARN` because that judge would only abstain), every `upstream.check_paths` entry exists
 (`check_path_missing`), a launcher with nothing named (`upstream_paths_unchecked`, a `FAIL` under
@@ -2097,6 +2099,7 @@ on stderr and exits 1.
 | a config key named | The config file is invalid | Fix that key |
 | `upstream_env_missing: upstream.env.X ...` | The variable `{env: NAME}` reads is unset or empty | Set it in the proxy's environment |
 | `agent_session_env: ...` | The agent session variable is unset or empty | Set it, or remove the key |
+| `cloud_judge_session_required: judge(s) ... are not on this machine, and agent_session_env is not set ...` | A judge is not on this machine (or runs a `:cloud` model), and `proxy.yaml` has no `agent_session_env`. Such a judge votes only when it gets the agent's session, so every call would be denied | Add `agent_session_env: NAME` to `proxy.yaml` and set `NAME` to the agent's session in the proxy's environment ([SETUP](SETUP.md#a-cloud-judge-needs-the-agents-session)) |
 | `TwoKeyConfigError: ...`, `JudgeConfigError: ...`, `LedgerError: ...` | Two-Key itself refused, as `two-key authorize` would | See the sections on judges, the monitored agent, and the ledger |
 | `AgentAccessError: agent_same_account: ...`, `agent_account_root`, `agent_account_unknown`, `agent_can_write: <path>: ...` | The account that started the proxy is Two-Key's own, root, unknown, or can change that path; `on_agent_access` is `refuse` (the default) or `high_assurance` is set | Start the proxy from the agent's own account through the `run-proxy` sudo rule (or SSH) and take its write access away ([CONNECTING](CONNECTING.md#route-1-an-mcp-client-through-two-key-mcp-proxy)). For a test under one account only: `on_agent_access: warn` |
 | `TwoKeyConfigError: writable_path: <path>: ...` | Another account could change a file or folder Two-Key runs or reads, and `on_writable_paths: refuse` or `high_assurance` is set | Make it owned by Two-Key's account (or root) and not writable by group or others ([CONNECTING](CONNECTING.md#run-two-key-as-a-service-account)) |

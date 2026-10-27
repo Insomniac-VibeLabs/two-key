@@ -15,7 +15,7 @@ A quorum number below the profile's own is weaker, as it is for ``config set``: 
 keeps it only after a typed ``yes``; from ``--answers`` it needs ``--confirm-weaker`` and a typed ``yes`` on a
 terminal. The ``config_changed`` entry setup records lists what was weaker. A proxy with a cloud judge needs
 ``agent_session_env``: without it every call that judge sees is denied (``cloud_judge_session_required``), so
-the interview asks until it is named and ``config check`` fails without it.
+the interview asks until it is named, ``config check`` fails, and ``mcp-proxy`` refuses to start without it.
 
 It writes into a new folder beside the target, owner-only from the first byte, and renames that folder into
 place only when the whole set passes ``config check`` (the proxy route) or loads and verifies (the others),
@@ -211,7 +211,7 @@ def _ask_session(out: dict, ask: Ask, cloud: list[str]) -> None:
     if not cloud:
         _optional(out, "agent_session_env", ask, f"{question} (blank: none): ")
         return
-    print(f"Judge(s) {', '.join(cloud)} run in the cloud: each refuses a call that comes without the agent's "
+    print(f"Judge(s) {', '.join(cloud)} are not on this machine: each refuses a call that comes without the agent's "
           "session, so the proxy needs it.")
     out["agent_session_env"] = _ask(ask, question)
 

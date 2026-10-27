@@ -465,6 +465,9 @@ tune these checks, `on_agent_access` and `on_writable_paths`, are in
   RIGHTS).
 - A judge holding the agent's credential, at any address, is refused;
   other overlaps warn and are recorded.
+- A judge that is not on this machine needs the agent's session, so the
+  MCP proxy refuses to start without `agent_session_env` when it has one
+  (`cloud_judge_session_required`, [SETUP](SETUP.md#a-cloud-judge-needs-the-agents-session)).
 - The MCP proxy: the upstream's tool schemas against the pinned digest,
   only signed tools shown, any other name `tool_not_offered`, the claim
   from `proxy.yaml` only, and `mcp_proxy_started` ledgered before serving.

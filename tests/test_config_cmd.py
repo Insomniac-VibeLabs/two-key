@@ -149,7 +149,7 @@ class Check(Workspace):
                                              encoding="utf-8")
         failed = [text for level, text in self.check() if level == config_cmd.FAIL]
         self.assertEqual(len(failed), 1, failed)
-        self.assertTrue(failed[0].startswith("cloud_judge_session_required: judge(s) j2 run in the cloud"))
+        self.assertTrue(failed[0].startswith("cloud_judge_session_required: judge(s) j2 are not on this machine"))
         local = JUDGES.replace("https://judge.example/v1", "http://127.0.0.1:11435/v1")
         (self.dir / "judges.yaml").write_text(local, encoding="utf-8")
         self.assertNotIn(config_cmd.FAIL, self.levels(self.check()))

@@ -90,7 +90,7 @@ Tier: operator config. The MCP proxy's own settings (`two-key mcp-proxy --config
 | `witness_public_key` | none |  | Path to the witness public key, to pin it outside the ledger (as `--witness-public-key`). **Not changed by `config set`.** |
 | `head_anchor` | none |  | Path to a head anchor file outside the ledger directory (as `--head-anchor`). **Not changed by `config set`.** |
 | `ttl_seconds` | 120 |  | Token lifetime in seconds, 1 to 300. |
-| `agent_session_env` | none |  | Name of the environment variable that holds the agent's session, read once at start. Unset or empty refuses to start. **Names a secret.** |
+| `agent_session_env` | none |  | Name of the environment variable that holds the agent's session, read once at start. Unset or empty refuses to start. Needed when a judge is not on this machine: without it the proxy refuses to start (`cloud_judge_session_required`). **Names a secret.** |
 | `agent_id` | none |  | Ledger metadata, at most 256 characters. Not trust. `two-key setup` writes the monitored agent's `id` here. |
 | `hosting` | none |  | Ledger metadata, at most 256 characters. Not trust. |
 | `allow_unresolved_identity` | false |  | `true` starts despite an `unresolved_identity` warning. |

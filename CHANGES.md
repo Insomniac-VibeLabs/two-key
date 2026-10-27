@@ -162,6 +162,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Regression pass: constitution editor fixes — 2026-10-27](#regression-pass-constitution-editor-fixes--2026-10-27)
 - [`ledger-view`: the search can match field names — 2026-10-27](#ledger-view-the-search-can-match-field-names--2026-10-27)
 - [Setup: an owner-only ledger, and the agent's id in `proxy.yaml` — 2026-10-27](#setup-an-owner-only-ledger-and-the-agents-id-in-proxyyaml--2026-10-27)
+- [The proxy refuses to start with a cloud judge and no agent session — 2026-10-27](#the-proxy-refuses-to-start-with-a-cloud-judge-and-no-agent-session--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4928,3 +4929,20 @@ Both were found in a live walkthrough of setting up with the new windows (setup,
 - Tests: `tests/test_config_set.py` (setup under umask 002 leaves nothing writable by the group or others and
   restores the umask; the proxy config names the agent). An undo test that appended `agent_id` by hand appends
   `hosting` instead, since setup now writes `agent_id`.
+
+## The proxy refuses to start with a cloud judge and no agent session — 2026-10-27
+
+The maintainer approved this after the change above. `two-key mcp-proxy` now refuses to start when a judge is
+not on this machine (or runs a `:cloud` model) and `proxy.yaml` has no `agent_session_env`, with
+`cloud_judge_session_required: judge(s) ... are not on this machine, and agent_session_env is not set ...; the
+proxy refuses to start`. Such a proxy could approve nothing: the judge votes only with the agent's session, and
+the quorum then denied every call. Before, setup and `config check` caught it, but a `proxy.yaml` edited by
+hand still started.
+
+- One test, `mcp_proxy.core.cloud_session_missing`, is used by both the proxy's start and `config check`, so the
+  two cannot disagree. A judge on this machine needs no session, and an all-local proxy starts as before.
+- A judge on another machine in your network (Ollama on `192.168.x.x`) counts as a cloud judge for this rule, as
+  it already did at call time; it still counts as local for `min_local_judges`.
+- Docs in plain words: SETUP "A cloud judge needs the agent's session" says which judges count, why, and how to
+  fix it; the HOWTO table of start-up refusals has the new line; CONNECTING, UPGRADING (0.8.0 row) and llms.txt
+  say it too. Test: `tests/test_config_set.py` (`test_the_proxy_refuses_to_start_without_it`).

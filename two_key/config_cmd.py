@@ -42,8 +42,7 @@ def _judges(config):
 
 def check(path: Path | str, environ: Mapping[str, str] | None = None) -> list[tuple[str, str]]:
     """``(level, text)`` findings for the proxy config at ``path``. Any ``FAIL`` means ``mcp-proxy`` would
-    refuse to start (or, for the writable-path and SIEM findings, would under that setting), except
-    ``cloud_judge_session_required``: that proxy starts, but denies every call its cloud judges see."""
+    refuse to start (or, for the writable-path and SIEM findings, would under that setting)."""
     config, bad = _load(path)
     if bad:
         return [bad]
@@ -115,17 +114,10 @@ def _quorum(judges, policy) -> list[tuple[str, str]]:
 
 
 def _cloud_session(config, judges) -> list[tuple[str, str]]:
-    """A cloud judge abstains on a call that comes without the agent's session (judges/llm.py), and the quorum
-    then denies the call: with a cloud judge and no ``agent_session_env``, every call it would judge is
-    denied ``cloud_judge_session_required`` (live setup run, 2026-10-27)."""
-    if config.agent_session_env:
-        return []
-    cloud = sorted(str(j.judge_id) for j in judges if getattr(j, "is_cloud", lambda: False)())
-    if not cloud:
-        return []
-    return [(FAIL, f"cloud_judge_session_required: judge(s) {', '.join(cloud)} run in the cloud and "
-                   "agent_session_env is not set, so every call they judge would be denied; set agent_session_env "
-                   "to the name of the variable that holds the agent's session (docs/CONNECTING.md)")]
+    """A cloud judge with no ``agent_session_env``: the proxy refuses to start (live setup run, 2026-10-27)."""
+    from .mcp_proxy.core import cloud_session_missing
+    missing = cloud_session_missing(config, judges)
+    return [(FAIL, missing)] if missing else []
 
 
 def _agent(config):

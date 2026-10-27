@@ -218,8 +218,8 @@ under the lock before writing; a shorter file or a partial line is still refused
 little tested (ROADMAP). two-key config show|check --config proxy.yaml (read-only: effective settings; would it start).
 two-key setup --dir DIR writes a new deployment (keys, rules, judges, proxy.yaml), signs and checks it; it asks
 for the quorum numbers at the profile's own, and a lower one is weaker (a typed yes in the wizard; --confirm-weaker
-and a typed yes with --answers). With a cloud judge it needs agent_session_env, and config check fails without it
-(cloud_judge_session_required); config check and setup warn about a quorum that could be too lenient. two-key
+and a typed yes with --answers). With a judge not on this machine it needs agent_session_env: config check fails and mcp-proxy refuses to start
+without it (cloud_judge_session_required); config check and setup warn about a quorum that could be too lenient. two-key
 config get|set|undo --config proxy.yaml NAME [VALUE] reads or changes one setting by its docs/SETTINGS.md name:
 Two-Key's own account only (root and files another account can change are refused), the whole config must pass
 config check first, a weaker change needs --confirm-weaker and a typed yes, a signed setting needs --key and

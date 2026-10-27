@@ -460,6 +460,9 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
                                                         if policy.files})
         key = config.load_principal_key(prompt=False)
         judges, policy = load_config_file(config.judges, judge_transport)
+        missing = cloud_session_missing(config, judges)
+        if missing:
+            raise ProxyConfigError(f"{missing}; the proxy refuses to start")
         high = bool(getattr(policy, "is_high_assurance", False))
         check_upstream_paths(config.upstream, high)
         paths = startup_paths(config)
@@ -481,6 +484,21 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
     except (OSError, ValueError, JudgeConfigError, IdentityError, LedgerError, ConstitutionError,
             ConstitutionSignatureError, TwoKeyConfigError, ScanConfigError, SiemConfigError) as e:
         raise ProxyConfigError(f"{type(e).__name__}: {e}") from None
+
+
+def cloud_session_missing(config: ProxyConfig, judges: Any) -> str | None:
+    """Why a proxy with these judges could approve nothing, or None. A cloud judge (one not on this machine's
+    loopback address, or a ``:cloud`` model) votes only on a call that comes with the agent's session, and the
+    proxy has that session only through ``agent_session_env``. Without it, every call that reaches the judges
+    is denied ``cloud_judge_session_required``, so ``mcp-proxy`` refuses to start and ``config check`` fails."""
+    if config.agent_session_env:
+        return None
+    cloud = sorted(str(j.judge_id) for j in judges if getattr(j, "is_cloud", lambda: False)())
+    if not cloud:
+        return None
+    return (f"cloud_judge_session_required: judge(s) {', '.join(cloud)} are not on this machine, and "
+            "agent_session_env is not set, so every call they judge would be denied; set agent_session_env to the "
+            "name of the variable that holds the agent's session (docs/CONNECTING.md)")
 
 
 def hold_agent_lock(tk: Any, config: ProxyConfig) -> None:

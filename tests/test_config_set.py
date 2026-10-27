@@ -321,6 +321,20 @@ class SetupQuorum(unittest.TestCase):
         self.assertEqual(setup_cmd.cloud_judges([LOCAL, CLOUD]), ["cloud"])
         self.assertIn("set AGENT_KEY_VAR, JUDGE_KEY_VAR, SESSION_VAR in the proxy's own environment", result["next"][0])
 
+    def test_the_proxy_refuses_to_start_without_it(self):
+        """A proxy.yaml edited by hand, past setup and config check: mcp-proxy itself refuses to start."""
+        from two_key.mcp_proxy.config import ProxyConfigError, load_proxy_config
+        from two_key.mcp_proxy.core import build_two_key
+        self.build(dict(ANSWERS, judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR"))
+        proxy = self.base / "d" / "proxy.yaml"
+        text = proxy.read_text(encoding="utf-8")
+        self.assertIn("agent_session_env: SESSION_VAR\n", text)
+        proxy.write_text(text.replace("agent_session_env: SESSION_VAR\n", ""), encoding="utf-8")
+        config = load_proxy_config(proxy)
+        with self.assertRaisesRegex(ProxyConfigError, "cloud_judge_session_required: judge\\(s\\) cloud .*"
+                                    "the proxy refuses to start"):
+            build_two_key(config)
+
     def interview(self, replies):
         asked = []
 
@@ -364,7 +378,7 @@ class SetupQuorum(unittest.TestCase):
         replies = cloud + self.AGENT + ["", "SESSION_VAR", ""]
         answers, _, err = self.interview(replies)
         self.assertEqual(answers["agent_session_env"], "SESSION_VAR")
-        self.assertIn("Judge(s) j1 run in the cloud", err)
+        self.assertIn("Judge(s) j1 are not on this machine", err)
         self.assertIn("an answer is needed", err)
 
 

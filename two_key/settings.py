@@ -105,7 +105,8 @@ PROXY = _rows(PROXY_YAML, [
     ("head_anchor", "none", "Path to a head anchor file outside the ledger directory (as `--head-anchor`)."),
     ("ttl_seconds", "120", "Token lifetime in seconds, 1 to 300."),
     ("agent_session_env", "none", "Name of the environment variable that holds the agent's session, read once at "
-     "start. Unset or empty refuses to start.", {"secret": True}),
+     "start. Unset or empty refuses to start. Needed when a judge is not on this machine: without it the proxy "
+     "refuses to start (`cloud_judge_session_required`).", {"secret": True}),
     ("agent_id", "none", "Ledger metadata, at most 256 characters. Not trust. `two-key setup` writes the monitored "
                  "agent's `id` here."),
     ("hosting", "none", "Ledger metadata, at most 256 characters. Not trust."),
