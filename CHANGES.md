@@ -4750,3 +4750,5 @@ it in a window as a table, one row per entry ([docs/LEDGER_VIEW.md](docs/LEDGER_
   window), `tests/test_ledger_view.py`, `tests/test_ledger_gui.py` (skipped without tkinter or a display).
   The coverage workflow runs the suite under `xvfb-run` so the window tests run there. HOWTO has a short
   section; AGENTS.md and llms.txt name the command.
+- The selected entry stays selected (and its details shown) when the filters change, as long as it is still
+  listed; opening with filters from the command line no longer clears the first selection a moment later.

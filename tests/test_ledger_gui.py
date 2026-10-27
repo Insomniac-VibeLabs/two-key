@@ -210,6 +210,20 @@ class Window(unittest.TestCase):
         self.assertEqual(view.details_now(), "")
         self.assertEqual(details_text(self.rows[0]).splitlines()[0], "agent = null")
 
+    def test_selection_stays_while_the_entry_is_listed(self):
+        view = self.viewer()
+        view.tree.selection_set("3")
+        self.top.update()
+        view.add_filter("kind", "equals", "path_b")
+        view.refresh()
+        self.assertEqual(view.tree.selection(), ("3",))
+        self.assertIsNone(view.pending)
+        view.search.set("quorum_pass")
+        view.refresh()
+        self.assertEqual(view.tree.selection(), ())
+        self.top.update()
+        self.assertEqual(view.details_now(), "")
+
     def test_right_click_menu_filters_on_a_value_or_copies_it(self):
         view = self.viewer()
         self.assertIsNone(view.menu_for("", "kind"))

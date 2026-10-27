@@ -184,17 +184,25 @@ class LedgerViewer:
         self.pending = self.root.after(REFRESH_MS, self.refresh)
 
     def refresh(self) -> None:
-        self.pending = None
+        """Filter and sort again now. The selected entry stays selected while it is still listed."""
+        if self.pending is not None:
+            self.root.after_cancel(self.pending)
+            self.pending = None
         try:
             shown = select(self.rows, self.query())
         except ViewError as e:
             self._set_status(str(e), error=True)
             return
+        selected = self.tree.selection()
         self.shown = shown
         self.by_seq = {str(row.seq): row for row in shown[:self.max_rows]}
         self.tree.delete(*self.tree.get_children())
         for row in shown[:self.max_rows]:
             self.tree.insert("", "end", iid=str(row.seq), values=[_cell(row.text(c)) for c in self.columns])
+        kept = [iid for iid in selected if iid in self.by_seq]
+        if kept:
+            self.tree.selection_set(kept)
+            self.tree.see(kept[0])
         self._update_headings()
         self._set_status(self._summary())
 
