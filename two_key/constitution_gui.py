@@ -24,8 +24,9 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any, Callable
 
+from .action import DEFAULT_DATA_CLASS
 from .constitution import ENVELOPE_FORMATS
-from .constitution_editor import (CLAIMS, DATA_CLASSES, FIELDS_EXAMPLE, FILE_NAMES, RULE_TEMPLATES, Draft,
+from .constitution_editor import (CLAIMS, DATA_CLASSES, FIELDS_EXAMPLE, FILE_NAMES, RULE_TEMPLATES, WARNING, Draft,
                                   EditorError, build_rule, build_spec, check, dump_value, move_rule, new_draft,
                                   open_signed, open_sources, parse_value, remove_tool, rule_summary, rule_type,
                                   rules_text, save_sources, set_tool, sign_and_save, spec_form, tool_names,
@@ -34,6 +35,9 @@ from .policy_vm import RULE_TYPES
 
 REFRESH_MS = 300            # typing waits this long before the draft is checked again
 GOOD, BAD = "#1b5e20", "#b00020"
+READ_ONLY = "readonly"       # a combobox that offers only its list
+SHOWN_ONLY = "disabled"      # a text box the window writes and the user only reads
+APPLY = "Apply"
 PROSE_HELP = ("What every judge reads, in full, before each call it votes on. It is signed with the rules: "
               "write what the principal wants and does not want, in plain words.")
 TOOLS_HELP = ("Only the tools listed here can be called. Each needs a spec: whether a call can be undone, its "
@@ -56,7 +60,7 @@ def _set_text(box: tk.Text, text: str, *, read_only: bool = False) -> None:
     box.delete("1.0", "end")
     box.insert("1.0", text)
     if read_only:
-        box.configure(state="disabled")
+        box.configure(state=SHOWN_ONLY)
 
 
 def _get_text(box: tk.Text) -> str:
@@ -169,7 +173,7 @@ class ConstitutionEditor:
         self.draft.envelope_format = self.format_var.get()
         report = check(self.draft)
         if report.ok:
-            warnings = sum(1 for level, _ in report.notes if level == "WARNING")
+            warnings = sum(1 for level, _ in report.notes if level == WARNING)
             extra = f" {warnings} warning(s) on Review and sign." if warnings else ""
             self.say(self.status, f"Ready to sign: {report.envelope_format}, digest {report.digest}.{extra}")
         else:
@@ -225,7 +229,7 @@ class ConstitutionEditor:
         form.pack(fill="both", expand=True)
         self.tool_id = tk.StringVar()
         self.irreversible = tk.BooleanVar(value=True)
-        self.floor = tk.StringVar(value="classified")
+        self.floor = tk.StringVar(value=DEFAULT_DATA_CLASS)
         self.deny_unmapped = tk.BooleanVar(value=False)
         line = ttk.Frame(form)
         line.pack(fill="x")
@@ -233,7 +237,7 @@ class ConstitutionEditor:
         ttk.Entry(line, textvariable=self.tool_id, width=32).pack(side="left", padx=(4, 12))
         ttk.Checkbutton(line, text="A call cannot be undone", variable=self.irreversible).pack(side="left")
         ttk.Label(line, text="Lowest data class").pack(side="left", padx=(12, 4))
-        ttk.Combobox(line, textvariable=self.floor, values=DATA_CLASSES, state="readonly", width=12).pack(side="left")
+        ttk.Combobox(line, textvariable=self.floor, values=DATA_CLASSES, state=READ_ONLY, width=12).pack(side="left")
         ttk.Checkbutton(line, text="Deny an argument no path names", variable=self.deny_unmapped).pack(
             side="left", padx=12)
         ttk.Label(form, text="Argument mappings (YAML: amount, counterparties, payload, fields)",
@@ -243,7 +247,7 @@ class ConstitutionEditor:
         buttons = ttk.Frame(form, padding=(0, 6, 0, 0))
         buttons.pack(fill="x")
         ttk.Button(buttons, text="New tool", command=lambda: self.edit_tool(None)).pack(side="left")
-        ttk.Button(buttons, text="Apply", command=self.apply_tool).pack(side="left", padx=4)
+        ttk.Button(buttons, text=APPLY, command=self.apply_tool).pack(side="left", padx=4)
         ttk.Button(buttons, text="Remove", command=self.remove_selected_tool).pack(side="left")
         self.tool_note = ttk.Label(buttons, padding=(12, 0))
         self.tool_note.pack(side="left", fill="x")
@@ -260,9 +264,9 @@ class ConstitutionEditor:
                 self.tools.insert("", "end", iid=name, values=(name, "", "", "no spec yet"))
                 continue
             known, rest = spec_form(spec)
-            self.tools.insert("", "end", iid=name, values=(
-                name, "yes" if known.get("irreversible", True) else "no", known.get("data_class_floor", "classified"),
-                ", ".join(rest) or "none"))
+            floor = known.get("data_class_floor", DEFAULT_DATA_CLASS)
+            irreversible = "yes" if known.get("irreversible", True) else "no"
+            self.tools.insert("", "end", iid=name, values=(name, irreversible, floor, ", ".join(rest) or "none"))
         if self.tool_selected in self.tools.get_children():
             self.tools.selection_set(self.tool_selected)
 
@@ -273,7 +277,7 @@ class ConstitutionEditor:
         known, rest = spec_form(spec if isinstance(spec, dict) else {})
         self.tool_id.set(name or "")
         self.irreversible.set(bool(known.get("irreversible", True)))
-        self.floor.set(known.get("data_class_floor", "classified"))
+        self.floor.set(known.get("data_class_floor", DEFAULT_DATA_CLASS))
         self.deny_unmapped.set(bool(known.get("deny_unmapped", False)))
         _set_text(self.mappings, dump_value(rest))
         self.say(self.tool_note, "")
@@ -324,7 +328,7 @@ class ConstitutionEditor:
         ttk.Label(line, text="Id").pack(side="left")
         ttk.Entry(line, textvariable=self.rule_id, width=28).pack(side="left", padx=(4, 12))
         ttk.Label(line, text="Type").pack(side="left")
-        ttk.Combobox(line, textvariable=self.rule_kind, values=RULE_TYPES, state="readonly", width=28).pack(
+        ttk.Combobox(line, textvariable=self.rule_kind, values=RULE_TYPES, state=READ_ONLY, width=28).pack(
             side="left", padx=4)
         ttk.Button(line, text="Template", command=self.rule_template).pack(side="left")
         ttk.Label(form, text="Rule (YAML)", padding=(0, 6, 0, 2)).pack(fill="x")
@@ -332,7 +336,7 @@ class ConstitutionEditor:
         self.rule_body.pack(fill="both", expand=True)
         buttons = ttk.Frame(form, padding=(0, 6, 0, 0))
         buttons.pack(fill="x")
-        for text, command in (("New rule", lambda: self.edit_rule(None)), ("Apply", self.apply_rule),
+        for text, command in (("New rule", lambda: self.edit_rule(None)), (APPLY, self.apply_rule),
                               ("Remove", self.remove_rule), ("Up", lambda: self.move(-1)),
                               ("Down", lambda: self.move(1))):
             ttk.Button(buttons, text=text, command=command).pack(side="left", padx=(0, 4))
@@ -404,7 +408,7 @@ class ConstitutionEditor:
         self.fields_box.pack(fill="both", expand=True)
         buttons = ttk.Frame(tab, padding=(0, 6, 0, 0))
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Apply", command=self.apply_fields).pack(side="left")
+        ttk.Button(buttons, text=APPLY, command=self.apply_fields).pack(side="left")
         ttk.Button(buttons, text="Insert an example", command=self.fields_example).pack(side="left", padx=4)
         self.fields_note = ttk.Label(buttons, padding=(12, 0))
         self.fields_note.pack(side="left", fill="x")
@@ -437,7 +441,7 @@ class ConstitutionEditor:
         self.try_tool = ttk.Combobox(line, textvariable=self.try_tool_var, width=28)
         self.try_tool.pack(side="left", padx=(4, 12))
         ttk.Label(line, text="Claimed data class").pack(side="left")
-        ttk.Combobox(line, textvariable=self.claim, values=CLAIMS, state="readonly", width=18).pack(side="left",
+        ttk.Combobox(line, textvariable=self.claim, values=CLAIMS, state=READ_ONLY, width=18).pack(side="left",
                                                                                                     padx=4)
         ttk.Label(line, text="Proposal (sent only to a judge set to receive it)").pack(side="left", padx=(12, 4))
         ttk.Entry(line, textvariable=self.proposal, width=40).pack(side="left", fill="x", expand=True)
@@ -451,7 +455,7 @@ class ConstitutionEditor:
         boxes.columnconfigure(0, weight=1)
         boxes.columnconfigure(1, weight=1)
         ttk.Button(tab, text="Run", command=self.run_trial).pack(anchor="w", pady=6)
-        self.trial = _text(tab, 12, state="disabled")
+        self.trial = _text(tab, 12, state=SHOWN_ONLY)
         self.trial.pack(fill="both", expand=True)
 
     def run_trial(self) -> None:
@@ -478,7 +482,7 @@ class ConstitutionEditor:
         ttk.Label(line, text="Serial (each new version gets a higher one; blank: none)").pack(side="left")
         ttk.Entry(line, textvariable=self.serial_var, width=10).pack(side="left", padx=(4, 12))
         ttk.Label(line, text="Envelope format").pack(side="left")
-        ttk.Combobox(line, textvariable=self.format_var, values=ENVELOPE_FORMATS, state="readonly",
+        ttk.Combobox(line, textvariable=self.format_var, values=ENVELOPE_FORMATS, state=READ_ONLY,
                      width=6).pack(side="left", padx=4)
         for var in (self.serial_var, self.format_var):
             var.trace_add("write", self.changed)
@@ -487,8 +491,8 @@ class ConstitutionEditor:
         self._build_key_rows(keys, key_path, folder)
         panes = ttk.Panedwindow(tab, orient="horizontal")
         panes.pack(fill="both", expand=True, pady=6)
-        self.review = _text(panes, 10, state="disabled")
-        self.preview = _text(panes, 10, state="disabled", wrap="none")
+        self.review = _text(panes, 10, state=SHOWN_ONLY)
+        self.preview = _text(panes, 10, state=SHOWN_ONLY, wrap="none")
         panes.add(self.review, weight=1)
         panes.add(self.preview, weight=1)
 

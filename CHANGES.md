@@ -4863,4 +4863,5 @@ prose every judge reads, the tools and their specs, the hard rules, the custom f
   `tests/test_constitution_editor.py`, `tests/test_constitution_gui.py` (skipped without tkinter or a display;
   the coverage job runs them under `xvfb-run`). HOWTO has a short section; ROADMAP, SCOPE, AGENTS.md and
   llms.txt name the command.
-- Helpers that use no instance state are static methods (DeepSource PYL-R0201).
+- Helpers that use no instance state are static methods (DeepSource PYL-R0201); repeated string literals are
+  named constants.

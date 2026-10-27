@@ -65,6 +65,9 @@ NOT_SIGNED_NOTE = ("The judges' system prompt is Two-Key's own and is not part o
                    "constitution's prose goes into every judge's prompt in full, inside <principal_constitution>.")
 
 
+WARNING, NOTE = "WARNING", "note"      # the levels sign-constitution prints
+
+
 class EditorError(ValueError):
     """A file could not be read or written, or a value could not be parsed. Nothing was written."""
 
@@ -352,10 +355,10 @@ def _signed_notes(signed: Mapping) -> list[tuple[str, str]]:
     """The notes ``two-key sign-constitution`` prints, in its order."""
     registry = signed.get("fields") or {}
     rules, specs = signed["hard_rules"], signed["tool_specs"]
-    out = [("WARNING" if warn else "note", line) for warn, line in not_applicable_notes(rules, specs, registry)]
-    out += [("WARNING", line) for line in case_warnings(rules, specs, registry)]
-    out += [("WARNING" if warn else "note", line) for warn, line in domain_allow_notes(specs)]
-    out += [("WARNING", line) for line in encrypted_pass_notes(specs)]
+    out = [(WARNING if warn else NOTE, line) for warn, line in not_applicable_notes(rules, specs, registry)]
+    out += [(WARNING, line) for line in case_warnings(rules, specs, registry)]
+    out += [(WARNING if warn else NOTE, line) for warn, line in domain_allow_notes(specs)]
+    out += [(WARNING, line) for line in encrypted_pass_notes(specs)]
     return out
 
 
@@ -374,7 +377,7 @@ def check(draft: Draft) -> Report:
         return Report(str(e))
     if draft.serial is None:
         from .setup_cmd import NO_SERIAL
-        notes.insert(0, ("WARNING", f"no serial: {NO_SERIAL}"))
+        notes.insert(0, (WARNING, f"no serial: {NO_SERIAL}"))
     return Report(None, tuple(notes), fmt, canonical_hash(signed), signed)
 
 
