@@ -272,7 +272,7 @@ class LedgerViewer:
 
     def clear(self) -> None:
         """Remove every filter and empty the search box; the sort stays."""
-        for row in list(self.filters):
+        for row in self.filters:
             row.frame.destroy()
         self.filters.clear()
         self.search.set("")

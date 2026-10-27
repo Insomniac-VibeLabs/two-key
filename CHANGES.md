@@ -4757,6 +4757,7 @@ it in a window as a table, one row per entry ([docs/LEDGER_VIEW.md](docs/LEDGER_
   test process outright (exit code 133, no Python error) instead of raising `TclError`; where the child
   process fails like that, the window tests are skipped with its exit code instead of taking the suite down.
   They still run under `xvfb-run` in the coverage job.
+- SonarCloud: **Clear** no longer copies the filter list before walking it (S7504, an unneeded `list()`).
 
 ## Listing on the official MCP Registry — 2026-10-27
 
