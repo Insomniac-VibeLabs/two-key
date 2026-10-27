@@ -33,7 +33,7 @@
                     [--confirm-weaker] [--key KEY --rules FILE]
   two-key config undo --config FILE [--confirm-weaker] [--key KEY]
   two-key config key-passphrase --config FILE (--new-from FILE | --remove) [--confirm-weaker]
-  two-key setup --dir DIR [--answers FILE]
+  two-key setup --dir DIR [--answers FILE [--confirm-weaker]]
 
 Every command that takes --key also takes --key-passphrase-file FILE for an encrypted key; without it, it
 asks on the terminal (docs/SETUP.md).
@@ -908,6 +908,8 @@ def main(argv: list[str] | None = None) -> int:
     setup.add_argument("--dir", required=True, help="a new folder for the files (never an existing one)")
     setup.add_argument("--answers", default=None, metavar="FILE",
                        help="read the answers from this YAML or JSON file instead of asking (docs/SETUP.md)")
+    setup.add_argument("--confirm-weaker", action="store_true",
+                       help="go ahead with --answers quorum numbers below the profile's own, after a typed yes")
     setup.set_defaults(func=_setup)
     drafter = sub.add_parser("mcp-draft-specs", help="draft tool_specs and the schema digest from an upstream MCP "
                                                      "server, for the principal to review and sign (needs the mcp extra)")

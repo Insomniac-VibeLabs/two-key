@@ -25,6 +25,8 @@ command and what it refuses.
 - [Who may run these commands](#who-may-run-these-commands)
 - [Full setup: `two-key setup`](#full-setup-two-key-setup)
   - [The questions](#the-questions)
+  - [The quorum numbers](#the-quorum-numbers)
+  - [A cloud judge needs the agent's session](#a-cloud-judge-needs-the-agents-session)
   - [What it writes, and where](#what-it-writes-and-where)
   - [What it refuses](#what-it-refuses)
   - [After it finishes](#after-it-finishes)
@@ -67,6 +69,7 @@ that, as before.
 ```
 two-key setup --dir /srv/two-key/billing
 two-key setup --dir /srv/two-key/billing --answers answers.yaml
+two-key setup --dir /srv/two-key/billing --answers answers.yaml --confirm-weaker
 ```
 
 Without `--answers`, it asks its questions on a terminal; without a terminal it refuses and asks for
@@ -82,12 +85,13 @@ The same keys go in an `--answers` file (YAML or JSON). An unknown key is refuse
 | `route` | `proxy` (`two-key mcp-proxy` in front of an MCP server), `guard`, or `library` | `proxy` |
 | `profile` | `default` or `high_assurance` | `default` |
 | `judges` | For each judge: `type`, `id`, `model`, `base_url` (for `openai_compatible` and `ollama`), `maker`, and `auth_env`, the name of the environment variable that holds its API key. Any other key of a judge in [SETTINGS](SETTINGS.md) can be given too | (asked) |
+| `quorum` | The quorum's numbers: `required_yes`, `min_responding`, `min_distinct_providers`, `min_makers` and `min_local_judges` ([below](#the-quorum-numbers)). Any you leave out keep the profile's own | the profile's own |
 | `monitored_agent` | `id`, `model`, `provider`, `base_url`, and `credential_env` (or `credential: none`) | (asked) |
 | `rules_file` | A rules file you reviewed. For the proxy, the `rules.draft.yaml` that `two-key mcp-draft-specs` drafted from the server | none |
 | `tools` | Without `rules_file`: the tools a starter allows, each with `id` and, optionally, `irreversible` (default `true`) and `data_class_floor` (default `classified`) | (asked) |
 | `prose_file` | The prose the judges read. Without it, a short starter you edit later | the starter |
 | `upstream` | Proxy only: `command` (a list; the wizard splits a line as a shell would, and the proxy runs it without a shell) and `schema_digest` | (asked) |
-| `agent_session_env` | Proxy only: the name of the variable that holds the agent's session | none |
+| `agent_session_env` | Proxy only: the name of the variable that holds the agent's session. Needed when a judge runs in the cloud ([below](#a-cloud-judge-needs-the-agents-session)) | none |
 | `judge_history` | Whether judges get a summary of recent decisions (`enabled`), what happens when it cannot be built (`on_failure`: `deny` or `judge_without_history`), and how many denies in how many minutes are an attempt episode (`burst_denies`, `burst_minutes`). Anything less than the default is recorded as weaker ([JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md#judge-history)) | on, `deny`, 5 in 10 |
 | `one_proxy_per_agent` | Proxy only: refuse a second proxy for the same agent on this ledger | `true` |
 | `key_passphrase_file` | The absolute path of a file only this account can read, holding a passphrase to encrypt the principal key with ([below](#protecting-the-principal-key-with-a-passphrase)). Never the passphrase itself | none: not encrypted |
@@ -95,6 +99,48 @@ The same keys go in an `--answers` file (YAML or JSON). An unknown key is refuse
 `schema_digest` is the `sha256:` digest that `two-key mcp-draft-specs --constitution` prints. Leave it blank
 and `setup` reads it from the server itself after signing, the same way: it starts the server to list its tools
 (this needs the `mcp` extra), and refuses if the server does not list a signed tool.
+
+### The quorum numbers
+
+After the judges, the wizard asks for five numbers, each offered at what the profile sets for that many
+judges. Press Enter to keep one.
+
+| Number | What it is | `default` profile | `high_assurance` |
+| --- | --- | --- | --- |
+| `required_yes` | Yes votes a call needs | the smaller of 2 and the number of judges | 2 |
+| `min_responding` | Judges that must answer, or the call is denied without counting | `required_yes` | `required_yes` |
+| `min_distinct_providers` | Different providers among those judges | 1 | 1 |
+| `min_makers` | Different makers of the judges' models | 1 | 2 |
+| `min_local_judges` | Judges that run on this host or its network | 0 | 1 |
+
+The loaders check the numbers as they always do: one the judges cannot meet (`required_yes: 3` with two
+judges, `min_makers: 2` with one maker) is shown at once, and you can give the numbers again; keep them, and
+setup refuses at the end ([JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md#the-quorum-threshold)).
+
+**A number lower than the profile's own is weaker**, the same as lowering it later with `config set`
+([below](#what-counts-as-weaker-and-why-it-needs---confirm-weaker)). Under `high_assurance`, a `min_makers`
+below 2 or a `min_local_judges` below 1 also turns the profile's floors off. The wizard names each weaker
+number and keeps them only after you type `yes`; anything else asks for the numbers again. From an
+`--answers` file, a weaker `quorum` needs `--confirm-weaker` and a typed `yes` on a terminal, as `config set`
+does; without them setup refuses (`weaker`, `not_confirmed`) and writes nothing. The `config_changed` entry
+setup records lists what was weaker and that it was confirmed.
+
+**A quorum that could be too lenient is warned about**, not refused: one judge deciding every call, one
+judge's yes approving a call while the others are down, `required_yes` at half the judges or fewer, and every
+judge from one provider or one maker. The wizard shows these after the numbers, and `config check` prints
+them as `WARN` lines ([JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md#warnings-about-a-lenient-quorum)).
+
+The other quorum settings (`require_local_yes`, `judge_inputs`, `ballot_binding`, and the rest in
+[SETTINGS](SETTINGS.md)) keep the profile's values; change them afterwards with `config set`.
+
+### A cloud judge needs the agent's session
+
+A judge that runs in the cloud (not on this host, or a `:cloud` model) refuses to vote on a call that comes
+without the monitored agent's session, and the quorum then denies the call
+(`cloud_judge_session_required`, [HOWTO](HOWTO.md#the-monitored-agent-and-the-judge-is-not-the-agent-rule)).
+The proxy reads that session from `agent_session_env`, so with a cloud judge the wizard names the cloud
+judges and asks until you give the variable's name, and `config check` fails without it. Until 0.8.0, a blank
+answer passed setup and `config check`, and then every call was denied.
 
 A starter rules file allows the tools you name and maps no argument. An argument a spec does not name is
 dropped before the tool sees it, so a starter is for trying Two-Key out. For a real MCP server, review and sign
@@ -112,7 +158,7 @@ an access list for your account only), except the public key, which is not a sec
 | `constitution.md` | The prose the judges read |
 | `hard_rules.yaml` | The rules Path A runs, with the tool specs, and `serial: 1` (see below) |
 | `constitution.signed.json` | Both, signed with the principal key |
-| `judges.yaml` | The judges, the quorum `profile`, and the `monitored_agent` |
+| `judges.yaml` | The judges, the quorum `profile` and the numbers you gave, and the `monitored_agent` |
 | `proxy.yaml` | Proxy only. Every scalar setting at its default, written out: `ttl_seconds: 120`, `allow_unresolved_identity: false`, `on_agent_access: refuse`, `on_writable_paths: warn` (`refuse` under `high_assurance`, which does not accept `warn`), and `upstream.on_schema_change: refuse` with `call_timeout_seconds: 60` |
 | `ledger/` | The ledger, with its key and witness folders beside it (`ledger.ledger-key/`, `ledger.witness/`) |
 
@@ -129,6 +175,10 @@ SHA-256 digest of each file it wrote except the private key, and the digest of t
 - A folder above `--dir` that another account could change (`setup_target_unsafe`).
 - A `key_passphrase_file` that is not an absolute path, that another account can read
   (`passphrase_file_insecure`), or whose passphrase is shorter than 12 bytes (`key_passphrase_short`).
+- A quorum number lower than the profile's own without `--confirm-weaker` (`weaker`) or without a typed `yes`
+  (`not_confirmed`), and a `quorum` answer with a key other than the five numbers.
+- A proxy with a cloud judge and no `agent_session_env` (`cloud_judge_session_required`, through
+  `config check`).
 - An answer the loaders refuse (an unknown judge type, a tool with no spec, a malformed digest), and anything
   `config check` fails (`config_check_failed`). `high_assurance` with fewer judges than it needs is one such
   failure. A variable the config names that is not set in your shell does not count
@@ -271,7 +321,8 @@ loaded the way the proxy loads them, not from the key you typed. Each of these i
 | `monitored_agent` | It is removed or changed (judges are checked against it) |
 | Signed rules | Anything but adding a rule, turning `irreversible` or `deny_unmapped` on, or raising a `data_class_floor`: whether an edit to a rule allows more cannot be told in general |
 
-An `undo` that weakens needs `--confirm-weaker` too: undoing a stricter setting is weaker.
+An `undo` that weakens needs `--confirm-weaker` too: undoing a stricter setting is weaker. `setup` reads
+its quorum numbers the same way, against the profile's own ([above](#the-quorum-numbers)).
 
 ### Signed settings need the principal key
 
@@ -443,7 +494,9 @@ no judge, scanner, collector, or upstream server.
 - **`check`** prints one line per finding, `ok`, `WARN`, or `FAIL`, and exits 1 on any `FAIL`: the config
   parses, the principal key opens (encrypted, with `keys.passphrase_file`, as at start) and signed the
   constitution, each `tools:` entry is signed, the judges and
-  quorum load, a monitored agent is declared, every variable the proxy and its judges read is set here (each
+  quorum load (with a `WARN` for a quorum that could be too lenient), a cloud judge has the agent's session
+  (`cloud_judge_session_required` is a `FAIL`: that proxy starts, but denies every call), a monitored agent is
+  declared, every variable the proxy and its judges read is set here (each
   missing one is named: an upstream or agent variable is a `FAIL`, since the proxy would not start or the
   upstream would not get it; a judge's key is a `WARN`, since that judge would abstain on every call), the writable-path
   check, the `on_agent_access` setting (a `FAIL` for `warn` under `high_assurance`), and plaintext SIEM sinks.

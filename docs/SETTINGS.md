@@ -73,6 +73,7 @@ constitution does not yet state a minimum profile.
 | a plaintext SIEM sink (`udp`, `tcp`, `http://`) | allowed, with a start-up warning | refused (`siem_plaintext_refused`) |
 | a scan stance other than `strict` (set by the signed `scan` rule) | allowed | allowed, with a start-up warning |
 | one judge with `required_yes: 1` | `lone_judge_warning` | not reachable: two makers are needed |
+| a quorum that could be too lenient (one judge, a minority approving, one provider or maker) | a `WARN` in `config check` and `setup` | the same, where it can still apply |
 
 ## `proxy.yaml`
 

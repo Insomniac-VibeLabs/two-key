@@ -100,6 +100,20 @@ This is **not a majority rule**. Two affirmative ballots can meet the default th
 
 **With `required_yes: 1` and two or more judges, one judge approves a call alone whenever the others are down, time out, or abstain,** because `min_responding` then follows `required_yes` and is 1. In live run 6x a 1-of-2 deployment executed a call with judge B on a dead port. `TwoKey` prints a `two-key: WARNING: quorum: required_yes 1 with N judges and min_responding 1 ...` line at start. Set `min_responding` to the number of judges to require every judge to answer, or `required_yes: 2` for two approvals.
 
+### Warnings about a lenient quorum
+
+Some quorums are allowed but let a call through on little. `two-key config check` prints a `WARN` line for each,
+and `two-key setup` shows them after you give the quorum numbers ([SETUP](SETUP.md#the-quorum-numbers)). None of
+them refuses; each may be what you meant.
+
+| Warning | Why it is lenient | What tightens it |
+| --- | --- | --- |
+| One judge decides every call | Its yes alone approves a call | A second judge from another maker, and `required_yes: 2` |
+| One judge approves a call alone while the others are down | `required_yes: 1` with `min_responding: 1` (above) | `min_responding` equal to the number of judges, or `required_yes: 2` |
+| `required_yes` is half the judges or fewer | A minority of the judges approves a call | `required_yes` above half the judges |
+| Every judge comes from one provider | An outage or a change on that provider's side reaches every ballot | A judge from another provider, and `min_distinct_providers: 2` |
+| Every judge's model comes from one maker | The judges share that maker's blind spots | A judge from another maker, and `min_makers: 2` |
+
 The configured set must be capable of satisfying the policy. If the affirmative threshold, response floor, provider floor, or judge-set diversity requirements cannot be met, configuration may be rejected at startup. `convene` also denies when the configured policy cannot be met.
 
 ## YES, NO, and ABSTAIN

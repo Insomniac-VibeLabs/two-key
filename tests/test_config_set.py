@@ -149,7 +149,7 @@ class Setup(Deployment):
         self.assertFalse((self.base / "ha").exists())
 
     def test_high_assurance_writes_refuse_for_the_writable_path_check(self):
-        answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD])
+        answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR")
         quiet(setup_cmd.build, answers, self.base / "ha", environ={})
         text = (self.base / "ha" / "proxy.yaml").read_text(encoding="utf-8")
         self.assertIn("on_writable_paths: refuse", text)
@@ -187,7 +187,8 @@ class Setup(Deployment):
 
     def test_the_interview_asks_for_names_never_secrets(self):
         replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "",
-                   "no", "agent", "some-model", "other", "https://agent.example/v1", "AGENT_KEY_VAR",
+                   "no", "", "", "", "", "",    # the quorum: the default profile's numbers for one judge
+                   "agent", "some-model", "other", "https://agent.example/v1", "AGENT_KEY_VAR",
                    "", "", "", "",          # judge history: on, deny on failure, 5 denies, 10 minutes
                    "", "", "tool_a", "no", "public", "", "server --stdio", DIGEST, "",
                    ""]                      # one proxy per agent: yes
@@ -203,6 +204,8 @@ class Setup(Deployment):
         self.assertEqual(answers["judge_history"], {"enabled": True, "on_failure": "deny", "burst_denies": 5,
                                                     "burst_minutes": 10})
         self.assertIs(answers["one_proxy_per_agent"], True)
+        self.assertEqual(answers["quorum"], {"required_yes": 1, "min_responding": 1, "min_distinct_providers": 1,
+                                             "min_makers": 1, "min_local_judges": 0})
         for q in asked:
             self.assertNotRegex(q.lower(), r"password|token|secret", q)
             if "passphrase" in q.lower():
@@ -224,6 +227,125 @@ class Setup(Deployment):
         self.assertFalse(load_proxy_config(self.base / "less" / "proxy.yaml").one_proxy_per_agent)
         with self.assertRaisesRegex(setup_cmd.SetupError, "one_proxy_per_agent"):
             quiet(setup_cmd.build, dict(ANSWERS, one_proxy_per_agent="yes"), self.base / "bad", environ={})
+
+
+class SetupQuorum(unittest.TestCase):
+    """The quorum numbers in ``setup``: offered at the profile's own, a lower one weaker as in ``config set``,
+    and a cloud judge needs the agent's session."""
+    TWO = dict(ANSWERS, judges=[LOCAL, dict(LOCAL, id="local2", maker="other-maker")])
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.base = Path(os.path.realpath(tmp.name))
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.base)
+        for patch in (mock.patch.object(config_set, "_euid", return_value=None if _platform.WINDOWS else 1000),
+                      NO_RUNTIME):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def build(self, answers, name="d", **kw):
+        kw.setdefault("environ", {})
+        return quiet(setup_cmd.build, answers, self.base / name, **kw)
+
+    def refused(self, pattern, answers, **kw):
+        with self.assertRaisesRegex(setup_cmd.SetupError, pattern):
+            self.build(answers, "refused", **kw)
+        self.assertFalse((self.base / "refused").exists())
+
+    def test_the_profiles_own_numbers(self):
+        self.assertEqual(setup_cmd.profile_quorum("default", 1), {
+            "required_yes": 1, "min_responding": 1, "min_distinct_providers": 1, "min_makers": 1,
+            "min_local_judges": 0})
+        self.assertEqual(setup_cmd.profile_quorum("default", 3)["required_yes"], 2)
+        self.assertEqual(setup_cmd.profile_quorum("high_assurance", 2), {
+            "required_yes": 2, "min_responding": 2, "min_distinct_providers": 1, "min_makers": 2,
+            "min_local_judges": 1})
+
+    def test_the_numbers_are_written_and_load_as_written(self):
+        from two_key.judges.config import load_config_file
+        answers = dict(self.TWO, quorum={"required_yes": 2, "min_responding": 2, "min_makers": 2})
+        result, _, _ = self.build(answers)
+        self.assertEqual(result["weaker"], [])
+        (_, policy), _, _ = quiet(load_config_file, self.base / "d" / "judges.yaml")
+        self.assertEqual((policy.required_yes, policy.effective_min_responding, policy.min_makers), (2, 2, 2))
+
+    def test_a_lower_number_needs_the_flag_and_a_typed_yes(self):
+        weaker = dict(self.TWO, quorum={"required_yes": 1})
+        self.refused("weaker: quorum.required_yes: lowered.*--confirm-weaker", weaker)
+        self.refused("not_confirmed", weaker, confirm_weaker=True, confirm=lambda _prompt: False)
+        result, out, _ = self.build(weaker, confirm_weaker=True, confirm=lambda _prompt: True)
+        self.assertEqual(result["weaker"], ["quorum.required_yes: lowered", "quorum.min_responding: lowered"])
+        self.assertIn("weaker: quorum.required_yes: lowered", out)
+        key = load_private_key_file(self.base / "d" / "principal.pem")
+        [entry] = [e for e in Ledger(self.base / "d" / "ledger", key).entries if e.kind == "config_changed"]
+        self.assertEqual(entry.body["weaker"], result["weaker"])
+        self.assertIs(entry.body["confirmed"], True)
+
+    def test_lowering_a_high_assurance_floor_turns_it_off(self):
+        answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                       quorum={"min_makers": 1})
+        self.refused("weaker: quorum: high_assurance turned off; quorum.min_makers: lowered", answers)
+
+    def test_only_the_five_numbers_and_what_the_loader_takes(self):
+        self.refused("quorum: expected a mapping of", dict(self.TWO, quorum={"require_local_yes": False}))
+        self.refused("quorum: expected a mapping of", dict(self.TWO, quorum=2))
+        self.refused("required_yes must be an integer", dict(self.TWO, quorum={"required_yes": "two"}))
+        self.refused("config_check_failed: judges_invalid.*too_few_judges",
+                     dict(self.TWO, quorum={"required_yes": 3}))
+
+    def test_a_cloud_judge_needs_the_agent_session(self):
+        self.refused("config_check_failed: cloud_judge_session_required: judge\\(s\\) cloud",
+                     dict(ANSWERS, judges=[CLOUD]))
+        self.build(dict(ANSWERS, judges=[CLOUD], agent_session_env="SESSION_VAR"))
+        self.assertEqual(setup_cmd.cloud_judges([LOCAL, CLOUD]), ["cloud"])
+
+    def interview(self, replies):
+        asked = []
+
+        def ask(prompt):
+            asked.append(prompt)
+            self.assertTrue(replies, f"the interview asked more than the test answers: {prompt}")
+            return replies.pop(0)
+        answers, out, err = quiet(setup_cmd.interview, ask)
+        self.assertEqual(replies, [], "the interview asked fewer questions than the test answers")
+        return answers, asked, out + err
+
+    START = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", ""]
+    AGENT = ["agent", "some-model", "other", "https://agent.example/v1", "AGENT_KEY_VAR", "", "", "", "", "", "",
+             "tool_a", "no", "public", "", "server", DIGEST]
+
+    def test_the_interview_keeps_a_lower_number_only_after_a_typed_yes(self):
+        second = ["yes", "openai_compatible", "j2", "m2", "http://127.0.0.1:11435/v1", "maker2", "", "no"]
+        replies = (self.START + second
+                   + ["1", "1", "", "", "", "no"]       # required_yes 1 of 2: weaker, not kept
+                   + ["1", "2", "", "", "", "yes"]      # again, with every judge answering: kept
+                   + self.AGENT + ["", ""])
+        answers, asked, err = self.interview(replies)
+        self.assertEqual(answers["quorum"]["required_yes"], 1)
+        self.assertEqual(answers["quorum"]["min_responding"], 2)
+        self.assertEqual(sum("Type yes to keep these numbers" in q for q in asked), 2)
+        self.assertIn("weaker: quorum.required_yes: lowered", err)
+        self.assertIn("one judge approves a call alone whenever the others are down", err)
+        self.assertIn("WARN  quorum: required_yes 1 of 2 judges", err)
+        self.assertIn("Quorum: required_yes, yes votes a call needs [2]: ", asked)
+
+    def test_the_interview_asks_again_for_numbers_the_judges_cannot_meet(self):
+        replies = self.START + ["no", "2", "", "", "", "", "yes", "", "", "", "", ""] + self.AGENT + ["", ""]
+        answers, _, err = self.interview(replies)
+        self.assertIn("too_few_judges_configured:1<2", err)
+        self.assertEqual(answers["quorum"]["required_yes"], 1)
+        self.assertIn("one judge decides every call", err)
+
+    def test_the_interview_needs_the_session_with_a_cloud_judge(self):
+        cloud = ["proxy", "default", "openai_compatible", "j1", "m", "https://judge.example/v1", "", "JUDGE_KEY_VAR",
+                 "no", "", "", "", "", ""]
+        replies = cloud + self.AGENT + ["", "SESSION_VAR", ""]
+        answers, _, err = self.interview(replies)
+        self.assertEqual(answers["agent_session_env"], "SESSION_VAR")
+        self.assertIn("Judge(s) j1 run in the cloud", err)
+        self.assertIn("an answer is needed", err)
 
 
 class Names(unittest.TestCase):
@@ -430,7 +552,7 @@ class Weaker(Deployment):
 
 
 class HighAssurance(Deployment):
-    answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD])
+    answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR")
 
     def test_what_the_profile_forbids_stays_forbidden(self):
         self.refused("config_check_failed: on_agent_access: high_assurance", "on_agent_access", "warn",

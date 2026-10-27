@@ -156,6 +156,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Regression pass: the audit on a shared ledger, and 0.8.0 checks in the live harness — 2026-10-27](#regression-pass-the-audit-on-a-shared-ledger-and-080-checks-in-the-live-harness--2026-10-27)
 - [Ledger audit window: `two-key ledger-view` — 2026-10-27](#ledger-audit-window-two-key-ledger-view--2026-10-27)
 - [Listing on the official MCP Registry — 2026-10-27](#listing-on-the-official-mcp-registry--2026-10-27)
+- [Setup asks for the quorum numbers; a cloud judge needs the agent's session — 2026-10-27](#setup-asks-for-the-quorum-numbers-a-cloud-judge-needs-the-agents-session--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4770,3 +4771,34 @@ which the registry reads on the PyPI page to confirm ownership; it reaches PyPI 
 `tests/test_mcp_registry.py` checks that `server.json`'s versions match `pyproject.toml`, that it points at this
 package over stdio, and that the README carries the line. docs/PYPI.md "List on the MCP Registry" gives the
 publishing steps, which follow each PyPI upload; AGENTS.md and llms.txt name the file.
+
+## Setup asks for the quorum numbers; a cloud judge needs the agent's session — 2026-10-27
+
+The maintainer asked for the quorum numbers in `two-key setup`, and for warnings when a quorum could be too
+lenient. Until now setup asked only for the profile and wrote its defaults; the numbers could be changed only
+afterwards with `config set` ([docs/SETUP.md](docs/SETUP.md#the-quorum-numbers)).
+
+- **The quorum numbers.** After the judges, the wizard asks for `required_yes`, `min_responding`,
+  `min_distinct_providers`, `min_makers` and `min_local_judges`, each offered at the profile's own for that many
+  judges, and writes them to `judges.yaml`. An `--answers` file takes the same five under `quorum`; any it leaves
+  out keep the profile's own, and any other quorum key is refused (the rest stay with `config set`). Numbers the
+  judges cannot meet are shown at once, and the wizard asks for them again.
+- **Lower is weaker, as in `config set`.** A number below the profile's own is weaker (under `high_assurance`, a
+  lower `min_makers` or `min_local_judges` also turns its floors off). The wizard names each one and keeps them
+  only after a typed `yes`. From `--answers`, they need the new `two-key setup --confirm-weaker` and a typed `yes`
+  on a terminal; without them setup refuses (`weaker`, `not_confirmed`) and writes nothing. The setup
+  `config_changed` entry now lists what was weaker and that it was confirmed; the entry's fields are unchanged.
+  `config_set.weaker_quorum` is the comparison both use.
+- **Warnings about a lenient quorum.** `config check`, and so setup, prints a `WARN` for one judge deciding every
+  call, one judge's yes approving while the others are down (the existing warning), `required_yes` at half the
+  judges or fewer, and every judge from one provider or one maker. The wizard shows them after the numbers. They
+  are warnings, not refusals (`quorum.lenient_warnings`; JUDGES_AND_QUORUM "Warnings about a lenient quorum").
+- **Fixed: a cloud judge with no agent session passed setup.** The live setup run found that the wizard took a
+  blank `agent_session_env` with cloud judges; setup and `config check` passed, and every call was then denied
+  `cloud_judge_session_required`. `config check` now fails with `cloud_judge_session_required` when a judge runs
+  in the cloud and `agent_session_env` is not set, so setup and `config set` refuse that configuration too, and
+  the wizard names the cloud judges and asks until the variable is named. The proxy itself still starts with
+  such a configuration, as before; only the check changed.
+- Tests: `tests/test_config_set.py` (`SetupQuorum`), `tests/test_config_cmd.py`, `tests/test_lone_judge.py`. The
+  existing tests with a cloud judge now name an agent session. SETUP, HOWTO, JUDGES_AND_QUORUM, SETTINGS and
+  llms.txt describe the change.

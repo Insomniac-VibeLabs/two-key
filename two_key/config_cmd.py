@@ -42,7 +42,8 @@ def _judges(config):
 
 def check(path: Path | str, environ: Mapping[str, str] | None = None) -> list[tuple[str, str]]:
     """``(level, text)`` findings for the proxy config at ``path``. Any ``FAIL`` means ``mcp-proxy`` would
-    refuse to start (or, for the writable-path and SIEM findings, would under that setting)."""
+    refuse to start (or, for the writable-path and SIEM findings, would under that setting), except
+    ``cloud_judge_session_required``: that proxy starts, but denies every call its cloud judges see."""
     config, bad = _load(path)
     if bad:
         return [bad]
@@ -63,6 +64,7 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
         judges, policy = loaded
         high = bool(policy.is_high_assurance)
         found += _quorum(judges, policy)
+        found += _cloud_session(config, judges)
         agent_found, agent = _agent(config)
         found += agent_found
     found += _environment(config, environ, judges, agent)
@@ -102,14 +104,28 @@ def _constitution(config) -> list[tuple[str, str]]:
 
 
 def _quorum(judges, policy) -> list[tuple[str, str]]:
-    from .quorum import heterogeneity_shortfall, lone_judge_warning
+    from .quorum import heterogeneity_shortfall, lenient_warnings
     out = [(OK, f"judges: {len(judges)} load; required_yes {policy.required_yes}, "
                 f"min_responding {policy.effective_min_responding}"
                 f"{', high_assurance floors' if policy.is_high_assurance else ''}")]
-    for text in (lone_judge_warning(judges, policy), heterogeneity_shortfall(judges, policy)):
+    for text in [*lenient_warnings(judges, policy), heterogeneity_shortfall(judges, policy)]:
         if text:
             out.append((WARN, text))
     return out
+
+
+def _cloud_session(config, judges) -> list[tuple[str, str]]:
+    """A cloud judge abstains on a call that comes without the agent's session (judges/llm.py), and the quorum
+    then denies the call: with a cloud judge and no ``agent_session_env``, every call it would judge is
+    denied ``cloud_judge_session_required`` (live setup run, 2026-10-27)."""
+    if config.agent_session_env:
+        return []
+    cloud = sorted(str(j.judge_id) for j in judges if getattr(j, "is_cloud", lambda: False)())
+    if not cloud:
+        return []
+    return [(FAIL, f"cloud_judge_session_required: judge(s) {', '.join(cloud)} run in the cloud and "
+                   "agent_session_env is not set, so every call they judge would be denied; set agent_session_env "
+                   "to the name of the variable that holds the agent's session (docs/CONNECTING.md)")]
 
 
 def _agent(config):

@@ -317,6 +317,31 @@ def lone_judge_warning(judges: Sequence, policy: QuorumPolicy) -> str | None:
     return None
 
 
+def lenient_warnings(judges: Sequence, policy: QuorumPolicy) -> list[str]:
+    """Start-up warnings for a quorum that is allowed but could be too lenient: one judge, one judge's yes
+    while the others are down (:func:`lone_judge_warning`), a minority of the judges approving, or every judge
+    from one provider or one maker. None of them is a refusal; ``config check`` and ``setup`` print them."""
+    n = len(judges)
+    lone = lone_judge_warning(judges, policy)
+    providers = {unicodedata.normalize("NFKC", str(getattr(j, "provider", "?"))).strip().casefold() for j in judges}
+    makers = {_maker(j) for j in judges}
+    checks = [
+        (n == 1, "quorum: one judge decides every call: its yes alone approves one. A second judge from another "
+                 "maker, with required_yes: 2, checks it"),
+        (lone is not None, lone or ""),
+        (lone is None and n >= 2 and policy.required_yes * 2 <= n,
+         f"quorum: required_yes {policy.required_yes} of {n} judges: half of them or fewer approve a call. Set "
+         f"required_yes: {n // 2 + 1} for a majority"),
+        (n >= 2 and len(providers) == 1,
+         "quorum: every judge comes from one provider, so an outage or a change on its side reaches every ballot. "
+         "Add a judge from another provider and set min_distinct_providers: 2"),
+        (n >= 2 and len(makers) == 1,
+         "quorum: every judge's model comes from one maker, so they share its blind spots. Add a judge from "
+         "another maker and set min_makers: 2"),
+    ]
+    return [text for applies, text in checks if applies]
+
+
 def check_judge_set(judges: Sequence, policy: QuorumPolicy) -> None:
     """Refuse a judge set below the policy's floors (makers, local judges, a local yes). Raises QuorumConfigError."""
     short = heterogeneity_shortfall(judges, policy)

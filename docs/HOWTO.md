@@ -27,8 +27,9 @@ sure which route fits.
 | Python code that calls `TwoKey` directly | **Library** | The same first six, then [Authorize from Python](#authorize-from-python), [Monitored agents](#monitored-agents), and [Redeem](#redeem) |
 
 To write a first deployment in one go, run `two-key setup --dir DIR`: it asks for the route, the
-profile, the judges, the monitored agent, the rules to sign and, for the proxy, the upstream server,
-then writes every file owner-only, signs the constitution, creates the ledger, and checks the result.
+profile, the judges and the quorum's numbers, the monitored agent, the rules to sign and, for the proxy, the
+upstream server, then writes every file owner-only, signs the constitution, creates the ledger, and checks the
+result.
 Later, `two-key config set` changes one setting without opening the files, and `config undo` puts it
 back. [SETUP.md](SETUP.md) says who may run them and what they refuse. They write the files for you;
 they do not decide the rules or the judges, so read the sections above for your route either way.
@@ -2010,7 +2011,11 @@ variable, and an upstream literal value as `<literal>`; no secret value is print
 its type, `base_url`, and the names of the variables it reads. `check` loads the files
 the config names and reports one line each: the config parses (unknown and repeated keys refused), the
 principal key file loads, the constitution is signed by that key, every `tools:` entry is a signed tool, the
-judges and quorum load (with the single-judge and maker-diversity warnings), a `monitored_agent` is declared,
+judges and quorum load (with a warning for a quorum that could be too lenient: one judge, one judge approving
+while the others are down, a minority approving, or one provider or maker for every judge; see
+[JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md#warnings-about-a-lenient-quorum)), a cloud judge has the agent's
+session (`cloud_judge_session_required`, a `FAIL`: without `agent_session_env` the proxy starts but denies every
+call that judge sees), a `monitored_agent` is declared,
 every environment variable the proxy and its judges read is set (each missing one named, never a value:
 an upstream or agent variable is a `FAIL`, a judge's key a `WARN` because that judge would only abstain), every `upstream.check_paths` entry exists
 (`check_path_missing`), a launcher with nothing named (`upstream_paths_unchecked`, a `FAIL` under

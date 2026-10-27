@@ -463,7 +463,7 @@ def _weaker_proxy(old: Posture, new: Posture) -> list[str]:
     from . import agent_access
     a, b = old.config, new.config
     ha, hb = bool(old.policy.is_high_assurance), bool(new.policy.is_high_assurance)
-    checks = [(ha and not hb, "quorum: high_assurance turned off"),
+    checks = [(ha and not hb, HIGH_ASSURANCE_OFF),
               (old.key_encrypted and not new.key_encrypted, "keys.principal: the key is no longer encrypted")]
     for name, resolve in (("on_writable_paths", writable.resolve_mode), ("on_agent_access", agent_access.resolve_mode)):
         checks.append((_mode(getattr(a, name), ha, resolve) == "refuse" and
@@ -504,6 +504,16 @@ def _weaker_tool(tool: str, old_policy, new_policy, floor) -> list[str]:
 
 _QUORUM_COUNTS = ("required_yes", "effective_min_responding", "min_distinct_providers", "min_makers",
                   "min_local_judges")
+
+
+HIGH_ASSURANCE_OFF = "quorum: high_assurance turned off"
+
+
+def weaker_quorum(pa, pb) -> list[str]:
+    """The quorum part of :func:`weaker`, for two policies alone. ``setup`` compares the numbers the operator
+    gives with the profile's own, so a lower one is weaker there too."""
+    off = [HIGH_ASSURANCE_OFF] if pa.is_high_assurance and not pb.is_high_assurance else []
+    return off + _weaker_quorum(pa, pb)
 
 
 def _lowered(old, new) -> bool:
@@ -1359,4 +1369,4 @@ def run_key_passphrase(args) -> int:
 
 
 __all__ = ["ConfigChangeError", "LEDGER_KIND", "apply", "change_key_encryption", "get", "parse_name", "set_setting",
-           "undo", "weaker"]
+           "undo", "weaker", "weaker_quorum"]

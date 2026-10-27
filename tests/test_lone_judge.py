@@ -17,7 +17,7 @@ from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger
-from two_key.quorum import QuorumPolicy, lone_judge_warning
+from two_key.quorum import QuorumPolicy, lenient_warnings, lone_judge_warning
 from two_key.testing import TEST_AGENT, FixedJudge
 
 RULES = [{"id": "tools", "allow_only_tools": ["lookup"]}]
@@ -40,6 +40,21 @@ class LoneJudge(unittest.TestCase):
         text = lone_judge_warning(TWO, QuorumPolicy(required_yes=1).resolved(2))
         self.assertIn("one judge approves a call alone", text)
         self.assertIn("min_responding: 2", text)
+
+    def test_a_quorum_that_could_be_too_lenient_is_named(self):
+        """lenient_warnings: what config check and setup print about a quorum that is allowed but loose."""
+        def warned(judges, policy):
+            return " | ".join(lenient_warnings(judges, policy.resolved(len(judges))))
+        self.assertIn("one judge decides every call", warned(TWO[:1], QuorumPolicy()))
+        self.assertIn("one judge approves a call alone", warned(TWO, QuorumPolicy(required_yes=1)))
+        self.assertEqual(warned(TWO, QuorumPolicy()), "")
+        four = [FixedJudge(f"j{i}", "yes", provider=f"p{i}", maker=f"m{i}") for i in range(4)]
+        self.assertIn("required_yes 2 of 4 judges", warned(four, QuorumPolicy(required_yes=2, min_responding=4)))
+        self.assertEqual(warned(four, QuorumPolicy(required_yes=3)), "")
+        same = [FixedJudge("a", "yes", provider="p", maker="m"), FixedJudge("b", "yes", provider="P ", maker="M")]
+        text = warned(same, QuorumPolicy())
+        self.assertIn("every judge comes from one provider", text)
+        self.assertIn("every judge's model comes from one maker", text)
 
     def test_start_prints_it_and_the_call_still_passes(self):
         key = generate_private_key()
