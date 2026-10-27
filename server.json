@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Insomniac-VibeLabs/two-key",
+  "title": "Two-Key",
+  "description": "Authorization proxy for another MCP server: a rule check and AI judges approve each tool call",
+  "repository": {
+    "url": "https://github.com/Insomniac-VibeLabs/two-key",
+    "source": "github"
+  },
+  "websiteUrl": "https://insomniac-vibelabs.github.io/Insomniac-VibeLabs-Webpage/two-key.html",
+  "version": "0.7.3",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "two-key",
+      "version": "0.7.3",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp-proxy"
+        },
+        {
+          "type": "named",
+          "name": "--config",
+          "description": "The proxy's YAML config, which names the upstream MCP server Two-Key guards (docs/HOWTO.md)",
+          "format": "filepath",
+          "isRequired": true,
+          "valueHint": "proxy.yaml"
+        }
+      ]
+    }
+  ]
+}

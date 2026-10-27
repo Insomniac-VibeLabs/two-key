@@ -57,7 +57,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10; CI tests 3.10 to 3.14 (3.15 in a Linux job that does not block, until PyYAML ships 3.15 wheels; no `requires-python` cap). Package name `two-key`, import name `two_key`,
-version `0.7.3` on PyPI (`pip install "two-key[yaml]==0.7.3"`), tag `v0.7.3` on `main`. Tags are not moved. docs/PYPI.md is the release process.
+version `0.7.3` on PyPI (`pip install "two-key[yaml]==0.7.3"`), tag `v0.7.3` on `main`. Tags are not moved. docs/PYPI.md is the release process. `server.json` (the MCP Registry listing) carries the same version as `pyproject.toml`; bump them together.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 

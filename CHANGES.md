@@ -155,6 +155,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Docs checked against the code — 2026-10-27](#docs-checked-against-the-code--2026-10-27)
 - [Regression pass: the audit on a shared ledger, and 0.8.0 checks in the live harness — 2026-10-27](#regression-pass-the-audit-on-a-shared-ledger-and-080-checks-in-the-live-harness--2026-10-27)
 - [Ledger audit window: `two-key ledger-view` — 2026-10-27](#ledger-audit-window-two-key-ledger-view--2026-10-27)
+- [Listing on the official MCP Registry — 2026-10-27](#listing-on-the-official-mcp-registry--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4756,3 +4757,14 @@ it in a window as a table, one row per entry ([docs/LEDGER_VIEW.md](docs/LEDGER_
   test process outright (exit code 133, no Python error) instead of raising `TclError`; where the child
   process fails like that, the window tests are skipped with its exit code instead of taking the suite down.
   They still run under `xvfb-run` in the coverage job.
+
+## Listing on the official MCP Registry — 2026-10-27
+
+Packaging and docs only; Two-Key's behaviour does not change. `server.json` describes the package for the
+[official MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.Insomniac-VibeLabs/two-key`: the
+`two-key` package on PyPI, run as `two-key mcp-proxy --config <file>` over stdio, described as a proxy in front of
+another MCP server. The README gains the invisible line `<!-- mcp-name: io.github.Insomniac-VibeLabs/two-key -->`,
+which the registry reads on the PyPI page to confirm ownership; it reaches PyPI with the next release.
+`tests/test_mcp_registry.py` checks that `server.json`'s versions match `pyproject.toml`, that it points at this
+package over stdio, and that the README carries the line. docs/PYPI.md "List on the MCP Registry" gives the
+publishing steps, which follow each PyPI upload; AGENTS.md and llms.txt name the file.

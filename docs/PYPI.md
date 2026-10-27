@@ -52,6 +52,7 @@ installs from PyPI.
 | [README.md](../README.md) | The project page's long description |
 | [LICENSE](../LICENSE) | Apache-2.0, declared as the SPDX expression `Apache-2.0` |
 | [MANIFEST.in](../MANIFEST.in) | Docs and examples in the source distribution. The wheel is still only the `two_key` package |
+| [server.json](../server.json) | The listing on the official MCP Registry. Its two versions match `pyproject.toml` (see "List on the MCP Registry") |
 | [.github/workflows/pypi-publish.yml](../.github/workflows/pypi-publish.yml) | Build, `twine check --strict`, a CycloneDX SBOM, then a tokenless upload |
 
 No `setup.py`, no `requirements.txt`, and no `.pypirc`. A `.pypirc` holds a
@@ -193,6 +194,44 @@ create an environment with no reviewer the first time the job asks for it.
   it. Other links in the README are repository-relative. They open on
   GitHub and do not resolve on pypi.org. The page still carries the full
   README. Nothing was cut from it to make the page.
+
+## List on the MCP Registry
+
+The [official MCP Registry](https://registry.modelcontextprotocol.io) lists
+MCP servers so clients and directories can find them. It stores only the
+listing in [server.json](../server.json), which points at the `two-key`
+package on PyPI and at `two-key mcp-proxy --config <file>` over stdio. The
+description says Two-Key is a proxy in front of another MCP server, so
+nobody expects tools of its own.
+
+- **Name.** `io.github.Insomniac-VibeLabs/two-key`. Publishing under the
+  organization needs a GitHub account that is an Owner of
+  Insomniac-VibeLabs; ordinary membership is refused.
+- **Ownership.** The registry looks for the line
+  `<!-- mcp-name: io.github.Insomniac-VibeLabs/two-key -->` in the README
+  that the PyPI page shows. It is an HTML comment under the copyright
+  header, so the page looks the same. The `PyPI` branch's README must keep
+  it, and PyPI shows it only from the first release that carries it
+  (0.8.0).
+- **Version.** `version` and `packages[0].version` in `server.json` equal
+  the version in `pyproject.toml`, and that version must already be on
+  PyPI. Bump all three together. `tests/test_mcp_registry.py` fails if they
+  differ or the README line is missing.
+
+After the release is on PyPI, from a clone of the release commit:
+
+```bash
+brew install mcp-publisher        # or the release download from github.com/modelcontextprotocol/registry
+mcp-publisher login github        # as an Owner of Insomniac-VibeLabs
+mcp-publisher publish
+curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Insomniac-VibeLabs/two-key"
+```
+
+Each later release is published the same way, after its upload to PyPI.
+A listing cannot be changed for a version already published; a fix is a
+new version. Community directories (the awesome-mcp-servers list, Glama,
+mcp.so, PulseMCP, Smithery) take their own submissions, and some read the
+official registry.
 
 ## Checks before you run it
 
