@@ -144,7 +144,7 @@ agent as a tool error with a reason code.
 flowchart TD
   host["Agent host<br/>MCP client"] -- "tools/list and<br/>tools/call, stdio" --> tk
   subgraph proxy["two-key mcp-proxy, its own OS user"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["TwoKey<br/>.authorize<br/>Path A and B"]
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["Two-Key<br/>checks policy,<br/>asks judges"]
     tk -- "token" --> gw["Gateway<br/>same process"]
   end
   tk -. "normalized record" .-> judges["Judges"]

@@ -4676,3 +4676,5 @@ name so no word wraps. In the roadmap diagrams 0.8.0 and 0.9.0 now say "beta", a
 
 GitHub then clipped the widest lines in the same diagram ("TwoKey.authorize", "Path A and Path B"). Its box
 and edge labels now break into lines of 14 characters or fewer, as the roadmap's do, in README and HOWTO.
+The decision box's code name ("TwoKey.authorize, Path A and B") is now plain words: "Two-Key checks
+policy, asks judges".
