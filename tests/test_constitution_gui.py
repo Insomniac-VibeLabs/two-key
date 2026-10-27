@@ -92,7 +92,8 @@ class Window(unittest.TestCase):
         self.top.update_idletasks()
         return editor
 
-    def add_tools(self, editor):
+    @staticmethod
+    def add_tools(editor):
         editor.tool_id.set("search")
         editor.irreversible.set(False)
         editor.floor.set("public")

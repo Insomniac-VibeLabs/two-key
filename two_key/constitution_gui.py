@@ -140,7 +140,8 @@ class ConstitutionEditor:
         self.say(self.sign_note, opened)
         self.recheck()
 
-    def say(self, label: ttk.Label, text: str, bad: bool = False) -> None:
+    @staticmethod
+    def say(label: ttk.Label, text: str, bad: bool = False) -> None:
         label.configure(text=text, foreground=BAD if bad else GOOD)
 
     def changed(self, *_args) -> None:
@@ -491,8 +492,8 @@ class ConstitutionEditor:
         panes.add(self.review, weight=1)
         panes.add(self.preview, weight=1)
 
-    def _row(self, parent, label: str, var: tk.StringVar, browse: Callable[[], Any] | None = None,
-             **entry) -> None:
+    @staticmethod
+    def _row(parent, label: str, var: tk.StringVar, browse: Callable[[], Any] | None = None, **entry) -> None:
         line = ttk.Frame(parent)
         line.pack(fill="x", pady=1)
         ttk.Label(line, text=label, width=30).pack(side="left")

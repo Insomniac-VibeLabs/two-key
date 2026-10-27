@@ -366,7 +366,8 @@ class TryingACall(unittest.TestCase):
 
 
 class CheckCommand(unittest.TestCase):
-    def run_cli(self, *argv):
+    @staticmethod
+    def run_cli(*argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = cli.main(["constitution-editor", *argv])
