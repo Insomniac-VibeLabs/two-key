@@ -157,6 +157,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Ledger audit window: `two-key ledger-view` — 2026-10-27](#ledger-audit-window-two-key-ledger-view--2026-10-27)
 - [Listing on the official MCP Registry — 2026-10-27](#listing-on-the-official-mcp-registry--2026-10-27)
 - [Setup asks for the quorum numbers; a cloud judge needs the agent's session — 2026-10-27](#setup-asks-for-the-quorum-numbers-a-cloud-judge-needs-the-agents-session--2026-10-27)
+- [Regression pass: ledger-view and setup fixes — 2026-10-27](#regression-pass-ledger-view-and-setup-fixes--2026-10-27)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4802,3 +4803,31 @@ afterwards with `config set` ([docs/SETUP.md](docs/SETUP.md#the-quorum-numbers))
 - Tests: `tests/test_config_set.py` (`SetupQuorum`), `tests/test_config_cmd.py`, `tests/test_lone_judge.py`. The
   existing tests with a cloud judge now name an agent session. SETUP, HOWTO, JUDGES_AND_QUORUM, SETTINGS and
   llms.txt describe the change.
+
+## Regression pass: ledger-view and setup fixes — 2026-10-27
+
+A regression pass over everything new since 1e9fd8e (`ledger-view`, the setup wizard's quorum numbers and
+warnings, the cloud-judge session check, and `server.json`): the full suite with and without the `mcp` extra,
+the live harness self-test and sabotage check, and each new command run by hand. `ledger-view` was checked on a
+ledger from a live-harness pass, with `--print` compared against a filter written separately and the window
+driven by real mouse and keyboard events. Fixes:
+
+- **`ledger-view`: the agent is `agent.id`.** The ledger records a proposal's or decision's agent as a mapping
+  (`id`, `hosting`, `trusted`), so the field is `agent.id`. The window's default `agent` column was never shown
+  and the LEDGER_VIEW recipe `agent equals buyer` matched nothing. The default column is now `agent.id`, and
+  docs/LEDGER_VIEW.md names it in the recipe and the field lists.
+- **`ledger-view`: Reload on a ledger that cannot be read.** A file the account could no longer read made
+  Reload print a traceback and leave the line above the table green. Reload now reports the reason in red, the
+  same as a ledger that fails its checks, and that line now says the table still shows the entries from when it
+  last opened (it used to say only "see the terminal").
+- **`ledger-view`: Columns keeps the order.** Applying the Columns list sorted the columns by name, so the
+  starting order was lost; columns already shown now keep their place, and new ones follow. **Defaults** puts
+  back the starting columns in their order. The no-display message now goes to stderr, as the no-tkinter one
+  does.
+- **`setup`: the next steps name the agent session variable.** With a cloud judge the wizard now requires
+  `agent_session_env`, but the "set ... in the proxy's own environment" step listed only the judges' keys and the
+  agent's credential.
+- docs/LEDGER_VIEW.md: quote `*` as well as names with `[]` on the command line.
+- Tests: `tests/test_ledger_view.py` (the agent field on a real ledger; Reload with no ledger, an unreadable
+  file, and a cut ledger), `tests/test_ledger_gui.py` (agent records as the ledger writes them, Columns order,
+  the Reload message, stderr), `tests/test_config_set.py` (the next steps).

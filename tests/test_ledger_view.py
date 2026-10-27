@@ -250,7 +250,7 @@ class Command(unittest.TestCase):
                          FixedJudge("b", "no", provider="p-b", maker="m-b")],
                         private_key=cls.key, quorum=QuorumPolicy(required_yes=1), allow_test_doubles=True,
                         monitored_agent=TEST_AGENT)
-            tk.authorize({"tool": "search", "data_class": "public"}, {"q": "find ada"}, "look up ada")
+            tk.authorize({"tool": "search", "data_class": "public"}, {"q": "find ada"}, "look up ada", agent_id="buyer")
             tk.authorize({"tool": "wire_transfer", "data_class": "public"}, {}, "wire it")
             tk.close()
         cls.size = len(tk.ledger.entries)
@@ -292,6 +292,12 @@ class Command(unittest.TestCase):
         self.assertEqual({e["kind"] for e in either}, {"proposal", "decision"})
         searched = self.printed("--search", "wire it")
         self.assertEqual([e["kind"] for e in searched], ["proposal"])
+
+    def test_print_by_agent(self):
+        """The ledger records the agent as a mapping, so its id is the field ``agent.id``."""
+        mine = self.printed("--where", "agent.id", "equals", "buyer")
+        self.assertEqual([e["kind"] for e in mine], ["proposal", "decision"])
+        self.assertIn("agent.id", default_columns(field_names(rows_from_entries(self.printed()))))
 
     def test_fields_lists_every_name(self):
         code, out, _ = self.run_cli("--fields")
@@ -358,7 +364,17 @@ class Command(unittest.TestCase):
             return 0
         self.window(show)
         reload = seen["reload"]
-        with mock.patch.object(cli, "_open_ledger", return_value=None), self.assertRaises(ViewError):
+        entries = self.dir / "ledger" / "entries.jsonl"
+        with mock.patch.object(Path, "is_file", return_value=False), self.assertRaisesRegex(ViewError, "no ledger"):
+            reload()
+        with mock.patch.object(Path, "read_text", side_effect=PermissionError(13, "Permission denied")), \
+                self.assertRaisesRegex(ViewError, "Permission denied"):
+            reload()
+        original = entries.read_bytes()
+        self.addCleanup(entries.write_bytes, original)
+        lines = original.splitlines(keepends=True)
+        entries.write_bytes(b"".join(lines[:-1]))
+        with self.assertRaisesRegex(ViewError, "."):
             reload()
 
     def test_without_tkinter_the_command_says_what_to_do(self):

@@ -61,14 +61,15 @@ Each row is one ledger entry. Its fields are:
   table joins them with commas, and a filter matches the row when any one element passes.
 - A body key with the same name as one of the four entry fields is shown as `body.<key>`.
 
-Different kinds of entry have different fields: a `decision` has `allowed`, `reason`, `agent`, `at`,
+Different kinds of entry have different fields: a `decision` has `allowed`, `reason`, `agent.id`, `at`,
 `subject.*`, `history_digest` and `history_basis.*`; a `path_b` has `passed`, `yes`, `no`, `abstain` and
 `ballots[].*`; a `gateway_denied` has `jti`, `reason` and `tool_args_digest`. A row with no value for a field
 shows an empty cell.
 
-The table starts with the fields most audits need (`seq`, `kind`, `at`, `agent`, `tool`, `subject.tool`,
+The table starts with the fields most audits need (`seq`, `kind`, `at`, `agent.id`, `tool`, `subject.tool`,
 `allowed`, `passed`, `reason`, `ballots[].judge_id`, `ballots[].vote`, `jti`, where the ledger has them).
-**Columns** picks others. Every field can be searched and filtered whether or not it is a column.
+**Columns** picks others: the columns already shown keep their place, and new ones follow. **Defaults** puts
+back the starting columns. Every field can be searched and filtered whether or not it is a column.
 
 Select a row to see all of its fields, and the whole entry as JSON, below the table.
 
@@ -86,7 +87,9 @@ Select a row to see all of its fields, and the whole entry as JSON, below the ta
   it as the next sort key; the headings number the keys (▲1, ▼2). Numbers sort as numbers, text ignores
   case, and a row with no value for a sort field goes last whichever way it is sorted.
 - **Reload** opens and checks the ledger again, so entries written since the window opened appear. The
-  search, filters, sort, and columns stay.
+  search, filters, sort, and columns stay. If the ledger does not open again (it fails a check, or a file
+  cannot be read), the line above the table turns red and says why, and the table keeps the entries from
+  when it last opened.
 - The line at the bottom says how many entries match, of how many, and the sort. The window lists at most
   `--max-rows` matching entries (10000 unless you say otherwise); the count is always of all of them.
 
@@ -132,14 +135,14 @@ two-key ledger-view --key keys/principal.pem --ledger ledger --print \
 | `--fields` | list the field names and stop |
 | `--max-rows N` | list at most N matching entries in the window |
 
-Quote a field name that has `[]` in it, so the shell does not read the brackets.
+Quote a field name that has `[]` in it, and the any-field name `*`, so the shell does not expand them.
 
 ## Audit recipes
 
 | Question | Filters |
 | --- | --- |
 | Which calls were denied, and why? | `kind equals decision`, `allowed equals false`; sort by `reason` |
-| What did one agent do? | `agent equals buyer` (decisions and proposals carry the agent) |
+| What did one agent do? | `agent.id equals buyer` (decisions and proposals carry the agent's id) |
 | Every step of one call | sort by `seq`, then find the `proposal` and read on to its `decision`; a call's entries are next to each other unless two proxies share the ledger |
 | Where did judge `c` vote no? | `kind equals path_b`, `ballots[].judge_id equals c`, `ballots[].vote equals no` (the second and third match the row if any ballot passes each; read the row's ballots to pair them) |
 | Calls a rule refused | `reason starts-with rule_denied:` |

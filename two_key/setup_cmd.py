@@ -587,11 +587,18 @@ def _record_setup(target: Path, key, written: list[str], constitution_hash: str,
     return entry.seq
 
 
+def _env_names(route: str, answers: Mapping) -> list[str]:
+    """The variables the answers name: each judge's API key, the agent's credential, and (proxy) its session."""
+    names = {j.get("auth_env") for j in answers.get("judges") or [] if isinstance(j, Mapping)}
+    names.add((answers.get("monitored_agent") or {}).get("credential_env"))
+    if route == "proxy":
+        names.add(answers.get("agent_session_env"))
+    return sorted(names - {None, ""})
+
+
 def _next_steps(route: str, target: Path, answers: Mapping) -> list[str]:
     from .constitution import load_serial
-    names = sorted({j.get("auth_env") for j in answers.get("judges") or [] if isinstance(j, Mapping)
-                    and j.get("auth_env")} | {(answers.get("monitored_agent") or {}).get("credential_env")} -
-                   {None, ""})
+    names = _env_names(route, answers)
     steps = []
     if names:
         steps.append(f"set {', '.join(names)} in the proxy's own environment (values never go in a file)")

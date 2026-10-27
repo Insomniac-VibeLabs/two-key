@@ -28,21 +28,26 @@ try:
 except ImportError:                 # this Python was built without tkinter
     tk = None
 
-from two_key.ledger_view import Filter, Query, ViewError, rows_from_entries
+from two_key.ledger_view import Filter, Query, ViewError, default_columns, rows_from_entries
 
 
 def entry(number, kind, **body):
     return {"seq": number, "prev": "0" * 64, "kind": kind, "body": body, "entry_hash": f"{number:064x}"}
 
 
+def agent(name):
+    """The ledger's agent record, as two_key.agent_meta.ledger_agent_record writes it."""
+    return {"id": name, "hosting": "unspecified", "trusted": False}
+
+
 ENTRIES = [
     entry(0, "proposal", tool="search", proposal="Look up Ada\non two lines", agent=None),
     entry(1, "path_b", passed=True, reason="quorum_pass",
           ballots=[{"judge_id": "a", "vote": "yes"}, {"judge_id": "b", "vote": "yes"}]),
-    entry(2, "decision", allowed=True, reason="both_paths_allow", agent="buyer", at="2026-10-27T02:00:00Z"),
+    entry(2, "decision", allowed=True, reason="both_paths_allow", agent=agent("buyer"), at="2026-10-27T02:00:00Z"),
     entry(3, "path_b", passed=False, reason="quorum_fail",
           ballots=[{"judge_id": "a", "vote": "yes"}, {"judge_id": "c", "vote": "no"}]),
-    entry(4, "decision", allowed=False, reason="quorum_fail", agent="seller", at="2026-10-27T03:00:00Z",
+    entry(4, "decision", allowed=False, reason="quorum_fail", agent=agent("seller"), at="2026-10-27T03:00:00Z",
           note="x" * 300),
 ]
 OK = {"ok": True, "size": 5, "decision_digest_problems": []}
@@ -128,7 +133,7 @@ class Window(unittest.TestCase):
         self.assertEqual(view.shown_seqs(), [0, 1, 2, 3, 4])
         self.assertEqual(view.status.cget("text"), "Showing 5 of 5 entries. Sorted by seq ascending.")
         self.assertEqual(self.top.title(), "Two-Key ledger: ledger")
-        self.assertEqual(list(view.tree["columns"]), ["seq", "kind", "at", "agent", "tool", "allowed", "passed",
+        self.assertEqual(list(view.tree["columns"]), ["seq", "kind", "at", "agent.id", "tool", "allowed", "passed",
                                                       "reason", "ballots[].judge_id", "ballots[].vote"])
 
     def test_cells_are_one_line_and_cut(self):
@@ -174,7 +179,7 @@ class Window(unittest.TestCase):
     def test_remove_and_clear(self):
         view = self.viewer()
         first = view.add_filter("kind", "equals", "decision")
-        view.add_filter("agent", "equals", "buyer")
+        view.add_filter("agent.id", "equals", "buyer")
         view.search.set("both")
         view.refresh()
         self.assertEqual(view.shown_seqs(), [2])
@@ -310,7 +315,9 @@ class Window(unittest.TestCase):
         self.assertEqual(view.tree.set("3", "ballots[].vote"), "yes, no")
         top = view.choose_columns()
         _find(top, ttk.Button, "Defaults").invoke()
-        self.assertEqual(view.columns[:2], ["seq", "kind"])
+        self.assertEqual(view.columns, default_columns(view.fields))
+        view.set_columns(["reason", "seq", "kind"])
+        self.assertEqual(view.columns, ["seq", "kind", "reason"], "shown columns keep their place, new ones follow")
         view.set_columns([])
         self.assertEqual(view.columns, ["seq"])
 
@@ -350,7 +357,8 @@ class Window(unittest.TestCase):
         self.assertEqual(view.shown_seqs(), [5, 4, 2])
         self.assertIn("extra_field", line.name_box.cget("values"))
         view.reload()
-        self.assertIn("did not open again: ledger gone", view.banner.cget("text"))
+        self.assertIn("did not open again: ledger gone. The table still shows the entries from when it last "
+                      "opened.", view.banner.cget("text"))
         self.assertEqual(view.shown_seqs(), [5, 4, 2])
 
     def test_no_reload_button_without_a_reload(self):
@@ -365,6 +373,7 @@ class Show(unittest.TestCase):
                 mock.patch("builtins.print") as printed:
             self.assertEqual(show([]), 1)
         self.assertIn("--print", printed.call_args[0][0])
+        self.assertIs(printed.call_args[1].get("file"), sys.stderr, "the message goes to stderr, as without tkinter")
 
     def test_opens_and_returns_when_closed(self):
         if tk_problem():

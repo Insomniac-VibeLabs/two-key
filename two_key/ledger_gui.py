@@ -18,6 +18,7 @@ no file. It only reads: the rows come from a ledger that ``two-key ledger-view``
 from __future__ import annotations
 
 import json
+import sys
 import tkinter as tk
 from tkinter import ttk
 from typing import Callable, Sequence
@@ -46,7 +47,8 @@ def details_text(row: Row) -> str:
 def report_text(report: dict) -> tuple[str, bool]:
     """The integrity line above the table, and whether it reports a problem."""
     if report.get("error"):
-        return f"The ledger did not open again: {report['error']}", True
+        return (f"The ledger did not open again: {report['error']}. The table still shows the entries from when "
+                "it last opened."), True
     problems = report.get("decision_digest_problems") or []
     if problems:
         more = f" (and {len(problems) - 1} more; press Show problems)" if len(problems) > 1 else ""
@@ -304,9 +306,17 @@ class LedgerViewer:
     # -- columns, details, reload -----------------------------------------------------------------------------
 
     def set_columns(self, names: Sequence[str]) -> None:
-        """Show these fields as columns, in the order ``field_names`` lists them; an empty choice keeps ``seq``."""
+        """Show these fields as columns: those already shown keep their place, the others follow in the order
+        ``field_names`` lists them. An empty choice keeps ``seq``."""
         chosen = set(names) or {"seq"}
-        self.columns = [name for name in self.fields if name in chosen]
+        kept = [name for name in self.columns if name in chosen]
+        self.columns = kept + [name for name in self.fields if name in chosen and name not in kept]
+        self._set_columns()
+        self.refresh()
+
+    def reset_columns(self) -> None:
+        """The columns a new window starts with, in their order."""
+        self.columns = default_columns(self.fields)
         self._set_columns()
         self.refresh()
 
@@ -329,7 +339,7 @@ class LedgerViewer:
             self.set_columns([self.fields[i] for i in box.curselection()])
             top.destroy()
         ttk.Button(buttons, text="Apply", command=apply).pack(side="right")
-        ttk.Button(buttons, text="Defaults", command=lambda: (self.set_columns(default_columns(self.fields)),
+        ttk.Button(buttons, text="Defaults", command=lambda: (self.reset_columns(),
                                                               top.destroy())).pack(side="right", padx=4)
         return top
 
@@ -379,7 +389,8 @@ def show(rows: Sequence[Row], **kwargs) -> int:
     try:
         root = tk.Tk()
     except tk.TclError as e:
-        print(f"two-key ledger-view: cannot open a window ({e}); use --print to list the entries instead")
+        print(f"two-key ledger-view: cannot open a window ({e}); use --print to list the entries instead",
+              file=sys.stderr)
         return 1
     root.geometry("1400x800")
     LedgerViewer(root, rows, **kwargs)

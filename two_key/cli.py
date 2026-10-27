@@ -311,6 +311,20 @@ def _audit(args) -> int:
     return 0 if report["ok"] else 1
 
 
+def _reopen_ledger(args, key):
+    """The window's Reload: the ledger opened and checked again as ``_open_ledger`` does, or ``ViewError`` with
+    the reason, so the window can show it. An unreadable file is a reason too, not a traceback."""
+    from .ledger import Ledger, LedgerError
+    from .ledger_view import ViewError
+    if not (Path(args.ledger) / "entries.jsonl").is_file():
+        raise ViewError(f"no ledger at {args.ledger}")
+    try:
+        pin = None if args.witness_public_key is None else load_public_key(args.witness_public_key)
+        return Ledger(args.ledger, key, witness_public_key=pin, anchor_path=_anchor_arg(args))
+    except (LedgerError, OSError, ValueError) as e:
+        raise ViewError(str(e)) from None
+
+
 def _ledger_view(args) -> int:
     from .ledger_view import ViewError, field_names, integrity, print_rows, query_from_args, rows_from_entries, select
     try:
@@ -341,9 +355,7 @@ def _ledger_view(args) -> int:
         return 1
 
     def reload():
-        again = _open_ledger(args, key)
-        if again is None:
-            raise ViewError("see the terminal for the reason")
+        again = _reopen_ledger(args, key)
         return rows_from_entries(e.to_json() for e in again.entries), integrity(again)
     return show(rows, title=str(args.ledger), report=integrity(ledger), reload=reload, query=query,
                 max_rows=args.max_rows)

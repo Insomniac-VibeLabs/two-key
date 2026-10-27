@@ -298,8 +298,9 @@ class SetupQuorum(unittest.TestCase):
     def test_a_cloud_judge_needs_the_agent_session(self):
         self.refused("config_check_failed: cloud_judge_session_required: judge\\(s\\) cloud",
                      dict(ANSWERS, judges=[CLOUD]))
-        self.build(dict(ANSWERS, judges=[CLOUD], agent_session_env="SESSION_VAR"))
+        result, _, _ = self.build(dict(ANSWERS, judges=[CLOUD], agent_session_env="SESSION_VAR"))
         self.assertEqual(setup_cmd.cloud_judges([LOCAL, CLOUD]), ["cloud"])
+        self.assertIn("set AGENT_KEY_VAR, JUDGE_KEY_VAR, SESSION_VAR in the proxy's own environment", result["next"][0])
 
     def interview(self, replies):
         asked = []
