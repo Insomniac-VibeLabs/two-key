@@ -298,7 +298,9 @@ class Window(unittest.TestCase):
     def test_columns_window(self):
         view = self.viewer()
         top = view.choose_columns()
-        box = next(w for w in top.winfo_children() if isinstance(w, tk.Listbox))
+        boxes = [w for w in top.winfo_children() if isinstance(w, tk.Listbox)]
+        self.assertEqual(len(boxes), 1)
+        box = boxes[0]
         box.selection_clear(0, "end")
         for i, name in enumerate(view.fields):
             if name in ("seq", "proposal", "ballots[].vote"):

@@ -4758,6 +4758,7 @@ it in a window as a table, one row per entry ([docs/LEDGER_VIEW.md](docs/LEDGER_
   process fails like that, the window tests are skipped with its exit code instead of taking the suite down.
   They still run under `xvfb-run` in the coverage job.
 - SonarCloud: **Clear** no longer copies the filter list before walking it (S7504, an unneeded `list()`).
+- DeepSource: the Columns window test finds its list without a bare `next()` (PTC-W0063).
 
 ## Listing on the official MCP Registry — 2026-10-27
 
