@@ -167,6 +167,7 @@ SPDX-License-Identifier: Apache-2.0
 - [The proxy's start names its agent — 2026-10-28](#the-proxys-start-names-its-agent--2026-10-28)
 - [Live run 11 findings — 2026-10-28](#live-run-11-findings--2026-10-28)
 - [Release v0.8.0: judge history, ballot records, one proxy per agent, two windows — 2026-10-28](#release-v080-judge-history-ballot-records-one-proxy-per-agent-two-windows--2026-10-28)
+- [Publish from the PyPI branch only — 2026-10-28](#publish-from-the-pypi-branch-only--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5048,3 +5049,11 @@ the upgrade: a ledger written by 0.8.0 is not meant to be opened by 0.7.3 again.
 - A proxy with a judge that is not on this machine needs `agent_session_env`, or it refuses to start.
 
 docs/UPGRADING.md has the full row.
+
+## Publish from the PyPI branch only — 2026-10-28
+
+`.github/workflows/pypi-publish.yml` no longer runs on a tag push. A release is a manual run of
+`publish` on the `PyPI` branch, as 0.7.0 to 0.7.3 were. The `v0.8.0` tag push started the workflow, and
+its publish job was refused because the `pypi` environment only deploys from the `PyPI` branch. The tag
+stays where it is: it is the git snapshot of 0.8.0, not the upload. The tag-version check step went with
+the trigger. docs/PYPI.md and the README's file table say so.

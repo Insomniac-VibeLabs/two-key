@@ -825,7 +825,7 @@ that file, not a description of the file. This table is the description.
 | `pyproject.toml` | Package name `two-key`, version, dependencies, extras, and the `two-key` command |
 | `MANIFEST.in` | Docs and examples included in the source distribution. The wheel is only `two_key` |
 | `docs/PYPI.md` | How to register the name and publish with trusted publishing, without a token in the repo |
-| `.github/workflows/pypi-publish.yml` | Build, metadata check, SBOM, and the tokenless upload. The file is on `main`; a run publishes only from branch `PyPI` or a matching version tag |
+| `.github/workflows/pypi-publish.yml` | Build, metadata check, SBOM, and the tokenless upload. The file is on `main`; a run publishes only when started by hand on branch `PyPI` |
 
 ## History and license
 
