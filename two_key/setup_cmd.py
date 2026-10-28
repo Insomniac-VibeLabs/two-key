@@ -145,9 +145,21 @@ def _ask_judge(ask: Ask, n: int) -> dict:
         judge["base_url"] = _ask(ask, f"Judge {n}: base URL",
                                  "http://127.0.0.1:11434" if kind == "ollama" else None)
     _optional(judge, "maker", ask, f"Judge {n}: who made the model (blank: the provider): ")
+    _ask_upstream(judge, ask, f"Judge {n}")
     _optional(judge, "auth_env", ask,
               f"Judge {n}: name of the environment variable holding its API key (blank: none): ")
     return judge
+
+
+def _ask_upstream(spec: dict, ask: Ask, who: str) -> None:
+    """``upstream`` for a judge or the agent whose address and model do not say who serves it (a local proxy, an
+    unrecognized host): without it the proxy refuses to start with ``unresolved_identity`` (live run 11, D1)."""
+    from .identity import resolve_upstream_info
+    if not spec.get("base_url") or resolve_upstream_info(spec["base_url"], spec.get("model", ""))[0]:
+        return
+    _optional(spec, "upstream", ask, f"{who}: Two-Key cannot tell who serves {spec.get('model')} at "
+                                     f"{spec['base_url']}; where does that address forward the calls (a host "
+                                     "such as api.x.ai; stated by you, not checked; blank: none): ")
 
 
 def _ask_quorum(ask: Ask, profile: str, judges: list[dict]) -> dict:
@@ -221,6 +233,7 @@ def _ask_agent(ask: Ask) -> dict:
                              "model": _ask(ask, "Monitored agent: model"),
                              "provider": _ask(ask, "Monitored agent: provider (a label)"),
                              "base_url": _ask(ask, "Monitored agent: base URL")}
+    _ask_upstream(agent, ask, "Monitored agent")
     env = ask("Monitored agent: name of the environment variable holding its credential (blank: none): ").strip()
     agent["credential_env" if env else "credential"] = env or "none"
     return agent

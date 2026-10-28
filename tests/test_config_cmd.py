@@ -125,6 +125,28 @@ class Check(Workspace):
         self.assertEqual(line, "environment: set here: AGENT_KEY_VAR, AGENT_SESSION_VAR, JUDGE_KEY_VAR, "
                                "UPSTREAM_SECRET_VAR")
 
+    def test_an_identity_the_proxy_cannot_resolve_is_named(self):
+        """Live run 11, D1: setup and config check passed, and then the proxy refused to start with
+        unresolved_identity. config check now names each judge and agent it would refuse."""
+        unresolved = [text for level, text in self.check() if text.startswith("unresolved_identity")]
+        self.assertEqual(len(unresolved), 1, unresolved)
+        for who in ("judge 'j1'", "judge 'j2'", "agent 'agent'", "the proxy refuses to start", "declare upstream:"):
+            self.assertIn(who, unresolved[0])
+        self.assertIn((config_cmd.WARN, unresolved[0]), self.check())
+        (self.dir / "judges.yaml").write_text(
+            JUDGES.replace("maker: local-maker}", "maker: local-maker, upstream: api.x.ai}")
+                  .replace("credential_env: AGENT_KEY_VAR}", "credential_env: AGENT_KEY_VAR, upstream: agent.example}"),
+            encoding="utf-8")
+        unresolved = [text for _, text in self.check() if text.startswith("unresolved_identity")]
+        self.assertEqual(len(unresolved), 1, unresolved)
+        self.assertIn("judge 'j2'", unresolved[0])
+        self.assertNotIn("judge 'j1'", unresolved[0])
+        self.assertNotIn("agent 'agent'", unresolved[0])
+        self.write_proxy("allow_unresolved_identity: true\n")
+        unresolved = [text for _, text in self.check() if text.startswith("unresolved_identity")]
+        self.assertIn("allowed by allow_unresolved_identity: true", unresolved[0])
+        self.assertNotIn("refuses to start", unresolved[0])
+
     def test_an_unset_agent_credential_fails(self):
         """Live run 9, finding 1: the proxy refuses to start without it, so check must not say all is set."""
         found = self.check({**SET, "AGENT_KEY_VAR": ""})

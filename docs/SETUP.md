@@ -84,9 +84,9 @@ The same keys go in an `--answers` file (YAML or JSON). An unknown key is refuse
 | --- | --- | --- |
 | `route` | `proxy` (`two-key mcp-proxy` in front of an MCP server), `guard`, or `library` | `proxy` |
 | `profile` | `default` or `high_assurance` | `default` |
-| `judges` | For each judge: `type`, `id`, `model`, `base_url` (for `openai_compatible` and `ollama`), `maker`, and `auth_env`, the name of the environment variable that holds its API key. Any other key of a judge in [SETTINGS](SETTINGS.md) can be given too | (asked) |
+| `judges` | For each judge: `type`, `id`, `model`, `base_url` (for `openai_compatible` and `ollama`), `maker`, `upstream` (asked only when the address and model do not say who serves it, such as a local proxy: where that address forwards the calls; without it the proxy refuses to start with `unresolved_identity`), and `auth_env`, the name of the environment variable that holds its API key. Any other key of a judge in [SETTINGS](SETTINGS.md) can be given too | (asked) |
 | `quorum` | The quorum's numbers: `required_yes`, `min_responding`, `min_distinct_providers`, `min_makers` and `min_local_judges` ([below](#the-quorum-numbers)). Any you leave out keep the profile's own | the profile's own |
-| `monitored_agent` | `id`, `model`, `provider`, `base_url`, and `credential_env` (or `credential: none`) | (asked) |
+| `monitored_agent` | `id`, `model`, `provider`, `base_url`, `upstream` (asked as for a judge), and `credential_env` (or `credential: none`) | (asked) |
 | `rules_file` | A rules file you reviewed. For the proxy, the `rules.draft.yaml` that `two-key mcp-draft-specs` drafted from the server | none |
 | `tools` | Without `rules_file`: the tools a starter allows, each with `id` and, optionally, `irreversible` (default `true`) and `data_class_floor` (default `classified`) | (asked) |
 | `prose_file` | The prose the judges read. Without it, a short starter you edit later | the starter |
@@ -266,7 +266,8 @@ here either.
 Exactly one of:
 
 - `VALUE`: JSON when it reads as JSON (`true`, `120`, `["a", "b"]`, `{"env": "NAME"}`, `"120"` for the text
-  120), and plain text otherwise (`warn`, `high_assurance`).
+  120), and plain text otherwise (`warn`, `high_assurance`). A block is JSON too, not YAML:
+  `two-key config set --config proxy.yaml siem '{"sinks": [{"type": "syslog", "host": "siem.example"}]}'`.
 - `--value-file FILE`: the file's text, without one final newline. The file must be owner-only
   (`value_file_insecure` otherwise).
 - `--prompt`: typed at a hidden prompt, on a terminal.

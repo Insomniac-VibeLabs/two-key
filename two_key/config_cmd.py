@@ -66,6 +66,7 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
         found += _cloud_session(config, judges)
         agent_found, agent = _agent(config)
         found += agent_found
+        found += _identities(config, judges, agent)
     found += _environment(config, environ, judges, agent)
     found += _upstream(config, high)
     found += _writable(config, high)
@@ -158,6 +159,37 @@ def _agent(config):
         return [(WARN, "monitored_agent: none declared, so judges are not checked against the agent's "
                        "own model and credential")], None
     return [(OK, "monitored_agent: declared")], agent
+
+
+def _unresolved(model: Any, base_url: Any, upstream: Any) -> bool:
+    """Whether Two-Key cannot tell who serves this model at this address (identity.ResolvedIdentity.unresolved)."""
+    from .identity import IdentityError, resolve_upstream_info, validate_upstream
+    if not isinstance(model, str) or not model or not isinstance(base_url, str) or not base_url:
+        return False        # the loaders refuse these on their own
+    try:
+        declared = validate_upstream(upstream, "upstream")
+    except IdentityError:
+        return False        # so does the proxy, with its own message
+    return not (resolve_upstream_info(base_url, model)[0] or declared)
+
+
+def _identities(config, judges, agent) -> list[tuple[str, str]]:
+    """A judge or agent whose upstream Two-Key cannot resolve: the proxy refuses to start
+    (``mcp_proxy.core.identity_refusal``) unless ``allow_unresolved_identity: true`` (live run 11, D1). A WARN,
+    not a FAIL, so ``setup`` and ``config set`` still write a deployment that names its upstream later."""
+    sides = [f"judge {j.judge_id!r}" for j in judges
+             if _unresolved(getattr(j, "model", None), getattr(j, "base_url", None), getattr(j, "upstream", None))]
+    if agent is not None and _unresolved(agent.model, agent.base_url, agent.upstream):
+        sides.append(f"agent {agent.id!r}")
+    if not sides:
+        return []
+    what = (f"Two-Key cannot resolve who serves {', '.join(sides)} (a local proxy or an unrecognized host, and a "
+            "model that names no maker)")
+    if config.allow_unresolved_identity:
+        return [(WARN, f"unresolved_identity: {what}; allowed by allow_unresolved_identity: true")]
+    return [(WARN, f"unresolved_identity: {what}, so the proxy refuses to start; declare upstream: (where that "
+                   "address forwards, such as api.x.ai) for it in the judges file, or set "
+                   "allow_unresolved_identity: true in the proxy config to accept the risk")]
 
 
 def judge_variables(judge) -> list[tuple[str, str]]:

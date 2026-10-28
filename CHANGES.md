@@ -165,6 +165,7 @@ SPDX-License-Identifier: Apache-2.0
 - [The proxy refuses to start with a cloud judge and no agent session — 2026-10-27](#the-proxy-refuses-to-start-with-a-cloud-judge-and-no-agent-session--2026-10-27)
 - [Live run 10 findings — 2026-10-28](#live-run-10-findings--2026-10-28)
 - [The proxy's start names its agent — 2026-10-28](#the-proxys-start-names-its-agent--2026-10-28)
+- [Live run 11 findings — 2026-10-28](#live-run-11-findings--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4988,3 +4989,23 @@ The maintainer approved this after run 10, which found the `mcp_proxy_started` r
   change have no such field; nothing reads it to decide a call.
 - docs/HOWTO.md (what the proxy ledgers at start) and docs/LEDGER_VIEW.md say so.
 - Tests: `tests/test_mcp_proxy.py` (`test_start_is_ledgered`), `tests/test_siem.py` (the field is sent).
+
+## Live run 11 findings — 2026-10-28
+
+GrokBot's live run 11, the last one before 0.8.0, found no product failure: 174 of 177 live cases passed and the
+other three were stopped by a valid rule. These are the fixes from its list of findings.
+
+- **`config check` (and so `setup`) names a judge or agent the proxy would refuse as `unresolved_identity`.**
+  Run 11's wizard deployment, with judges behind a local relay, passed setup and the check and then refused to
+  start. The check now prints a `WARN` naming each judge and agent whose address and model do not say who serves
+  it, and how to fix it. It is a warning, not a failure, so `setup` and `config set` still write the deployment.
+- **The setup interview asks for `upstream` when it is needed:** for a judge or the monitored agent whose address
+  and model leave Two-Key unable to tell who serves it (a local proxy, an unrecognized host), it asks where that
+  address forwards. A resolvable one is not asked.
+- **`config set` says to give a block as JSON.** A `siem` block written as YAML on the command line is read as
+  text and was refused only as `siem: expected a mapping`. The refusal now says the value was read as text and
+  shows the JSON form. docs/SETUP.md has the example.
+- Live harness: cases C72 (bcc out of the clinic) and C172 (over-cap payment) also accept
+  `counterparty_not_allowed` and `rule_denied:require-po-match`, valid stops that fired before the ones they
+  listed. C58 stays INCONCLUSIVE when the agent uses the scanned tool, since its point is the unscanned one.
+- Tests: `tests/test_config_cmd.py`, `tests/test_config_set.py`.

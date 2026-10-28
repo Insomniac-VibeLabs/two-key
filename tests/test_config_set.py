@@ -205,9 +205,9 @@ class Setup(Deployment):
             setup_cmd.load_answers(str(path))
 
     def test_the_interview_asks_for_names_never_secrets(self):
-        replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "",
+        replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "", "",
                    "no", "", "", "", "", "",    # the quorum: the default profile's numbers for one judge
-                   "agent", "some-model", "other", "https://agent.example/v1", "AGENT_KEY_VAR",
+                   "agent", "some-model", "other", "https://agent.example/v1", "", "AGENT_KEY_VAR",
                    "", "", "", "",          # judge history: on, deny on failure, 5 denies, 10 minutes
                    "", "", "tool_a", "no", "public", "", "server --stdio", DIGEST, "",
                    ""]                      # one proxy per agent: yes
@@ -234,6 +234,28 @@ class Setup(Deployment):
         quiet(setup_cmd.build, answers, self.base / "asked", environ={})
         self.assertIn("one_proxy_per_agent: true", (self.base / "asked" / "proxy.yaml").read_text(encoding="utf-8"))
         self.assertIn("on_failure: deny", (self.base / "asked" / "judges.yaml").read_text(encoding="utf-8"))
+
+    def test_the_interview_asks_where_an_unresolved_judge_forwards(self):
+        """Live run 11, D1: a judge or agent behind a local proxy, with a model that names no maker, cannot be
+        told apart from the agent, so the proxy refuses to start until its upstream is declared. The interview
+        asks for it then, and only then."""
+        replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:8081/v1", "", "api.x.ai",
+                   "", "no", "", "", "", "", "",
+                   "agent", "claude-sonnet", "anthropic", "https://api.anthropic.com", "AGENT_KEY_VAR",
+                   "", "", "", "", "", "", "tool_a", "no", "public", "", "server --stdio", DIGEST, "", ""]
+        asked = []
+
+        def ask(prompt):
+            asked.append(prompt)
+            self.assertTrue(replies, f"the interview asked more than the test answers: {prompt}")
+            return replies.pop(0)
+        answers, _, _ = quiet(setup_cmd.interview, ask)
+        self.assertEqual(answers["judges"][0]["upstream"], "api.x.ai")
+        self.assertNotIn("upstream", answers["monitored_agent"])
+        self.assertEqual(sum("where does that address forward" in q for q in asked), 1, asked)
+        _, out, _ = quiet(setup_cmd.build, answers, self.base / "asked", environ={})
+        self.assertIn("upstream: api.x.ai", (self.base / "asked" / "judges.yaml").read_text(encoding="utf-8"))
+        self.assertNotIn("unresolved_identity", out)
 
     def test_setup_offers_less_history_and_records_it(self):
         """D1, D2 and D10: setup offers each 0.8.0 choice; what it writes loads as written."""
@@ -346,12 +368,14 @@ class SetupQuorum(unittest.TestCase):
         self.assertEqual(replies, [], "the interview asked fewer questions than the test answers")
         return answers, asked, out + err
 
-    START = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", ""]
-    AGENT = ["agent", "some-model", "other", "https://agent.example/v1", "AGENT_KEY_VAR", "", "", "", "", "", "",
+    # Each blank after a judge's maker, and after the agent's base URL, is its upstream: neither address says who
+    # serves the model.
+    START = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "", ""]
+    AGENT = ["agent", "some-model", "other", "https://agent.example/v1", "", "AGENT_KEY_VAR", "", "", "", "", "", "",
              "tool_a", "no", "public", "", "server", DIGEST]
 
     def test_the_interview_keeps_a_lower_number_only_after_a_typed_yes(self):
-        second = ["yes", "openai_compatible", "j2", "m2", "http://127.0.0.1:11435/v1", "maker2", "", "no"]
+        second = ["yes", "openai_compatible", "j2", "m2", "http://127.0.0.1:11435/v1", "maker2", "", "", "no"]
         replies = (self.START + second
                    + ["1", "1", "", "", "", "no"]       # required_yes 1 of 2: weaker, not kept
                    + ["1", "2", "", "", "", "yes"]      # again, with every judge answering: kept
@@ -373,7 +397,7 @@ class SetupQuorum(unittest.TestCase):
         self.assertIn("one judge decides every call", err)
 
     def test_the_interview_needs_the_session_with_a_cloud_judge(self):
-        cloud = ["proxy", "default", "openai_compatible", "j1", "m", "https://judge.example/v1", "", "JUDGE_KEY_VAR",
+        cloud = ["proxy", "default", "openai_compatible", "j1", "m", "https://judge.example/v1", "", "", "JUDGE_KEY_VAR",
                  "no", "", "", "", "", ""]
         replies = cloud + self.AGENT + ["", "SESSION_VAR", ""]
         answers, _, err = self.interview(replies)
@@ -728,6 +752,18 @@ class CommandLine(Deployment):
         code, out, err = quiet(cli.main, ["config", "set", "--config", str(self.proxy), "ttl_seconds", "300"])
         self.assertEqual(code, 1)
         self.assertIn("two-key: config set: refused: weaker", err)
+
+    def test_a_block_given_as_yaml_says_to_give_json(self):
+        """Live run 11: config set siem with a YAML value was refused as 'expected a mapping', with no word on why."""
+        before = self.snapshot()
+        code, _, err = quiet(cli.main, ["config", "set", "--config", str(self.proxy), "siem",
+                                        "sinks: [{type: syslog, host: 127.0.0.1}]"])
+        self.assertEqual(code, 1)
+        self.assertIn("siem: expected a mapping", err)
+        self.assertIn("the value was read as text, because it is not JSON", err)
+        self.assertEqual(self.snapshot(), before)
+        code, _, err = quiet(cli.main, ["config", "set", "--config", str(self.proxy), "ttl_seconds", "300"])
+        self.assertNotIn("not JSON", err)
 
     def test_setup_without_a_terminal_needs_answers(self):
         with mock.patch("sys.stdin", io.StringIO("")):

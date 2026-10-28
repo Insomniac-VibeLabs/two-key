@@ -1343,9 +1343,19 @@ def run_set(args) -> int:
                              key_path=args.key, rules_path=args.rules, confirm_weaker=args.confirm_weaker,
                              key_passphrase_file=args.key_passphrase_file)
     except ConfigChangeError as e:
-        print(f"two-key: config set: refused: {e}", file=sys.stderr)
+        print(f"two-key: config set: refused: {e}{_text_hint(e, value, source)}", file=sys.stderr)
         return 1
     return _report(result)
+
+
+def _text_hint(error: ConfigChangeError, value: Any, source: str) -> str:
+    """A VALUE that did not read as JSON is text, so a block written as YAML (``sinks: [...]``) reaches the
+    loader as one string and is refused as not a mapping (live run 11). Say how to give it."""
+    if source != "argv" or not isinstance(value, str) or not re.search(r"expected a (non-empty )?(mapping|list)",
+                                                                       str(error)):
+        return ""
+    return ("; the value was read as text, because it is not JSON: give a mapping or a list as JSON, such as "
+            "'{\"sinks\": [{\"type\": \"syslog\", \"host\": \"siem.example\"}]}'")
 
 
 def run_undo(args) -> int:
