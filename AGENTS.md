@@ -95,8 +95,12 @@ From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-Vib
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/CONSTITUTION_EDITOR.md`, `docs/TOOL_CHECK.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
+  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/CONSTITUTION_EDITOR.md`, `docs/TOOL_CHECK.md`, `docs/QUICKSTART.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
+- docs/QUICKSTART.md (0.9.0) is run in CI by `tests/quickstart_run.py`: every ```bash block runs in order
+  in a new folder and must exit 0, unless the `<!-- quickstart: ... -->` line above it says `skip`, `exit=N`
+  or `expect=TEXT`. Its judge there is a stand-in that always votes yes; keep that stand-in out of the
+  package and out of any example. A command changed on the page is a command changed in CI.
 - A new setting (a key a loader accepts) gets a row in `two_key/settings.py`.
   `docs/SETTINGS.md` is generated from it: run `python tests/test_settings_doc.py
   --write`. The test fails on a key with no row and on a page that is not what

@@ -22,6 +22,7 @@ from two_key.testing import TEST_AGENT, FixedJudge
 from two_key.toolcheck import (META_KEY, STAMP_LABEL, STAMP_PREFIX, SeenRecord, ToolCheckConfig, ToolCheckError,
                                ToolChecker, key_fingerprint, mcp_receipt, new_tool_key, open_stamp_key, peek, seal,
                                stamp_key_path, text_hash, tool_args_hash, verify_receipt)
+from perm import private
 
 RULES = [{"id": "tools", "allow_only_tools": ["send", "plain"]}]
 PROSE = "Only send to ada."
@@ -124,7 +125,7 @@ class Formats(Deployment):
     def test_constitution_loaded_pins_the_stamp_key_and_each_tool_key(self):
         body = self.tk.ledger.last_before(self.tk.ledger.size(), "constitution_loaded").body
         self.assertEqual(body["tool_check_keys"], {"send": self.fingerprint})
-        self.assertEqual(stamp_key_path(self.tk.ledger).stat().st_mode & 0o077, 0)
+        self.assertTrue(private(stamp_key_path(self.tk.ledger)))
 
     def test_a_label_keeps_a_stamp_from_passing_as_anything_else(self):
         key = generate_private_key()
@@ -329,8 +330,7 @@ class Seen(unittest.TestCase):
             self.assertFalse(record.add("a", until=10, now=5))
             self.assertTrue(SeenRecord(Path(tmp, "seen.sqlite")).add("b", until=10, now=5))
             self.assertTrue(record.add("a", until=30, now=20))      # pruned once its token could not be valid
-            if os.name != "nt":
-                self.assertEqual(os.stat(Path(tmp, "seen.sqlite")).st_mode & 0o077, 0)
+            self.assertTrue(private(Path(tmp, "seen.sqlite")))
 
     def test_a_record_others_can_read_is_refused(self):
         if os.name == "nt":

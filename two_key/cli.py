@@ -534,12 +534,32 @@ def _write_token(path: Path, token: str) -> None:
         fh.write(token + "\n")
 
 
-def _authorize(args) -> int:
+def _open_two_key(args):
+    """``authorize``'s TwoKey, or None after printing why it would not start (a refusal, not a traceback)."""
     from .constitution import load_envelope
-    from .core import TwoKey
+    from .core import TwoKey, TwoKeyConfigError
     from .identity import load_monitored_agent_file
     from .judges.config import load_config_file
     from .ledger import Ledger, LedgerError
+    key = _principal_key(args)
+    judges, policy = load_config_file(Path(args.judges))
+    # The monitored agent is declared by the operator in the judges file, never by the agent.
+    agent = load_monitored_agent_file(Path(args.judges))
+    try:
+        ledger = Ledger(args.ledger, key, witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args))
+    except LedgerError as e:
+        print(f"ledger refused: {e}", file=sys.stderr)
+        return None
+    try:
+        return TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
+                           private_key=key, quorum=policy, monitored_agent=agent,
+                           ttl_seconds=args.ttl_seconds)
+    except TwoKeyConfigError as e:
+        print(f"two-key: refused to start: {e}", file=sys.stderr)
+        return None
+
+
+def _authorize(args) -> int:
     if args.agent_session is not None:
         print("--agent-session took the secret on the command line and is no longer accepted; "
               "put it in an environment variable and pass --agent-session-env NAME", file=sys.stderr)
@@ -571,18 +591,9 @@ def _authorize(args) -> int:
     if token_path is not None and (token_path.exists() or token_path.is_symlink()):
         print(f"refusing to overwrite {token_path}", file=sys.stderr)
         return 1
-    key = _principal_key(args)
-    judges, policy = load_config_file(Path(args.judges))
-    # The monitored agent is declared by the operator in the judges file, never by the agent.
-    agent = load_monitored_agent_file(Path(args.judges))
-    try:
-        ledger = Ledger(args.ledger, key, witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args))
-    except LedgerError as e:
-        print(f"ledger refused: {e}", file=sys.stderr)
+    tk = _open_two_key(args)
+    if tk is None:
         return 1
-    tk = TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
-                     private_key=key, quorum=policy, monitored_agent=agent,
-                     ttl_seconds=args.ttl_seconds)
     action = {"tool": args.tool}
     # Omitted claims are not lies: derive fills amount and counterparty from the
     # bytes, irreversible from the spec, and a missing data_class from normalize_action (#53).

@@ -172,6 +172,8 @@ SPDX-License-Identifier: Apache-2.0
 - [A setup window beside the terminal: `two-key setup --window` — 2026-10-28](#a-setup-window-beside-the-terminal-two-key-setup---window--2026-10-28)
 - [A tool error spends the token — 2026-10-28](#a-tool-error-spends-the-token--2026-10-28)
 - [The tool check: a tool behind the proxy checks its own calls (#28) — 2026-10-28](#the-tool-check-a-tool-behind-the-proxy-checks-its-own-calls-28--2026-10-28)
+- [A ten-minute quickstart, run in CI — 2026-10-28](#a-ten-minute-quickstart-run-in-ci--2026-10-28)
+- [Tool check CI fixes — 2026-10-28](#tool-check-ci-fixes--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5149,3 +5151,24 @@ MCP proxy only, Q6 above). docs/TOOL_CHECK.md describes it for operators and for
 - The setup window's PR checks: the starting quorum is `dict.fromkeys` (SonarCloud S7519); `_table` and the test's
   `fill` are static methods (DeepSource PYL-R0201); the upstream command is read on its own line before
   `shlex.join`, which DeepSource took for an SQL join (PY-W0800).
+
+## A ten-minute quickstart, run in CI — 2026-10-28
+
+- docs/QUICKSTART.md: from `pip install` to one call Two-Key allows and one it refuses, then both in the ledger
+  view, on one machine with a local Ollama judge and no API key. It uses `two-key setup --answers` (guard route)
+  and `two-key authorize`.
+- Every command on the page runs in CI (a new `quickstart` job on Linux and macOS, `tests/quickstart_run.py`),
+  except installing from PyPI and starting Ollama: CI installs the checkout, and answers for the judge with a
+  stand-in that always votes yes. The stand-in lives in that script only. `tests/test_quickstart_doc.py`
+  checks the page still has the blocks and markers the script expects.
+- Fix: `two-key authorize` printed a Python traceback when Two-Key refused to start (for example, the monitored
+  agent's `credential_env` variable not set). It now prints `two-key: refused to start: <why>` and exits 1.
+- The README is unchanged; a link to the quickstart from its Quick start section is proposed to the maintainer.
+
+## Tool check CI fixes — 2026-10-28
+
+- A test read POSIX mode bits for the stamp key and the seen record, which mean
+  nothing on Windows; it now asks `perm.private`, as the other owner-only tests do. The test vectors in
+  TOOL_CHECK.md show each token, stamp and receipt as its three parts, because written whole a token's
+  `tk1.eyJ...` shape tripped Semgrep's JWT rule (they are made from public seeds). The test run uses
+  `-X faulthandler`, so a crash names the test it happened in (one macOS 3.14 run ended with a segfault).

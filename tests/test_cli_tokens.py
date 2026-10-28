@@ -16,7 +16,7 @@ from unittest.mock import patch
 from two_key.capability import _b64u_dec
 from two_key.cli import main
 from two_key.constitution import save_envelope, sign_constitution
-from two_key.core import TwoKey
+from two_key.core import TwoKey, TwoKeyConfigError
 from two_key.keys import generate_private_key, load_private_key_file, save_private_key, save_public_key
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
@@ -59,6 +59,15 @@ class CliTokens(unittest.TestCase):
              patch.dict(os.environ, env or {}), redirect_stdout(out), redirect_stderr(err):
             code = main(argv)
         return code, out.getvalue(), err.getvalue()
+
+    def test_a_config_refusal_is_a_message_not_a_traceback(self):
+        refusal = TwoKeyConfigError("monitored_agent 'agent': credential_env AGENT_KEY is not set")
+        with patch(f"{__name__}._load_with_doubles", side_effect=refusal):     # run_cli wraps it as TwoKey.load
+            code, out, err = self.run_cli()
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("refused to start: monitored_agent 'agent': credential_env AGENT_KEY is not set", err)
+        self.assertNotIn("Traceback", err)
 
     def test_token_never_printed_jti_and_digest_are(self):
         code, out, _ = self.run_cli()

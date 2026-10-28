@@ -29,6 +29,13 @@ START, END = "<!-- vectors -->", "<!-- /vectors -->"
 IAT = 1_800_000_000
 
 
+def parts(signed: str) -> dict:
+    """A signed object as its three parts. On the wire they are joined with dots; written whole, a token's
+    ``<prefix>.eyJ...`` shape reads to secret scanners as a JWT, though these are made from public seeds."""
+    prefix, body, signature = signed.split(".")
+    return {"prefix": prefix, "body": body, "signature": signature}
+
+
 def vectors() -> dict:
     capability, stamp_key, tool_key = (Ed25519PrivateKey.from_private_bytes(bytes([n]) * 32) for n in (1, 2, 3))
     arguments = {"amount": 12.5, "vendor": "ada"}
@@ -56,11 +63,11 @@ def vectors() -> dict:
         "tool_key_fingerprint": key_fingerprint(tool_key.public_key()),
         "arguments": arguments,
         "tool_args_hash": payload["tool_args_hash"],
-        "token": token,
-        "stamp": stamp,
+        "token": parts(token),
+        "stamp": parts(stamp),
         "result": result,
         "result_hash": result_hash(result),
-        "receipt": receipt,
+        "receipt": parts(receipt),
         "checked_at": IAT + 2,
     }
 
@@ -81,8 +88,8 @@ class Vectors(unittest.TestCase):
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["--write"]:
-        text = DOC.read_text(encoding="utf-8")
-        DOC.write_text(text.replace(current(), block()), encoding="utf-8")
+        page = DOC.read_text(encoding="utf-8")
+        DOC.write_text(page.replace(current(), block()), encoding="utf-8")
         print(f"wrote {DOC.relative_to(ROOT)}")
     else:
         unittest.main()
