@@ -43,7 +43,7 @@ class Workspace(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name).resolve()
         os.chmod(self.dir, 0o700)
-        key = generate_private_key()
+        key = self.key = generate_private_key()
         save_private_key(self.dir / "k.pem", key)
         save_envelope(self.dir / "c.json", sign_constitution(
             "Approve small, routine requests.", [{"id": "tools", "allow_only_tools": ["tool_a"]}], key,
@@ -169,6 +169,26 @@ class Check(Workspace):
     def test_a_tool_the_constitution_does_not_sign_fails(self):
         self.write_proxy("tools:\n  tool_b: {claim: floor}\n")
         self.assertTrue(any(level == config_cmd.FAIL and "tool_b" in text for level, text in self.check()))
+
+    def test_a_rule_that_denies_every_call_to_a_tool_with_no_claim_warns(self):
+        rules = [{"id": "tools", "allow_only_tools": ["tool_a", "tool_b"]},
+                 {"id": "no-sensitive-data", "deny_if": {"data_class_in": ["medical", "classified"]}}]
+        specs = {"tool_a": {"irreversible": False, "data_class_floor": "public"},
+                 "tool_b": {"irreversible": False, "data_class_floor": "public"}}
+        save_envelope(self.dir / "c.json", sign_constitution("Approve small, routine requests.", rules, self.key, specs))
+        self.write_proxy("tools:\n  tool_b: {claim: floor}\n")
+        warned = [text for level, text in self.check() if level == config_cmd.WARN and "no-sensitive-data" in text]
+        self.assertEqual(len(warned), 1, warned)
+        self.assertIn("['tool_a']", warned[0])
+        self.write_proxy("tools:\n  tool_a: {claim: public}\n  tool_b: {claim: floor}\n")
+        self.assertFalse(any("no-sensitive-data" in text for _, text in self.check()))
+
+    def test_a_data_class_rule_with_another_condition_does_not_warn(self):
+        rules = [{"id": "tools", "allow_only_tools": ["tool_a"]},
+                 {"id": "big-classified", "deny_if": {"data_class_in": ["classified"], "amount_usd_gt": 100}}]
+        save_envelope(self.dir / "c.json", sign_constitution(
+            "Approve small, routine requests.", rules, self.key, {"tool_a": {"irreversible": False}}))
+        self.assertFalse(any("big-classified" in text for _, text in self.check()))
 
     def test_a_missing_judges_file_fails(self):
         (self.dir / "judges.yaml").unlink()

@@ -36,7 +36,8 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 ENTRY_FIELDS = ("seq", "kind", "prev", "entry_hash")
 ANY_FIELD = "*"
 # Shown first when a ledger has them; every other field can be added from the window's Columns list.
-DEFAULT_COLUMNS = ("seq", "kind", "at", "agent.id", "tool", "subject.tool", "allowed", "passed", "reason",
+# A decision names its agent as agent.id; attempt_episode and agent_already_connected as agent_id (run 10).
+DEFAULT_COLUMNS = ("seq", "kind", "at", "agent.id", "agent_id", "tool", "subject.tool", "allowed", "passed", "reason",
                    "ballots[].judge_id", "ballots[].vote", "jti")
 MAX_REGEX = 500
 

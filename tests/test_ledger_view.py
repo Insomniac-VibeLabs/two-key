@@ -98,6 +98,10 @@ class Rows(unittest.TestCase):
         self.assertEqual(default_columns(names)[:3], ["seq", "kind", "at"])
         self.assertNotIn("jti" + "x", default_columns(names))
 
+    def test_an_attempt_episode_shows_its_agent_by_default(self):
+        names = ["seq", "kind", "agent.id", "agent_id", "denies"]
+        self.assertEqual(default_columns(names), ["seq", "kind", "agent.id", "agent_id"])
+
     def test_text_of(self):
         self.assertEqual([text_of(v) for v in (None, True, False, 3, 0.5, "x")],
                          ["null", "true", "false", "3", "0.5", "x"])
@@ -378,7 +382,20 @@ class Command(unittest.TestCase):
         self.window(show)
         reload = seen["reload"]
         entries = self.dir / "ledger" / "entries.jsonl"
-        with mock.patch.object(Path, "is_file", return_value=False), self.assertRaisesRegex(ViewError, "no ledger"):
+        real_stat = Path.stat
+
+        def failing_stat(error):
+            def stat(path, *args, **kwargs):
+                if path == entries:
+                    raise error
+                return real_stat(path, *args, **kwargs)
+            return stat
+        with mock.patch.object(Path, "stat", failing_stat(FileNotFoundError(2, "No such file"))), \
+                self.assertRaisesRegex(ViewError, "no ledger"):
+            reload()
+        # A ledger folder this account may not read is not called missing (live run 10).
+        with mock.patch.object(Path, "stat", failing_stat(PermissionError(13, "Permission denied"))), \
+                self.assertRaisesRegex(ViewError, "cannot read the ledger at .*: permission denied"):
             reload()
         with mock.patch.object(Path, "read_text", side_effect=PermissionError(13, "Permission denied")), \
                 self.assertRaisesRegex(ViewError, "Permission denied"):

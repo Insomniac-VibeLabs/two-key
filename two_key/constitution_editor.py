@@ -423,11 +423,18 @@ def _write_text(path: Path, text: str) -> None:
 
 def _write_sources(paths: Mapping[str, Path], draft: Draft, refused: str) -> None:
     """Write the prose and the rules file. A folder or file that cannot be written is an ``EditorError``."""
-    try:
-        _write_text(paths["prose"], draft.prose)
-        _write_text(paths["rules"], rules_text(draft, paths["rules"].suffix.lower() == ".json"))
-    except OSError as e:
-        raise EditorError(f"{refused}: {e}") from None
+    for role, text in (("prose", draft.prose),
+                       ("rules", rules_text(draft, paths["rules"].suffix.lower() == ".json"))):
+        try:
+            _write_text(paths[role], text)
+        except OSError as e:
+            raise EditorError(f"{refused}: {write_refusal(paths[role], e)}") from None
+
+
+def write_refusal(path: Path, error: OSError) -> str:
+    """Why ``path`` could not be written, in words: the file and folder, not the temporary file's name."""
+    reason = error.strerror or type(error).__name__
+    return f"cannot write {path.name} in {path.parent}: {reason}"
 
 
 def same_from_files(paths: Mapping[str, Path], signed: Mapping) -> None:
@@ -468,7 +475,7 @@ def sign_and_save(draft: Draft, private_key, folder: Path | str, names: Mapping[
     try:
         save_envelope(paths["signed"], envelope)
     except OSError as e:
-        raise EditorError(f"not signed: {e}") from None
+        raise EditorError(f"not signed: {write_refusal(paths['signed'], e)}") from None
     return Saved(str(paths["prose"]), str(paths["rules"]), str(paths["signed"]), canonical_hash(envelope["signed"]),
                  envelope["fingerprint"], envelope["format"], report.notes)
 

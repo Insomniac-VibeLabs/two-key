@@ -32,7 +32,7 @@ def _contains(args, terms):
 
 
 def _values(node):
-    """Every argument value as text (not the keys), for the deny-reason leak check."""
+    """Every value as text (not the keys), for the deny-reason and SIEM leak checks."""
     if isinstance(node, dict):
         return [v for item in node.values() for v in _values(item)]
     if isinstance(node, list):
@@ -349,7 +349,9 @@ def siem_check(cases, results, siem, entries):
     from the calls the pass actually made, so the check needs no hand-kept canary list."""
     if not siem:
         return ["- no SIEM events were delivered (no collector, or no sink configured)"], []
-    text = json.dumps(siem, default=str)
+    # Only the events' values are searched, not their field names: run 10's C22 "found" the value "status" inside
+    # the field name http_status.
+    sent = _values(siem)
     values = sorted({v for case in cases for c in _calls(results.get(case["id"]) or {})
                      for v in _values(c["call"].get("arguments")) if len(v) >= 6})
     # A value that is also a tool name or a ledger kind is not a leak when it turns up in an event: those words are
@@ -360,7 +362,8 @@ def siem_check(cases, results, siem, entries):
     # hold-1-branch and export-2-branch, not an argument value.
     vocab |= {str(ev.get(k)).lower() for x in siem if isinstance(ev := x.get("event"), dict)
               for k in ("denied_by", "reason", "deny_reason") if isinstance(ev.get(k), str)}
-    leaked = sorted({v[:60] for v in values if v in text and not any(v.lower() in w for w in vocab)})
+    leaked = sorted({v[:60] for v in values if any(v in item for item in sent)
+                     and not any(v.lower() in w for w in vocab)})
     kinds: dict = {}
     for item in siem:
         kinds[item.get("msgid") or "?"] = kinds.get(item.get("msgid") or "?", 0) + 1

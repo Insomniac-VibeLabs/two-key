@@ -86,6 +86,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -260,12 +261,26 @@ def _anchor_arg(args):
     return path
 
 
+def _ledger_missing(folder) -> str | None:
+    """Why there is no ledger file to open in ``folder``, or None when there is one. A file or folder this
+    account may not read is said as that, not as a missing ledger (live run 10)."""
+    missing = f"no ledger at {folder}"
+    try:
+        mode = (Path(folder) / "entries.jsonl").stat().st_mode
+    except PermissionError:
+        return f"cannot read the ledger at {folder}: permission denied"
+    except OSError:
+        return missing
+    return None if stat.S_ISREG(mode) else missing
+
+
 def _open_ledger(args, key):
     """Open an existing ledger for rotate-witness and audit; a refusal is printed, not raised. A path with no
     ledger is refused rather than created."""
     from .ledger import Ledger, LedgerError
-    if not (Path(args.ledger) / "entries.jsonl").is_file():
-        print(json.dumps({"ok": False, "error": f"no ledger at {args.ledger}"}, indent=2))
+    missing = _ledger_missing(args.ledger)
+    if missing:
+        print(json.dumps({"ok": False, "error": missing}, indent=2))
         return None
     try:
         return Ledger(args.ledger, key, witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args))
@@ -319,8 +334,9 @@ def _reopen_ledger(args, key):
     the reason, so the window can show it. An unreadable file is a reason too, not a traceback."""
     from .ledger import Ledger, LedgerError
     from .ledger_view import ViewError
-    if not (Path(args.ledger) / "entries.jsonl").is_file():
-        raise ViewError(f"no ledger at {args.ledger}")
+    missing = _ledger_missing(args.ledger)
+    if missing:
+        raise ViewError(missing)
     try:
         pin = None if args.witness_public_key is None else load_public_key(args.witness_public_key)
         return Ledger(args.ledger, key, witness_public_key=pin, anchor_path=_anchor_arg(args))
@@ -388,9 +404,12 @@ def _editor_check(draft) -> int:
     report = check(draft)
     for level, line in report.notes:
         print(f"{level}: {line}")
-    print(f"signs as {report.envelope_format}, digest {report.digest}" if report.ok else
-          f"does not sign: {report.error}")
-    return 0 if report.ok else 1
+    if not report.ok:
+        print(f"does not sign: {report.error}")
+        return 1
+    serial = "no serial" if draft.serial is None else f"serial {draft.serial}"
+    print(f"signs as {report.envelope_format}, {serial}, digest {report.digest}")
+    return 0
 
 
 def _constitution_editor(args) -> int:

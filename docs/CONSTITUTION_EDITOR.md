@@ -142,7 +142,8 @@ proxy loads it, and the ledger records it as `constitution_loaded`. To change on
 two-key constitution-editor --check --prose constitution.md --rules hard_rules.yaml
 ```
 
-prints every warning and note, then `signs as <format>, digest <digest>`, and exits 0; or `does not sign:
+prints every warning and note, then `signs as <format>, serial <n>, digest <digest>` (`no serial` when the
+rules file declares none; with `--signed`, the next serial), and exits 0; or `does not sign:
 <reason>` and exits 1. It reads the files and writes nothing.
 
 ## What it does not do

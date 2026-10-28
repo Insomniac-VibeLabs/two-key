@@ -282,6 +282,9 @@ class AcceptanceCases(Base):
                     appended.now = False
                     registered.wait()
         tk._in_flight, tk._in_flight_lock = Flights(), Gate()
+        # Neither judge answers until both calls have built their summaries; otherwise one call could finish and
+        # mint before the other built its summary, which then counts an approval, not a call in flight (run 10).
+        self.judge.hook = threading.Barrier(2, timeout=10).wait
         calls = []
         threads = [threading.Thread(target=lambda: calls.append(tk.authorize(*pay(), "pay it"))) for _ in range(2)]
         for t in threads:

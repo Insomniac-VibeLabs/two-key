@@ -66,8 +66,10 @@ Different kinds of entry have different fields: a `decision` has `allowed`, `rea
 `ballots[].*`; a `gateway_denied` has `jti`, `reason` and `tool_args_digest`. A row with no value for a field
 shows an empty cell.
 
-The table starts with the fields most audits need (`seq`, `kind`, `at`, `agent.id`, `tool`, `subject.tool`,
-`allowed`, `passed`, `reason`, `ballots[].judge_id`, `ballots[].vote`, `jti`, where the ledger has them).
+The table starts with the fields most audits need (`seq`, `kind`, `at`, `agent.id`, `agent_id`, `tool`,
+`subject.tool`, `allowed`, `passed`, `reason`, `ballots[].judge_id`, `ballots[].vote`, `jti`, where the ledger
+has them). Decisions and proposals name the agent as `agent.id`; an `attempt_episode` and an
+`agent_already_connected` entry name it as `agent_id`. `mcp_proxy_started` names no agent.
 **Columns** picks others: the columns already shown keep their place, and new ones follow. **Defaults** puts
 back the starting columns. Every field can be searched and filtered whether or not it is a column.
 
@@ -147,7 +149,7 @@ Quote a field name that has `[]` in it, and the any-field name `*`, so the shell
 | Question | Filters |
 | --- | --- |
 | Which calls were denied, and why? | `kind equals decision`, `allowed equals false`; sort by `reason` |
-| What did one agent do? | `agent.id equals buyer` (decisions and proposals carry the agent's id) |
+| What did one agent do? | `agent.id equals buyer` (decisions and proposals carry the agent's id); `agent_id equals buyer` finds its attempt episodes |
 | Every step of one call | sort by `seq`, then find the `proposal` and read on to its `decision`; a call's entries are next to each other unless two proxies share the ledger |
 | Where did judge `c` vote no? | `kind equals path_b`, `ballots[].judge_id equals c`, `ballots[].vote equals no` (the second and third match the row if any ballot passes each; read the row's ballots to pair them) |
 | Calls a rule refused | `reason starts-with rule_denied:` |

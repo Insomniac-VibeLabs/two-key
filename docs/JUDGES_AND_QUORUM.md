@@ -230,6 +230,10 @@ What the summary holds:
 - `now`, and `history_starts`, the time of the oldest dated decision, so a judge can tell "nothing in 90 days" from
   "history began yesterday". A ledger upgraded from 0.7.3 shows its older decisions with `"age": "before_upgrade"`;
   they count in no window, which fill up over the next 90 days.
+- The two labels answer different questions. `before_upgrade` is a decision's age: it has no time, so it shows only
+  in the tool's last decisions, which list every agent's calls. `unnamed` is an agent: a dated decision or
+  episode whose agent id the operator did not configure. Setting `agent_id` later never moves older decisions
+  under the new id; an undated one stays `before_upgrade`, and a dated one stays `unnamed`.
 
 **The agent's text never reaches a judge through the summary.** Tool names, counterparties, arguments, proposals,
 decline text and error details are all agent-controlled, and none of them is copied in. Every string is a signed

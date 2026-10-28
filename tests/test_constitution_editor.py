@@ -322,6 +322,17 @@ class Signing(unittest.TestCase):
             ce.sign_and_save(draft, self.key, self.dir, overwrite=True)
         self.assertFalse((self.dir / "constitution.signed.json").exists())
 
+    def test_the_refusal_names_the_file_not_the_temporary_file(self):
+        draft = draft_with_tools()
+        denied = PermissionError(13, "Permission denied", str(self.dir / ".constitution.md.1.ab.tmp"))
+        with mock.patch.object(ce, "_write_text", side_effect=denied), \
+                self.assertRaises(ce.EditorError) as caught:
+            ce.save_sources(draft, self.dir)
+        said = str(caught.exception)
+        self.assertEqual(said, f"not saved: cannot write constitution.md in {self.dir}: Permission denied")
+        self.assertNotIn(".tmp", said)
+        self.assertNotIn("Errno", said)
+
     def test_files_that_do_not_read_back_are_refused_in_words(self):
         paths = ce.target_paths(self.dir)
         with self.assertRaisesRegex(ce.EditorError, "do not read back"):
@@ -397,7 +408,7 @@ class CheckCommand(unittest.TestCase):
         code, out = self.run_cli("--check", "--prose", str(EXAMPLES / "constitution.md"),
                                  "--rules", str(EXAMPLES / "custom_fields.yaml"))
         self.assertEqual(code, 0)
-        self.assertIn("signs as two-key-constitution-v3, digest ", out)
+        self.assertIn("signs as two-key-constitution-v3, no serial, digest ", out)
         self.assertIn("WARNING: no serial", out)
 
     def test_check_a_new_draft_does_not_sign(self):
@@ -413,7 +424,7 @@ class CheckCommand(unittest.TestCase):
             saved = ce.sign_and_save(draft_with_tools(), key, tmp)
             code, out = self.run_cli("--check", "--signed", saved.signed, "--public-key", str(Path(tmp) / "p.pub.pem"))
         self.assertEqual(code, 0)
-        self.assertIn("signs as", out)
+        self.assertIn("serial 2, digest ", out)        # --signed opens as the next version
 
     def test_without_tkinter_it_says_what_to_use(self):
         err = io.StringIO()

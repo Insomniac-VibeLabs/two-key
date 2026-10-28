@@ -163,6 +163,7 @@ SPDX-License-Identifier: Apache-2.0
 - [`ledger-view`: the search can match field names — 2026-10-27](#ledger-view-the-search-can-match-field-names--2026-10-27)
 - [Setup: an owner-only ledger, and the agent's id in `proxy.yaml` — 2026-10-27](#setup-an-owner-only-ledger-and-the-agents-id-in-proxyyaml--2026-10-27)
 - [The proxy refuses to start with a cloud judge and no agent session — 2026-10-27](#the-proxy-refuses-to-start-with-a-cloud-judge-and-no-agent-session--2026-10-27)
+- [Live run 10 findings — 2026-10-28](#live-run-10-findings--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4946,3 +4947,31 @@ hand still started.
 - Docs in plain words: SETUP "A cloud judge needs the agent's session" says which judges count, why, and how to
   fix it; the HOWTO table of start-up refusals has the new line; CONNECTING, UPGRADING (0.8.0 row) and llms.txt
   say it too. Test: `tests/test_config_set.py` (`test_the_proxy_refuses_to_start_without_it`).
+
+## Live run 10 findings — 2026-10-28
+
+GrokBot's live run 10 on `working` passed all six items. These are the fixes from its list of findings.
+
+- **`config check` (and so `setup`) warns when a rule denies every call to a tool with no claim.** A tool with no
+  `tools.<id>.claim` is read as `classified`. A `deny_if` rule that tests only the data class (and perhaps the
+  tool) and denies `classified` therefore denies every call to it. Run 10's setup input had such a rule, and
+  every proxied call was denied at Path A. The new warning names the tools and the rule, and says to set a
+  claim if that is not meant. Nothing that starts or authorizes changed.
+- **The constitution editor says which file it could not write.** A folder it may not write gave
+  `[Errno 13] Permission denied: '.constitution.md.<pid>.<random>.tmp'`. It now says `not saved: cannot write
+  constitution.md in <folder>: Permission denied` (or `not signed: ...`).
+- **`constitution-editor --check` names the serial it signs as**: `signs as <format>, serial <n>, digest ...`,
+  or `no serial`. With `--signed` that is the next serial, which is why its digest differs from the open file's.
+- **`ledger-view` Reload, `audit` and `rotate-witness` no longer call a ledger they may not read missing.**
+  A ledger folder this account cannot read said `no ledger at ...`; it now says `cannot read the ledger at ...:
+  permission denied`.
+- **`ledger-view` shows `agent_id` by default** beside `agent.id`. Decisions and proposals name the agent as
+  `agent.id`, but `attempt_episode` and `agent_already_connected` name it as `agent_id`, so their agent column was
+  blank. docs/LEDGER_VIEW.md says which kinds use which.
+- docs/JUDGES_AND_QUORUM.md: `before_upgrade` (a decision with no time) and `unnamed` (an agent id the operator
+  did not configure) are different labels, and setting `agent_id` later moves no older decision under it.
+- Live harness: the SIEM leak check (`report.siem_check`) searches the events' values, not their field names.
+  Run 10's selftest case C22 failed because the argument value `status` is inside the field name `http_status`.
+- Tests: `tests/test_config_cmd.py`, `tests/test_constitution_editor.py`, `tests/test_cli_witness.py`,
+  `tests/test_ledger_view.py`. `tests/test_judge_history.py` test 10 (two threads in flight) was flaky: one call
+  could finish before the other built its summary. Its judge now waits until both calls have asked it.

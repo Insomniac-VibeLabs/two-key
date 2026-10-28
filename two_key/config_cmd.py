@@ -99,6 +99,33 @@ def _constitution(config) -> list[tuple[str, str]]:
     unknown = sorted(set(config.tools) - set(signed.tool_specs))
     if unknown:
         out.append((FAIL, f"tools: {unknown} are not tools in the signed constitution"))
+    out += _unset_claims(config, signed)
+    return out
+
+
+def _blanket_class_rules(rules) -> list[tuple[str, str | None]]:
+    """``(rule id, tool or None)`` for each ``deny_if`` rule that tests only the data class (and perhaps the
+    tool) and denies ``classified``: it denies every call to a tool whose claim is unset."""
+    out = []
+    for rule in rules:
+        body = rule.get("deny_if")
+        if isinstance(body, Mapping) and set(body) <= {"data_class_in", "tool"} \
+                and "classified" in body.get("data_class_in", ()):
+            out.append((rule["id"], body.get("tool")))
+    return out
+
+
+def _unset_claims(config, signed) -> list[tuple[str, str]]:
+    """A tool with no ``claim`` is read as ``classified``. A rule that denies that class denies every call to
+    it, which is rarely what the operator meant (live run 10, 2026-10-27)."""
+    out = []
+    for rule_id, only in _blanket_class_rules(signed.hard_rules):
+        tools = sorted(t for t in signed.tool_specs
+                       if (only is None or t == only) and config.tool_policy(t).claim == "none")
+        if tools:
+            out.append((WARN, f"tools: {tools} set no claim, so they read as classified, and rule {rule_id!r} "
+                              "denies classified: every call to them is denied. Set tools.<id>.claim "
+                              "(floor or a data class) if that is not meant"))
     return out
 
 
