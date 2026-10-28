@@ -5057,3 +5057,5 @@ docs/UPGRADING.md has the full row.
 its publish job was refused because the `pypi` environment only deploys from the `PyPI` branch. The tag
 stays where it is: it is the git snapshot of 0.8.0, not the upload. The tag-version check step went with
 the trigger. docs/PYPI.md and the README's file table say so.
+
+The README drops the bold line under the banner, which repeated the opening sentence (Stephan's edit on `main`, b4c3095, brought to `working`).
