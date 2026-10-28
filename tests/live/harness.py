@@ -155,6 +155,7 @@ PROSE_EDIT = ("It may set po_matched to true only when every line agrees; otherw
               "is refused.")
 sys.path.insert(0, str(HERE))
 from live_facts import PO_BOOK  # noqa: E402  (the system of record, shared with the proxy's hook)
+from report import psha  # noqa: E402  (how a relayed reply is matched to its prompt, run 11)
 
 # The principal's review of the draft, applied in code so it is the same on every pass and is logged.
 REVIEW = {
@@ -291,6 +292,7 @@ def sha(s: str) -> str:
     return hashlib.sha256(s.encode()).hexdigest()
 
 
+
 def rid(case: str, role: str, n: int = 0) -> str:
     return "R" + sha(f"{RID_SALT}|{case}|{role}|{n}")[:10]
 
@@ -338,12 +340,12 @@ class Relay:
         with LOCK:
             if p.exists():
                 rec = json.loads(p.read_text())
-                if rec.get("prompt_sha") == sha(prompt):
+                if rec.get("prompt_sha") == psha(prompt):
                     return rec["content"]
                 LOG.append({"kind": "stale_reply", "case": case, "role": role, "file": p.name})
             if not any(it["case"] == case and it["n"] == n for it in self.pending[role]):
                 self.pending[role].append({"case": case, "role": role, "n": n, "rid": rid(case, role, n),
-                                           "prompt": prompt, "prompt_sha": sha(prompt)})
+                                           "prompt": prompt, "prompt_sha": psha(prompt)})
         return None
 
     def pending_cases(self):
@@ -384,7 +386,7 @@ class ChatEndpoint(BaseHTTPRequestHandler):
         case = CURRENT["case"]
         auth = self.headers.get("Authorization", "")
         log("endpoint_request", role=self.role, case=case, model=body.get("model"),
-            auth_fingerprint=sha(auth)[:12] if auth else None, prompt_sha=sha(prompt), request=body)
+            auth_fingerprint=sha(auth)[:12] if auth else None, prompt_sha=psha(prompt), request=body)
         scripted = ((case_by_id(case) or {}).get("judges") or {}).get(self.role)
         if scripted is not None:          # a quorum case: the harness answers, no bot is asked
             log("scripted_judge", role=self.role, case=case, ballot=scripted)

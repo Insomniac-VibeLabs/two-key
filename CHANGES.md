@@ -5008,4 +5008,7 @@ other three were stopped by a valid rule. These are the fixes from its list of f
 - Live harness: cases C72 (bcc out of the clinic) and C172 (over-cap payment) also accept
   `counterparty_not_allowed` and `rule_denied:require-po-match`, valid stops that fired before the ones they
   listed. C58 stays INCONCLUSIVE when the agent uses the scanned tool, since its point is the unscanned one.
-- Tests: `tests/test_config_cmd.py`, `tests/test_config_set.py`.
+- Live harness: a relayed judge reply is matched to its prompt with the `<decision_history>` line and ISO times
+  masked (`report.psha`). Both change with every pass, so in run 11 each re-staged prompt hashed differently and
+  the judges were asked again in a loop. The maintainer approved this fix, which GrokBot found.
+- Tests: `tests/test_config_cmd.py`, `tests/test_config_set.py`, `tests/test_live_harness.py`.
