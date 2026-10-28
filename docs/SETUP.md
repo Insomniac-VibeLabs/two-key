@@ -30,6 +30,7 @@ command and what it refuses.
   - [What it writes, and where](#what-it-writes-and-where)
   - [What it refuses](#what-it-refuses)
   - [After it finishes](#after-it-finishes)
+  - [The setup window: `two-key setup --window`](#the-setup-window-two-key-setup---window)
 - [Changing one setting: `config set`, `get`, `undo`](#changing-one-setting-config-set-get-undo)
   - [Finding a setting's name](#finding-a-settings-name)
   - [Giving a value](#giving-a-value)
@@ -70,6 +71,7 @@ that, as before.
 two-key setup --dir /srv/two-key/billing
 two-key setup --dir /srv/two-key/billing --answers answers.yaml
 two-key setup --dir /srv/two-key/billing --answers answers.yaml --confirm-weaker
+two-key setup --dir /srv/two-key/billing --window
 ```
 
 Without `--answers`, it asks its questions on a terminal; without a terminal it refuses and asks for
@@ -225,6 +227,58 @@ It prints the files and the next steps:
 For the guard and library routes there is no `proxy.yaml`: load the files from Python as
 [HOWTO "Authorize from Python"](HOWTO.md#authorize-from-python) shows. `config set`, `get`, and `undo` work on
 a proxy config; on those routes, edit the files and sign again with `sign-constitution`.
+
+### The setup window: `two-key setup --window`
+
+The same questions on one screen, for those who prefer a window to a terminal. It is a choice beside the
+terminal interview, not a replacement: both collect the same answers and hand them to the same code, so the
+files, what is refused, and the ledger entry are the same (`tests/test_setup_form.py` checks that the same
+answers write the same files both ways). It runs as Two-Key's own account, like the terminal setup, and it
+uses tkinter, so it adds no dependency and opens no network port. Without tkinter (on Debian and Ubuntu:
+`apt install python3-tk`) or without a display, it says so and points to the terminal or `--answers`.
+
+```
+two-key setup --dir /srv/two-key/billing --window
+two-key setup --dir /srv/two-key/billing --window --answers answers.json
+```
+
+With `--answers`, the window opens filled in from that file. Its pages follow the interview:
+
+| Page | What it asks |
+| --- | --- |
+| Deployment | The new folder, the route, the key's passphrase file, and the **High assurance** switch |
+| Judges | Each judge: id, type, model, base URL, maker, upstream (only needed when the address does not say who serves the model), and the name of its API key's variable |
+| Quorum | The five numbers, filled in with the profile's own for these judges; **Use the profile's numbers** puts them back |
+| Agent and history | The monitored agent, and the judge history summary |
+| Rules and prose | A reviewed rules file, or the starter tools; the prose file, or the starter |
+| Proxy | The upstream command, its schema digest (blank: read from the server), the agent session's variable, and one proxy per agent. Turned off for the guard and library routes |
+| Review and set up | Every answer, every problem, warning and weaker setting, the typed `yes`, **Save answers file**, and **Set up** |
+
+The status line under the pages always says whether setup would go ahead, and if not, the first reason. **Set
+up** stays off until nothing stops it. A weaker setting (a quorum number below the profile's own, the summary
+turned off, one proxy per agent turned off) needs `yes` typed in the box beside it, as the terminal asks. When
+setup finishes, the Review page shows the next steps, and two buttons open `constitution-editor` and
+`ledger-view` on the new folder.
+
+**The High assurance switch** sets `quorum.profile: high_assurance`, fills in the profile's quorum numbers, and
+makes them minimums: each number can be raised (with three judges you can require three yes votes) but never
+lowered below the profile's. It also shows, grayed out, what the profile sets that the window does not let you
+change:
+
+| Setting | Under high assurance |
+| --- | --- |
+| `quorum.required_yes`, `min_responding` | at least 2 |
+| `quorum.min_makers` | at least 2: judges from two different model makers |
+| `quorum.min_local_judges` | at least 1: a judge on this machine |
+| `quorum.require_local_yes` | true: a judge on this machine must vote yes |
+| `on_writable_paths` | refuse: the proxy does not start when another account can change a file it runs or reads |
+| `on_agent_access` | refuse: the proxy does not start when the agent's account could reach Two-Key's files |
+| a plaintext SIEM sink | refused |
+| `upstream.check_paths` | required: the upstream server's files are checked, or the proxy does not start |
+
+**Save answers file** writes the answers as JSON, owner-only, for a machine with no screen: fill them in on a
+desktop, copy the file to the server, and run `two-key setup --dir DIR --answers FILE` there. The file holds
+no secret, only the names of environment variables and the paths of files.
 
 ## Changing one setting: `config set`, `get`, `undo`
 

@@ -199,6 +199,14 @@ frozen, so the public review looks at the final shape.
   question is answered with the standing decision: stdio only, remote
   agents over SSH.
 - A ten-minute quickstart and a demo with a real MCP server.
+- `two-key config set 'tools[*].claim'`: one setting on every tool as one change, one confirmation and one
+  ledger entry (live run 11; on `working`).
+- A setup window, `two-key setup --window`, beside the terminal setup (maintainer's request, 2026-10-28):
+  the same answers and the same `build`, a High assurance switch that locks the profile's settings and makes
+  its quorum numbers minimums, and a Save answers file for a server with no screen (on `working`).
+- Quantum-resistant signatures (maintainer's decision, 2026-10-28): hybrid Ed25519 plus ML-DSA-65 for the
+  constitution, the ledger head, the witness and tokens, on by default for a new deployment. A design note
+  and the maintainer's security review come before any code. FIPS 140-3 approved mode follows in 1.0.0.
 - A freeze for 1.0: what 1.0 keeps stable (constitution, rules and judge
   configuration shapes, the ledger and token formats, the SIEM schema, the
   CLI and its exit codes, the public Python API) is written in
@@ -325,6 +333,7 @@ guard with a token, and it shows every field decrypted, because the
 maintainer asked for every field to be searchable. It holds the principal
 key while open, as `two-key audit` does, because opening the ledger needs it.
 The constitution part came next, also in 0.8.0, as `two-key constitution-editor`, a tkinter window too.
+Setup follows in 0.9.0 as `two-key setup --window`, beside the terminal interview.
 The bullets below are still the plan for the rest.
 
 - Runs locally only. It binds to loopback, requires a per-session token, and
@@ -395,7 +404,9 @@ neither.
 - A gateway in its own process or on its own host, or a gateway-only
   ledger role. This is a decision, not a gap: the gateway runs in the
   `TwoKey` process ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
-- A hosted, remote, or multi-user GUI, and a GUI that holds the signing key.
+- A hosted, remote, or multi-user GUI. (Until 2026-10-28 this line also excluded a GUI that holds the signing
+  key; the constitution editor signs in its window and the setup window creates the key, as the terminal
+  commands do, so the maintainer reworded it.)
 - A CMVP validation of this package, and any claim that it is "FIPS
   compliant" or "FIPS validated".
 - Permissioned-chain anchoring and seed phrases.

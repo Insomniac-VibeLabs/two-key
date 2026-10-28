@@ -29,7 +29,7 @@ sure which route fits.
 To write a first deployment in one go, run `two-key setup --dir DIR`: it asks for the route, the
 profile, the judges and the quorum's numbers, the monitored agent, the rules to sign and, for the proxy, the
 upstream server, then writes every file owner-only, signs the constitution, creates the ledger, and checks the
-result.
+result. `two-key setup --dir DIR --window` asks the same questions in a window instead.
 Later, `two-key config set` changes one setting without opening the files, and `config undo` puts it
 back. [SETUP.md](SETUP.md) says who may run them and what they refuse. They write the files for you;
 they do not decide the rules or the judges, so read the sections above for your route either way.

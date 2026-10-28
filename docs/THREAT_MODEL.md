@@ -518,6 +518,18 @@ claims to close.
   constitution into a deployment folder is not a `config_changed` entry,
   exactly as with `sign-constitution --force` (the next start records
   `constitution_loaded`, and the serial still refuses an older one).
+- Setup window (0.9.0, `two-key setup --window`, `two_key/setup_form.py`,
+  `two_key/setup_gui.py`). No new boundary: a tkinter window of the
+  operator's own process, with no network port, that collects the same
+  answers as the terminal interview and calls the same `setup_cmd.build`,
+  so it refuses what `setup --answers` refuses (root, an existing folder, an
+  unsafe parent, a failing `config check`) and writes the same files. It
+  creates the principal key in that call, as the terminal setup does, and
+  never shows it; it never asks for a secret or a typed passphrase (the
+  passphrase is a file path). A weaker answer needs the typed `yes`. Under
+  `high_assurance` the window lets the quorum numbers go up only. Save
+  answers file writes owner-only JSON with variable names and paths, no
+  values. Residual: whoever can see the screen sees the answers.
 - One proxy per agent (0.8.0, `one_proxy_per_agent`, on by default). A
   second proxy for an agent already connected to the ledger refuses
   (`agent_already_connected`). A proxy whose client died but whose process

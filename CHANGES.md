@@ -169,6 +169,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Release v0.8.0: judge history, ballot records, one proxy per agent, two windows — 2026-10-28](#release-v080-judge-history-ballot-records-one-proxy-per-agent-two-windows--2026-10-28)
 - [Publish from the PyPI branch only — 2026-10-28](#publish-from-the-pypi-branch-only--2026-10-28)
 - [One confirm for every tool: `tools[*].claim` — 2026-10-28](#one-confirm-for-every-tool-toolsclaim--2026-10-28)
+- [A setup window beside the terminal: `two-key setup --window` — 2026-10-28](#a-setup-window-beside-the-terminal-two-key-setup---window--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5075,3 +5076,26 @@ entry names each tool, and one `config undo` puts them all back. `tools[*]` reac
 set in `proxy.yaml` or not; with `--unset`, a tool that does not set it is skipped. `[*]` anywhere else is refused
 (`every_tool`). `config get tools[*].claim` prints the value for each tool. docs/SETUP.md, "Finding a setting's name",
 has an example.
+
+## A setup window beside the terminal: `two-key setup --window` — 2026-10-28
+
+Maintainer's request (2026-10-28): a window for `two-key setup`, as a choice beside the terminal interview, not a
+replacement. `two-key setup --dir DIR --window` asks the same questions on seven pages (Deployment, Judges, Quorum,
+Agent and history, Rules and prose, Proxy, Review and set up) and calls the same `build`, so the files, what is
+refused and the `config_changed` entry are the same; `tests/test_setup_form.py` checks that the same answers write
+the same files from the terminal and from the window. With `--answers FILE` the window opens filled in.
+
+- A **High assurance** switch sets the profile, fills in its quorum numbers and makes them minimums (raised, never
+  lowered: maintainer's decision), and shows grayed out what the profile locks: `require_local_yes`,
+  `on_writable_paths` and `on_agent_access` refuse, no plaintext SIEM sink, `upstream.check_paths` required.
+- The status line always says whether setup would go ahead; **Set up** stays off until it would. A weaker answer
+  needs `yes` typed beside it. Afterwards, buttons open `constitution-editor` and `ledger-view` on the new folder.
+- **Save answers file** writes owner-only JSON (variable names and paths, never a value) for
+  `setup --answers` on a machine with no screen.
+- A judge or agent nobody can tell the server of is a warning, as in `config check` (live run 11 decision), not a
+  refusal.
+- New `two_key/setup_form.py` (the checks, no window) and `two_key/setup_gui.py` (tkinter). `setup_cmd` gains
+  `needs_upstream` and makes `quorum_findings` public; the interview's questions are unchanged.
+- ROADMAP: the "Not planned" line no longer excludes a GUI that holds the signing key (maintainer, 2026-10-28), and
+  the 0.9.0 section lists the setup window, `tools[*].claim` and quantum-resistant signatures. Docs: SETUP.md "The
+  setup window", HOWTO, THREAT_MODEL, AGENTS.md, llms.txt.

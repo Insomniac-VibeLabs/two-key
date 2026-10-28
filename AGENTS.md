@@ -424,5 +424,12 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   `two_key/constitution_editor.py`, the window in
   `two_key/constitution_gui.py` (`tests/test_constitution_editor.py`,
   `tests/test_constitution_gui.py`).
+- `two-key setup --window` (0.9.0) is a front end only: it builds the same
+  answers the terminal interview does and calls the same
+  `setup_cmd.build`, so it can never write what `setup --answers` would
+  refuse. Keep the checks it shows in `two_key/setup_form.py`, the window
+  in `two_key/setup_gui.py` (`tests/test_setup_form.py`, which also checks
+  the window and the interview write the same files, and
+  `tests/test_setup_gui.py`).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

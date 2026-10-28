@@ -151,11 +151,16 @@ def _ask_judge(ask: Ask, n: int) -> dict:
     return judge
 
 
-def _ask_upstream(spec: dict, ask: Ask, who: str) -> None:
-    """``upstream`` for a judge or the agent whose address and model do not say who serves it (a local proxy, an
-    unrecognized host): without it the proxy refuses to start with ``unresolved_identity`` (live run 11, D1)."""
+def needs_upstream(spec: Mapping) -> bool:
+    """True when a judge's or the agent's address and model do not say who serves it (a local proxy, an
+    unrecognized host): without ``upstream`` the proxy refuses to start with ``unresolved_identity``."""
     from .identity import resolve_upstream_info
-    if not spec.get("base_url") or resolve_upstream_info(spec["base_url"], spec.get("model", ""))[0]:
+    return bool(spec.get("base_url")) and not resolve_upstream_info(spec["base_url"], spec.get("model", ""))[0]
+
+
+def _ask_upstream(spec: dict, ask: Ask, who: str) -> None:
+    """``upstream`` for a judge or the agent that :func:`needs_upstream` (live run 11, D1)."""
+    if not needs_upstream(spec):
         return
     _optional(spec, "upstream", ask, f"{who}: Two-Key cannot tell who serves {spec.get('model')} at "
                                      f"{spec['base_url']}; where does that address forward the calls (a host "
@@ -170,7 +175,7 @@ def _ask_quorum(ask: Ask, profile: str, judges: list[dict]) -> dict:
     while True:
         counts = {name: _ask_count(ask, f"Quorum: {name}, {QUORUM_QUESTIONS[name]}", defaults[name])
                   for name in QUORUM_COUNTS}
-        problem, lenient = _quorum_findings(profile, judges, counts)
+        problem, lenient = quorum_findings(profile, judges, counts)
         for line in lenient:
             print(f"  WARN  {line}", file=sys.stderr)
         if problem:
@@ -198,7 +203,7 @@ def _typed_yes(ask: Ask, reasons: list[str]) -> bool:
                "them again: ").strip() == "yes"
 
 
-def _quorum_findings(profile: str, judges: list[dict], counts: Mapping) -> tuple[str | None, list[str]]:
+def quorum_findings(profile: str, judges: list[dict], counts: Mapping) -> tuple[str | None, list[str]]:
     """Why the judges' loader would refuse these numbers for these judges (None when it would not, or when a
     judge itself does not load: ``build`` reports that one), and the warnings ``config check`` would print about
     a quorum that could be too lenient."""

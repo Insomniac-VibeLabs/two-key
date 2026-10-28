@@ -36,7 +36,7 @@
                     [--confirm-weaker] [--key KEY --rules FILE]
   two-key config undo --config FILE [--confirm-weaker] [--key KEY]
   two-key config key-passphrase --config FILE (--new-from FILE | --remove) [--confirm-weaker]
-  two-key setup --dir DIR [--answers FILE [--confirm-weaker]]
+  two-key setup --dir DIR [--answers FILE [--confirm-weaker]] [--window]
 
 Every command that takes --key also takes --key-passphrase-file FILE for an encrypted key; without it, it
 asks on the terminal (docs/SETUP.md).
@@ -587,8 +587,26 @@ def _config_key_passphrase(args) -> int:
 
 
 def _setup(args) -> int:
+    if getattr(args, "window", False):
+        return _setup_window(args)
     from .setup_cmd import run
     return run(args)
+
+
+def _setup_window(args) -> int:
+    from .setup_cmd import SetupError
+    try:
+        from .setup_gui import load_for_window, show
+    except ImportError:
+        print("two-key setup: the window needs tkinter, which this Python does not have (on Debian and Ubuntu: apt "
+              "install python3-tk); answer on the terminal, or give --answers FILE", file=sys.stderr)
+        return 1
+    try:
+        answers = load_for_window(args.answers)
+    except SetupError as e:
+        print(f"two-key setup: refused: {e}", file=sys.stderr)
+        return 1
+    return show(answers, folder=args.dir)
 
 
 def _draft_env(items: list[str] | None) -> dict[str, str]:
@@ -1005,6 +1023,9 @@ def main(argv: list[str] | None = None) -> int:
                        help="read the answers from this YAML or JSON file instead of asking (docs/SETUP.md)")
     setup.add_argument("--confirm-weaker", action="store_true",
                        help="go ahead with --answers quorum numbers below the profile's own, after a typed yes")
+    setup.add_argument("--window", action="store_true",
+                       help="answer in a window instead of on the terminal (tkinter); with --answers, start from "
+                            "that file")
     setup.set_defaults(func=_setup)
     drafter = sub.add_parser("mcp-draft-specs", help="draft tool_specs and the schema digest from an upstream MCP "
                                                      "server, for the principal to review and sign (needs the mcp extra)")

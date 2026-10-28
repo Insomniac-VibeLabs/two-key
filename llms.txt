@@ -74,6 +74,9 @@ one row per entry in a read-only tkinter window: every field (seq, kind, and eac
 lists as name[]) searchable, filterable (contains, equals, starts-with, ends-with, regex, gt/ge/lt/le, empty, and
 negations; all or any), and sortable on several keys. --print writes the matches as JSON Lines; --fields lists the
 names. No network port, no export, never appends (docs/LEDGER_VIEW.md).
+two-key setup --window (two_key/setup_form.py, two_key/setup_gui.py) asks setup's questions in a tkinter window instead
+of on the terminal and runs the same build, so the files and refusals are the same; a High assurance switch locks the
+profile's settings and makes its quorum numbers minimums; Save answers file writes JSON for setup --answers.
 two-key constitution-editor (two_key/constitution_editor.py, two_key/constitution_gui.py) writes, checks, and signs a
 constitution in a tkinter window: prose, tools and specs, hard rules, custom fields, serial. It checks with the code
 sign_constitution runs, tries one call on a throwaway key and ledger with a stand-in judge (Path A's decision and the
