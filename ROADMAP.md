@@ -13,9 +13,11 @@ promise: the order may change, and version numbers are targets, not dates.
 
 <!-- toc -->
 - [The path to 1.0](#the-path-to-10)
-- [Where we are (2026-10-23)](#where-we-are-2026-10-23)
+- [Where we are (2026-10-28)](#where-we-are-2026-10-28)
 - [Ground rules](#ground-rules)
-- [1.0.0: Review and release](#100-review-and-release)
+- [0.8.0: Judge history and ballot records](#080-judge-history-and-ballot-records)
+- [0.9.0: Tool-side token check and remote agents](#090-tool-side-token-check-and-remote-agents)
+- [1.0.0: First stable release](#100-first-stable-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
   - [PKI and certificate recovery](#pki-and-certificate-recovery)
   - [Post-quantum signatures](#post-quantum-signatures)
@@ -39,15 +41,18 @@ promise: the order may change, and version numbers are targets, not dates.
 
 ```mermaid
 flowchart TD
-  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
-  r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
-  r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
-  r07 --> r073["0.7.3<br/>Setup and config<br/>commands<br/>Released"]
-  r073 --> r10["1.0.0<br/>Review and release"]
-  r10 -. "later" .-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
+  subgraph done["Released betas"]
+    direction LR
+    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"]
+  end
+  subgraph next["Next: one beta, then 1.0.0"]
+    direction LR
+    r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+  end
+  done --> next
 ```
 
-*Each release builds on the one above it. The dashed line leads to work planned after 1.0.*
+*Every release so far is a beta; 1.0.0 is the first stable one. The dashed line leads to work after 1.0.*
 
 | Version | What | Status |
 | --- | --- | --- |
@@ -56,14 +61,16 @@ flowchart TD
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners; a start-up check for writable paths; judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
-| 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review and release on PyPI | Planned |
+| 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
+| 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
+| 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
 antivirus hooks, then the SIEM export, then 1.0. PKI, post-quantum
 signatures, FIPS approved mode, and the local GUI move after 1.0. Judge
 connection reuse (#6) joins 0.6.0, and the judge history summary (#1) comes
-before the 1.0 review. Earlier
+before the 1.0 review; on 2026-10-25 it became its own release, 0.8.0. Earlier
 versions of this plan numbered the phases 0.4 to 0.11 in another order;
 CHANGES.md keeps that record. Released versions are under "Shipped" below.
 
@@ -71,9 +78,17 @@ Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
 in the same release.
 
-## Where we are (2026-10-23)
+## Where we are (2026-10-28)
 
-- **0.7.3 is released**: tag `v0.7.3` on `main`, and on PyPI. It adds
+- **0.8.0 is released**: tag `v0.8.0` on `main`, and on PyPI. Judges get a
+  summary of recent decisions from the ledger (#1), each judge's ballot is
+  recorded without its rationale text, one proxy serves each agent on a
+  ledger, and two windows arrive: `two-key ledger-view`, a read-only ledger
+  audit, and `two-key constitution-editor`. Live runs 10 and 11 checked it
+  with real judges; run 11, the last before the release, found no Two-Key
+  failure (174 of 177 cases PASS, the other three stopped by another valid
+  rule).
+- **0.7.3** (tag `v0.7.3`) added
   `two-key setup` for a first deployment and `two-key config set`, `get`,
   `undo`, `show` and `check` to change and read one (docs/SETUP.md), every
   change checked as a whole, confirmed when weaker, signed with the principal
@@ -98,10 +113,10 @@ in the same release.
   stated blind spot. Every Two-Key finding is fixed (CHANGES.md); run 9z, a
   regression round, found none. Results live on the `live-runs` branch,
   never on `working` or `main`.
-- **Issues**: #13 and #27 shipped in 0.7.3. #1 comes before 1.0, and #3
+- **Issues**: #13 and #27 shipped in 0.7.3, and #1 in 0.8.0. #3
   (repository setup after the move) has maintainer settings left to confirm.
-- **Next**: the judge history summary (#1), then the public review and the
-  1.0 release.
+- **Next**: 0.9.0, the last beta, then the public review and the first
+  stable release, 1.0.
 - **Not yet tested enough: agents on another machine.** The maintainer
   expects an agent connecting from another machine to be the normal case,
   and the same machine an edge case for testing (2026-10-16). Today the
@@ -115,7 +130,7 @@ in the same release.
   over SSH (connect, reconnect, a dropped connection, two agents at once,
   and the escape attempts `restrict` should stop: a shell, `sftp`, port
   forwarding, environment variables), the same on macOS and Windows hosts,
-  and a decision on a network transport.
+  and a decision on a network transport. This is planned for 0.9.0.
 
 ## Ground rules
 
@@ -132,23 +147,69 @@ in the same release.
 - Keep the README's "Known limits" section current: no independent review,
   no external anchor, not FIPS validated, signatures not quantum resistant.
 
-## 1.0.0: Review and release
+## 0.8.0: Judge history and ballot records
 
-- First, the judge history summary (#1): Path B judges get a summary of
-  recent allows, denies, and abstains, built by `TwoKey` from its own
-  ledger and on by default (opt-out in the quorum policy), so a repeated
-  bill, a split payment, or a burst of denied attempts is visible to the
-  next decision. Structured fields and library reason codes only: no
-  proposal text, no rationale, and a counterparty or tool name only when it
-  is signed. It changes what judges receive and reads the ledger during
-  authorization, so it gets its own maintainer security review before any
-  code. The design is in the issue.
-- With it, per-judge ballot records in the ledger (maintainer's decision
-  after live run 6): each judge's id, vote, confidence, and error class, and
-  a digest of its rationale, never the text, which is model output and may
-  quote arguments. Today the ledger keeps only the tally, so a pass with one
-  judge down cannot be told from the ledger alone. Reviewed with #1.
-- A time-boxed, public community review with a stated scope.
+Released as tag `v0.8.0` on `main`, and on PyPI. The design note, decisions
+D1 to D10, was reviewed and approved by the maintainer before any code.
+CHANGES.md "Release v0.8.0" lists what shipped.
+
+- The judge history summary (#1): Path B judges get a summary of recent
+  allows, denies, and abstains, built by `TwoKey` from its own ledger and on
+  by default (`quorum.judge_history`), so a repeated bill, a split payment,
+  or a burst of denied attempts is visible to the next decision. Structured
+  fields and library reason codes only: no proposal text, no rationale, and
+  a counterparty or amount only when the spec signs it. A summary that
+  cannot be built denies by default, and a decision whose history changed
+  before the token is denied `history_changed`
+  ([JUDGES_AND_QUORUM](docs/JUDGES_AND_QUORUM.md#judge-history)).
+- Per-judge ballot records in the ledger (maintainer's decision after live
+  run 6): each judge's id, vote, confidence, and error class, and an HMAC
+  digest of its rationale, never the text, which is model output and may
+  quote arguments. A pass with one judge down can now be told from the
+  ledger.
+- One proxy per agent on a ledger, on by default (`one_proxy_per_agent`).
+- A ledger audit window, `two-key ledger-view` (maintainer's request,
+  2026-10-27; [LEDGER_VIEW.md](docs/LEDGER_VIEW.md)): one row per entry,
+  every field searchable, filterable, and sortable, alone and together. It
+  is the ledger-auditing part of the local GUI below, brought forward and
+  read-only: a tkinter window with no network port, opened the way
+  `two-key audit` opens the ledger, and `--print` for the same search
+  without a window.
+- A constitution editor, `two-key constitution-editor` (maintainer's
+  request, 2026-10-27; [CONSTITUTION_EDITOR.md](docs/CONSTITUTION_EDITOR.md)):
+  the prose, tools and specs, hard rules, custom fields, and serial in one
+  window, checked as they are typed, a trial call that shows Path A's
+  decision and the judge prompt, and signing with the principal key. It
+  signs with the same code as `sign-constitution` and adds no format.
+- Done: live runs 10 and 11 with real judges covered the first three; the
+  release follows [PYPI.md](docs/PYPI.md).
+
+## 0.9.0: Tool-side token check and remote agents
+
+Planned, the last beta. Everything 1.0 will contain is in, tested on real deployments, and
+frozen, so the public review looks at the final shape.
+
+- An optional tool-side token check (#28): a way for a tool, or a thin
+  wrapper in front of it, to check that a call was authorized. Off by
+  default; the gateway stays in the `TwoKey` process and still verifies
+  only. It touches tokens and the gateway, so a design note and the
+  maintainer's security review come before any code.
+- A live run with the agent on another machine over SSH ("Where we are"
+  above), on machines the maintainer sets up. The network transport
+  question is answered with the standing decision: stdio only, remote
+  agents over SSH.
+- A ten-minute quickstart and a demo with a real MCP server.
+- A freeze for 1.0: what 1.0 keeps stable (constitution, rules and judge
+  configuration shapes, the ledger and token formats, the SIEM schema, the
+  CLI and its exit codes, the public Python API) is written in
+  [UPGRADING.md](docs/UPGRADING.md).
+- Before release: a live round across the full case list plus the new
+  cases.
+
+## 1.0.0: First stable release
+
+- A time-boxed, public community review with a stated scope. 0.9.0 is what
+  is reviewed; fixes ship as 0.9.x.
 - Release only with no unresolved Medium or higher findings from that review.
 - The first index upload is 0.7.0, from the `PyPI` branch, and it is not
   this review. Later releases use the same workflow (docs/PYPI.md):
@@ -156,7 +217,6 @@ in the same release.
   metadata, `MANIFEST.in`, and `.github/workflows/pypi-publish.yml`
   (OpenID Connect, no token in the repository, PEP 740 attestations, and
   a CycloneDX SBOM kept as a workflow artifact).
-- A ten-minute quickstart and a demo with a real MCP server.
 - 1.0 is described as community-reviewed, not audited, and as not FIPS
   validated itself. A paid audit and any validation of this package are
   later goals.
@@ -258,6 +318,14 @@ module in approved mode", never "FIPS compliant" or "FIPS validated".
 A graphical front end so the package can be configured and audited without
 hand-editing YAML and reading JSON. It is built last, on top of the stable
 CLI and file formats, so it adds no new logic of its own.
+
+The read-only ledger audit part came first, in 0.8.0, as `two-key ledger-view`
+(above): a tkinter window, not a browser page, so it has no local port to
+guard with a token, and it shows every field decrypted, because the
+maintainer asked for every field to be searchable. It holds the principal
+key while open, as `two-key audit` does, because opening the ledger needs it.
+The constitution part came next, also in 0.8.0, as `two-key constitution-editor`, a tkinter window too.
+The bullets below are still the plan for the rest.
 
 - Runs locally only. It binds to loopback, requires a per-session token, and
   is not a hosted or multi-user service.
@@ -563,7 +631,8 @@ in this plan, these win; nothing above is removed.
 - **Monitor mode** exists, for tuning before enforcing.
 - **What the judges get:** the scanner's decision for the call (verdict,
   finding categories, scanner label), never content. Recent scan verdicts
-  also go into the judge history summary (#1, before 1.0), designed then.
+  also go into the judge history summary (#1, built for 0.8.0) as counts
+  of each verdict over seven days.
 
 **Platforms, CI, and docs**
 

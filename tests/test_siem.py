@@ -66,7 +66,7 @@ SAMPLE_BODIES = {
                          "tail_file": "/tmp/" + SECRET},
     "scanner_unavailable": {"scanner": "clamd", "error": "exception:OSError", "stance": "default"},
     "scanner_available": {"scanner": "clamd", "stance": "default"},
-    "mcp_proxy_started": {"upstream_program": "server", "upstream_command_digest": "sha256:" + "0" * 64,
+    "mcp_proxy_started": {"agent_id": "buyer", "upstream_program": "server", "upstream_command_digest": "sha256:" + "0" * 64,
                           "schema_digest_pinned": "sha256:" + "1" * 64,
                           "schema_digest_seen": "sha256:" + "1" * 64, "on_schema_change": "refuse",
                           "allow_unresolved_identity": False,

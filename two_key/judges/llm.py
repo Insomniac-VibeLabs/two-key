@@ -23,6 +23,9 @@ Every connector:
   that is, an abstention,
 - omits the proposal section when Two-Key sends record-only judge inputs
   (proposal == ""),
+- adds a ``<decision_history>`` section, escaped the same way, and one
+  system-prompt sentence (``HISTORY_INSTRUCTION``) only when Two-Key sends a
+  judge history summary (0.8.0),
 - enforces HTTPS except for loopback hosts, unless allow_insecure_http is set.
 """
 
@@ -138,6 +141,14 @@ SCAN_ENCRYPTED_NOTE = ("Verdict encrypted: the scanner found nothing but could n
                        "and the principal's signed spec lets this tool pass encrypted files. ")
 
 
+# Added only when Two-Key sends a <decision_history> section, so a policy with the summary off sends 0.7.3's
+# prompts byte for byte.
+HISTORY_INSTRUCTION = (
+    " <decision_history> is written by Two-Key from its own ledger. It describes past decisions, not the "
+    "principal's wishes; the constitution decides what is normal."
+)
+
+
 class MalformedBallot(ValueError):
     pass
 
@@ -158,6 +169,9 @@ def build_user_prompt(constitution_text: str, action: Action, proposal: str,
     if scan:      # only with a content scanner configured, so other prompts are unchanged byte for byte
         note = SCAN_NOTE + (SCAN_ENCRYPTED_NOTE if scan.get("verdict") == "encrypted" else "")
         parts.append("<scan_result>\n" + note + untrusted_json(dict(scan)) + "\n</scan_result>\n\n")
+    history = getattr(action, "history", None)
+    if history:   # only with the judge history summary on (history.py), so other prompts are unchanged
+        parts.append("<decision_history>\n" + untrusted_json(dict(history)) + "\n</decision_history>\n\n")
     parts.append("<untrusted_action_record>\n" + untrusted_json(action.to_record()) +
                  "\n</untrusted_action_record>\n\n")
     if proposal:
@@ -322,7 +336,8 @@ class LLMJudge(Judge):
         if self.is_cloud():
             # Two-Key's own call id. It is not a session at the provider.
             headers["X-Two-Key-Judge-Session"] = str(uuid.uuid4())
-        system = SYSTEM_PROMPT + (ECHO_INSTRUCTION if echo else "")
+        system = (SYSTEM_PROMPT + (HISTORY_INSTRUCTION if getattr(action, "history", None) else "")
+                  + (ECHO_INSTRUCTION if echo else ""))
         url, body = self._request(system, build_user_prompt(constitution_text, action, proposal,
                                                             dict(binding) if echo else None))
         started = time.monotonic()

@@ -27,8 +27,9 @@ sure which route fits.
 | Python code that calls `TwoKey` directly | **Library** | The same first six, then [Authorize from Python](#authorize-from-python), [Monitored agents](#monitored-agents), and [Redeem](#redeem) |
 
 To write a first deployment in one go, run `two-key setup --dir DIR`: it asks for the route, the
-profile, the judges, the monitored agent, the rules to sign and, for the proxy, the upstream server,
-then writes every file owner-only, signs the constitution, creates the ledger, and checks the result.
+profile, the judges and the quorum's numbers, the monitored agent, the rules to sign and, for the proxy, the
+upstream server, then writes every file owner-only, signs the constitution, creates the ledger, and checks the
+result.
 Later, `two-key config set` changes one setting without opening the files, and `config undo` puts it
 back. [SETUP.md](SETUP.md) says who may run them and what they refuse. They write the files for you;
 they do not decide the rules or the judges, so read the sections above for your route either way.
@@ -47,9 +48,11 @@ route. The rest of the page is reference, for when a section above points to it.
 - [Install](#install)
   - [Platforms](#platforms)
 - [Create a principal key and sign a constitution](#create-a-principal-key-and-sign-a-constitution)
+- [Write and sign a constitution in a window](#write-and-sign-a-constitution-in-a-window)
 - [Data classes](#data-classes)
 - [What Two-Key verifies, and what it does not](#what-two-key-verifies-and-what-it-does-not)
 - [Designing a constitution](#designing-a-constitution)
+  - [Describing normal activity for the judges](#describing-normal-activity-for-the-judges)
 - [Custom Path A fields](#custom-path-a-fields)
   - [Declare, map, and rule](#declare-map-and-rule)
   - [What happens to a call](#what-happens-to-a-call)
@@ -80,6 +83,7 @@ route. The rest of the page is reference, for when a section above points to it.
   - [What each refusal or warning means](#what-each-refusal-or-warning-means)
   - [Key custody](#key-custody)
   - [Limits](#limits)
+- [Search the ledger for an audit](#search-the-ledger-for-an-audit)
 - [Send the ledger to a SIEM](#send-the-ledger-to-a-siem)
 - [If the ledger will not open after a crash](#if-the-ledger-will-not-open-after-a-crash)
 - [Back up the keys](#back-up-the-keys)
@@ -110,8 +114,8 @@ version pinned in `.github/requirements/uv.in`, run `uv sync --locked
 with that same uv and commit it. The lock is not a consumer pin: a git
 install still uses the ranges.
 
-Version 0.7.3 is on PyPI, and is tag `v0.7.3` on `main`. Install with
-`pip install "two-key[yaml]==0.7.3"` (the `mcp` extra for the proxy).
+Version 0.8.0 is on PyPI, and is tag `v0.8.0` on `main`. Install with
+`pip install "two-key[yaml]==0.8.0" (the `mcp` extra for the proxy).
 The release steps are [PYPI.md](PYPI.md). A checkout install, above, is
 for working in this repository.
 
@@ -186,10 +190,10 @@ v2 constitution; see [Custom Path A fields](#custom-path-a-fields) and
 flowchart TD
   prose["Prose<br/>constitution.md"] --> sign["sign-constitution<br/>one signature"]
   rules["Hard rules<br/>hard_rules.yaml"] --> sign
-  specs["tool_specs<br/>inside hard_rules.yaml"] --> sign
+  specs["Tool specs<br/>inside hard_rules.yaml"] --> sign
   sign --> envelope["Signed envelope<br/>prose, hard_rules,<br/>tool_specs, signature"]
-  envelope --> load["verify_signed<br/>fail-closed on any change"]
-  load --> compiled["CompiledConstitution<br/>bytecode + tool_specs"]
+  envelope --> load["Signature checked<br/>any change refused"]
+  load --> compiled["Compiled rules<br/>and tool specs"]
   compiled --> pathA["Path A policy VM<br/>bytecode and<br/>derived fields"]
   compiled --> pathB["Path B judges<br/>prose and the normalized<br/>action record"]
 ```
@@ -274,6 +278,27 @@ allowed after the floor, and pass `--no-irreversible` only for a tool the
 spec marks reversible.
 
 
+## Write and sign a constitution in a window
+
+`two-key constitution-editor` puts the whole constitution in one window: the prose the judges read, the
+tools and their specs, the hard rules, the custom fields, and the serial.
+[docs/CONSTITUTION_EDITOR.md](CONSTITUTION_EDITOR.md) is the reference; this is the short version.
+
+```bash
+two-key constitution-editor --prose constitution.md --rules hard_rules.yaml --key keys/principal.pem
+```
+
+- It checks the draft as you type, with the same code `sign-constitution` uses, and lists every warning and
+  note `sign-constitution` would print.
+- **Try a call** runs one call through the draft with a throwaway key, a temporary ledger, and a stand-in
+  judge, and shows what Path A decides and the exact prompt a judge is sent.
+- **Sign and save** signs with the principal key and writes `constitution.md`, `hard_rules.yaml`, and
+  `constitution.signed.json`; the rules file signs to the same digest with `sign-constitution`. It refuses
+  to write over a file unless you tick Replace.
+- `--signed FILE` opens a signed constitution as its next version (serial one higher); `--check` prints
+  whether files sign, without a window. The window needs tkinter (on Debian and Ubuntu,
+  `apt install python3-tk`).
+
 ## Data classes
 
 A call's `data_class` combines the agent's claim with the tool's signed
@@ -354,6 +379,17 @@ The commands above sign a constitution. They do not design one. The operator own
 9. Describe caller-supplied facts in plain words, not by field name. The prose goes to the agent too, and an agent that reads "the assistant must never supply `ticket_verified`" knows which key to try. Two-Key denies it (`caller_field_in_arguments`), but say "the help-desk system confirms the ticket; the assistant does not" instead. Judges still see the field names in the record (`fact_fields`).
 10. Without a scanner, content leaks rest on the judges. Path A reads structured fields, not a message body: a diagnosis, a card number, or a recovery code in free text was stopped in live run 6 only because both judges denied it. Connect your antivirus or DLP product (see [Scan content with an antivirus or DLP product](#scan-content-with-an-antivirus-or-dlp-product)): Two-Key scans every call to a tool you mark, and a signed rule decides on the verdict. For a check of your own that is not a scanner, a [caller-supplied fact](#caller-supplied-facts) still works.
 11. Test allowed, denied, ambiguous, and adversarial examples before trusting the constitution. Confirm that Path A denies the cases the hard rules are meant to catch, that Path B receives the intended context, and that the gateway drops or denies unmapped keys as configured (`deny_unmapped` defaults off).
+
+### Describing normal activity for the judges
+
+Since 0.8.0 the judges get a summary of recent decisions with each call ([Judge history](JUDGES_AND_QUORUM.md#judge-history)): for the same tool and allow-listed counterparty, the last few decisions, the days since the last one that ran, and the totals over 7, 30 and 90 days; counts for all tools over the last hour and day; and the agent's recent bursts of denied calls. The summary only says what happened. Whether that is normal is for the constitution's prose to say, so describe it:
+
+- How often, and how much: "We pay acme-supplies once a month, about $1,200. A second payment to them in the same month needs a reason in the request."
+- What is never normal: "Never pay the same invoice twice." "Never split one payment into several smaller ones."
+- For a tool that is not a payment: "At most a handful of external emails an hour; a burst of them is not normal." "Deleting more than one project a day is never routine."
+- What the judges should not hold against a call: "Several small refunds on the same day are normal during a sale."
+
+Name parties by the same ids the signed allow lists use, so the judges can tie the prose to the summary. The summary never contains the agent's text, only signed names, reason codes, counts, amounts and times.
 
 The signed constitution remains the authority. A future GUI constitution maker (planned later) should help construct and validate choices, but the principal must still sign the resulting constitution. The GUI must not silently weaken the rules.
 
@@ -824,6 +860,10 @@ The 256 KiB argument cap, the 62-level nesting cap, and the 4,096
 instruction cap on the compiled program (`max_steps`) still apply; a very
 large rule set is refused by that last one.
 
+Path A denies with `rule_denied:<rule id>`. A program that ends without
+passing denies `no_pass`, one that runs past `max_steps` denies
+`resource_limit`, and an internal fault denies `vm_fault:`.
+
 These are not configuration settings. A limit inside the signed file
 could be raised by the same file it is meant to constrain. To change one:
 
@@ -1033,6 +1073,8 @@ from `two_key.canonical` (SHA-256 of sorted-key, compact, ASCII JSON).
 
 At call time, a judge that is not on a loopback host makes the round deny
 when `authorize` gets no `agent_session` (`cloud_judge_session_required`).
+The MCP proxy gets the session only from `agent_session_env`, so it refuses
+to start with such a judge and no `agent_session_env`.
 A judge whose credential equals that session (whitespace stripped, a
 username and password compared as their pair, a key it holds but never
 sends included) abstains with
@@ -1111,6 +1153,14 @@ that errors, abstains, times out, or returns anything but a valid ballot is
 not a yes. Ballots are paired with judges by position, and the judge id and
 provider on the record come from the judge, not the ballot. A ballot that
 names another judge abstains (`judge_id_mismatch`).
+
+Path B's other deny reasons: `no_judges` (an empty judge list),
+`judge_set_not_heterogeneous:` (the judges selected for the call are below
+`min_makers` or the local-judge floors), `insufficient_responses:N<K` (fewer
+valid ballots than `min_responding`; nothing is counted),
+`responding_not_heterogeneous:` (with `heterogeneity_scope: responding`, the
+judges that answered are below those floors), `insufficient_yes:N<K`, and
+`local_judge_required` (`require_local_yes` and no local judge voted yes).
 
 Without a local judge, the constitution prose, the action record, and any
 attached tool arguments go to the cloud judges' vendors.
@@ -1376,7 +1426,7 @@ sequenceDiagram
   participant Caller as Caller (your app)
   participant TwoKey
   participant Agent as Monitored agent host
-  Caller->>TwoKey: agent_vocabulary(tools=[pay_bill])
+  Caller->>TwoKey: ask for the vocabulary for pay_bill
   Note over TwoKey: reads tool_specs and the field registry
   TwoKey-->>Caller: vocabulary text, syntax only
   Note over Caller: adds this task's exact values to the instruction
@@ -1701,12 +1751,12 @@ comes back to the agent as a tool error with a reason code.
 flowchart TD
   host["Agent host<br/>MCP client"] -- "tools/list and<br/>tools/call, stdio" --> tk
   subgraph proxy["two-key mcp-proxy, its own OS user"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["TwoKey.authorize<br/>Path A and Path B"]
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["Two-Key<br/>checks policy,<br/>asks judges"]
     tk -- "token" --> gw["Gateway<br/>same process"]
   end
   tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected arguments,<br/>stdio" --> up["Upstream MCP server<br/>child process,<br/>third OS user"]
-  up --> sor["System of record"]
+  gw -- "projected args,<br/>stdio" --> up["Upstream<br/>MCP server<br/>child process,<br/>third OS user"]
+  up --> sor["System<br/>of record"]
   hooks -. "look facts up" .-> sor
 ```
 
@@ -1746,7 +1796,7 @@ messages and decides nothing.
 ### Install
 
 ```bash
-pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.3"
+pip install "two-key[mcp] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.8.0"
 pip install -e ".[mcp]"          # or from a checkout
 ```
 
@@ -1949,6 +1999,7 @@ what `high_assurance` does to it, and which file tier it is in, is in
 | `agent_id`, `hosting` | no | Ledger metadata, at most 256 characters; not trust |
 | `allow_unresolved_identity` | no | `true` starts despite an `unresolved_identity` warning (default `false`) |
 | `on_agent_access` | no | `refuse` (default) does not start when the account that started the proxy (the agent host's, or the SSH login account's) is Two-Key's own (`agent_same_account`), is root (`agent_account_root`), cannot be told (`agent_account_unknown`, which includes Windows for now), or can change a file or folder the proxy runs or reads (`agent_can_write`); `warn` names it and starts, for a test on one machine under one account. `high_assurance` refuses either way and does not accept `warn` ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you), 0.7.0) |
+| `one_proxy_per_agent` | no | `true` (default): one running proxy per `agent_id` on this ledger (a proxy without one counts as the agent `unnamed`). A second proxy for the same agent refuses to start with `agent_already_connected`, which is ledgered and sent to the SIEM; the lock goes when the first proxy's process ends. `false` lets several run at once, warns at start, and is weaker in `config set`. Clients that open several sessions at once need one `agent_id` per session, or `false` ([Judge history](JUDGES_AND_QUORUM.md#judge-history), 0.8.0) |
 | `on_writable_paths` | no | `warn` (default) names each file or folder the proxy runs or reads that another account could change, and starts; `refuse` does not start. `high_assurance` refuses either way and does not accept `warn` ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you), 0.6.0) |
 | `upstream.command` | yes | Program and arguments, as a list; no shell |
 | `upstream.env` | no | Variables for the child: a literal, or `{env: NAME}` read from the proxy's environment (unset refuses to start) |
@@ -1984,7 +2035,11 @@ variable, and an upstream literal value as `<literal>`; no secret value is print
 its type, `base_url`, and the names of the variables it reads. `check` loads the files
 the config names and reports one line each: the config parses (unknown and repeated keys refused), the
 principal key file loads, the constitution is signed by that key, every `tools:` entry is a signed tool, the
-judges and quorum load (with the single-judge and maker-diversity warnings), a `monitored_agent` is declared,
+judges and quorum load (with a warning for a quorum that could be too lenient: one judge, one judge approving
+while the others are down, a minority approving, or one provider or maker for every judge; see
+[JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md#warnings-about-a-lenient-quorum)), a cloud judge has the agent's
+session (`cloud_judge_session_required`, a `FAIL`: without `agent_session_env` the proxy refuses to start,
+[SETUP](SETUP.md#a-cloud-judge-needs-the-agents-session)), a `monitored_agent` is declared,
 every environment variable the proxy and its judges read is set (each missing one named, never a value:
 an upstream or agent variable is a `FAIL`, a judge's key a `WARN` because that judge would only abstain), every `upstream.check_paths` entry exists
 (`check_path_missing`), a launcher with nothing named (`upstream_paths_unchecked`, a `FAIL` under
@@ -2005,7 +2060,8 @@ it writes anything ([SETUP](SETUP.md)).
   upstream child, lists its tools (every page), and checks the schema
   digest. It imports each fact hook and refuses to start when a
   caller-supplied field a tool maps has no hook. Last, it ledgers
-  `mcp_proxy_started`: the upstream program and a digest of its command,
+  `mcp_proxy_started`: the agent it serves (`agent_id`, or `unnamed`), the
+  upstream program and a digest of its command,
   both schema digests, `on_schema_change`, `allow_unresolved_identity`, and
   each tool's claim and fact fields.
 - **The upstream child** gets `upstream.command`, no shell, and only the
@@ -2044,12 +2100,13 @@ on stderr and exits 1.
 | a config key named | The config file is invalid | Fix that key |
 | `upstream_env_missing: upstream.env.X ...` | The variable `{env: NAME}` reads is unset or empty | Set it in the proxy's environment |
 | `agent_session_env: ...` | The agent session variable is unset or empty | Set it, or remove the key |
+| `cloud_judge_session_required: judge(s) ... are not on this machine, and agent_session_env is not set ...` | A judge is not on this machine (or runs a `:cloud` model), and `proxy.yaml` has no `agent_session_env`. Such a judge votes only when it gets the agent's session, so every call would be denied | Add `agent_session_env: NAME` to `proxy.yaml` and set `NAME` to the agent's session in the proxy's environment ([SETUP](SETUP.md#a-cloud-judge-needs-the-agents-session)) |
 | `TwoKeyConfigError: ...`, `JudgeConfigError: ...`, `LedgerError: ...` | Two-Key itself refused, as `two-key authorize` would | See the sections on judges, the monitored agent, and the ledger |
 | `AgentAccessError: agent_same_account: ...`, `agent_account_root`, `agent_account_unknown`, `agent_can_write: <path>: ...` | The account that started the proxy is Two-Key's own, root, unknown, or can change that path; `on_agent_access` is `refuse` (the default) or `high_assurance` is set | Start the proxy from the agent's own account through the `run-proxy` sudo rule (or SSH) and take its write access away ([CONNECTING](CONNECTING.md#route-1-an-mcp-client-through-two-key-mcp-proxy)). For a test under one account only: `on_agent_access: warn` |
 | `TwoKeyConfigError: writable_path: <path>: ...` | Another account could change a file or folder Two-Key runs or reads, and `on_writable_paths: refuse` or `high_assurance` is set | Make it owned by Two-Key's account (or root) and not writable by group or others ([CONNECTING](CONNECTING.md#run-two-key-as-a-service-account)) |
 | `upstream_paths_unchecked: upstream.command starts with <launcher> ...; high_assurance refuses to start` | `upstream.command[0]` is a launcher such as `sudo` or `npx`, no argument after it is an absolute path that exists, and `upstream.check_paths` is unset, so the checks cannot see the server. Without `high_assurance` this is a `WARNING` and the proxy starts | Give the server's program and script as absolute paths, or list its files and folders in `upstream.check_paths` |
 | `check_path_missing: upstream.check_paths[<n>]: <path> does not exist` | An entry names nothing | Fix the path, or remove the entry |
-| `unresolved_identity: ...` | Two-Key cannot tell who serves a judge or the agent (a local proxy serving an alias, an unrecognized host), so it cannot rule out a judge that is the agent | Declare `upstream:` for that side in `judges.yaml`, or set `allow_unresolved_identity: true` to accept the risk |
+| `unresolved_identity: ...` | Two-Key cannot tell who serves a judge or the agent (a local proxy serving an alias, an unrecognized host), so it cannot rule out a judge that is the agent. `two-key config check` names each one as a `WARN` first | Declare `upstream:` for that side in `judges.yaml`, or set `allow_unresolved_identity: true` to accept the risk |
 | `tools: [...] are not tools in the signed constitution` | A `tools:` entry names an unsigned tool | Remove it, or sign the tool |
 | `upstream_unavailable: <type>: ...` | The child did not start, or did not speak MCP | Check the command and its user |
 | `upstream_duplicate_tool`, `upstream_tool_unreadable`, `upstream_too_many_tools`, `upstream_too_many_pages` | The upstream's tool list cannot be pinned | Fix or replace the server |
@@ -2148,6 +2205,25 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 - **Results are not read.** An upstream result can carry injected text back
   to the agent. Two-Key judges each later call on its own terms; it does not
   scan the result.
+
+## Search the ledger for an audit
+
+`two-key ledger-view` opens the ledger in a window as a table, one row per entry, to search, filter, and sort
+for an audit. [docs/LEDGER_VIEW.md](LEDGER_VIEW.md) is the reference; this is the short version.
+
+```bash
+two-key ledger-view --key keys/principal.pem --ledger ledger --where kind equals decision --where allowed equals false
+```
+
+- It opens the ledger the way `two-key audit` does, so a ledger that does not verify is not shown, and it
+  also checks each decision's digests. It never adds an entry or writes a file, and it opens no network port.
+- Every field is a column you can show, search, filter, and sort: `seq`, `kind`, and every value in the body
+  under a dotted path (`subject.tool`, `ballots[].vote`). Filters combine with "all" or "any", and the search
+  box applies with either.
+- It shows every field decrypted, including the proposal text and argument-derived values, to whoever runs
+  it; the SIEM export leaves those out.
+- `--print` writes the matching entries as JSON Lines instead of opening a window, and `--fields` lists the
+  field names. The window needs tkinter (on Debian and Ubuntu, `apt install python3-tk`); `--print` does not.
 
 ## Send the ledger to a SIEM
 
@@ -2519,6 +2595,20 @@ names the setting or declaration that controls it.
   stderr, where a background process can hide it. `refuse` stops that
   setup from running, at the cost of not starting where, for example, an
   admin group can write Python's folders. `high_assurance` always refuses.
+
+- The judge history summary (`quorum.judge_history`, on by default since 0.8.0). Cloud judges receive it on every
+  call: signed tool ids, allow-listed counterparties, amounts, counts and times, so that history is now at the
+  judge vendor. `enabled: false`, or local judges only, keeps it on your machine, at the cost of judges that see
+  each call alone and cannot spot a duplicate or a burst. `on_failure: judge_without_history` keeps calls going
+  when the summary cannot be built, at the cost of those calls being judged without it; `deny`, the default, stops
+  them. Calls decided by two proxies on one ledger at the same moment are caught by the re-check at mint
+  (`history_changed`): the cost is an extra deny when two legitimate calls to one party race.
+
+- `one_proxy_per_agent` (on by default since 0.8.0): a second `two-key mcp-proxy` for an agent that is already
+  connected refuses to start (`agent_already_connected`). An MCP client that opens several sessions at once then
+  needs one `agent_id` per session, or the setting off. A proxy whose SSH session died holds the lock until its
+  process ends: set sshd's `ClientAliveInterval` (for example 30, with `ClientAliveCountMax 3`) so such a proxy is
+  stopped.
 
 - `encrypted: pass` on a tool (default off): encrypted files the scanner
   cannot open reach that tool unscanned, so a malicious agent can carry

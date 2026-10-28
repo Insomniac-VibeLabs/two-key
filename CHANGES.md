@@ -146,6 +146,27 @@ SPDX-License-Identifier: Apache-2.0
 - [Dependabot: uv and the diagram tools updated — 2026-10-23](#dependabot-uv-and-the-diagram-tools-updated--2026-10-23)
 - [Live run 9s: two test-code fixes — 2026-10-23](#live-run-9s-two-test-code-fixes--2026-10-23)
 - [Optional tool spec fields, and README wording — 2026-10-23](#optional-tool-spec-fields-and-readme-wording--2026-10-23)
+- [0.8.0 work: judge history, ballot records, and one proxy per agent — 2026-10-25](#080-work-judge-history-ballot-records-and-one-proxy-per-agent--2026-10-25)
+- [Dependabot: setuptools 84.1.0 for CI builds — 2026-10-25](#dependabot-setuptools-8410-for-ci-builds--2026-10-25)
+- [Roadmap: 0.8.0 and 0.9.0 in the README and ROADMAP diagrams — 2026-10-26](#roadmap-080-and-090-in-the-readme-and-roadmap-diagrams--2026-10-26)
+- [Roadmap diagrams redrawn, and no "release candidate" — 2026-10-26](#roadmap-diagrams-redrawn-and-no-release-candidate--2026-10-26)
+- [README: the MCP proxy diagram, and 0.8.0 and 0.9.0 marked as betas — 2026-10-26](#readme-the-mcp-proxy-diagram-and-080-and-090-marked-as-betas--2026-10-26)
+- [Diagrams: plain words for code names — 2026-10-27](#diagrams-plain-words-for-code-names--2026-10-27)
+- [Docs checked against the code — 2026-10-27](#docs-checked-against-the-code--2026-10-27)
+- [Regression pass: the audit on a shared ledger, and 0.8.0 checks in the live harness — 2026-10-27](#regression-pass-the-audit-on-a-shared-ledger-and-080-checks-in-the-live-harness--2026-10-27)
+- [Ledger audit window: `two-key ledger-view` — 2026-10-27](#ledger-audit-window-two-key-ledger-view--2026-10-27)
+- [Listing on the official MCP Registry — 2026-10-27](#listing-on-the-official-mcp-registry--2026-10-27)
+- [Setup asks for the quorum numbers; a cloud judge needs the agent's session — 2026-10-27](#setup-asks-for-the-quorum-numbers-a-cloud-judge-needs-the-agents-session--2026-10-27)
+- [Regression pass: ledger-view and setup fixes — 2026-10-27](#regression-pass-ledger-view-and-setup-fixes--2026-10-27)
+- [Constitution editor: `two-key constitution-editor` — 2026-10-27](#constitution-editor-two-key-constitution-editor--2026-10-27)
+- [Regression pass: constitution editor fixes — 2026-10-27](#regression-pass-constitution-editor-fixes--2026-10-27)
+- [`ledger-view`: the search can match field names — 2026-10-27](#ledger-view-the-search-can-match-field-names--2026-10-27)
+- [Setup: an owner-only ledger, and the agent's id in `proxy.yaml` — 2026-10-27](#setup-an-owner-only-ledger-and-the-agents-id-in-proxyyaml--2026-10-27)
+- [The proxy refuses to start with a cloud judge and no agent session — 2026-10-27](#the-proxy-refuses-to-start-with-a-cloud-judge-and-no-agent-session--2026-10-27)
+- [Live run 10 findings — 2026-10-28](#live-run-10-findings--2026-10-28)
+- [The proxy's start names its agent — 2026-10-28](#the-proxys-start-names-its-agent--2026-10-28)
+- [Live run 11 findings — 2026-10-28](#live-run-11-findings--2026-10-28)
+- [Release v0.8.0: judge history, ballot records, one proxy per agent, two windows — 2026-10-28](#release-v080-judge-history-ballot-records-one-proxy-per-agent-two-windows--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4579,3 +4600,451 @@ C170, the two cases fixed after run 9z, both passed live. It found two problems 
   drafted spec is decided on purpose.
 - **README: "Dual-path authorization" in plain language.** The same facts, reworded into short labelled
   points. Path B is now called "the judges" rather than "a quorum", since one judge is enough.
+
+## 0.8.0 work: judge history, ballot records, and one proxy per agent — 2026-10-25
+
+Released in 0.8.0 ("Release v0.8.0" below). Built from the design note the
+maintainer approved on 2026-10-25 (decisions D1 to D10). Issue #1.
+
+- **Judge history summary** (`two_key/history.py`). Each judge's prompt gets a `<decision_history>` section,
+  built by `TwoKey` from its own ledger at each decision: the last decisions on the same tool and the same
+  signed counterparty (age in hours, outcome, whether an allowed call ran, the reason code, the amount when
+  the signed spec maps one), days since the last allow, totals over 7, 30 and 90 days of calls that were
+  allowed and redeemed, allowed calls that never ran, denies on this target in the last hour and day, calls
+  still in flight, scan verdicts over 7 days when a scanner is configured, and counts across all tools.
+  Library reason codes and signed values only: never proposal text, argument values, rationale, or a
+  counterparty the spec does not sign. A system-prompt sentence tells the judges what the section is and
+  that it is data. On by default; set under `quorum.judge_history` (`enabled`, `window_days`, `max_items`,
+  `on_failure`, `burst_denies`, `burst_minutes`). Decisions from before the upgrade show
+  `"age": "before_upgrade"`.
+- **Fail closed when it cannot be built** (D1). A summary that cannot be built denies the call
+  `internal_error:history` by default and records `judge_history_failed`, sent to the SIEM at WARNING.
+  `on_failure: judge_without_history` asks the judges without it instead. Turning history off, shortening it,
+  or judging without it is a weaker setting: start-up warns, `config set` asks for a typed yes, and
+  `two-key setup` offers it (D2).
+- **Re-checked before the token** (D7). If a decision on the same target is allowed between the summary and
+  the token, the call is denied `history_changed`, so two calls racing cannot both be judged on a history
+  that shows neither.
+- **Attempt episodes** (D4). `burst_denies` denies (default 5) from one agent within `burst_minutes`
+  (default 10) are recorded as one `attempt_episode`, sent to the SIEM at WARNING, and counted for the
+  judges. The agent is named only by the operator's agent id, otherwise `unnamed`.
+- **Bound to the ballot** (D3). The summary's digest is a fifth field of each judge's binding
+  (`history_hash`) and is stamped on each ballot; the decision records `history_digest`, the time `at`, the
+  `subject` it was built for, and `history_basis`. `two-key audit --check-history CONSTITUTION` rebuilds each
+  summary from the ledger and reports any digest that does not match. (The design note named this
+  `verify-ledger --check-history`; Two-Key has no such command, so it is an `audit` option.)
+- **Per-judge ballot records** (D8). Path B entries now record each judge's id, vote, confidence, error
+  class, and HTTP status, and an HMAC-SHA256 digest of its rationale keyed with the install's fingerprint
+  key (`hmac-sha256:` prefix; `ballot_digest_key_id` names the key). Never the rationale text. A pass with
+  one judge down can now be told from the ledger. The SIEM copy sends the records.
+- **One proxy per agent** (D10). `two-key mcp-proxy` takes a lock for its agent id beside the ledger and
+  refuses to start a second proxy for the same agent, recording `agent_already_connected`. On by default;
+  `one_proxy_per_agent: false` in `proxy.yaml` turns it off (a weaker setting), and `two-key setup` asks.
+- Docs: JUDGES_AND_QUORUM (judge history, ballot records), HOWTO, THREAT_MODEL, SCOPE, SIEM, UPGRADING,
+  CONNECTING, ROADMAP, AGENTS.md, and the generated SETTINGS. Tests: `tests/test_judge_history.py`.
+- DeepSource (PR #37) flagged three methods that use no instance (PYL-R0201): `HistoryIndex.approved_after` and
+  two test helpers. All three are now static methods; no change in behaviour.
+- Three new functions were split for readability, no change in behaviour: `HistoryIndex._record` (the pre-0.8.0
+  subject is now `_legacy_subject`), the summary's `this_tool` block (`_last_item`, `_scan_counts`), and
+  `check_history_digests` (`_history_basis_problem`, `_loaded_history_policy`, `_rebuilt_summary`).
+- SonarCloud (PR #37) listed eight issues, all real; each is fixed with no change in behaviour. Cognitive complexity
+  over 15: `check_decision_digests` (27, from 0.3.x; now `_loaded_digests` and `_decision_digest_problems`),
+  `check_history_digests` (18; the per-decision check is `_HistoryRebuild.check`), `HistoryIndex._record` (16;
+  `_subject` and `_part`), and `parse_proxy_config` (16; `_required` and `_flag`). The scan verdict counts start
+  from `dict.fromkeys`. In `tests/test_judge_history.py`, three assertions name what they check (`assertIsNone`,
+  and `assertIs` for `True` and `False`, which stays as strict as the `assertEqual` it replaces), and the
+  `agent_already_connected` test builds its config outside the `assertRaisesRegex` block.
+
+## Dependabot: setuptools 84.1.0 for CI builds — 2026-10-25
+
+No change in Two-Key or in what it installs for users. Dependabot alerts #9 to #12 (Low): setuptools before 84.1.0
+lets a wheel's `namespace_packages.txt` write outside the destination on Windows during a legacy
+`setup_requires` install (GHSA-xmj3-9gf7-h52w). CI's build and publish jobs pin setuptools as the build backend,
+and `python -m build --no-isolation` never takes that path, but the fix is free: `.github/requirements/build.in`
+and `publish.in` now pin 84.1.0, and the `.txt` files are recompiled with hashes by the uv in `uv.in`, only
+setuptools upgraded. The sdist and wheel build with it.
+
+## Roadmap: 0.8.0 and 0.9.0 in the README and ROADMAP diagrams — 2026-10-26
+
+Docs only. The roadmap diagrams and tables in the README and ROADMAP.md went from 0.7.3 straight to 1.0.0. At
+the maintainer's request every release now has its own step: 0.8.0 (judge history, ballot records, one proxy per
+agent; in progress) and 0.9.0 (release candidate: the optional tool-side token check #28, the remote-agent live
+run, the quickstart and demo, and the 1.0 freeze), then 1.0.0, a public review of 0.9.0. ROADMAP.md gains a
+0.9.0 section; the quickstart and demo move there from 1.0.0. The README's 1.0.0 row no longer lists #1 and the
+ballot records, which are 0.8.0's.
+
+## Roadmap diagrams redrawn, and no "release candidate" — 2026-10-26
+
+Docs only. The roadmap diagrams in the README and ROADMAP.md had text that did not fit its boxes on GitHub (a
+nine-box chain in one row, and lines GitHub wrapped mid-phrase). Both are now the same two rows: the released
+betas 0.4.0 to 0.7.3, then 0.8.0, 0.9.0, 1.0.0 and after 1.0, with no label line longer than 14 characters.
+Every release so far is a beta, so 0.9.0 is "the last beta" (tool-side token check and remote agents), not a
+release candidate, and 1.0.0 is "the first stable release", not "review and release". The tables, the ROADMAP
+headings and the sentences around them say the same.
+
+## README: the MCP proxy diagram, and 0.8.0 and 0.9.0 marked as betas — 2026-10-26
+
+Docs only. The README's diagram under "Put Two-Key in front of an MCP server" ran left to right, and on GitHub its
+two dashed labels ("look facts up", "normalized record") lay on top of each other. It is now the top-to-bottom
+version HOWTO already uses, where every label has its own place; in both, the upstream server's box breaks its
+name so no word wraps. In the roadmap diagrams 0.8.0 and 0.9.0 now say "beta", and the second row is titled
+"Next: two betas, then 1.0.0".
+
+GitHub then clipped the widest lines in the same diagram ("TwoKey.authorize", "Path A and Path B"). Its box
+and edge labels now break into lines of 14 characters or fewer, as the roadmap's do, in README and HOWTO.
+The decision box's code name ("TwoKey.authorize, Path A and B") is now plain words: "Two-Key checks
+policy, asks judges".
+
+## Diagrams: plain words for code names — 2026-10-27
+
+Docs only. Diagram boxes that named code now say what the step does, so a reader new to the project can follow
+them: SCANNERS ("Two-Key checks the call"), CONNECTING ("Two-Key guard decides, then runs the tool"), HOWTO
+(signature checked, compiled rules and tool specs, asking for the vocabulary), SETUP ("Change recorded in the
+ledger"), SIEM ("Two-Key decisions and tool runs"), JUDGES_AND_QUORUM (yes-vote count, how many judges must
+answer, the history summary and its fingerprint) and the README flow diagram ("agent declined"). Names a reader
+types, such as commands, account names and the clamd and ICAP protocol messages, stay as they are.
+
+## Docs checked against the code — 2026-10-27
+
+Docs only. Every `two-key` command and flag in the docs, the keyword arguments in the Python examples, the
+proxy config keys, the YAML examples, the limit constants, and the links were compared with the code. They
+match, with three exceptions, now fixed: SIEM's syslog example showed a decision reason `path_a_deny:cap`,
+which the library never writes (it is `rule_denied:cap`); HOWTO did not name Path B's denies `no_judges`,
+`judge_set_not_heterogeneous:`, `insufficient_responses:`, `responding_not_heterogeneous:` and
+`local_judge_required` (now listed under "Quorum policy"); and it did not name Path A's `no_pass`,
+`resource_limit` and `vm_fault:` (now beside the `max_steps` cap).
+
+## Regression pass: the audit on a shared ledger, and 0.8.0 checks in the live harness — 2026-10-27
+
+A regression pass before the next GrokBot round: the live harness's self-test with stub bots, its sabotage check,
+and the documented commands run by hand (demo, init-key, sign-constitution, authorize allowed and denied, audit,
+SIEM export and verify in every schema and format, backup export, verify and restore, rotate-witness, recover).
+
+- **Fixed: `two-key audit --check-history` failed on a ledger two proxies share.** Each proxy records the agent
+  ids it names in judge history in its own `constitution_loaded` entry, and a decision does not say which process
+  made it. The audit took the newest such entry, so once a later proxy had started (or been refused) with other
+  ids, an earlier proxy's decisions were reported as not matching. It now tries each distinct `constitution_loaded`
+  with the decision's policy digest, newest first, and confirms the digest when one rebuilds it. Nothing in the
+  ledger changes (`tests/test_judge_history.py`, test 13).
+- **Live harness.** One proxy per agent is now the default, so the two-proxy case gives each proxy its own
+  `agent_id`, then starts a third for the first agent, which must refuse (`agent_already_connected`). Two checks
+  over the whole pass need no bot: `audit --check-history` on every ledger, and one ballot record per judge with a
+  rationale digest and no rationale. `sabotage.py` gains `one_proxy_lock_skipped`, `ballot_rationale_kept` and
+  `history_digest_unbound`; the harness catches each, and every earlier patch. COVERAGE: F28 and F29 are
+  `partly`, F30 `yes`. RELAY.md says what the 0.8.0 checks are, and the case count is 177.
+- JUDGES_AND_QUORUM says how the audit treats a ledger two proxies share.
+
+## Ledger audit window: `two-key ledger-view` — 2026-10-27
+
+The maintainer asked for a program that makes the ledger easy to search for an audit, with every field
+searchable, sortable and filterable, alone and together. `two-key ledger-view` opens the ledger the way
+`two-key audit` does (chain, signed head, witness pins, head anchor, then each decision's digests) and shows
+it in a window as a table, one row per entry ([docs/LEDGER_VIEW.md](docs/LEDGER_VIEW.md)).
+
+- **Every field.** A row's fields are `seq`, `kind`, `prev`, `entry_hash`, and every body value under a dotted
+  path (`subject.tool`, `history_basis.ledger_size`); a list keeps every element under `name[]`
+  (`ballots[].judge_id`, `ballots[].vote`), and a filter matches when any element does. **Columns** picks
+  which fields the table shows; every field can be searched and filtered either way.
+- **Search, filter, sort.** A search box across all fields; filter lines with contains, not-contains, equals,
+  not-equals, starts-with, ends-with, regex, gt, ge, lt, le, empty and not-empty, combined with "all" or
+  "any"; click a heading to sort and Shift-click to add a sort key. Right-click a cell to filter on its value
+  or copy it. Select a row to see all its fields and the entry as JSON. **Reload** opens and checks the
+  ledger again and keeps the view.
+- **Without a window.** `--search`, `--where FIELD OP [VALUE]`, `--any` and `--sort FIELD[:desc]` fill in the
+  window, and with `--print` they write the matching entries to stdout as JSON Lines instead; `--fields`
+  lists the field names.
+- **Read-only, no port.** It is a tkinter window (Python's standard library; no new dependency). It never
+  appends to the ledger, writes no file, has no export, and opens no network port. It shows every field
+  decrypted, more than the SIEM export sends, and holds the principal key while open, as `two-key audit`
+  does. ROADMAP, SCOPE and THREAT_MODEL say so: this is the read-only audit part of the after-1.0 local GUI,
+  brought forward as a window instead of a loopback web page.
+- New: `two_key/ledger_view.py` (rows, filters, sort; no display needed), `two_key/ledger_gui.py` (the
+  window), `tests/test_ledger_view.py`, `tests/test_ledger_gui.py` (skipped without tkinter or a display).
+  The coverage workflow runs the suite under `xvfb-run` so the window tests run there. HOWTO has a short
+  section; AGENTS.md and llms.txt name the command.
+- The selected entry stays selected (and its details shown) when the filters change, as long as it is still
+  listed; opening with filters from the command line no longer clears the first selection a moment later.
+- The window tests first open and close a window in a child process. On the macOS CI runner Tk stopped the
+  test process outright (exit code 133, no Python error) instead of raising `TclError`; where the child
+  process fails like that, the window tests are skipped with its exit code instead of taking the suite down.
+  They still run under `xvfb-run` in the coverage job.
+- SonarCloud: **Clear** no longer copies the filter list before walking it (S7504, an unneeded `list()`).
+- DeepSource: the Columns window test finds its list without a bare `next()` (PTC-W0063).
+
+## Listing on the official MCP Registry — 2026-10-27
+
+Packaging and docs only; Two-Key's behaviour does not change. `server.json` describes the package for the
+[official MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.Insomniac-VibeLabs/two-key`: the
+`two-key` package on PyPI, run as `two-key mcp-proxy --config <file>` over stdio, described as a proxy in front of
+another MCP server. The README gains the invisible line `<!-- mcp-name: io.github.Insomniac-VibeLabs/two-key -->`,
+which the registry reads on the PyPI page to confirm ownership; it reaches PyPI with the next release.
+`tests/test_mcp_registry.py` checks that `server.json`'s versions match `pyproject.toml`, that it points at this
+package over stdio, and that the README carries the line. docs/PYPI.md "List on the MCP Registry" gives the
+publishing steps, which follow each PyPI upload; AGENTS.md and llms.txt name the file.
+
+## Setup asks for the quorum numbers; a cloud judge needs the agent's session — 2026-10-27
+
+The maintainer asked for the quorum numbers in `two-key setup`, and for warnings when a quorum could be too
+lenient. Until now setup asked only for the profile and wrote its defaults; the numbers could be changed only
+afterwards with `config set` ([docs/SETUP.md](docs/SETUP.md#the-quorum-numbers)).
+
+- **The quorum numbers.** After the judges, the wizard asks for `required_yes`, `min_responding`,
+  `min_distinct_providers`, `min_makers` and `min_local_judges`, each offered at the profile's own for that many
+  judges, and writes them to `judges.yaml`. An `--answers` file takes the same five under `quorum`; any it leaves
+  out keep the profile's own, and any other quorum key is refused (the rest stay with `config set`). Numbers the
+  judges cannot meet are shown at once, and the wizard asks for them again.
+- **Lower is weaker, as in `config set`.** A number below the profile's own is weaker (under `high_assurance`, a
+  lower `min_makers` or `min_local_judges` also turns its floors off). The wizard names each one and keeps them
+  only after a typed `yes`. From `--answers`, they need the new `two-key setup --confirm-weaker` and a typed `yes`
+  on a terminal; without them setup refuses (`weaker`, `not_confirmed`) and writes nothing. The setup
+  `config_changed` entry now lists what was weaker and that it was confirmed; the entry's fields are unchanged.
+  `config_set.weaker_quorum` is the comparison both use.
+- **Warnings about a lenient quorum.** `config check`, and so setup, prints a `WARN` for one judge deciding every
+  call, one judge's yes approving while the others are down (the existing warning), `required_yes` at half the
+  judges or fewer, and every judge from one provider or one maker. The wizard shows them after the numbers. They
+  are warnings, not refusals (`quorum.lenient_warnings`; JUDGES_AND_QUORUM "Warnings about a lenient quorum").
+- **Fixed: a cloud judge with no agent session passed setup.** The live setup run found that the wizard took a
+  blank `agent_session_env` with cloud judges; setup and `config check` passed, and every call was then denied
+  `cloud_judge_session_required`. `config check` now fails with `cloud_judge_session_required` when a judge runs
+  in the cloud and `agent_session_env` is not set, so setup and `config set` refuse that configuration too, and
+  the wizard names the cloud judges and asks until the variable is named. The proxy itself still starts with
+  such a configuration, as before; only the check changed.
+- Tests: `tests/test_config_set.py` (`SetupQuorum`), `tests/test_config_cmd.py`, `tests/test_lone_judge.py`. The
+  existing tests with a cloud judge now name an agent session. SETUP, HOWTO, JUDGES_AND_QUORUM, SETTINGS and
+  llms.txt describe the change.
+
+## Regression pass: ledger-view and setup fixes — 2026-10-27
+
+A regression pass over everything new since 1e9fd8e (`ledger-view`, the setup wizard's quorum numbers and
+warnings, the cloud-judge session check, and `server.json`): the full suite with and without the `mcp` extra,
+the live harness self-test and sabotage check, and each new command run by hand. `ledger-view` was checked on a
+ledger from a live-harness pass, with `--print` compared against a filter written separately and the window
+driven by real mouse and keyboard events. Fixes:
+
+- **`ledger-view`: the agent is `agent.id`.** The ledger records a proposal's or decision's agent as a mapping
+  (`id`, `hosting`, `trusted`), so the field is `agent.id`. The window's default `agent` column was never shown
+  and the LEDGER_VIEW recipe `agent equals buyer` matched nothing. The default column is now `agent.id`, and
+  docs/LEDGER_VIEW.md names it in the recipe and the field lists.
+- **`ledger-view`: Reload on a ledger that cannot be read.** A file the account could no longer read made
+  Reload print a traceback and leave the line above the table green. Reload now reports the reason in red, the
+  same as a ledger that fails its checks, and that line now says the table still shows the entries from when it
+  last opened (it used to say only "see the terminal").
+- **`ledger-view`: Columns keeps the order.** Applying the Columns list sorted the columns by name, so the
+  starting order was lost; columns already shown now keep their place, and new ones follow. **Defaults** puts
+  back the starting columns in their order. The no-display message now goes to stderr, as the no-tkinter one
+  does.
+- **`setup`: the next steps name the agent session variable.** With a cloud judge the wizard now requires
+  `agent_session_env`, but the "set ... in the proxy's own environment" step listed only the judges' keys and the
+  agent's credential.
+- docs/LEDGER_VIEW.md: quote `*` as well as names with `[]` on the command line.
+- Tests: `tests/test_ledger_view.py` (the agent field on a real ledger; Reload with no ledger, an unreadable
+  file, and a cut ledger), `tests/test_ledger_gui.py` (agent records as the ledger writes them, Columns order,
+  the Reload message, stderr), `tests/test_config_set.py` (the next steps).
+
+## Constitution editor: `two-key constitution-editor` — 2026-10-27
+
+The maintainer asked for a window that does all the constitution's policy and prompt writing and signs
+everything that is signed with it. `two-key constitution-editor` holds the whole signed body in one window: the
+prose every judge reads, the tools and their specs, the hard rules, the custom fields, and the serial
+([docs/CONSTITUTION_EDITOR.md](docs/CONSTITUTION_EDITOR.md)).
+
+- **Six tabs.** Judges' text (the prose, with the starter text a button away); Tools (the allow list and each
+  tool's spec: irreversible, lowest data class, `deny_unmapped`, and the argument mappings as YAML); Rules (the
+  hard rules in order, a template for each type, Up and Down); Custom fields (the registry as YAML); Try a call;
+  Review and sign. The status line always says whether the draft signs, and why not.
+- **Checked as typed, with the signing code.** `constitution.signed_body` is new: the checks and the body
+  `sign_constitution` signs, without the key. `sign_constitution` now calls it, so what it signs is unchanged
+  byte for byte. The editor shows every warning and note `sign-constitution` prints.
+- **Try a call.** One call through the draft on a throwaway key and a temporary ledger, through
+  `TwoKey.authorize`, with a stand-in judge that votes yes and keeps its prompt: Path A's decision and reason,
+  and the exact system and user prompt a judge is sent. Nothing real is touched.
+- **Sign and save.** Signs with the principal key (a passphrase typed or from a file; the box is emptied after
+  each try), verifies the envelope, writes `constitution.md` and `hard_rules.yaml` owner-only, checks that they
+  sign to the same body with `sign-constitution`, then writes `constitution.signed.json`. It refuses to write
+  over a file unless Replace is ticked. Save prose and rules only writes the two sources unsigned.
+- **Open.** Prose and rules files, or a signed constitution (its signature checked with `--public-key`) as its
+  next version: the signed defaults (`amount: null`, `payload: []`) are left out and the serial goes up by one.
+  `--check` prints whether files sign, with every note, without a window.
+- No security-relevant change: no new signed key or format, and nothing in authorization, tokens, the gateway,
+  the ledger, or the judge-identity checks changed. THREAT_MODEL lists the window and its residual risks.
+- New: `two_key/constitution_editor.py` (no display needed), `two_key/constitution_gui.py` (the window),
+  `tests/test_constitution_editor.py`, `tests/test_constitution_gui.py` (skipped without tkinter or a display;
+  the coverage job runs them under `xvfb-run`). HOWTO has a short section; ROADMAP, SCOPE, AGENTS.md and
+  llms.txt name the command.
+- Helpers that use no instance state are static methods (DeepSource PYL-R0201); repeated string literals are
+  named constants.
+
+## Regression pass: constitution editor fixes — 2026-10-27
+
+The regression pass drove `two-key constitution-editor` by hand: every tab, Sign and save against
+`two-key sign-constitution` (the same signed body), Replace, an encrypted key typed and from a file, an unsigned
+save, a signed constitution opened with and without its public key, and `--check`.
+
+- **Fixed: the Review and sign message could not be seen.** The line under Sign and save was made before the tabs
+  and drawn under them, so "Signed ...", "already there" and every key or folder problem were set but hidden. It
+  is now part of the tab.
+- **Fixed: a folder that cannot be written crashed the button.** A read-only folder (or full disk) raised an
+  uncaught `PermissionError` to the terminal and the window said nothing. Sign and save and Save prose and rules
+  only now say `not signed: ...` or `not saved: ...` under the buttons, and source files that do not read back
+  are refused the same way; the signed file is still written last.
+- **Fixed: the "applied" note on Tools and Rules was cleared at once.** Apply re-selects the row it edited, and
+  that select event cleared the note (and filled the form again). Selecting the row already being edited now
+  does nothing. **New tool** and **New rule** clear the row selection, so a click on the row edited before
+  opens it again.
+- The no-display message now goes to stderr, as `ledger-view`'s does.
+- docs/CONSTITUTION_EDITOR.md: a folder that cannot be written.
+- Tests: `tests/test_constitution_editor.py` (a folder that cannot be written; files that do not read back),
+  `tests/test_constitution_gui.py` (where the message lives, the applied notes and selection, stderr).
+- Tests: the selection test calls the row-click handlers itself, as a click's select event does; Tk on macOS
+  sends no event to the test's hidden window, so it failed on macOS CI.
+- SonarCloud: `EditorError` is a `ValueError`, so it is no longer named beside it in two `except` clauses; the
+  passphrase source in the window is plain `if` statements, not a nested conditional; a test's `assertRaises`
+  holds one call.
+
+## `ledger-view`: the search can match field names — 2026-10-27
+
+The maintainer asked for the option after the regression pass found that a few entries hold a name only as a
+field name: `mcp_proxy_started` lists its tools as `tools.<tool id>.*`, so a search for a tool id did not find
+that entry.
+
+- **Also match field names** (the window, beside the search box) and `--search-names` (the command line) make
+  the search keep a row whose field names contain the text, as well as one whose values do. It is off by
+  default, because words such as `agent` or `reason` are part of a field name in nearly every decision.
+  Filters still test values only.
+- `Query.search_names` in `two_key/ledger_view.py`; docs/LEDGER_VIEW.md and the usage line say so.
+- Tests: `tests/test_ledger_view.py` (the option on fixed entries and with `--print` on a real ledger),
+  `tests/test_ledger_gui.py` (the checkbox).
+
+## Setup: an owner-only ledger, and the agent's id in `proxy.yaml` — 2026-10-27
+
+Both were found in a live walkthrough of setting up with the new windows (setup, `constitution-editor`,
+`ledger-view`), and the maintainer asked for both to be fixed.
+
+- **Fixed: setup's ledger followed the shell's umask.** The files setup writes itself were owner-only, but the
+  ledger, its key and witness folders and the public keys were created with the shell's umask. Under Ubuntu's
+  default 002 the ledger folder and its files were group-writable, and `config check` warned `writable_path`
+  on the deployment setup had just written. `setup_cmd.build` now runs under umask 077 and puts the caller's
+  umask back.
+- **Fixed: the monitored agent's id did not reach `proxy.yaml`.** The wizard asks for the agent's id and wrote
+  it only to `judges.yaml`, so the proxy ran with no `agent_id`: every decision recorded `agent = null`, and the
+  judges' history and `one_proxy_per_agent` called the agent `unnamed`. Setup now writes `agent_id` with that
+  id.
+- docs/SETUP.md (what setup writes) and docs/SETTINGS.md (`agent_id`) say so.
+- Tests: `tests/test_config_set.py` (setup under umask 002 leaves nothing writable by the group or others and
+  restores the umask; the proxy config names the agent). An undo test that appended `agent_id` by hand appends
+  `hosting` instead, since setup now writes `agent_id`.
+
+## The proxy refuses to start with a cloud judge and no agent session — 2026-10-27
+
+The maintainer approved this after the change above. `two-key mcp-proxy` now refuses to start when a judge is
+not on this machine (or runs a `:cloud` model) and `proxy.yaml` has no `agent_session_env`, with
+`cloud_judge_session_required: judge(s) ... are not on this machine, and agent_session_env is not set ...; the
+proxy refuses to start`. Such a proxy could approve nothing: the judge votes only with the agent's session, and
+the quorum then denied every call. Before, setup and `config check` caught it, but a `proxy.yaml` edited by
+hand still started.
+
+- One test, `mcp_proxy.core.cloud_session_missing`, is used by both the proxy's start and `config check`, so the
+  two cannot disagree. A judge on this machine needs no session, and an all-local proxy starts as before.
+- A judge on another machine in your network (Ollama on `192.168.x.x`) counts as a cloud judge for this rule, as
+  it already did at call time; it still counts as local for `min_local_judges`.
+- Docs in plain words: SETUP "A cloud judge needs the agent's session" says which judges count, why, and how to
+  fix it; the HOWTO table of start-up refusals has the new line; CONNECTING, UPGRADING (0.8.0 row) and llms.txt
+  say it too. Test: `tests/test_config_set.py` (`test_the_proxy_refuses_to_start_without_it`).
+
+## Live run 10 findings — 2026-10-28
+
+GrokBot's live run 10 on `working` passed all six items. These are the fixes from its list of findings.
+
+- **`config check` (and so `setup`) warns when a rule denies every call to a tool with no claim.** A tool with no
+  `tools.<id>.claim` is read as `classified`. A `deny_if` rule that tests only the data class (and perhaps the
+  tool) and denies `classified` therefore denies every call to it. Run 10's setup input had such a rule, and
+  every proxied call was denied at Path A. The new warning names the tools and the rule, and says to set a
+  claim if that is not meant. Nothing that starts or authorizes changed.
+- **The constitution editor says which file it could not write.** A folder it may not write gave
+  `[Errno 13] Permission denied: '.constitution.md.<pid>.<random>.tmp'`. It now says `not saved: cannot write
+  constitution.md in <folder>: Permission denied` (or `not signed: ...`).
+- **`constitution-editor --check` names the serial it signs as**: `signs as <format>, serial <n>, digest ...`,
+  or `no serial`. With `--signed` that is the next serial, which is why its digest differs from the open file's.
+- **`ledger-view` Reload, `audit` and `rotate-witness` no longer call a ledger they may not read missing.**
+  A ledger folder this account cannot read said `no ledger at ...`; it now says `cannot read the ledger at ...:
+  permission denied`.
+- **`ledger-view` shows `agent_id` by default** beside `agent.id`. Decisions and proposals name the agent as
+  `agent.id`, but `attempt_episode` and `agent_already_connected` name it as `agent_id`, so their agent column was
+  blank. docs/LEDGER_VIEW.md says which kinds use which.
+- docs/JUDGES_AND_QUORUM.md: `before_upgrade` (a decision with no time) and `unnamed` (an agent id the operator
+  did not configure) are different labels, and setting `agent_id` later moves no older decision under it.
+- Live harness: the SIEM leak check (`report.siem_check`) searches the events' values, not their field names.
+  Run 10's selftest case C22 failed because the argument value `status` is inside the field name `http_status`.
+- Tests: `tests/test_config_cmd.py`, `tests/test_constitution_editor.py`, `tests/test_cli_witness.py`,
+  `tests/test_ledger_view.py`. `tests/test_judge_history.py` test 10 (two threads in flight) was flaky: one call
+  could finish before the other built its summary. Its judge now waits until both calls have asked it.
+
+## The proxy's start names its agent — 2026-10-28
+
+The maintainer approved this after run 10, which found the `mcp_proxy_started` row's agent column empty in
+`ledger-view`.
+
+- `mcp_proxy_started` now records `agent_id`: the proxy's `agent_id` from `proxy.yaml`, or `unnamed` when it
+  has none, the same name `one_proxy_per_agent` and `agent_already_connected` use. It is the operator's
+  setting, never agent text, and the SIEM copy carries it like `attempt_episode`'s. Entries written before this
+  change have no such field; nothing reads it to decide a call.
+- docs/HOWTO.md (what the proxy ledgers at start) and docs/LEDGER_VIEW.md say so.
+- Tests: `tests/test_mcp_proxy.py` (`test_start_is_ledgered`), `tests/test_siem.py` (the field is sent).
+
+## Live run 11 findings — 2026-10-28
+
+GrokBot's live run 11, the last one before 0.8.0, found no product failure: 174 of 177 live cases passed and the
+other three were stopped by a valid rule. These are the fixes from its list of findings.
+
+- **`config check` (and so `setup`) names a judge or agent the proxy would refuse as `unresolved_identity`.**
+  Run 11's wizard deployment, with judges behind a local relay, passed setup and the check and then refused to
+  start. The check now prints a `WARN` naming each judge and agent whose address and model do not say who serves
+  it, and how to fix it. It is a warning, not a failure, so `setup` and `config set` still write the deployment.
+- **The setup interview asks for `upstream` when it is needed:** for a judge or the monitored agent whose address
+  and model leave Two-Key unable to tell who serves it (a local proxy, an unrecognized host), it asks where that
+  address forwards. A resolvable one is not asked.
+- **`config set` says to give a block as JSON.** A `siem` block written as YAML on the command line is read as
+  text and was refused only as `siem: expected a mapping`. The refusal now says the value was read as text and
+  shows the JSON form. docs/SETUP.md has the example.
+- Live harness: cases C72 (bcc out of the clinic) and C172 (over-cap payment) also accept
+  `counterparty_not_allowed` and `rule_denied:require-po-match`, valid stops that fired before the ones they
+  listed. C58 stays INCONCLUSIVE when the agent uses the scanned tool, since its point is the unscanned one.
+- Live harness: a relayed judge reply is matched to its prompt with the `<decision_history>` line and ISO times
+  masked (`report.psha`). Both change with every pass, so in run 11 each re-staged prompt hashed differently and
+  the judges were asked again in a loop. The maintainer approved this fix, which GrokBot found.
+- Tests: `tests/test_config_cmd.py`, `tests/test_config_set.py`, `tests/test_live_harness.py`.
+
+## Release v0.8.0: judge history, ballot records, one proxy per agent, two windows — 2026-10-28
+
+Package version 0.8.0 (`pyproject.toml`, `two_key.__version__`, `uv.lock`, `server.json`). To be tagged
+`v0.8.0` on `main` after the merge. The sections from "0.8.0 work" on are the detail.
+
+- **Judge history summary** (#1): each judge's prompt carries a `<decision_history>` section built from the
+  ledger, so a repeated bill, a split payment, or a burst of denied attempts is visible to the next decision.
+  Codes, counts, signed values and times only; on by default, fail closed when it cannot be built, bound to
+  each ballot, and rebuilt by `two-key audit --check-history`.
+- **Per-judge ballot records**: each judge's id, vote, confidence, error class and HTTP status, and an HMAC
+  digest of its rationale, never the text.
+- **One proxy per agent** on a ledger (`agent_already_connected`), and `mcp_proxy_started` names its agent.
+- **`two-key ledger-view`**, a read-only ledger audit window (and `--print`), and
+  **`two-key constitution-editor`**, which edits, tries and signs a constitution as `sign-constitution` does.
+- **Setup**: the quorum numbers, the agent's id as `agent_id`, an owner-only ledger whatever the umask, a
+  cloud judge needs `agent_session_env`, and the judge's upstream when Two-Key cannot resolve it.
+- **The official MCP Registry listing** (`server.json`), published after this version is on PyPI.
+- **Live testing**: GrokBot's runs 10 and 11 with real judges. Run 11, the last before the release, found no
+  Two-Key failure: 174 of 177 cases PASS, and the other three were stopped by another valid rule. Its
+  findings are fixed ("Live run 11 findings"). Results are on the `live-runs` branch.
+- 1377 tests.
+
+### Upgrading from 0.7.3
+
+Constitutions, keys and ledgers load unchanged; nothing is re-signed. Keep a backup of the ledger from before
+the upgrade: a ledger written by 0.8.0 is not meant to be opened by 0.7.3 again. Then check:
+
+- Judges get the history summary by default; tune or turn it off under `quorum.judge_history`. The quorum
+  policy's digest changes because it records `judge_history`.
+- A second proxy for the same agent on one ledger refuses to start. Give each its own `agent_id`, or set
+  `one_proxy_per_agent: false` where two are intended.
+- A proxy with a judge that is not on this machine needs `agent_session_env`, or it refuses to start.
+
+docs/UPGRADING.md has the full row.

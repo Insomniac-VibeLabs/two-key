@@ -4,10 +4,18 @@
 """``two-key setup``: write a new deployment's files in one go, then check them (docs/SETUP.md).
 
 It asks for the route (``proxy``, ``guard`` or ``library``), the profile (``default`` or ``high_assurance``), the
-judges, the monitored agent, the rules to sign, and for the proxy the upstream server; or it reads the same
+judges, the quorum's numbers (offered at the profile's own), the monitored agent, the judge history settings,
+the rules to sign, and for the proxy the upstream server and whether one proxy at a time may serve the agent;
+or it reads the same
 answers from ``--answers FILE``. It never asks for a secret: a judge's key, the agent's credential and the
 agent session are named by environment variable, and their values stay out of every file. To encrypt the
 principal key, it takes the path of a passphrase file (``key_passphrase_file``), never the passphrase.
+
+A quorum number below the profile's own is weaker, as it is for ``config set``: the interview shows why and
+keeps it only after a typed ``yes``; from ``--answers`` it needs ``--confirm-weaker`` and a typed ``yes`` on a
+terminal. The ``config_changed`` entry setup records lists what was weaker. A proxy with a cloud judge needs
+``agent_session_env``: without it every call that judge sees is denied (``cloud_judge_session_required``), so
+the interview asks until it is named, ``config check`` fails, and ``mcp-proxy`` refuses to start without it.
 
 It writes into a new folder beside the target, owner-only from the first byte, and renames that folder into
 place only when the whole set passes ``config check`` (the proxy route) or loads and verifies (the others),
@@ -18,6 +26,7 @@ that another account could change.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shlex
@@ -27,15 +36,24 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from . import _platform, writable
-from .config_set import (CONSTITUTION, JUDGES, PROXY, RULES, ConfigChangeError, LEDGER_KIND, account_label,
-                         dump, refuse_root, sha256)
+from .config_set import (CONSTITUTION, JUDGES, PROXY, RULES, Confirm, ConfigChangeError, LEDGER_KIND,
+                         account_label, dump, refuse_root, sha256, terminal_confirm, weaker_quorum)
 
 ROUTES = ("proxy", "guard", "library")
 PROFILES = ("default", "high_assurance")
 JUDGE_TYPES = ("openai_compatible", "anthropic", "gemini", "ollama")
 DATA_CLASSES = ("public", "personal", "medical", "financial", "classified")
-ANSWER_KEYS = {"route", "profile", "judges", "monitored_agent", "rules_file", "prose_file", "tools", "upstream",
-               "agent_session_env", "key_passphrase_file"}
+ANSWER_KEYS = {"route", "profile", "judges", "quorum", "monitored_agent", "rules_file", "prose_file", "tools",
+               "upstream", "agent_session_env", "key_passphrase_file", "judge_history", "one_proxy_per_agent"}
+# The quorum numbers setup asks for; the other quorum settings keep their defaults until `config set`.
+QUORUM_COUNTS = ("required_yes", "min_responding", "min_distinct_providers", "min_makers", "min_local_judges")
+QUORUM_QUESTIONS = {
+    "required_yes": "yes votes a call needs",
+    "min_responding": "judges that must answer, or the call is denied uncounted",
+    "min_distinct_providers": "different providers among those judges",
+    "min_makers": "different makers of the judges' models",
+    "min_local_judges": "judges that run on this host or its network",
+}
 
 # Use-case agnostic on purpose: what a call may do is the rules' business, and the principal writes the rest.
 STARTER_PROSE = """\
@@ -90,7 +108,9 @@ def interview(ask: Ask = input) -> dict:
     while _yes(ask, "Add another judge?", out["profile"] == "high_assurance" and len(judges) < 2):
         judges.append(_ask_judge(ask, len(judges) + 1))
     out["judges"] = judges
+    out["quorum"] = _ask_quorum(ask, out["profile"], judges)
     out["monitored_agent"] = _ask_agent(ask)
+    out["judge_history"] = _ask_history(ask)
     _optional(out, "key_passphrase_file", ask,
               "Principal key: absolute path of a file only this account can read, holding a passphrase to "
               "encrypt the key with (blank: not encrypted): ")
@@ -103,8 +123,9 @@ def interview(ask: Ask = input) -> dict:
         digest = ask("Upstream schema digest (sha256:...), or blank to read it from the server now "
                      "(starts it; needs the mcp extra): ").strip()
         out["upstream"] = {"command": command, "schema_digest": digest}
-        _optional(out, "agent_session_env", ask,
-                  "Name of the environment variable that holds the agent's session (blank: none): ")
+        _ask_session(out, ask, cloud_judges(judges))
+        out["one_proxy_per_agent"] = _yes(ask, "Let only one proxy at a time serve this agent on this ledger? "
+                                          "(no is weaker)", True)
     return out
 
 
@@ -124,9 +145,87 @@ def _ask_judge(ask: Ask, n: int) -> dict:
         judge["base_url"] = _ask(ask, f"Judge {n}: base URL",
                                  "http://127.0.0.1:11434" if kind == "ollama" else None)
     _optional(judge, "maker", ask, f"Judge {n}: who made the model (blank: the provider): ")
+    _ask_upstream(judge, ask, f"Judge {n}")
     _optional(judge, "auth_env", ask,
               f"Judge {n}: name of the environment variable holding its API key (blank: none): ")
     return judge
+
+
+def _ask_upstream(spec: dict, ask: Ask, who: str) -> None:
+    """``upstream`` for a judge or the agent whose address and model do not say who serves it (a local proxy, an
+    unrecognized host): without it the proxy refuses to start with ``unresolved_identity`` (live run 11, D1)."""
+    from .identity import resolve_upstream_info
+    if not spec.get("base_url") or resolve_upstream_info(spec["base_url"], spec.get("model", ""))[0]:
+        return
+    _optional(spec, "upstream", ask, f"{who}: Two-Key cannot tell who serves {spec.get('model')} at "
+                                     f"{spec['base_url']}; where does that address forward the calls (a host "
+                                     "such as api.x.ai; stated by you, not checked; blank: none): ")
+
+
+def _ask_quorum(ask: Ask, profile: str, judges: list[dict]) -> dict:
+    """The five quorum numbers, each offered at the profile's own. A lower one is weaker: it is kept only after a
+    typed yes, which is what ``config set --confirm-weaker`` asks for too."""
+    defaults = profile_quorum(profile, len(judges))
+    print(f"Quorum: the {profile} profile's numbers for {len(judges)} judge(s) are offered; a lower one is weaker.")
+    while True:
+        counts = {name: _ask_count(ask, f"Quorum: {name}, {QUORUM_QUESTIONS[name]}", defaults[name])
+                  for name in QUORUM_COUNTS}
+        problem, lenient = _quorum_findings(profile, judges, counts)
+        for line in lenient:
+            print(f"  WARN  {line}", file=sys.stderr)
+        if problem:
+            print(f"  {problem}", file=sys.stderr)
+            if _yes(ask, "Give the quorum numbers again? (no: keep them, and setup refuses at the end)", True):
+                continue
+            return counts
+        reasons = weaker_reasons({"profile": profile, "judges": judges, "quorum": counts})
+        if not reasons or _typed_yes(ask, reasons):
+            return counts
+
+
+def _ask_count(ask: Ask, question: str, default: int) -> int:
+    while True:
+        try:
+            return int(_ask(ask, question, str(default)))
+        except ValueError:
+            print("  a whole number", file=sys.stderr)
+
+
+def _typed_yes(ask: Ask, reasons: list[str]) -> bool:
+    for line in reasons:
+        print(f"weaker: {line}", file=sys.stderr)
+    return ask("This weakens what the profile enforces. Type yes to keep these numbers, anything else to give "
+               "them again: ").strip() == "yes"
+
+
+def _quorum_findings(profile: str, judges: list[dict], counts: Mapping) -> tuple[str | None, list[str]]:
+    """Why the judges' loader would refuse these numbers for these judges (None when it would not, or when a
+    judge itself does not load: ``build`` reports that one), and the warnings ``config check`` would print about
+    a quorum that could be too lenient."""
+    from .judges.config import JudgeConfigError, load_config
+    from .quorum import lenient_warnings
+    specs = [_judge(j) for j in judges]
+    try:
+        load_config({"judges": specs})
+    except JudgeConfigError:
+        return None, []
+    try:
+        loaded, policy = load_config({"judges": specs, "quorum": {"profile": profile, **counts}})
+    except JudgeConfigError as e:
+        return f"quorum: {e}", []
+    return None, lenient_warnings(loaded, policy)
+
+
+def _ask_session(out: dict, ask: Ask, cloud: list[str]) -> None:
+    """``agent_session_env``. A cloud judge abstains on a call that comes without the agent's session, so with
+    one the answer cannot be blank (live setup run, 2026-10-27)."""
+    question = "Name of the environment variable that holds the agent's session"
+    if not cloud:
+        _optional(out, "agent_session_env", ask, f"{question} (blank: none): ")
+        return
+    print(f"Judge(s) {', '.join(cloud)} are not on this machine: each refuses a call that comes without the agent's "
+          "session, so the proxy needs it.")
+    out["agent_session_env"] = _ask(ask, question)
 
 
 def _ask_agent(ask: Ask) -> dict:
@@ -134,9 +233,24 @@ def _ask_agent(ask: Ask) -> dict:
                              "model": _ask(ask, "Monitored agent: model"),
                              "provider": _ask(ask, "Monitored agent: provider (a label)"),
                              "base_url": _ask(ask, "Monitored agent: base URL")}
+    _ask_upstream(agent, ask, "Monitored agent")
     env = ask("Monitored agent: name of the environment variable holding its credential (blank: none): ").strip()
     agent["credential_env" if env else "credential"] = env or "none"
     return agent
+
+
+def _ask_history(ask: Ask) -> dict:
+    """``quorum.judge_history`` (0.8.0): the defaults unless the operator changes them; every "less" is weaker."""
+    if not _yes(ask, "Show the judges a summary of recent decisions with each call? (no is weaker)", True):
+        return {"enabled": False}
+    on_failure = _ask(ask, "If that summary cannot be built: deny the call, or judge it without the summary "
+                      "(weaker)", "deny", ("deny", "judge_without_history"))
+    denies = _ask(ask, "Attempt episode: how many denied calls from the agent", "5")
+    minutes = _ask(ask, "Attempt episode: within how many minutes", "10")
+    try:
+        return {"enabled": True, "on_failure": on_failure, "burst_denies": int(denies), "burst_minutes": int(minutes)}
+    except ValueError:
+        raise SetupError("judge_history: the episode counts are whole numbers") from None
 
 
 def _ask_tools(ask: Ask) -> list[dict]:
@@ -145,6 +259,61 @@ def _ask_tools(ask: Ask) -> list[dict]:
              "irreversible": _yes(ask, f"Tool {tool}: can a call not be undone?", True),
              "data_class_floor": _ask(ask, f"Tool {tool}: lowest data class", "classified", DATA_CLASSES)}
             for tool in shlex.split(_ask(ask, "Starter: the tool ids to allow, separated by spaces"))]
+
+
+def cloud_judges(judges: Any) -> list[str]:
+    """The ids of the judges that run in the cloud (``LLMJudge.is_cloud``). A judge that does not load is left
+    out: ``build`` reports it."""
+    from .judges.config import JudgeConfigError, build_judge
+    out = []
+    for spec in judges if isinstance(judges, list) else []:
+        try:
+            judge = build_judge(_judge(spec))
+        except (JudgeConfigError, SetupError):
+            continue
+        if getattr(judge, "is_cloud", lambda: False)():
+            out.append(str(judge.judge_id))
+    return out
+
+
+def _policy(profile: str, counts: Mapping, n_judges: int):
+    """The quorum policy the judges' loader builds from the profile and these numbers."""
+    from .quorum import QuorumConfigError, QuorumPolicy
+    make = QuorumPolicy.high_assurance if profile == "high_assurance" else QuorumPolicy
+    try:
+        return make(**counts).resolved(n_judges)
+    except (QuorumConfigError, TypeError) as e:
+        raise SetupError(f"quorum: {e}") from None
+
+
+def profile_quorum(profile: str, n_judges: int) -> dict[str, int]:
+    """The profile's own quorum numbers for this many judges: what setup offers, and what lower is weaker than."""
+    policy = _policy(profile, {}, n_judges)
+    return {"required_yes": policy.required_yes, "min_responding": policy.effective_min_responding,
+            "min_distinct_providers": policy.min_distinct_providers, "min_makers": policy.min_makers,
+            "min_local_judges": policy.min_local_judges}
+
+
+def _quorum_answer(answers: Mapping) -> dict:
+    """The ``quorum`` answer: some of the five numbers, or none."""
+    counts = answers.get("quorum")
+    if counts is None:
+        return {}
+    if not isinstance(counts, Mapping) or set(counts) - set(QUORUM_COUNTS):
+        raise SetupError(f"quorum: expected a mapping of {list(QUORUM_COUNTS)}; set the other quorum settings "
+                         "afterwards with two-key config set")
+    return dict(counts)
+
+
+def weaker_reasons(answers: Mapping) -> list[str]:
+    """Why the answers' quorum enforces less than the profile's own, one line each (as ``config set`` words it)."""
+    counts = _quorum_answer(answers)
+    if not counts:
+        return []
+    profile = answers.get("profile", "default")
+    judges = answers.get("judges")
+    n_judges = len(judges) if isinstance(judges, list) else 0
+    return weaker_quorum(_policy(profile, {}, n_judges), _policy(profile, counts, n_judges))
 
 
 def load_answers(path: str) -> dict:
@@ -177,9 +346,15 @@ def judges_doc(answers: Mapping) -> dict:
     judges = answers.get("judges")
     if not isinstance(judges, list) or not judges:
         raise SetupError("judges: at least one judge is needed")
+    quorum: dict[str, Any] = {"profile": answers.get("profile", "default"), **_quorum_answer(answers)}
+    history = answers.get("judge_history")
+    if history is not None:
+        if not isinstance(history, Mapping):
+            raise SetupError("judge_history: expected a mapping (enabled, on_failure, burst_denies, ...)")
+        quorum["judge_history"] = dict(history)
     return {"monitored_agent": dict(answers.get("monitored_agent") or {}),
             "judges": [_judge(j) for j in judges],
-            "quorum": {"profile": answers.get("profile", "default")}}
+            "quorum": quorum}
 
 
 NO_SERIAL = ("until a constitution with a serial runs, this ledger accepts any constitution signed with this key, "
@@ -217,6 +392,15 @@ def proxy_doc(answers: Mapping, digest: str) -> dict:
     }
     if answers.get("agent_session_env"):
         doc["agent_session_env"] = answers["agent_session_env"]
+    agent = answers.get("monitored_agent")
+    if isinstance(agent, Mapping) and agent.get("id"):
+        # The ledger names the agent by the proxy's agent_id; without it every decision records no agent and
+        # the judges' history calls it "unnamed" (live walkthrough, 2026-10-27).
+        doc["agent_id"] = str(agent["id"])
+    if "one_proxy_per_agent" in answers:
+        if not isinstance(answers["one_proxy_per_agent"], bool):
+            raise SetupError("one_proxy_per_agent: expected true or false")
+        doc["one_proxy_per_agent"] = answers["one_proxy_per_agent"]
     return doc
 
 
@@ -256,8 +440,29 @@ def _schema_digest(command: list[str], envelope: Mapping) -> str:
     return digest
 
 
-def build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] | None = None, out=None) -> dict:
-    """Write and check every file in a new folder, rename it to ``target``, then create the ledger."""
+@contextlib.contextmanager
+def _owner_only_umask():
+    """Close what setup creates without an explicit mode (the ledger, its key and witness folders, the public
+    keys) to the group and others, whatever the shell's umask. Under Ubuntu's 002 the ledger was left
+    group-writable and ``config check`` warned ``writable_path`` (live walkthrough, 2026-10-27)."""
+    old = os.umask(0o077)
+    try:
+        yield
+    finally:
+        os.umask(old)
+
+
+def build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] | None = None, out=None,
+          confirm_weaker: bool = False, confirm: Confirm = terminal_confirm) -> dict:
+    """Write and check every file in a new folder, rename it to ``target``, then create the ledger. Weaker
+    answers need ``confirm_weaker`` and a yes from ``confirm``, as ``config set`` does. Nothing it creates is
+    writable by the group or others."""
+    with _owner_only_umask():
+        return _build(answers, target, environ=environ, out=out, confirm_weaker=confirm_weaker, confirm=confirm)
+
+
+def _build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] | None, out, confirm_weaker: bool,
+           confirm: Confirm) -> dict:
     from .keys import generate_private_key, save_private_key, save_public_key
     out = sys.stdout if out is None else out
     try:
@@ -269,6 +474,7 @@ def build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] | 
         raise SetupError(f"route: expected one of {list(ROUTES)}")
     if answers.get("profile", "default") not in PROFILES:
         raise SetupError(f"profile: expected one of {list(PROFILES)}")
+    weaker = _confirmed_weaker(answers, confirm_weaker, confirm, out)
     passphrase = _new_passphrase(answers.get("key_passphrase_file"))
     target = Path(os.path.abspath(target))
     staging = _staging(target)
@@ -289,10 +495,26 @@ def build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] | 
         shutil.rmtree(staging, ignore_errors=True)
         raise
     _platform.fsync_dir(target.parent)
-    record = _record_setup(target, key, written, signed.digest)
+    record = _record_setup(target, key, written, signed.digest, weaker)
     return {"ok": True, "route": route, "dir": str(target),
             "files": [str(target / FILES[w]) for w in written], "ledger": str(target / FILES["ledger"]),
-            "ledger_entry": record, "next": _next_steps(route, target, answers)}
+            "ledger_entry": record, "weaker": weaker, "next": _next_steps(route, target, answers)}
+
+
+def _confirmed_weaker(answers: Mapping, confirm_weaker: bool, confirm: Confirm, out) -> list[str]:
+    """What in the answers is weaker than the profile's own; refuses it without the flag and a typed yes."""
+    reasons = weaker_reasons(answers)
+    if not reasons:
+        return []
+    if not confirm_weaker:
+        raise SetupError("weaker: " + "; ".join(reasons) + ". Run it again with --confirm-weaker to go ahead; "
+                         "nothing was written")
+    for line in reasons:
+        print(f"weaker: {line}", file=out)
+    out.flush()
+    if not confirm("This weakens what the profile enforces. Type yes to go ahead: "):
+        raise SetupError("not_confirmed: nothing was written")
+    return reasons
 
 
 def _new_passphrase(file: Any):
@@ -390,24 +612,31 @@ def _check_library(staging: Path, key) -> list[tuple[str, str]]:
     return found
 
 
-def _record_setup(target: Path, key, written: list[str], constitution_hash: str) -> int:
+def _record_setup(target: Path, key, written: list[str], constitution_hash: str, weaker: list[str]) -> int:
     from .ledger import Ledger
     ledger = Ledger(target / FILES["ledger"], key)
     roles = {"proxy": PROXY, "judges": JUDGES, "rules": RULES, "constitution": CONSTITUTION}
     files = [{"role": roles.get(w, w), "file": FILES[w], "old_sha256": None,
               "new_sha256": sha256((target / FILES[w]).read_bytes())} for w in written if w != "key"]
     entry = ledger.append(LEDGER_KIND, {"command": "setup", "settings": [], "files": files, "signed": True,
-                                        "weaker": [], "confirmed": False, "constitution_hash": constitution_hash,
-                                        "account": account_label()})
+                                        "weaker": weaker, "confirmed": bool(weaker),
+                                        "constitution_hash": constitution_hash, "account": account_label()})
     ledger.checkpoint()
     return entry.seq
 
 
+def _env_names(route: str, answers: Mapping) -> list[str]:
+    """The variables the answers name: each judge's API key, the agent's credential, and (proxy) its session."""
+    names = {j.get("auth_env") for j in answers.get("judges") or [] if isinstance(j, Mapping)}
+    names.add((answers.get("monitored_agent") or {}).get("credential_env"))
+    if route == "proxy":
+        names.add(answers.get("agent_session_env"))
+    return sorted(names - {None, ""})
+
+
 def _next_steps(route: str, target: Path, answers: Mapping) -> list[str]:
     from .constitution import load_serial
-    names = sorted({j.get("auth_env") for j in answers.get("judges") or [] if isinstance(j, Mapping)
-                    and j.get("auth_env")} | {(answers.get("monitored_agent") or {}).get("credential_env")} -
-                   {None, ""})
+    names = _env_names(route, answers)
     steps = []
     if names:
         steps.append(f"set {', '.join(names)} in the proxy's own environment (values never go in a file)")
@@ -433,11 +662,13 @@ def run(args) -> int:
     try:
         if args.answers:
             answers = load_answers(args.answers)
+            result = build(answers, args.dir, confirm_weaker=args.confirm_weaker)
         else:
             if not sys.stdin.isatty():
                 raise SetupError("setup asks its questions on a terminal; without one, give --answers FILE")
             answers = interview()
-        result = build(answers, args.dir)
+            # The interview asked for the typed yes when the weaker numbers were given.
+            result = build(answers, args.dir, confirm_weaker=True, confirm=lambda _prompt: True)
     except (SetupError, ConfigChangeError) as e:
         print(f"two-key: setup: refused: {e}", file=sys.stderr)
         return 1

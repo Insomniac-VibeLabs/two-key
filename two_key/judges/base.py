@@ -47,6 +47,9 @@ class Ballot:
     nl_hash: str | None = None
     bytecode_hash: str | None = None
     binding: str | None = None   # "echo" (reported by the judge) | "stamp" (added by the convenor) | None
+    # The digest of the judge history summary the round sent (two_key/history.py), stamped by the convenor.
+    # None when no summary was sent. Judges are not asked to echo it.
+    history_hash: str | None = None
 
     @property
     def consistent(self) -> bool:

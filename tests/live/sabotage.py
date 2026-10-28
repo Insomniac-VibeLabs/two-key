@@ -61,6 +61,23 @@ PATCHES = {
         "what": "a weaker or signed `config set` no longer needs a typed yes on a terminal",
         "needs_non_root": True,      # the commands refuse to run as root, so a pass run as root cannot exercise them
     },
+    "one_proxy_lock_skipped": {
+        "file": "mcp_proxy/core.py",
+        "edits": [("    if _platform.try_lock(fd):\n", "    if True:\n")],
+        "what": "a second proxy for an agent already connected to the ledger starts anyway (0.8.0, D10)",
+    },
+    "ballot_rationale_kept": {
+        "file": "quorum.py",
+        "edits": [("        rec = {\"judge_id\": b.judge_id, \"vote\": b.vote,",
+                   "        rec = {\"rationale\": b.rationale, \"judge_id\": b.judge_id, \"vote\": b.vote,")],
+        "what": "each ballot record in the ledger keeps the judge's rationale text, not only its digest (0.8.0, D8)",
+    },
+    "history_digest_unbound": {
+        "file": "core.py",
+        "edits": [("                    history_digest = judge_history.digest(summary)",
+                   "                    history_digest = judge_history.digest({**summary, \"planted\": True})")],
+        "what": "the ledgered history digest no longer matches the summary the judges were sent (0.8.0, #1)",
+    },
     "gateway_skips_argument_hash": {
         "file": "gateway.py",
         "edits": [("        if payload[\"args_hash\"] != hashed:", "        if False:")],

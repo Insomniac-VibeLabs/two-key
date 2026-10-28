@@ -83,6 +83,7 @@ if WINDOWS:  # pragma: no cover - exercised on the Windows CI runner
     _ACCESS_DENIED_ACE_TYPE = 1
     _INHERIT_ONLY_ACE = 0x08
     _LOCKFILE_EXCLUSIVE_LOCK = 0x2
+    _LOCKFILE_FAIL_IMMEDIATELY = 0x1
     # Rights another account may hold without reaching the contents: wait on the handle, read the
     # access list, read the timestamps and size.
     _HARMLESS = 0x00100000 | _READ_CONTROL | 0x80
@@ -406,6 +407,24 @@ def lock(fd: int) -> None:
     if not _k32.LockFileEx(msvcrt.get_osfhandle(fd), _LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0,  # pragma: no cover
                            ctypes.byref(overlapped)):
         raise _last_error()
+
+
+def try_lock(fd: int) -> bool:
+    """Take the same lock as :func:`lock` without waiting: False when another process holds it."""
+    if not WINDOWS:
+        import fcntl
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        return True
+    overlapped = _OVERLAPPED()  # pragma: no cover
+    if not _k32.LockFileEx(msvcrt.get_osfhandle(fd), _LOCKFILE_EXCLUSIVE_LOCK | _LOCKFILE_FAIL_IMMEDIATELY,  # pragma: no cover
+                           0, 1, 0, ctypes.byref(overlapped)):
+        if ctypes.get_last_error() in _SHARING_VIOLATION:  # pragma: no cover
+            return False
+        raise _last_error()  # pragma: no cover
+    return True  # pragma: no cover
 
 
 def unlock(fd: int) -> None:

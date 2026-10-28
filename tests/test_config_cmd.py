@@ -27,7 +27,7 @@ quorum: {required_yes: 1}
 """
 
 
-SET = {"UPSTREAM_SECRET_VAR": "x", "AGENT_KEY_VAR": "y", "JUDGE_KEY_VAR": "z"}
+SET = {"UPSTREAM_SECRET_VAR": "x", "AGENT_KEY_VAR": "y", "JUDGE_KEY_VAR": "z", "AGENT_SESSION_VAR": "s"}
 
 
 def run(*argv):
@@ -43,7 +43,7 @@ class Workspace(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name).resolve()
         os.chmod(self.dir, 0o700)
-        key = generate_private_key()
+        key = self.key = generate_private_key()
         save_private_key(self.dir / "k.pem", key)
         save_envelope(self.dir / "c.json", sign_constitution(
             "Approve small, routine requests.", [{"id": "tools", "allow_only_tools": ["tool_a"]}], key,
@@ -54,6 +54,7 @@ class Workspace(unittest.TestCase):
     def write_proxy(self, extra=""):
         (self.dir / "proxy.yaml").write_text(
             "constitution: c.json\nkeys: {principal: k.pem}\nledger: ledger\njudges: judges.yaml\n"
+            "agent_session_env: AGENT_SESSION_VAR\n"
             f"upstream:\n  command: [server]\n  schema_digest: {DIGEST}\n"
             "  env: {TOKEN: {env: UPSTREAM_SECRET_VAR}, LEVEL: info-literal-value}\n" + extra, encoding="utf-8")
 
@@ -121,7 +122,30 @@ class Check(Workspace):
 
     def test_every_variable_set_is_named_in_the_ok_line(self):
         [line] = [text for _, text in self.check() if text.startswith("environment")]
-        self.assertEqual(line, "environment: set here: AGENT_KEY_VAR, JUDGE_KEY_VAR, UPSTREAM_SECRET_VAR")
+        self.assertEqual(line, "environment: set here: AGENT_KEY_VAR, AGENT_SESSION_VAR, JUDGE_KEY_VAR, "
+                               "UPSTREAM_SECRET_VAR")
+
+    def test_an_identity_the_proxy_cannot_resolve_is_named(self):
+        """Live run 11, D1: setup and config check passed, and then the proxy refused to start with
+        unresolved_identity. config check now names each judge and agent it would refuse."""
+        unresolved = [text for level, text in self.check() if text.startswith("unresolved_identity")]
+        self.assertEqual(len(unresolved), 1, unresolved)
+        for who in ("judge 'j1'", "judge 'j2'", "agent 'agent'", "the proxy refuses to start", "declare upstream:"):
+            self.assertIn(who, unresolved[0])
+        self.assertIn((config_cmd.WARN, unresolved[0]), self.check())
+        (self.dir / "judges.yaml").write_text(
+            JUDGES.replace("maker: local-maker}", "maker: local-maker, upstream: api.x.ai}")
+                  .replace("credential_env: AGENT_KEY_VAR}", "credential_env: AGENT_KEY_VAR, upstream: agent.example}"),
+            encoding="utf-8")
+        unresolved = [text for _, text in self.check() if text.startswith("unresolved_identity")]
+        self.assertEqual(len(unresolved), 1, unresolved)
+        self.assertIn("judge 'j2'", unresolved[0])
+        self.assertNotIn("judge 'j1'", unresolved[0])
+        self.assertNotIn("agent 'agent'", unresolved[0])
+        self.write_proxy("allow_unresolved_identity: true\n")
+        unresolved = [text for _, text in self.check() if text.startswith("unresolved_identity")]
+        self.assertIn("allowed by allow_unresolved_identity: true", unresolved[0])
+        self.assertNotIn("refuses to start", unresolved[0])
 
     def test_an_unset_agent_credential_fails(self):
         """Live run 9, finding 1: the proxy refuses to start without it, so check must not say all is set."""
@@ -139,6 +163,24 @@ class Check(Workspace):
                                   "empty here (the proxy's own environment may differ); the judge will abstain"])
         self.assertNotIn(config_cmd.FAIL, self.levels(found), found)
 
+    def test_a_cloud_judge_without_the_agent_session_fails(self):
+        """Live setup run, 2026-10-27: a cloud judge abstains on a call without the agent's session, so with no
+        agent_session_env every call it would judge is denied cloud_judge_session_required."""
+        text = (self.dir / "proxy.yaml").read_text(encoding="utf-8")
+        (self.dir / "proxy.yaml").write_text(text.replace("agent_session_env: AGENT_SESSION_VAR\n", ""),
+                                             encoding="utf-8")
+        failed = [text for level, text in self.check() if level == config_cmd.FAIL]
+        self.assertEqual(len(failed), 1, failed)
+        self.assertTrue(failed[0].startswith("cloud_judge_session_required: judge(s) j2 are not on this machine"))
+        local = JUDGES.replace("https://judge.example/v1", "http://127.0.0.1:11435/v1")
+        (self.dir / "judges.yaml").write_text(local, encoding="utf-8")
+        self.assertNotIn(config_cmd.FAIL, self.levels(self.check()))
+
+    def test_a_quorum_that_could_be_too_lenient_warns(self):
+        warned = [text for level, text in self.check() if level == config_cmd.WARN and text.startswith("quorum:")]
+        self.assertTrue(any("one judge approves a call alone" in text for text in warned), warned)
+        self.assertTrue(any("every judge comes from one provider" in text for text in warned), warned)
+
     def test_a_constitution_signed_by_another_key_fails(self):
         other = generate_private_key()
         save_envelope(self.dir / "c.json", sign_constitution(
@@ -149,6 +191,26 @@ class Check(Workspace):
     def test_a_tool_the_constitution_does_not_sign_fails(self):
         self.write_proxy("tools:\n  tool_b: {claim: floor}\n")
         self.assertTrue(any(level == config_cmd.FAIL and "tool_b" in text for level, text in self.check()))
+
+    def test_a_rule_that_denies_every_call_to_a_tool_with_no_claim_warns(self):
+        rules = [{"id": "tools", "allow_only_tools": ["tool_a", "tool_b"]},
+                 {"id": "no-sensitive-data", "deny_if": {"data_class_in": ["medical", "classified"]}}]
+        specs = {"tool_a": {"irreversible": False, "data_class_floor": "public"},
+                 "tool_b": {"irreversible": False, "data_class_floor": "public"}}
+        save_envelope(self.dir / "c.json", sign_constitution("Approve small, routine requests.", rules, self.key, specs))
+        self.write_proxy("tools:\n  tool_b: {claim: floor}\n")
+        warned = [text for level, text in self.check() if level == config_cmd.WARN and "no-sensitive-data" in text]
+        self.assertEqual(len(warned), 1, warned)
+        self.assertIn("['tool_a']", warned[0])
+        self.write_proxy("tools:\n  tool_a: {claim: public}\n  tool_b: {claim: floor}\n")
+        self.assertFalse(any("no-sensitive-data" in text for _, text in self.check()))
+
+    def test_a_data_class_rule_with_another_condition_does_not_warn(self):
+        rules = [{"id": "tools", "allow_only_tools": ["tool_a"]},
+                 {"id": "big-classified", "deny_if": {"data_class_in": ["classified"], "amount_usd_gt": 100}}]
+        save_envelope(self.dir / "c.json", sign_constitution(
+            "Approve small, routine requests.", rules, self.key, {"tool_a": {"irreversible": False}}))
+        self.assertFalse(any("big-classified" in text for _, text in self.check()))
 
     def test_a_missing_judges_file_fails(self):
         (self.dir / "judges.yaml").unlink()

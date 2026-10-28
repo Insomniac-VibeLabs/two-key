@@ -463,7 +463,7 @@ def _weaker_proxy(old: Posture, new: Posture) -> list[str]:
     from . import agent_access
     a, b = old.config, new.config
     ha, hb = bool(old.policy.is_high_assurance), bool(new.policy.is_high_assurance)
-    checks = [(ha and not hb, "quorum: high_assurance turned off"),
+    checks = [(ha and not hb, HIGH_ASSURANCE_OFF),
               (old.key_encrypted and not new.key_encrypted, "keys.principal: the key is no longer encrypted")]
     for name, resolve in (("on_writable_paths", writable.resolve_mode), ("on_agent_access", agent_access.resolve_mode)):
         checks.append((_mode(getattr(a, name), ha, resolve) == "refuse" and
@@ -476,6 +476,7 @@ def _weaker_proxy(old: Posture, new: Posture) -> list[str]:
         (not a.allow_unresolved_identity and b.allow_unresolved_identity, "allow_unresolved_identity: turned on"),
         (b.ttl_seconds > a.ttl_seconds, "ttl_seconds: tokens live longer"),
         (a.agent_session_env and not b.agent_session_env, "agent_session_env: removed"),
+        (a.one_proxy_per_agent and not b.one_proxy_per_agent, "one_proxy_per_agent: turned off"),
     ]
     return [line for weaker_now, line in checks if weaker_now]
 
@@ -505,6 +506,16 @@ _QUORUM_COUNTS = ("required_yes", "effective_min_responding", "min_distinct_prov
                   "min_local_judges")
 
 
+HIGH_ASSURANCE_OFF = "quorum: high_assurance turned off"
+
+
+def weaker_quorum(pa, pb) -> list[str]:
+    """The quorum part of :func:`weaker`, for two policies alone. ``setup`` compares the numbers the operator
+    gives with the profile's own, so a lower one is weaker there too."""
+    off = [HIGH_ASSURANCE_OFF] if pa.is_high_assurance and not pb.is_high_assurance else []
+    return off + _weaker_quorum(pa, pb)
+
+
 def _lowered(old, new) -> bool:
     return old is not None and new is not None and new < old
 
@@ -523,7 +534,26 @@ def _weaker_quorum(pa, pb) -> list[str]:
         (pa.heterogeneity_scope == "responding" and pb.heterogeneity_scope != "responding",
          "quorum.heterogeneity_scope: responding to selection"),
     ]
-    return out + [line for weaker_now, line in checks if weaker_now]
+    return out + [line for weaker_now, line in checks if weaker_now] + _weaker_history(pa.judge_history,
+                                                                                      pb.judge_history)
+
+
+def _weaker_history(ha, hb) -> list[str]:
+    """Judges see less history (0.8.0, D1 and D2): the summary turned off, a shorter window, fewer items, or a
+    call judged without its history when the summary cannot be built."""
+    if ha.enabled and not hb.enabled:
+        return ["quorum.judge_history.enabled: judges see no decision history"]
+    if not hb.enabled:
+        return []
+    checks = [
+        (hb.window_days < ha.window_days, "quorum.judge_history.window_days: lowered"),
+        (hb.max_items < ha.max_items, "quorum.judge_history.max_items: lowered"),
+        (ha.on_failure == "deny" and hb.on_failure != "deny",
+         "quorum.judge_history.on_failure: deny to judge_without_history"),
+        (hb.burst_denies > ha.burst_denies, "quorum.judge_history.burst_denies: more denies before an episode"),
+        (hb.burst_minutes < ha.burst_minutes, "quorum.judge_history.burst_minutes: a shorter burst window"),
+    ]
+    return [line for weaker_now, line in checks if weaker_now]
 
 
 def _judge_map(doc: Mapping) -> dict[str, Mapping]:
@@ -1313,9 +1343,19 @@ def run_set(args) -> int:
                              key_path=args.key, rules_path=args.rules, confirm_weaker=args.confirm_weaker,
                              key_passphrase_file=args.key_passphrase_file)
     except ConfigChangeError as e:
-        print(f"two-key: config set: refused: {e}", file=sys.stderr)
+        print(f"two-key: config set: refused: {e}{_text_hint(e, value, source)}", file=sys.stderr)
         return 1
     return _report(result)
+
+
+def _text_hint(error: ConfigChangeError, value: Any, source: str) -> str:
+    """A VALUE that did not read as JSON is text, so a block written as YAML (``sinks: [...]``) reaches the
+    loader as one string and is refused as not a mapping (live run 11). Say how to give it."""
+    if source != "argv" or not isinstance(value, str) or not re.search(r"expected a (non-empty )?(mapping|list)",
+                                                                       str(error)):
+        return ""
+    return ("; the value was read as text, because it is not JSON: give a mapping or a list as JSON, such as "
+            "'{\"sinks\": [{\"type\": \"syslog\", \"host\": \"siem.example\"}]}'")
 
 
 def run_undo(args) -> int:
@@ -1339,4 +1379,4 @@ def run_key_passphrase(args) -> int:
 
 
 __all__ = ["ConfigChangeError", "LEDGER_KIND", "apply", "change_key_encryption", "get", "parse_name", "set_setting",
-           "undo", "weaker"]
+           "undo", "weaker", "weaker_quorum"]

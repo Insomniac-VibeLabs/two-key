@@ -4,4 +4,4 @@
 # build.yml: the sdist and wheel. setuptools is the build backend (pyproject.toml), installed here so
 # `python -m build --no-isolation` does not fetch it without a hash.
 build==1.6.1
-setuptools==84.0.0
+setuptools==84.1.0

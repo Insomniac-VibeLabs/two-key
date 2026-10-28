@@ -73,6 +73,7 @@ Quorum protocol specifics:
 from __future__ import annotations
 
 import inspect
+import math
 import threading
 import time
 import unicodedata
@@ -81,6 +82,7 @@ from typing import Mapping, Sequence
 
 from .action import Action
 from .agent_meta import exception_ledger_error
+from .history import HistoryConfigError, JudgeHistoryPolicy
 from .judges.base import Ballot, Judge
 
 
@@ -117,9 +119,14 @@ class QuorumPolicy:
     # keyless on a keyless agent's address (identity.compare), so there is nothing left for this flag to lift.
     # Still accepted, recorded and part of the policy digest, with a note on stderr, so older configurations load.
     allow_same_model_distinct_tenant: bool = False
-
+    # The judge history summary (two_key/history.py): on by default; a mapping is read as its settings.
+    judge_history: JudgeHistoryPolicy = JudgeHistoryPolicy()
 
     def __post_init__(self):
+        try:
+            object.__setattr__(self, "judge_history", JudgeHistoryPolicy.from_value(self.judge_history))
+        except (HistoryConfigError, TypeError) as e:
+            raise QuorumConfigError(str(e)) from None
         if self.required_yes is not None and (isinstance(self.required_yes, bool)
                                               or not isinstance(self.required_yes, int) or self.required_yes < 1):
             raise QuorumConfigError("required_yes must be an integer >= 1")
@@ -198,7 +205,9 @@ class QuorumPolicy:
                 "allow_same_provider_judge": self.allow_same_provider_judge,
                 "allow_same_model_distinct_tenant": self.allow_same_model_distinct_tenant,
                 # Present only when set, so a policy without it records and digests as before.
-                **({"tool_args_on_scan_flag": True} if self.tool_args_on_scan_flag else {})}
+                **({"tool_args_on_scan_flag": True} if self.tool_args_on_scan_flag else {}),
+                # Always present (0.8.0): the record that judges now see history, or that they do not.
+                "judge_history": self.judge_history.to_record()}
 
     @property
     def is_high_assurance(self) -> bool:
@@ -243,7 +252,7 @@ class QuorumResult:
 
 
 _BALLOT_FIELDS = tuple(f.name for f in fields(Ballot))
-_BINDING_SET = frozenset(("action_hash", "constitution_hash", "nl_hash", "bytecode_hash"))
+_BINDING_SET = frozenset(("action_hash", "constitution_hash", "nl_hash", "bytecode_hash", "history_hash"))
 
 
 def _ballot_record(b: Ballot, binding: Mapping[str, str] | None = None) -> dict:
@@ -308,6 +317,31 @@ def lone_judge_warning(judges: Sequence, policy: QuorumPolicy) -> str | None:
     return None
 
 
+def lenient_warnings(judges: Sequence, policy: QuorumPolicy) -> list[str]:
+    """Start-up warnings for a quorum that is allowed but could be too lenient: one judge, one judge's yes
+    while the others are down (:func:`lone_judge_warning`), a minority of the judges approving, or every judge
+    from one provider or one maker. None of them is a refusal; ``config check`` and ``setup`` print them."""
+    n = len(judges)
+    lone = lone_judge_warning(judges, policy)
+    providers = {unicodedata.normalize("NFKC", str(getattr(j, "provider", "?"))).strip().casefold() for j in judges}
+    makers = {_maker(j) for j in judges}
+    checks = [
+        (n == 1, "quorum: one judge decides every call: its yes alone approves one. A second judge from another "
+                 "maker, with required_yes: 2, checks it"),
+        (lone is not None, lone or ""),
+        (lone is None and n >= 2 and policy.required_yes * 2 <= n,
+         f"quorum: required_yes {policy.required_yes} of {n} judges: half of them or fewer approve a call. Set "
+         f"required_yes: {n // 2 + 1} for a majority"),
+        (n >= 2 and len(providers) == 1,
+         "quorum: every judge comes from one provider, so an outage or a change on its side reaches every ballot. "
+         "Add a judge from another provider and set min_distinct_providers: 2"),
+        (n >= 2 and len(makers) == 1,
+         "quorum: every judge's model comes from one maker, so they share its blind spots. Add a judge from "
+         "another maker and set min_makers: 2"),
+    ]
+    return [text for applies, text in checks if applies]
+
+
 def check_judge_set(judges: Sequence, policy: QuorumPolicy) -> None:
     """Refuse a judge set below the policy's floors (makers, local judges, a local yes). Raises QuorumConfigError."""
     short = heterogeneity_shortfall(judges, policy)
@@ -333,7 +367,7 @@ def _bind(b: Ballot, binding: Mapping[str, str] | None, policy: QuorumPolicy) ->
     if policy.ballot_binding == "echo" and b.responded and not echoed:
         vote, error = "abstain", "unbound_ballot: judge did not echo the ballot binding"
     return Ballot(b.judge_id, b.provider, vote, b.confidence, b.rationale, error, ah, ch, nh, bh,
-                  "echo" if echoed else "stamp")
+                  "echo" if echoed else "stamp", history_hash=binding.get("history_hash"))
 
 
 def _proposal_for(j: Judge, proposal: str, policy: QuorumPolicy) -> str:
@@ -517,3 +551,60 @@ def convene(
         if not any(b.vote == "yes" and _local(j) for j, b in pairs):
             return result(False, "local_judge_required")
     return result(True, "quorum_pass")
+
+
+# The class of a ballot's error, for the ledger (0.8.0): a fixed set, never the error text, which can quote an
+# HTTP body or an exception message (and through them, arguments). The first prefix that matches wins.
+ERROR_CLASSES = (
+    ("timeout", "timeout"), ("transport", "transport"), ("http ", "http"), ("credential", "credential"),
+    ("ballot_key_env", "credential"), ("malformed_ballot", "malformed_ballot"),
+    ("malformed_response", "malformed_response"), ("binding_mismatch", "binding_mismatch"),
+    ("unbound_ballot", "unbound_ballot"), ("judge_id_mismatch", "judge_id_mismatch"),
+    ("judge returned an invalid ballot object", "invalid_ballot"), ("ballot_mac_mismatch", "ballot_mac_mismatch"),
+    ("cloud_judge_session_required", "cloud_judge_session_required"),
+    ("cloud_judge_reused_agent_session", "cloud_judge_reused_agent_session"),
+    ("empty constitution", "empty_constitution"),
+)
+RATIONALE_DIGEST_ALG = "hmac-sha256"
+
+
+def error_class(error: str | None) -> tuple[str | None, int | None]:
+    """``(error_class, http_status)`` for a ballot's error string. ``other`` for anything not in the list."""
+    if not error:
+        return None, None
+    for prefix, name in ERROR_CLASSES:
+        if error.startswith(prefix):
+            if name != "http":
+                return name, None
+            code = error[len(prefix):].strip()
+            return name, int(code) if code.isdigit() and len(code) == 3 else None
+    return "other", None
+
+
+def rationale_digest(rationale: str | None, key: bytes) -> str | None:
+    """HMAC-SHA256 of a rationale under the per-install fingerprint key (D8), via ``cryptography`` so a FIPS
+    build runs it on its OpenSSL provider. Never the text: a plain hash of "ok" could be confirmed by guessing,
+    and the operator, who has the key, can still match a rationale from the judge's own logs."""
+    if not rationale:
+        return None
+    from cryptography.hazmat.primitives import hashes, hmac
+    mac = hmac.HMAC(key, hashes.SHA256())
+    mac.update(b"two-key/rationale/1\x00" + rationale.encode("utf-8", "surrogatepass"))
+    return f"{RATIONALE_DIGEST_ALG}:{mac.finalize().hex()}"
+
+
+def ballot_records(ballots: Sequence[Ballot], key: bytes) -> list[dict]:
+    """One record per ballot, in the configured order, for the ``path_b`` ledger entry: who voted what, how
+    sure, why it failed (a class), and a keyed digest of the rationale. No rationale or error text."""
+    out = []
+    for b in ballots:
+        cls, status = error_class(b.error)
+        confidence = b.confidence
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not math.isfinite(confidence):
+            confidence = None
+        rec = {"judge_id": b.judge_id, "vote": b.vote, "confidence": confidence, "error_class": cls,
+               "rationale_digest": rationale_digest(b.rationale if isinstance(b.rationale, str) else None, key)}
+        if cls == "http":
+            rec["http_status"] = status
+        out.append(rec)
+    return out

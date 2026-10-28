@@ -24,8 +24,9 @@ jobs:
           uv sync --locked --no-build --extra yaml --extra mcp --no-dev --python python --no-managed-python --no-python-downloads
           uv pip install --python .venv --require-hashes --only-binary :all: -r .github/requirements/coverage.txt
       - name: Run coverage and produce XML
+        # xvfb-run gives the window tests (tests/test_ledger_gui.py, tests/test_constitution_gui.py) a display; Linux jobs without one skip them.
         run: |
-          .venv/bin/coverage run -m unittest discover -s tests
+          xvfb-run -a .venv/bin/coverage run -m unittest discover -s tests
           .venv/bin/coverage report -m
           .venv/bin/coverage xml -o coverage.xml
       - name: SonarCloud Scan

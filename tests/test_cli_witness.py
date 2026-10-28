@@ -127,6 +127,21 @@ class CliWitness(unittest.TestCase):
             self.assertIn("no ledger at", json.loads(out)["error"])
         self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["c.json", "principal.pem"])
 
+    def test_a_ledger_this_account_may_not_read_is_not_called_missing(self):
+        self.assertEqual(self.authorize()[0], 0)
+        real_stat = Path.stat
+
+        def stat(path, *args, **kwargs):
+            if path.name == "entries.jsonl":
+                raise PermissionError(13, "Permission denied", str(path))
+            return real_stat(path, *args, **kwargs)
+        with patch.object(Path, "stat", stat):
+            code, out, _ = self.ledger_cmd("audit")
+        error = json.loads(out)["error"]
+        self.assertEqual(code, 1)
+        self.assertIn("permission denied", error)
+        self.assertNotIn("no ledger at", error)
+
     def test_rotate_witness_refusal_is_printed(self):
         self.assertEqual(self.authorize()[0], 0)
         staged = self.dir / "ledger.witness" / "witness.pem.new"

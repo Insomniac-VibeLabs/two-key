@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.7.3, tag `v0.7.3` on `main`. What each release
+`two-key` is beta (pre-1.0). Package version 0.8.0, tag `v0.8.0` on `main`. What each release
 shipped is under "Shipped" in [ROADMAP.md](../ROADMAP.md); tags and branches are in
 [AGENTS.md](../AGENTS.md).
 
@@ -104,11 +104,33 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   older, reused, or missing serial. The start-up checks also look at the
   upstream server's files named in `upstream.command` and
   `upstream.check_paths` (#13)
+- in 0.8.0: the judge history summary (#1,
+  `two_key/history.py`). Each judge's prompt gets a
+  `<decision_history>` section built from the ledger: recent decisions on
+  the same tool and signed counterparty, ages, totals of redeemed calls,
+  denies in the last hour and day, recent scan verdicts, and denial bursts
+  as attempt episodes. Reason codes and signed values only, never proposal
+  text or rationale. On by default (`quorum.judge_history`); a summary that
+  cannot be built denies by default, and a decision whose history changed
+  before the token is issued is denied `history_changed`. Each ballot is
+  recorded per judge with an HMAC digest of its rationale, never the text.
+  `two-key ledger-view` shows the ledger in a read-only window (tkinter, no
+  network port) to search, filter, and sort every field of every entry for an
+  audit, or prints the matches as JSON Lines (`--print`); it opens the ledger
+  the way `two-key audit` does and writes nothing
+  ([LEDGER_VIEW.md](LEDGER_VIEW.md)).
+  `two-key constitution-editor` writes, checks, and signs a constitution
+  (prose, hard rules, tool specs, custom fields, serial) in a window
+  (tkinter, no network port), and runs a trial call on a throwaway key and
+  ledger to show Path A's decision and a judge's prompt; it signs with the
+  same code as `sign-constitution` ([CONSTITUTION_EDITOR.md](CONSTITUTION_EDITOR.md))
+  The MCP proxy allows one proxy per agent by default
+  (`one_proxy_per_agent`)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
 Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
 `two_key/strict.py` (duplicate-key JSON/YAML), `two_key/audit.py` (decision
-digest checks), `two_key/backup.py` (key backup), `two_key/siem.py` and
+digest checks), `two_key/history.py` (the judge history summary), `two_key/backup.py` (key backup), `two_key/siem.py` and
 `two_key/siem_sinks.py` (the SIEM field allowlist and sinks), and the per-install fingerprint key beside the ledger
 (`*.ledger-key/fingerprint.key`).
 
@@ -138,9 +160,10 @@ in the same release.
   tokens the gateway refused without a ledger entry (forged, expired, or
   malformed), kept outside the ledger (live run 7). What the collector
   stores, who can read it, and what it alerts on stay the operator's.
-- Judge history summary (#1, before 1.0): judges get a summary of recent
-  decisions built from the ledger, on by default, after its own security
-  review.
+- Judge history summary (#1, 0.8.0): shipped. Judges get a summary of
+  recent decisions built from the ledger (`two_key/history.py`), on by
+  default, with per-judge ballot records and one proxy per agent
+  ([JUDGES_AND_QUORUM.md](JUDGES_AND_QUORUM.md#judge-history)).
 
 After 1.0, not scheduled:
 
@@ -161,8 +184,10 @@ After 1.0, not scheduled:
   Running on a validated module is not the same as this package being
   validated or compliant, and the docs will not describe it that way.
 - Local GUI: a loopback-only interface for configuration and
-  ledger auditing, built on the CLI and the existing file formats. It does not
-  hold the principal key, and it is not a hosted or multi-user service.
+  ledger auditing, built on the CLI and the existing file formats. The
+  read-only audit view shipped early as `two-key ledger-view` (0.8.0, above), and the
+  constitution part as `two-key constitution-editor` (0.8.0, above); both are tkinter windows and hold the
+  principal key while they use it. It is not a hosted or multi-user service.
   Filtering by judge uses the per-judge ballot records planned for 1.0
   (judge id, vote, confidence, error class, and a rationale digest, never
   the rationale text); the ledger does not hold them today.

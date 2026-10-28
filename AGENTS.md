@@ -41,12 +41,13 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.7.3 (package name `two-key`) is tag `v0.7.3` on `main`; 0.7.0 is
+- Package 0.8.0 (package name `two-key`) is tag `v0.8.0` on `main`; 0.7.3 is
+  tag `v0.7.3`; 0.7.0 is
   tag `v0.7.0` (PyPI's 0.7.1 and 0.7.2 are its code, repackaged on the
   `PyPI` branch), 0.6.0 is tag `v0.6.0`, 0.5.0 is
   tag `v0.5.0`, and 0.4.0 (tag `v0.4.0`) was the first release from this repository. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`.
   Tag `v0.2.4` stays on `fc836bb`.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.7.3`, `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.8.0`, `v0.7.3`, `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
   where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
@@ -57,7 +58,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10; CI tests 3.10 to 3.14 (3.15 in a Linux job that does not block, until PyYAML ships 3.15 wheels; no `requires-python` cap). Package name `two-key`, import name `two_key`,
-version `0.7.3` on PyPI (`pip install "two-key[yaml]==0.7.3"`), tag `v0.7.3` on `main`. Tags are not moved. docs/PYPI.md is the release process.
+version `0.8.0` on PyPI (`pip install "two-key[yaml]==0.8.0"`), tag `v0.8.0` on `main`. Tags are not moved. docs/PYPI.md is the release process. `server.json` (the MCP Registry listing) carries the same version as `pyproject.toml`; bump them together.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
@@ -84,8 +85,8 @@ there), not in `pyproject.toml`. CI installs them with `--require-hashes`.
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0); `two-key config show`, `get`, `check`, `set`, and `undo`, and `two-key setup`, read and write the proxy config without the SDK (`setup` needs it only to read a schema digest from the server) |
 
-Index install: `pip install "two-key[yaml]==0.7.3"`.
-From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.3"`.
+Index install: `pip install "two-key[yaml]==0.8.0"`.
+From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.8.0"`.
 
 ## Tests and docs
 
@@ -94,7 +95,7 @@ From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-Vib
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
+  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/CONSTITUTION_EDITOR.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
 - A new setting (a key a loader accepts) gets a row in `two_key/settings.py`.
   `docs/SETTINGS.md` is generated from it: run `python tests/test_settings_doc.py
@@ -388,5 +389,40 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   file and refuses to overwrite, and `two-key siem-verify` re-derives every
   event from the ledger (`tests/test_siem_export.py`). Keep the unit tests
   network-free: loopback only, with `tests/tls.py` for certificates.
+- The judge history summary (0.8.0, `two_key/history.py`) is on by default
+  and is built from the ledger, never from the agent's claim. It carries
+  library reason codes, ages, counts, and values the signed spec maps, never
+  proposal text, argument values, rationale, or an unsigned counterparty,
+  and it is sent with `untrusted_json` in its own `<decision_history>`
+  section (`tests/test_judge_history.py`). A summary that cannot be built
+  denies (`on_failure: deny`, `internal_error:history`, a
+  `judge_history_failed` entry); judging without it is a setting, and a
+  weaker one. Its digest is bound to every ballot (`history_hash`) and
+  recorded on the decision. Do not drop the re-check before the token: a
+  call whose history gained an allow on the same target is denied
+  `history_changed`.
+- Path B records each judge's ballot (0.8.0): id, vote, confidence, error
+  class, and an HMAC-SHA256 digest of its rationale under the fingerprint
+  key. Never the rationale or error text, in the ledger or the SIEM copy.
+- The MCP proxy allows one proxy per agent id on a ledger by default
+  (`one_proxy_per_agent`): a second refuses to start with
+  `agent_already_connected`, recorded in the ledger. Turning it off is a
+  weaker setting and warns at start.
+- `two-key ledger-view` (0.8.0) only reads: it opens the ledger the way
+  `two-key audit` does and must never append, write a file, or open a port
+  (`tests/test_ledger_view.py`, `tests/test_ledger_gui.py`). The filtering
+  and sorting live in `two_key/ledger_view.py` so they run without a
+  display; `two_key/ledger_gui.py` is only the tkinter window. The window
+  tests skip without tkinter or a display; CI's coverage job runs them
+  under `xvfb-run`.
+- `two-key constitution-editor` (0.8.0) signs only through
+  `constitution.sign_constitution` and checks only through
+  `constitution.signed_body`, the checks `sign_constitution` itself runs;
+  keep it that way, so the window can never sign something
+  `sign-constitution` would refuse. Its trial call runs on a throwaway key,
+  a temporary ledger, and a test-double judge. Logic in
+  `two_key/constitution_editor.py`, the window in
+  `two_key/constitution_gui.py` (`tests/test_constitution_editor.py`,
+  `tests/test_constitution_gui.py`).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

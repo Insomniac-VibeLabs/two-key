@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Threat model
 
-This is the design model for `two-key` 0.7.3 (tag `v0.7.3` on `main`). What each
+This is the design model for `two-key` 0.8.0 (tag `v0.8.0` on `main`). What each
 release added to the model is under [Changes by release](#changes-by-release) at the end of
 this page. Tags and branches are in [AGENTS.md](../AGENTS.md), and the full history is
 [CHANGES.md](../CHANGES.md).
@@ -278,6 +278,11 @@ flowchart TD
 ## What this design is meant to stop
 
 - A tool execution inside `authorize_from_agent`.
+- A call that looks normal alone but is not (0.8.0): a duplicate bill, a split payment, a burst of denied
+  attempts. The judges get a summary of recent decisions for the same signed tool and counterparty, and the
+  agent's bursts of denies, built by Two-Key from its ledger and bound to the round (`history_digest`). Agent
+  text never reaches the summary. Two duplicates decided at once on one ledger do not both get a token
+  (`history_changed`).
 - An allow when either path denies or does not answer. A missing, malformed,
   or timed-out ballot is an abstention, not a yes. A ballot that names
   another judge abstains (`judge_id_mismatch`). At least one judge must
@@ -388,13 +393,22 @@ flowchart TD
   change which warnings print, not what is refused. Two names for one
   server (a CNAME, or a host name and its IP) are two addresses.
 - Each judge answers a ballot from that request alone. Two-Key sends no
-  earlier calls, at temperature 0. A judge endpoint that keeps memory across
+  earlier calls, at temperature 0; since 0.8.0 it sends a summary of past
+  decisions that it writes itself from its ledger (`<decision_history>`),
+  never the agent's text from them. A judge endpoint that keeps memory across
   ballots (a persistent agent, a chat with saved memory) lets text the agent
   wrote in one call reach the vote on another, outside what the ledger
   records. Two-Key cannot detect it; give each judge a fresh context per
   ballot (JUDGES_AND_QUORUM "What a judge is").
 - Without a local judge, the constitution prose, the action record, and any
-  attached tool arguments go to the cloud judges' vendors.
+  attached tool arguments go to the cloud judges' vendors. Since 0.8.0 so
+  does the judge history summary on every call: signed tool ids,
+  allow-listed counterparties, amounts, counts, and times
+  (`quorum.judge_history.enabled: false` or local judges avoid it).
+- The host clock is right. Decision times (`at`) and the history windows
+  come from it. Changing it needs Two-Key's account or root, which the agent
+  account check keeps from the agent; a clock that goes back makes the
+  summary show more, not less (`clock_went_back`).
 - With a SIEM configured (0.7.0), the collector and everyone who can read
   it are an audience for ledger metadata, and the operator's own network
   carries it. Two-Key assumes the collector stores what it is sent; it
@@ -453,6 +467,63 @@ claims to close.
   - The proxy does not verify the upstream server's identity beyond the
     command it runs. A changed package behind an unpinned `npx -y` shows
     up only if its schema changes.
+- Judge history (0.8.0, `two_key/history.py`). New read during
+  authorization: an in-memory index of the ledger. A bug there can change
+  what judges see, never Path A or the token; a summary that cannot be
+  built is a deny (`internal_error:history`) unless the operator sets
+  `on_failure: judge_without_history`, and either way a
+  `judge_history_failed` entry is ledgered and sent to the SIEM. What stays
+  open:
+  - Slow drip: an agent can send many small allowed calls so a pattern
+    looks normal. The 90-day totals make it visible to the judges; whether
+    they act on it depends on the prose. The fallback named in #1, one
+    optional ceiling per tool, is built only if live runs show judges miss it.
+  - Deny floods push older decisions out of `last_decisions`, but allowed
+    totals and `days_since_last_allowed` are counted apart, so a flood
+    cannot hide an allowed duplicate.
+  - Two processes on one ledger deciding duplicates at the same moment:
+    neither sees the other in flight. The re-check at mint, under the ledger
+    lock, denies the second (`history_changed`), so both cannot get a token;
+    an honest race between two calls to one party costs one extra deny.
+  - History before 0.8.0 has no times: it shows as `before_upgrade` and the
+    windows fill up over 90 days.
+  - The summary carries no agent text, but it does carry the agent id when
+    the operator configured it; any other id is shown as `unnamed`.
+- Ledger audit window (0.8.0, `two-key ledger-view`, `two_key/ledger_view.py`,
+  `two_key/ledger_gui.py`). New audience: whoever can see the screen. It
+  shows every field of every entry decrypted, including proposal text,
+  derived amounts and counterparties, and custom field values, which the SIEM
+  export leaves out; a judge's rationale is not in the ledger, so it cannot
+  show that. It opens the ledger as `two-key audit` does (chain, signed head,
+  witness pins, head anchor) and refuses one that does not verify, and it
+  holds the principal private key in memory while the window is open, so
+  Reload can open the ledger again. No new boundary: it is a tkinter window
+  of the operator's own process, with no network port, no server, and no
+  export; `--print` writes to standard output only. It never appends to the
+  ledger (`tests/test_ledger_view.py` checks every file is unchanged). A
+  regular expression in a filter runs on the operator's own machine against
+  their own ledger, capped at 500 characters.
+- Constitution editor (0.8.0, `two-key constitution-editor`,
+  `two_key/constitution_editor.py`, `two_key/constitution_gui.py`). No new
+  boundary and no new signed format: it is a tkinter window of the
+  principal's own process, with no network port, and it signs with
+  `sign_constitution` and verifies with `verify_signed`, unchanged. It reads
+  the principal key only when Sign and save is pressed, and empties the
+  passphrase box after each try. It writes the prose and rules owner-only and
+  the signed file last, after the written rules read back as the same body,
+  and refuses to write over a file unless told to. A trial call signs the
+  draft with a throwaway key and runs on a temporary ledger with a stand-in
+  test-double judge, so it can never reach a real judge, ledger, or tool.
+  Residual: whoever can see the screen sees the draft; signing a new
+  constitution into a deployment folder is not a `config_changed` entry,
+  exactly as with `sign-constitution --force` (the next start records
+  `constitution_loaded`, and the serial still refuses an older one).
+- One proxy per agent (0.8.0, `one_proxy_per_agent`, on by default). A
+  second proxy for an agent already connected to the ledger refuses
+  (`agent_already_connected`). A proxy whose client died but whose process
+  lives on (a dead SSH session) holds the lock until it ends; sshd's
+  `ClientAliveInterval` ends it. Turned off, several proxies may serve one
+  agent, and only the re-check at mint keeps their histories in step.
 - Judges not asked about an unreadable call (0.5.0). A `derive_failed:`
   call is denied without a judge opinion in the ledger, unless
   `tool_args_on_derive_deny` sends the arguments to the judges; Path B is
@@ -757,14 +828,6 @@ custom Path A fields (0.3.0), the MCP adapter (0.5.0), the DLP and
 antivirus hooks (0.6.0), and the SIEM export with the refused-token count
 (0.7.0) shipped and are described above, not here.
 
-- Judge history summary (#1, before 1.0). Judges are meant to receive a
-  summary of recent decisions that `TwoKey` builds from its own ledger, on
-  by default. New flows: the ledger is read during authorization, and cloud
-  judges receive the counterparty's history on every call. The summary is
-  meant to carry structured fields and library reason codes only, never
-  proposal text, decline reasons, or rationales, and a counterparty or tool
-  name only when it is signed; its digest is meant to be ledgered with the
-  decision. It needs its own maintainer security review before code.
 - After 1.0, not scheduled:
   - PKI and certificate recovery. New assets: the certificate
     authority key (a personal local CA or an enterprise CA), issued
@@ -794,16 +857,19 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
     cover the rest of the host. How a hybrid signature is treated in approved
     mode depends on what the validated module supports, and is decided when
     the mode is built.
-  - Local GUI. New boundary: browser to a local server. It is
+  - Local GUI. The read-only audit view shipped in 0.8.0 as a tkinter
+    window instead (`two-key ledger-view`, under "Residual risks"), with no
+    local server; what follows is the plan for the configuration part. New
+    boundary: browser to a local server. It is
     meant to bind to loopback only and to require a per-session token, which
     is meant to address other local pages, cross-site requests, and DNS
     rebinding. It is the first place decrypted ledger content is displayed, so
     anyone who can see the screen or reach the local port is a new audience. It
     is meant to show digests, sizes, and reason codes, not argument values.
-    Filtering by judge uses the per-judge ballot records planned for 1.0
-    with the judge history summary (#1): judge id, vote, confidence, error
-    class, and a rationale digest, never the rationale text, which is model
-    output and may quote arguments. The ledger does not hold them today.
+    Filtering by judge uses the per-judge ballot records the ledger holds
+    since 0.8.0: judge id, vote, confidence, error class, and a keyed
+    rationale digest, never the rationale text, which is model output and
+    may quote arguments.
     Configuration edits change policy, so the GUI is meant never to hold the
     principal key. It prepares a constitution and hands it to the existing
     signing command. A GUI that is reachable from another machine is out of
@@ -819,6 +885,8 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
 - `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies; a `case: exact` ASCII string is compared and passed on as written, and signs only as v3. A description is never compiled, sent to a judge, or used in a reason.
 - `two_key/derive.py`: JSON paths only. `party_allowed`: an exact entry, or an `@domain` entry for an address whose domain equals it (ASCII host name, no subdomain) and whose local part is plain (atext and dots); `@domain` itself is not a party. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
 - `two_key/constitution.py`: a caller field, a `case: exact` field, a `not_applicable` mark, or an `@domain` allow entry signs only as v3; a v1 or v2 envelope with one is refused. A constitution without them keeps its v1 or v2 bytes. Every tool maps each field a `deny_if_fields` rule reads or marks it `not_applicable`, at signing and on load. An allow entry with `*`, or a domain entry that is not an ASCII host name, does not sign; `deny_counterparties` refuses domain entries.
+- `two_key/history.py`: every string in a summary is a signed tool id, an exact signed allow entry or the `@domain` entry an address matched (never one on `deny_counterparties`), a reason code from `REASON_CODES` (detail dropped; `rule_denied:<id>` keeps the signed id), an operator-configured agent id or `unnamed`, a scan verdict, or a time Two-Key formatted. It is written with `untrusted_json`, and with `enabled: false` no section and no system-prompt sentence are added (`tests/test_judge_history.py`). Approved totals count calls whose token ran (D6).
+- `two_key/core.py` (0.8.0): the summary is built under the ledger lock after catch-up; a failure is `internal_error:history` without judges unless `on_failure: judge_without_history`, and `judge_history_failed` is written in the decision's hold. Just before a token is minted, an approved decision for the same signed tool and party written after the summary was built is `history_changed`, no token. Every decision carries `at`, `subject`, `history_digest`, and `history_basis`; every `path_b` carries `ballots` with an error class and a keyed rationale digest, never text.
 - `two_key/quorum.py`: `lone_judge_warning` warns, never refuses, when one judge can approve alone (required_yes 1, min_responding 1, two or more judges). An abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner. A token that does not verify is still not ledgered; it only increments a class counter (`refused_tokens`), which keeps no token text.
 - `two_key/siem.py`: every ledger kind has a `KindSpec`, and every body key of every kind is `sent`, `hashed`, `excluded`, or extracted; a key nobody decided fails the tests. The excluded set keeps argument values, proposal and decline text, derived amounts, counterparties, custom field values, scanner threat names, and credentials out, and canary values in the tests prove it. The ledger observer only enqueues a sequence number; projecting, formatting, and sending happen on the sender thread, a full queue drops rather than blocks, and nothing a sink returns reaches the caller. An unledgered event (the refused-token count) carries `ledgered: false` and `seq: -1`.
@@ -840,6 +908,11 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
 
 What each release added to the model, newest first. Each is described where it applies below.
 
+- 0.8.0: the judge history summary (`two_key/history.py`), bound to each ballot and rebuilt by
+  `two-key audit --check-history`; per-judge ballot records with an HMAC digest of the rationale, never
+  its text; attempt episodes; one proxy per agent on a ledger (`agent_already_connected`); the proxy's
+  refusal to start with a cloud judge and no agent session; and two local windows with no network port,
+  `two-key ledger-view` (read-only) and `two-key constitution-editor` (signs as `sign-constitution`).
 - 0.7.3: `two-key setup` and `two-key config set`, `get`, `undo`, `show` and `check`
   (`two_key/setup_cmd.py`, `two_key/config_set.py`, `two_key/config_cmd.py`), with the
   `config_changed` ledger entry; a principal key encrypted with a passphrase
@@ -873,6 +946,6 @@ What each release added to the model, newest first. Each is described where it a
   aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt.
 - 0.2.2: changed when a judge counts as the monitored agent and added HTTP Basic auth.
 
-Tags: `v0.7.3`, `v0.7.0`, `v0.6.0` and `v0.5.0` are on `main`, with `v0.4.0` before them. Tags `v0.3.1` and
+Tags: `v0.8.0`, `v0.7.3`, `v0.7.0`, `v0.6.0` and `v0.5.0` are on `main`, with `v0.4.0` before them. Tags `v0.3.1` and
 earlier are in the archived `two-key-concept` repository. There, `v0.3.0` stays on `e44be56`,
 `v0.2.4` on `fc836bb`, `v0.2.3` on `4a4352e` and `v0.2.0` on `2f756ac`.

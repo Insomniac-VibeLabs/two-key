@@ -310,6 +310,13 @@ flowchart TD
    proxy. Proxies can share a ledger (each reads what the others wrote
    before it writes), but a login account per agent keeps one agent from
    using another's key, and lets the ledger's `agent_id` tell them apart.
+   Since 0.8.0 a second proxy for the same `agent_id` on one ledger refuses
+   to start (`agent_already_connected`, `one_proxy_per_agent`), and a
+   proxy with no `agent_id` counts as one agent, `unnamed`; give each
+   agent its own `agent_id`. The proxy holds its lock until it exits, so
+   a session whose connection dropped keeps it until sshd notices: set
+   `ClientAliveInterval 30` and `ClientAliveCountMax 3` in `sshd_config`
+   so the agent can reconnect within a couple of minutes.
 6. **Record where the agent runs.** `agent_id` and `hosting` in
    `proxy.yaml` go into the ledger as metadata (not trust), for example
    `hosting: agent-machine over ssh`.
@@ -352,7 +359,7 @@ model's output is data; your code is trusted. See
 ```mermaid
 flowchart TD
   model["Model<br/>untrusted text"] -- "proposed call:<br/>tool name, arguments" --> app["Your agent loop<br/>trusted code"]
-  app -- "signed, guarded<br/>names only" --> guard["Guard<br/>authorize, then<br/>gateway.invoke"]
+  app -- "signed, guarded<br/>names only" --> guard["Two-Key guard<br/>decides, then<br/>runs the tool"]
   hooks["Fact hooks<br/>look facts up by id"] --> guard
   guard -- "after both keys" --> fn["pay_vendor<br/>loads its own credential"]
   fn --> api["Billing API"]
@@ -458,6 +465,9 @@ tune these checks, `on_agent_access` and `on_writable_paths`, are in
   RIGHTS).
 - A judge holding the agent's credential, at any address, is refused;
   other overlaps warn and are recorded.
+- A judge that is not on this machine needs the agent's session, so the
+  MCP proxy refuses to start without `agent_session_env` when it has one
+  (`cloud_judge_session_required`, [SETUP](SETUP.md#a-cloud-judge-needs-the-agents-session)).
 - The MCP proxy: the upstream's tool schemas against the pinned digest,
   only signed tools shown, any other name `tool_not_offered`, the claim
   from `proxy.yaml` only, and `mcp_proxy_started` ledgered before serving.

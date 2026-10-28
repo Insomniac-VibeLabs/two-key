@@ -3,10 +3,13 @@ Copyright 2026 Insomniac-VibeLabs
 Author: Stephan Busch
 SPDX-License-Identifier: Apache-2.0
 -->
+<!-- mcp-name: io.github.Insomniac-VibeLabs/two-key -->
 
 # Two-Key
 
-**AI agent authorization and MCP gateway — dual-path policy + judge approval, single-use capability tokens, and an encrypted ledger.**
+**Two independent keys must turn before an AI agent can act.  No human needed.**
+
+**AI agent authorization and MCP gateway with dual-path authorization. Deterministic bytecode policy combined with AI judge approval, single-use capability tokens, and an encrypted ledger.**
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/PyPI/docs/images/two-key-banner.png" alt="Two-Key — Authorization and execution control for AI agents">
@@ -16,8 +19,6 @@ SPDX-License-Identifier: Apache-2.0
 
 [![tests](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key)](https://github.com/Insomniac-VibeLabs/two-key/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Insomniac-VibeLabs/two-key/blob/main/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml)[![CodeQL](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/codeql.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/codeql.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key/)
-
-**Two independent keys must turn before an AI agent can act.**
 
 **🎯 The Problem**
 
@@ -51,8 +52,8 @@ is written to an encrypted, hash-chained ledger with a signed head.
 What you get:
 
 - **Works with the agent you have.** Grok, ChatGPT, Claude, Gemini, or a
-  local Ollama model proposes the call as data; Two-Key decides.
-- **Judges you choose.** xAI, OpenAI, Anthropic, Gemini, or Ollama. One
+  local model (i.e. Ollama) proposes the call as data; Two-Key decides.
+- **Judges you choose.** xAI, OpenAI, Anthropic, Gemini, or a local model. One
   judge is enough to start; the `high_assurance` profile asks for judges
   from two makers and a yes from a local one.
 - **In front of any MCP server** (0.5.0). `two-key mcp-proxy` shows the
@@ -71,7 +72,11 @@ What you get:
 - **Small on purpose.** Python 3.10 to 3.14, one required dependency
   (`cryptography`), Apache-2.0.
 
-**Status:** beta. 0.7.3 is the current release: it adds `two-key setup` and
+**Status:** beta. 0.8.0 is the current release: judges see a summary of
+recent decisions (a repeated bill, a split payment, a burst of denied
+attempts), the ledger keeps each judge's ballot, one proxy serves each agent,
+and two windows arrive: a read-only ledger audit (`two-key ledger-view`) and
+a constitution editor. 0.7.3 added `two-key setup` and
 `two-key config set`, `get`, `undo` and `check` for setting up and changing a
 deployment, a signed serial so a ledger never goes back to older rules, and
 start-up checks for the upstream server's files behind a launcher. 0.7.0
@@ -101,13 +106,13 @@ on it.
 
 ## Quick start
 
-Install 0.7.3 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
+Install 0.8.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 
 ```bash
-pip install "two-key[yaml]==0.7.3"
+pip install "two-key[yaml]==0.8.0"
 ```
 
-Tag `v0.7.3` on `main` is the same code.
+Tag `v0.8.0` on `main` is the same code.
 
 Or run the offline demo from a clone. It uses test-double judges, so it
 needs no API keys:
@@ -129,7 +134,7 @@ around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp]==0.7.3"
+pip install "two-key[mcp]==0.8.0"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -141,15 +146,15 @@ from your own hook, never from the agent. A refused call comes back to the
 agent as a tool error with a reason code.
 
 ```mermaid
-flowchart LR
-  host["Agent host<br/>MCP client"] -- "tools/list, tools/call<br/>over stdio" --> tk
+flowchart TD
+  host["Agent host<br/>MCP client"] -- "tools/list and<br/>tools/call, stdio" --> tk
   subgraph proxy["two-key mcp-proxy, its own OS user"]
-    tk["TwoKey.authorize<br/>Path A and Path B"] -- "token" --> gw["Gateway<br/>same process"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk
+    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["Two-Key<br/>checks policy,<br/>asks judges"]
+    tk -- "token" --> gw["Gateway<br/>same process"]
   end
   tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected arguments<br/>over stdio" --> up["Upstream MCP server<br/>child process, third OS user"]
-  up --> sor["System of record"]
+  gw -- "projected args,<br/>stdio" --> up["Upstream<br/>MCP server<br/>child process,<br/>third OS user"]
+  up --> sor["System<br/>of record"]
   hooks -. "look facts up" .-> sor
 ```
 
@@ -337,7 +342,7 @@ flowchart TD
   instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
   agent -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>Authorize"]
 
-  authorize --> early{"Early deny?<br/>malformed / size<br/>agent_declined<br/>file limits"}
+  authorize --> early{"Early deny?<br/>malformed / size<br/>agent declined<br/>file limits"}
   early -->|yes| ledger["Encrypted<br/>Ledger"]
   early -->|no| derive["Derive fields"]
 
@@ -667,19 +672,23 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 The MCP adapter shipped in 0.5.0; Windows support, DLP and antivirus hooks,
 and judge connection reuse shipped in 0.6.0. The ledger export for a SIEM
 shipped in 0.7.0, and the setup and change commands and the signed serial
-in 0.7.3; a public review and the 1.0 release come next.
+in 0.7.3, and the judge history summary in 0.8.0. The last beta, 0.9.0, comes
+next; a public review and the first stable release, 1.0, come next.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
-flowchart LR
-  r04["0.4.0<br/>Released"] --> r05["0.5.0<br/>MCP adapter<br/>Released"]
-  r05 --> r06["0.6.0<br/>DLP and AV hooks<br/>Released"]
-  r06 --> r07["0.7.0<br/>Ledger export<br/>for SIEM<br/>Released"]
-  r07 --> r073["0.7.3<br/>Setup and config<br/>commands<br/>Released"]
-  r073 --> r10["1.0.0<br/>Review and release"]
-  r10 -.-> after["After 1.0<br/>PKI, post-quantum,<br/>FIPS mode, local GUI"]
+flowchart TD
+  subgraph done["Released betas"]
+    direction LR
+    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"]
+  end
+  subgraph next["Next: one beta, then 1.0.0"]
+    direction LR
+    r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+  end
+  done --> next
 ```
 
 | Version | What | Status |
@@ -689,20 +698,24 @@ flowchart LR
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners (ClamAV, ICAP products, a command, Python); judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and `config set`, `get`, `undo`, `show` and `check`; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13) | Released, tag `v0.7.3` |
-| 1.0.0 | Judge history summary (#1) and per-judge ballot records, then a public community review. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
+| 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a ledger audit window and a constitution editor | Released, tag `v0.8.0` |
+| 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart, and formats frozen for 1.0 | Planned |
+| 1.0.0 | The first stable release, after a public community review of 0.9.0. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). Version 0.7.3 is on PyPI. It is this beta, not
+three (HOWTO "Platforms"). Version 0.8.0 is on PyPI. It is this beta, not
 the 1.0 community review. Tags are not moved.
 
 ```bash
-pip install "two-key[yaml]==0.7.3"
+pip install "two-key[yaml]==0.8.0"
 ```
 
-`v0.7.3` adds `two-key setup` and the `config` commands, a principal key
+`v0.8.0` gives the judges a summary of recent decisions, keeps each judge's
+ballot in the ledger, lets one proxy serve each agent, and adds the ledger
+audit window and the constitution editor. `@v0.7.3` adds `two-key setup` and the `config` commands, a principal key
 encrypted with a passphrase, a signed serial so a ledger never goes back to
 older rules, and start-up checks for the upstream server's files.
 `main` holds that release and the fixes merged since; `working` is where the
@@ -760,6 +773,12 @@ Upgrading from an older version: read the "Upgrading" notes in
   `high_assurance`, refuses) when a launcher such as `sudo` or `npx` hides
   them, and once a ledger has run a constitution with a `serial` it refuses
   an older one. "Release v0.7.3" > "Upgrading from 0.7.0" in CHANGES.md.
+- 0.8.0 loads 0.7.3 constitutions, keys, ledgers, and `proxy.yaml` files
+  unchanged. Check before upgrading: judges now get a history summary (on by
+  default), a second proxy for the same agent on one ledger refuses to start,
+  and a proxy with a cloud judge needs `agent_session_env`. Keep a backup of
+  the ledger from before the upgrade. "Release v0.8.0" > "Upgrading from
+  0.7.3" in CHANGES.md.
 
 A clone installed with `pip install -e` follows the ranges in
 `pyproject.toml`. CI does not: it installs the versions in `uv.lock`

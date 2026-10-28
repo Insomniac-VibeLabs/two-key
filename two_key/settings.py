@@ -105,8 +105,10 @@ PROXY = _rows(PROXY_YAML, [
     ("head_anchor", "none", "Path to a head anchor file outside the ledger directory (as `--head-anchor`)."),
     ("ttl_seconds", "120", "Token lifetime in seconds, 1 to 300."),
     ("agent_session_env", "none", "Name of the environment variable that holds the agent's session, read once at "
-     "start. Unset or empty refuses to start.", {"secret": True}),
-    ("agent_id", "none", "Ledger metadata, at most 256 characters. Not trust."),
+     "start. Unset or empty refuses to start. Needed when a judge is not on this machine: without it the proxy "
+     "refuses to start (`cloud_judge_session_required`).", {"secret": True}),
+    ("agent_id", "none", "Ledger metadata, at most 256 characters. Not trust. `two-key setup` writes the monitored "
+                 "agent's `id` here."),
     ("hosting", "none", "Ledger metadata, at most 256 characters. Not trust."),
     ("allow_unresolved_identity", "false", "`true` starts despite an `unresolved_identity` warning."),
     ("on_writable_paths", "warn", "`warn` names each file or folder the proxy runs or reads that another account "
@@ -114,6 +116,9 @@ PROXY = _rows(PROXY_YAML, [
     ("on_agent_access", "refuse", "`refuse` does not start when the account that started the proxy is Two-Key's own, "
      "is root, cannot be told, or can change a path the proxy runs or reads. `warn` names it and starts, for a test "
      "on one machine.", {"ha": "always refuses; `warn` is refused"}),
+    ("one_proxy_per_agent", "true", "`true` lets one running proxy serve this `agent_id` (or, with none, the "
+     "`unnamed` agent) on this ledger: a second refuses to start with `agent_already_connected`, ledgered and sent to "
+     "the SIEM. `false` lets several run at once and warns at start; it counts as weaker in `config set`. Since 0.8.0."),
     ("upstream", "required", "The MCP server the proxy starts and forwards signed calls to."),
     ("upstream.command", "required", "Program and arguments, as a list. Run without a shell."),
     ("upstream.env", "none", "Variables for the child: a literal, or `{env: NAME}` read from the proxy's "
@@ -275,6 +280,22 @@ JUDGES = _rows(JUDGES_YAML, [
      "flagged the call."),
     ("quorum.allow_same_provider_judge", "false", "Deprecated and ignored: the same provider is allowed."),
     ("quorum.allow_same_model_distinct_tenant", "false", "Deprecated and ignored."),
+    ("quorum.judge_history", "on, with the defaults below", "The decision history summary judges get with each call "
+     "(0.8.0): recent decisions for the same signed tool and allow-listed counterparty, counts for all tools, and the "
+     "agent's bursts of denied calls. Built from signed names and reason codes only, never from the agent's text."),
+    ("quorum.judge_history.enabled", "true", "`false` sends judges exactly the prompt 0.7.3 sent. It warns at start, "
+     "is recorded in `quorum_policy`, and counts as weaker in `config set`."),
+    ("quorum.judge_history.window_days", "90", "`7`, `30` or `90`: the longest window of allowed totals shown. "
+     "Lower warns at start and counts as weaker."),
+    ("quorum.judge_history.max_items", "10", "Past decisions (and attempt episodes) shown, 1 to 50. Lower warns at "
+     "start and counts as weaker."),
+    ("quorum.judge_history.on_failure", "deny", "`deny` or `judge_without_history`: what happens when the summary "
+     "cannot be built. Either way a `judge_history_failed` entry is ledgered and sent to the SIEM. "
+     "`judge_without_history` counts as weaker."),
+    ("quorum.judge_history.burst_denies", "5", "An attempt episode is at least this many denied calls from one agent "
+     "(2 to 1000) ..."),
+    ("quorum.judge_history.burst_minutes", "10", "... within this many minutes (1 to 1440). Each episode is ledgered "
+     "as `attempt_episode` and sent to the SIEM."),
     ("monitored_agent", "none", "The agent you run, declared by you and never by the agent. Judges are checked "
      "against it."),
     ("monitored_agent.id", "monitored-agent", "The agent's name in the ledger."),
@@ -457,6 +478,7 @@ constitution does not yet state a minimum profile.
 | a plaintext SIEM sink (`udp`, `tcp`, `http://`) | allowed, with a start-up warning | refused (`siem_plaintext_refused`) |
 | a scan stance other than `strict` (set by the signed `scan` rule) | allowed | allowed, with a start-up warning |
 | one judge with `required_yes: 1` | `lone_judge_warning` | not reachable: two makers are needed |
+| a quorum that could be too lenient (one judge, a minority approving, one provider or maker) | a `WARN` in `config check` and `setup` | the same, where it can still apply |
 """
 
 

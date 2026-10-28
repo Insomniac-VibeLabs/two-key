@@ -63,8 +63,10 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
         judges, policy = loaded
         high = bool(policy.is_high_assurance)
         found += _quorum(judges, policy)
+        found += _cloud_session(config, judges)
         agent_found, agent = _agent(config)
         found += agent_found
+        found += _identities(config, judges, agent)
     found += _environment(config, environ, judges, agent)
     found += _upstream(config, high)
     found += _writable(config, high)
@@ -98,18 +100,52 @@ def _constitution(config) -> list[tuple[str, str]]:
     unknown = sorted(set(config.tools) - set(signed.tool_specs))
     if unknown:
         out.append((FAIL, f"tools: {unknown} are not tools in the signed constitution"))
+    out += _unset_claims(config, signed)
+    return out
+
+
+def _blanket_class_rules(rules) -> list[tuple[str, str | None]]:
+    """``(rule id, tool or None)`` for each ``deny_if`` rule that tests only the data class (and perhaps the
+    tool) and denies ``classified``: it denies every call to a tool whose claim is unset."""
+    out = []
+    for rule in rules:
+        body = rule.get("deny_if")
+        if isinstance(body, Mapping) and set(body) <= {"data_class_in", "tool"} \
+                and "classified" in body.get("data_class_in", ()):
+            out.append((rule["id"], body.get("tool")))
+    return out
+
+
+def _unset_claims(config, signed) -> list[tuple[str, str]]:
+    """A tool with no ``claim`` is read as ``classified``. A rule that denies that class denies every call to
+    it, which is rarely what the operator meant (live run 10, 2026-10-27)."""
+    out = []
+    for rule_id, only in _blanket_class_rules(signed.hard_rules):
+        tools = sorted(t for t in signed.tool_specs
+                       if (only is None or t == only) and config.tool_policy(t).claim == "none")
+        if tools:
+            out.append((WARN, f"tools: {tools} set no claim, so they read as classified, and rule {rule_id!r} "
+                              "denies classified: every call to them is denied. Set tools.<id>.claim "
+                              "(floor or a data class) if that is not meant"))
     return out
 
 
 def _quorum(judges, policy) -> list[tuple[str, str]]:
-    from .quorum import heterogeneity_shortfall, lone_judge_warning
+    from .quorum import heterogeneity_shortfall, lenient_warnings
     out = [(OK, f"judges: {len(judges)} load; required_yes {policy.required_yes}, "
                 f"min_responding {policy.effective_min_responding}"
                 f"{', high_assurance floors' if policy.is_high_assurance else ''}")]
-    for text in (lone_judge_warning(judges, policy), heterogeneity_shortfall(judges, policy)):
+    for text in [*lenient_warnings(judges, policy), heterogeneity_shortfall(judges, policy)]:
         if text:
             out.append((WARN, text))
     return out
+
+
+def _cloud_session(config, judges) -> list[tuple[str, str]]:
+    """A cloud judge with no ``agent_session_env``: the proxy refuses to start (live setup run, 2026-10-27)."""
+    from .mcp_proxy.core import cloud_session_missing
+    missing = cloud_session_missing(config, judges)
+    return [(FAIL, missing)] if missing else []
 
 
 def _agent(config):
@@ -123,6 +159,37 @@ def _agent(config):
         return [(WARN, "monitored_agent: none declared, so judges are not checked against the agent's "
                        "own model and credential")], None
     return [(OK, "monitored_agent: declared")], agent
+
+
+def _unresolved(model: Any, base_url: Any, upstream: Any) -> bool:
+    """Whether Two-Key cannot tell who serves this model at this address (identity.ResolvedIdentity.unresolved)."""
+    from .identity import IdentityError, resolve_upstream_info, validate_upstream
+    if not isinstance(model, str) or not model or not isinstance(base_url, str) or not base_url:
+        return False        # the loaders refuse these on their own
+    try:
+        declared = validate_upstream(upstream, "upstream")
+    except IdentityError:
+        return False        # so does the proxy, with its own message
+    return not (resolve_upstream_info(base_url, model)[0] or declared)
+
+
+def _identities(config, judges, agent) -> list[tuple[str, str]]:
+    """A judge or agent whose upstream Two-Key cannot resolve: the proxy refuses to start
+    (``mcp_proxy.core.identity_refusal``) unless ``allow_unresolved_identity: true`` (live run 11, D1). A WARN,
+    not a FAIL, so ``setup`` and ``config set`` still write a deployment that names its upstream later."""
+    sides = [f"judge {j.judge_id!r}" for j in judges
+             if _unresolved(getattr(j, "model", None), getattr(j, "base_url", None), getattr(j, "upstream", None))]
+    if agent is not None and _unresolved(agent.model, agent.base_url, agent.upstream):
+        sides.append(f"agent {agent.id!r}")
+    if not sides:
+        return []
+    what = (f"Two-Key cannot resolve who serves {', '.join(sides)} (a local proxy or an unrecognized host, and a "
+            "model that names no maker)")
+    if config.allow_unresolved_identity:
+        return [(WARN, f"unresolved_identity: {what}; allowed by allow_unresolved_identity: true")]
+    return [(WARN, f"unresolved_identity: {what}, so the proxy refuses to start; declare upstream: (where that "
+                   "address forwards, such as api.x.ai) for it in the judges file, or set "
+                   "allow_unresolved_identity: true in the proxy config to accept the risk")]
 
 
 def judge_variables(judge) -> list[tuple[str, str]]:

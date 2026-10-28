@@ -365,6 +365,18 @@ class Ledger:
         _platform.owner_only_dir(directory)
         return directory / hashlib.sha256(jti.encode("utf-8")).hexdigest()
 
+    def agent_lock_path(self, agent_id: str) -> Path:
+        """The lock a running ``two-key mcp-proxy`` holds for its agent on this ledger (0.8.0, D10): one file per
+        agent id, named by its SHA-256, in an owner-only folder outside the ledger directory."""
+        if not isinstance(agent_id, str) or not agent_id:
+            raise LedgerError("agent id required")
+        directory = self.path.parent / f"{self.path.name}.agents"
+        if _platform.inside(directory, self.path):
+            raise LedgerError("agent lock must live outside the ledger directory")
+        directory.mkdir(parents=True, exist_ok=True)
+        _platform.owner_only_dir(directory)
+        return directory / f"{hashlib.sha256(agent_id.encode('utf-8')).hexdigest()}.lock"
+
     def _entries_file_size(self) -> int:
         try:
             return self.entries_path.stat().st_size

@@ -10,6 +10,7 @@
 
 None of this needs the MCP SDK, a bot, or the network.
 """
+import hashlib
 import importlib.util
 import re
 import tempfile
@@ -183,3 +184,16 @@ class Verdicts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RelayMatching(unittest.TestCase):
+    def test_a_reply_matches_its_prompt_whatever_the_history_and_times_say(self):
+        """Run 11: the judges' history line and its times change with every pass, so an unmasked hash asked
+        the judges again in a loop. Anything else in the prompt still has to match."""
+        report = load("report")
+        prompt = ("[user]\nCall at 2026-10-28T04:56:08Z\n\n<decision_history>\n{\"denies\":1,\"at\":\"x\"}\n"
+                  "</decision_history>\n\nIs it consistent?")
+        later = prompt.replace("04:56:08Z", "05:10:41.5+00:00").replace("\"denies\":1", "\"denies\":7")
+        self.assertEqual(report.psha(prompt), report.psha(later))
+        self.assertNotEqual(report.psha(prompt), report.psha(prompt.replace("consistent", "allowed")))
+        self.assertNotEqual(hashlib.sha256(prompt.encode()).digest(), hashlib.sha256(later.encode()).digest())

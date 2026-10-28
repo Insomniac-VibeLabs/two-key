@@ -6,9 +6,9 @@ testing and automated scanners, not independently audited. Apache-2.0.
 
 Package: two-key
 Import: two_key
-Package version: 0.7.3 (two-key setup and config set, get, undo, show and check; a principal key with a passphrase; a signed constitution serial against older rules; the upstream server's files in the start-up checks). Tag v0.7.3 is on main; so are v0.7.0 (the SIEM export, a start-up check for the account the monitored agent runs as, a count of refused gateway tokens), v0.6.0 (Windows support, content scanning through your antivirus or DLP product, a start-up check for writable paths), v0.5.0 (MCP proxy, caller-supplied facts, constitution v3) and v0.4.0 (package renamed from two-key-concept). Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
+Package version: 0.8.0 (a judge history summary from the ledger, per-judge ballot records, one proxy per agent, the ledger-view audit window and the constitution editor). Tag v0.8.0 is on main; so are v0.7.3 (two-key setup and config set, get, undo, show and check; a principal key with a passphrase; a signed constitution serial against older rules; the upstream server's files in the start-up checks), v0.7.0 (the SIEM export, a start-up check for the account the monitored agent runs as, a count of refused gateway tokens), v0.6.0 (Windows support, content scanning through your antivirus or DLP product, a start-up check for writable paths), v0.5.0 (MCP proxy, caller-supplied facts, constitution v3) and v0.4.0 (package renamed from two-key-concept). Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-0.7.3 is on PyPI (0.7.1 and 0.7.2 are the 0.7.0 code, repackaged). Distribution name two-key, import two_key, extras yaml and mcp. Install two-key[yaml]==0.7.3, or two-key[mcp]==0.7.3 for the proxy. Tags are not moved. docs/PYPI.md is the release process: trusted publishing, no token in the repo.
+0.8.0 is on PyPI (0.7.1 and 0.7.2 are the 0.7.0 code, repackaged). Distribution name two-key, import two_key, extras yaml and mcp. Install two-key[yaml]==0.8.0, or two-key[mcp]==0.8.0 for the proxy. Tags are not moved. docs/PYPI.md is the release process: trusted publishing, no token in the repo. server.json lists the proxy on the official MCP Registry as io.github.Insomniac-VibeLabs/two-key (docs/PYPI.md).
 uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged. CI tools (uv, build, coverage, bandit, twine, cyclonedx-bom) are hash-pinned in .github/requirements/.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
@@ -57,6 +57,28 @@ without a ledger entry by class (bad_signature, expired, malformed, other) and r
 most once an interval, on stderr and as a gateway_token_refused event marked ledgered: false; no
 token text is kept and nothing is written to the ledger. Standard library only, no new dependency.
 Two-Key is not a SIEM: storing, searching, retaining, and alerting stay with the collector.
+
+0.8.0: judge history summary (#1, two_key/history.py). Each judge's
+prompt gets a <decision_history> section built by TwoKey from its own ledger: recent decisions on the same tool
+and signed counterparty (ages, outcomes, reason codes, signed amounts), totals of redeemed calls over 7/30/90
+days, allowed calls not run, denies in the last hour and day, scan verdicts over 7 days, and attempt episodes
+(burst_denies denies in burst_minutes, ledgered as attempt_episode). Never proposal text, argument values,
+rationale, or an unsigned counterparty. On by default (quorum.judge_history); a summary that cannot be built
+denies internal_error:history (on_failure: deny, judge_history_failed entry), and a decision whose history gained
+an allow on the same target before minting is denied history_changed. The summary digest is bound to each ballot
+(history_hash) and recorded on the decision; two-key audit --check-history CONSTITUTION rebuilds it. Path B entries
+record each judge's ballot (id, vote, confidence, error class, HMAC-SHA256 rationale digest, never the text). The
+MCP proxy allows one proxy per agent id on a ledger by default (one_proxy_per_agent; agent_already_connected).
+two-key ledger-view (two_key/ledger_view.py, two_key/ledger_gui.py) opens the ledger as two-key audit does and shows
+one row per entry in a read-only tkinter window: every field (seq, kind, and each body value under a dotted path,
+lists as name[]) searchable, filterable (contains, equals, starts-with, ends-with, regex, gt/ge/lt/le, empty, and
+negations; all or any), and sortable on several keys. --print writes the matches as JSON Lines; --fields lists the
+names. No network port, no export, never appends (docs/LEDGER_VIEW.md).
+two-key constitution-editor (two_key/constitution_editor.py, two_key/constitution_gui.py) writes, checks, and signs a
+constitution in a tkinter window: prose, tools and specs, hard rules, custom fields, serial. It checks with the code
+sign_constitution runs, tries one call on a throwaway key and ledger with a stand-in judge (Path A's decision and the
+judge prompt), and writes constitution.md, hard_rules.yaml and constitution.signed.json; --check prints whether
+files sign (docs/CONSTITUTION_EDITOR.md).
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. docs/CONNECTING.md: how to connect the agent and every hook so
@@ -194,7 +216,10 @@ refuses) when the real account of its parent process is Two-Key's own (agent_sam
 path it runs or reads (agent_can_write). Processes sharing a ledger read and verify each other's entries
 under the lock before writing; a shorter file or a partial line is still refused. Remote agents are
 little tested (ROADMAP). two-key config show|check --config proxy.yaml (read-only: effective settings; would it start).
-two-key setup --dir DIR writes a new deployment (keys, rules, judges, proxy.yaml), signs and checks it. two-key
+two-key setup --dir DIR writes a new deployment (keys, rules, judges, proxy.yaml), signs and checks it; it asks
+for the quorum numbers at the profile's own, and a lower one is weaker (a typed yes in the wizard; --confirm-weaker
+and a typed yes with --answers). With a judge not on this machine it needs agent_session_env: config check fails and mcp-proxy refuses to start
+without it (cloud_judge_session_required); config check and setup warn about a quorum that could be too lenient. two-key
 config get|set|undo --config proxy.yaml NAME [VALUE] reads or changes one setting by its docs/SETTINGS.md name:
 Two-Key's own account only (root and files another account can change are refused), the whole config must pass
 config check first, a weaker change needs --confirm-weaker and a typed yes, a signed setting needs --key and

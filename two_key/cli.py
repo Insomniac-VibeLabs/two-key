@@ -20,7 +20,12 @@
                     --principal-passphrase-env NAME --ledger-passphrase-env NAME \
                     --witness-passphrase-env NAME [--witness-public-key PEM] [--head-anchor PATH] \
                     [--replace-ledger]
-  two-key audit --key KEY --ledger DIR [--witness-public-key PEM]
+  two-key audit --key KEY --ledger DIR [--witness-public-key PEM] [--check-history CONSTITUTION]
+  two-key ledger-view --key KEY --ledger DIR [--witness-public-key PEM] [--search TEXT]
+                    [--search-names] [--where FIELD OP [VALUE]]... [--any] [--sort FIELD[:desc]]...
+                    [--print | --fields]
+  two-key constitution-editor [--prose FILE --rules FILE | --signed FILE [--public-key PEM]] [--key KEY]
+                    [--dir DIR] [--check]
   two-key siem-export --key KEY --ledger DIR [--out FILE] [--schema native|ecs|ocsf]
                     [--format json|cef] [--from-seq N] [--to-seq N]
   two-key siem-verify --key KEY --ledger DIR --events FILE [--require-complete]
@@ -31,7 +36,7 @@
                     [--confirm-weaker] [--key KEY --rules FILE]
   two-key config undo --config FILE [--confirm-weaker] [--key KEY]
   two-key config key-passphrase --config FILE (--new-from FILE | --remove) [--confirm-weaker]
-  two-key setup --dir DIR [--answers FILE]
+  two-key setup --dir DIR [--answers FILE [--confirm-weaker]]
 
 Every command that takes --key also takes --key-passphrase-file FILE for an encrypted key; without it, it
 asks on the terminal (docs/SETUP.md).
@@ -56,6 +61,10 @@ a rollback or a wipe of the ledger directory. Creating a ledger at a new path
 warns on stderr. Opening a ledger made before 0.2.3 pins its witness key
 (trust on first use), whichever command opens it.
 
+``ledger-view`` opens the ledger the way ``audit`` does and shows its entries in a window (tkinter) to
+search, filter, and sort for an audit; ``--print`` writes the matching entries to stdout as JSON Lines
+instead, and ``--fields`` lists every field name a filter can use. It never appends to the ledger.
+
 ``siem-export`` verifies the ledger, decrypts it locally, and writes one event per
 line for a SIEM: digests, sizes, and reason codes, never argument values, the proposal
 text, the derived amount or counterparty, or a custom field value (the allowlist is
@@ -77,6 +86,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -251,12 +261,26 @@ def _anchor_arg(args):
     return path
 
 
+def _ledger_missing(folder) -> str | None:
+    """Why there is no ledger file to open in ``folder``, or None when there is one. A file or folder this
+    account may not read is said as that, not as a missing ledger (live run 10)."""
+    missing = f"no ledger at {folder}"
+    try:
+        mode = (Path(folder) / "entries.jsonl").stat().st_mode
+    except PermissionError:
+        return f"cannot read the ledger at {folder}: permission denied"
+    except OSError:
+        return missing
+    return None if stat.S_ISREG(mode) else missing
+
+
 def _open_ledger(args, key):
     """Open an existing ledger for rotate-witness and audit; a refusal is printed, not raised. A path with no
     ledger is refused rather than created."""
     from .ledger import Ledger, LedgerError
-    if not (Path(args.ledger) / "entries.jsonl").is_file():
-        print(json.dumps({"ok": False, "error": f"no ledger at {args.ledger}"}, indent=2))
+    missing = _ledger_missing(args.ledger)
+    if missing:
+        print(json.dumps({"ok": False, "error": missing}, indent=2))
         return None
     try:
         return Ledger(args.ledger, key, witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args))
@@ -293,9 +317,114 @@ def _audit(args) -> int:
         return 1
     witness = ledger.witness_report()       # opening verified the chain, the head, and both pins
     problems = check_decision_digests(ledger)
-    print(json.dumps({"ok": not problems, "size": ledger.size(), "witness": witness,
-                      "decision_digest_problems": problems}, indent=2))
-    return 0 if not problems else 1
+    report = {"ok": not problems, "size": ledger.size(), "witness": witness, "decision_digest_problems": problems}
+    if args.check_history:
+        from .audit import check_history_digests
+        from .constitution import load_envelope, verify_signed
+        history = check_history_digests(ledger, verify_signed(load_envelope(args.check_history), key.public_key()))
+        report["history_digest_problems"] = history
+        # A decision under another constitution is listed as not checked; it does not fail the audit.
+        report["ok"] = report["ok"] and all(": not checked:" in line for line in history)
+    print(json.dumps(report, indent=2))
+    return 0 if report["ok"] else 1
+
+
+def _reopen_ledger(args, key):
+    """The window's Reload: the ledger opened and checked again as ``_open_ledger`` does, or ``ViewError`` with
+    the reason, so the window can show it. An unreadable file is a reason too, not a traceback."""
+    from .ledger import Ledger, LedgerError
+    from .ledger_view import ViewError
+    missing = _ledger_missing(args.ledger)
+    if missing:
+        raise ViewError(missing)
+    try:
+        pin = None if args.witness_public_key is None else load_public_key(args.witness_public_key)
+        return Ledger(args.ledger, key, witness_public_key=pin, anchor_path=_anchor_arg(args))
+    except (LedgerError, OSError, ValueError) as e:
+        raise ViewError(str(e)) from None
+
+
+def _ledger_view(args) -> int:
+    from .ledger_view import ViewError, field_names, integrity, print_rows, query_from_args, rows_from_entries, select
+    try:
+        query = query_from_args(args)
+    except ViewError as e:
+        raise SystemExit(f"ledger-view: {e}") from None
+    if args.max_rows < 1:
+        raise SystemExit("ledger-view: --max-rows must be at least 1")
+    key = _principal_key(args)
+    ledger = _open_ledger(args, key)        # opening verified the chain, the head, and both witness pins
+    if ledger is None:
+        return 1
+    rows = rows_from_entries(e.to_json() for e in ledger.entries)
+    if args.fields:
+        print("\n".join(field_names(rows)))
+        return 0
+    if args.print:
+        try:
+            print_rows(select(rows, query), sys.stdout)
+        except ViewError as e:
+            raise SystemExit(f"ledger-view: {e}") from None
+        return 0
+    try:
+        from .ledger_gui import show
+    except ImportError:
+        print("two-key ledger-view: the window needs tkinter, which this Python does not have (on Debian and "
+              "Ubuntu: apt install python3-tk); use --print to list the entries instead", file=sys.stderr)
+        return 1
+
+    def reload():
+        again = _reopen_ledger(args, key)
+        return rows_from_entries(e.to_json() for e in again.entries), integrity(again)
+    return show(rows, title=str(args.ledger), report=integrity(ledger), reload=reload, query=query,
+                max_rows=args.max_rows)
+
+
+def _editor_draft(args):
+    """The draft ``constitution-editor`` starts from, its window title, and a line on where it came from."""
+    from .constitution_editor import new_draft, open_signed, open_sources
+    if bool(args.prose) != bool(args.rules):
+        raise SystemExit("constitution-editor: give --prose and --rules together")
+    if args.signed and args.prose:
+        raise SystemExit("constitution-editor: give --prose and --rules, or --signed, not both")
+    try:
+        if args.signed:
+            public = load_public_key(args.public_key) if args.public_key else None
+            draft, said = open_signed(args.signed, public)
+            return draft, args.signed, f"Opened {args.signed}: {said}."
+        if args.prose:
+            return open_sources(args.prose, args.rules), args.rules, f"Opened {args.prose} and {args.rules}."
+    except (OSError, ValueError) as e:       # EditorError is a ValueError
+        raise SystemExit(f"constitution-editor: {e}") from None
+    return new_draft(), "new constitution", ""
+
+
+def _editor_check(draft) -> int:
+    from .constitution_editor import check
+    report = check(draft)
+    for level, line in report.notes:
+        print(f"{level}: {line}")
+    if not report.ok:
+        print(f"does not sign: {report.error}")
+        return 1
+    serial = "no serial" if draft.serial is None else f"serial {draft.serial}"
+    print(f"signs as {report.envelope_format}, {serial}, digest {report.digest}")
+    return 0
+
+
+def _constitution_editor(args) -> int:
+    draft, title, opened = _editor_draft(args)
+    if args.check:
+        return _editor_check(draft)
+    try:
+        from .constitution_gui import show
+    except ImportError:
+        print("two-key constitution-editor: the window needs tkinter, which this Python does not have (on Debian and "
+              "Ubuntu: apt install python3-tk); use --check, or two-key sign-constitution", file=sys.stderr)
+        return 1
+    source = args.signed or args.rules
+    folder = args.dir or str(Path(source).resolve().parent if source else Path.cwd())
+    return show(draft, title=title, key_path=args.key or "", folder=folder, opened=opened)
 
 
 def _siem_export(args) -> int:
@@ -704,7 +833,48 @@ def main(argv: list[str] | None = None) -> int:
     audit.add_argument("--ledger", required=True)
     audit.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     audit.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    audit.add_argument("--check-history", default=None, metavar="CONSTITUTION",
+                       help="also rebuild every judge history summary from the ledger and check its history_digest; "
+                            "CONSTITUTION is the signed constitution the decisions ran under")
     audit.set_defaults(func=_audit)
+    viewer = sub.add_parser("ledger-view", help="search, filter, and sort the ledger's entries in a window "
+                                                "(or print them); read-only")
+    _add_key(viewer)
+    viewer.add_argument("--ledger", required=True)
+    viewer.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    viewer.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    viewer.add_argument("--search", default="", metavar="TEXT", help="keep entries with TEXT in any field's value")
+    viewer.add_argument("--search-names", action="store_true",
+                        help="--search also matches field names, such as tools.pay_bill.irreversible")
+    viewer.add_argument("--where", action="append", nargs="+", default=None, metavar="FIELD OP [VALUE]",
+                        help="keep entries where FIELD passes the test (repeatable); OP is contains, not-contains, "
+                             "equals, not-equals, starts-with, ends-with, regex, gt, ge, lt, le, empty, or not-empty; "
+                             "FIELD * means any field")
+    viewer.add_argument("--any", action="store_true", help="keep entries that pass any --where (default: all)")
+    viewer.add_argument("--sort", action="append", default=None, metavar="FIELD[:desc]",
+                        help="sort by FIELD (repeatable; the first decides first); default seq")
+    shown = viewer.add_mutually_exclusive_group()
+    shown.add_argument("--print", action="store_true",
+                       help="write the matching entries to stdout as JSON Lines instead of opening a window")
+    shown.add_argument("--fields", action="store_true", help="list every field name a filter or sort can use")
+    viewer.add_argument("--max-rows", type=int, default=10000, metavar="N",
+                        help="list at most N matching entries in the window (default 10000); the count shows all")
+    viewer.set_defaults(func=_ledger_view)
+    editor = sub.add_parser("constitution-editor", help="write, check, try, and sign a constitution (prose, rules, "
+                                                       "tool specs, fields, serial) in a window")
+    editor.add_argument("--prose", default=None, metavar="FILE", help="start from this prose (with --rules)")
+    editor.add_argument("--rules", default=None, metavar="FILE", help="start from this rules file (with --prose)")
+    editor.add_argument("--signed", default=None, metavar="FILE",
+                        help="start from a signed constitution, as its next version (the serial goes up by one)")
+    editor.add_argument("--public-key", default=None, metavar="PEM",
+                        help="check --signed against this public key before opening it")
+    editor.add_argument("--key", default=None, help="fill in the principal key to sign with (asked for in the window "
+                                                    "otherwise)")
+    editor.add_argument("--dir", default=None, metavar="DIR", help="the folder to write into (default: the folder of "
+                                                                    "--rules or --signed, else this one)")
+    editor.add_argument("--check", action="store_true",
+                        help="print whether the files sign, with every warning, instead of opening a window")
+    editor.set_defaults(func=_constitution_editor)
     recover = sub.add_parser("recover", help="drop an uncheckpointed tail and record it; does not run on open")
     _add_key(recover)
     recover.add_argument("--ledger", required=True)
@@ -833,6 +1003,8 @@ def main(argv: list[str] | None = None) -> int:
     setup.add_argument("--dir", required=True, help="a new folder for the files (never an existing one)")
     setup.add_argument("--answers", default=None, metavar="FILE",
                        help="read the answers from this YAML or JSON file instead of asking (docs/SETUP.md)")
+    setup.add_argument("--confirm-weaker", action="store_true",
+                       help="go ahead with --answers quorum numbers below the profile's own, after a typed yes")
     setup.set_defaults(func=_setup)
     drafter = sub.add_parser("mcp-draft-specs", help="draft tool_specs and the schema digest from an upstream MCP "
                                                      "server, for the principal to review and sign (needs the mcp extra)")
