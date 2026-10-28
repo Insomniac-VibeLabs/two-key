@@ -5061,3 +5061,5 @@ the trigger. docs/PYPI.md and the README's file table say so.
 The README drops the bold line under the banner, which repeated the opening sentence (Stephan's edit on `main`, b4c3095, brought to `working`).
 
 0.8.0 is listed on the official MCP Registry as `io.github.Insomniac-VibeLabs/two-key` (2026-10-28). docs/PYPI.md now says the browser sign-in is refused for an organization name and a `read:org` token is needed.
+
+New workflow `.github/workflows/mcp-registry.yml`: one **Run workflow** on the `PyPI` branch, approved in the `pypi` environment, lists the release on the MCP Registry. It signs in with GitHub Actions OIDC, so no personal token is needed, and refuses a `server.json` version that differs from `pyproject.toml` or is not on PyPI yet. `mcp-publisher` v1.8.6 is pinned by its SHA-256. docs/PYPI.md and the README file table describe it.

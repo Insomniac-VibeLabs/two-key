@@ -824,6 +824,7 @@ that file, not a description of the file. This table is the description.
 | `MANIFEST.in` | Docs and examples included in the source distribution. The wheel is only `two_key` |
 | `docs/PYPI.md` | How to register the name and publish with trusted publishing, without a token in the repo |
 | `.github/workflows/pypi-publish.yml` | Build, metadata check, SBOM, and the tokenless upload. The file is on `main`; a run publishes only when started by hand on branch `PyPI` |
+| `.github/workflows/mcp-registry.yml` | Lists the release on the official MCP Registry from `server.json`, signed in with GitHub Actions OIDC. Started by hand on branch `PyPI`, after the PyPI upload |
 
 ## History and license
 

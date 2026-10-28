@@ -216,7 +216,16 @@ nobody expects tools of its own.
   PyPI. Bump all three together. `tests/test_mcp_registry.py` fails if they
   differ or the README line is missing.
 
-After the release is on PyPI, from a clone of the release commit:
+After the release is on PyPI, once the `PyPI` branch carries it: Actions,
+workflow `mcp-registry`, **Run workflow**, branch `PyPI`, then approve the
+`pypi` environment prompt. The workflow
+([mcp-registry.yml](../.github/workflows/mcp-registry.yml)) checks that
+`server.json` names the version in `pyproject.toml` and that the version
+is on PyPI, installs `mcp-publisher` v1.8.6 by its checksum, signs in with
+GitHub Actions OIDC (no token), and publishes. Like `publish`, it refuses
+every branch except `PyPI`.
+
+By hand instead, from a clone of the release commit:
 
 ```bash
 brew install mcp-publisher        # or the release download from github.com/modelcontextprotocol/registry
