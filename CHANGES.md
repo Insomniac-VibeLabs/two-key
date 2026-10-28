@@ -168,6 +168,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Live run 11 findings — 2026-10-28](#live-run-11-findings--2026-10-28)
 - [Release v0.8.0: judge history, ballot records, one proxy per agent, two windows — 2026-10-28](#release-v080-judge-history-ballot-records-one-proxy-per-agent-two-windows--2026-10-28)
 - [Publish from the PyPI branch only — 2026-10-28](#publish-from-the-pypi-branch-only--2026-10-28)
+- [One confirm for every tool: `tools[*].claim` — 2026-10-28](#one-confirm-for-every-tool-toolsclaim--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5063,3 +5064,14 @@ The README drops the bold line under the banner, which repeated the opening sent
 0.8.0 is listed on the official MCP Registry as `io.github.Insomniac-VibeLabs/two-key` (2026-10-28). docs/PYPI.md now says the browser sign-in is refused for an organization name and a `read:org` token is needed.
 
 New workflow `.github/workflows/mcp-registry.yml`: one **Run workflow** on the `PyPI` branch, approved in the `pypi` environment, lists the release on the MCP Registry. It signs in with GitHub Actions OIDC, so no personal token is needed, and refuses a `server.json` version that differs from `pyproject.toml` or is not on PyPI yet. `mcp-publisher` v1.8.6 is pinned by its SHA-256. docs/PYPI.md and the README file table describe it.
+
+## One confirm for every tool: `tools[*].claim` — 2026-10-28
+
+First 0.9.0 change (live run 11, C1: lowering the data class claim on every tool needed one confirmation per tool,
+and setting the whole `tools` block as JSON replaced every other per-tool setting). `two-key config set` takes `[*]` in place
+of a tool's id: `tools[*].claim` in `proxy.yaml` and `tool_specs[*].<setting>` in the signed rules. It is one change: the
+whole configuration is checked once, one `--confirm-weaker` and one typed yes cover every tool, one `config_changed`
+entry names each tool, and one `config undo` puts them all back. `tools[*]` reaches every tool the constitution signs,
+set in `proxy.yaml` or not; with `--unset`, a tool that does not set it is skipped. `[*]` anywhere else is refused
+(`every_tool`). `config get tools[*].claim` prints the value for each tool. docs/SETUP.md, "Finding a setting's name",
+has an example.

@@ -252,6 +252,18 @@ has a dot in it in brackets:
 | `quorum.profile`, `judges[1].timeout`, `monitored_agent.model` | `judges.yaml` (the `judges:` path in `proxy.yaml`) |
 | `hard_rules[2].deny_if.amount_usd_gt`, `tool_specs.pay.data_class_floor`, `fields.region.default` | the signed rules |
 
+**Every tool at once:** `[*]` in place of a tool's id changes that setting on every tool, as one change with one
+confirmation, one `config_changed` entry that names each tool, and one `config undo`. In `proxy.yaml`,
+`tools[*].claim` reaches every tool the constitution signs, whether `proxy.yaml` sets it yet or not. In the
+signed rules, `tool_specs[*].irreversible` reaches every signed tool and signs one new constitution. With
+`--unset`, a tool that does not set it is skipped. `[*]` stands only for the tool in `tools[*].<setting>` and
+`tool_specs[*].<setting>`; anywhere else it is refused (`every_tool`). `config get tools[*].claim` prints the
+value for each tool.
+
+```
+two-key config set --config proxy.yaml 'tools[*].claim' floor --confirm-weaker
+```
+
 The first part picks the file, so you never name one. A name that is not a setting is refused
 (`unknown_setting`), and so is a typo. `config get NAME` prints the value, the file, the tier, and the default.
 

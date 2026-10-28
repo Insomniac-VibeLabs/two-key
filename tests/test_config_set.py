@@ -609,6 +609,58 @@ class Weaker(Deployment):
         self.assertEqual(self.answered, [])
 
 
+class EveryTool(Deployment):
+    """``tools[*].claim``: one setting on every tool, as one change with one confirmation (live run 11, C1)."""
+    answers = dict(ANSWERS, tools=[{"id": "tool_a", "irreversible": False, "data_class_floor": "personal"},
+                                   {"id": "tool_b", "irreversible": False, "data_class_floor": "personal"}])
+
+    def test_every_tool_one_confirm_one_entry(self):
+        before = len(self._changes())
+        result, out, _ = self.set("tools[*].claim", "public", confirm_weaker=True)
+        self.assertEqual(result["settings"], ["tools.tool_a.claim", "tools.tool_b.claim"])
+        self.assertEqual(len(result["weaker"]), 2)
+        self.assertEqual(len(self.answered), 1, "one typed yes covers every tool")
+        self.assertIn("tools.tool_b.claim in proxy.yaml: (not set) -> \"public\"", out)
+        changes = self._changes()
+        self.assertEqual(len(changes), before + 1)
+        self.assertEqual(changes[-1].body["settings"], ["tools.tool_a.claim", "tools.tool_b.claim"])
+        got = config_set.get(self.proxy, "tools[*].claim")
+        self.assertEqual(got["values"], {"tool_a": "public", "tool_b": "public"})
+
+    def test_weaker_for_every_tool_needs_the_flag(self):
+        self.refused("weaker: tools.tool_a.claim.*tools.tool_b.claim", "tools[*].claim", "public")
+
+    def test_undo_puts_every_tool_back(self):
+        first = self.proxy.read_bytes()
+        self.set("tools[*].claim", "floor", confirm_weaker=True)
+        quiet(config_set.undo, self.proxy, confirm=self.confirm(), confirm_weaker=True, environ={})
+        self.assertEqual(self.proxy.read_bytes(), first)
+
+    def test_unset_skips_a_tool_that_does_not_set_it(self):
+        self.set("tools.tool_a.claim", "floor", confirm_weaker=True)
+        result, _, _ = self.set("tools[*].claim", unset=True)
+        self.assertEqual(result["settings"], ["tools.tool_a.claim"])
+        self.refused("unchanged: no tool sets tools\\[\\*\\]\\.claim", "tools[*].claim", unset=True)
+
+    def test_star_only_stands_for_a_tool(self):
+        for name in ("siem.sinks[*].port", "judges[*].timeout", "tools[*]", "tools[*].files[*].kind",
+                     "tool_specs.tool_a.fields[*].type"):
+            with self.subTest(name=name):
+                self.refused("every_tool", name, 1, key_path=str(self.key), rules_path=str(self.rules))
+
+    def test_signed_every_tool(self):
+        result, out, _ = self.set("tool_specs[*].irreversible", True, key_path=str(self.key),
+                                  rules_path=str(self.rules))
+        self.assertTrue(result["signed"])
+        self.assertEqual(result["settings"], ["tool_specs.tool_a.irreversible", "tool_specs.tool_b.irreversible"])
+        self.assertEqual(len(self.answered), 1)
+        signed = verify_signed(load_envelope(self.dir / "constitution.signed.json"),
+                               load_private_key_file(self.key).public_key())
+        self.assertIs(signed.tool_specs["tool_a"]["irreversible"], True)
+        self.assertIs(signed.tool_specs["tool_b"]["irreversible"], True)
+        self.assertIn("tool_specs.tool_b.irreversible (signed): false -> true", out)
+
+
 class HighAssurance(Deployment):
     answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR")
 
