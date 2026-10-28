@@ -236,8 +236,11 @@ class Window(unittest.TestCase):
         editor.use_starter()
         self.assertIn("Ready to sign", editor.status_text())
         editor.prose.insert("end", "More.")
-        editor.prose.event_generate("<<Modified>>")
-        self.top.update()
+        # A slow runner can spend REFRESH_MS inside update(), and the check then runs before the assertion
+        # (macOS CI, 2026-10-28): wait long enough that it is still waiting.
+        with mock.patch.object(constitution_gui, "REFRESH_MS", 60_000):
+            editor.prose.event_generate("<<Modified>>")
+            self.top.update()
         self.assertTrue(editor.check_waiting)
         editor.changed()
         editor.recheck()
