@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping
 
 from . import _platform
-from .canonical import EncodingError, canonical_bytes, canonical_hash
+from .canonical import canonical_bytes, canonical_hash
 from .capability import MAX_TTL_SECONDS, _b64u, _b64u_dec, capability_key_fingerprint
 from .keys import (generate_private_key, load_private_key_file, load_public_key, public_from_raw, public_raw,
                    save_private_key, save_public_key, sign, verify)
@@ -50,6 +50,9 @@ CLOCK_ALLOWANCE_SECONDS = 5
 # A stamp or receipt is a few hundred characters; anything far longer is refused unread.
 MAX_OBJECT_CHARS = 4096
 EXEMPT = "exempt"
+SHA256 = "sha256:"
+# A tool's own refusal, as the result tells it: ``refused:<reason>``.
+REFUSED = "refused:"
 # What the tool refuses with, in check order (docs/TOOL_CHECK.md).
 REFUSALS = ("check_missing", "stamp_invalid", "token_invalid", "stamp_mismatch", "tool_mismatch", "args_mismatch",
             "expired", "replayed", "check_failed")
@@ -70,17 +73,17 @@ def key_fingerprint(public) -> str:
 
 def text_hash(text: str) -> str:
     """``sha256:`` of a token, stamp or receipt as sent (its ASCII text)."""
-    return "sha256:" + hashlib.sha256(text.encode("ascii")).hexdigest()
+    return SHA256 + hashlib.sha256(text.encode("ascii")).hexdigest()
 
 
 def tool_args_hash(arguments: Any) -> str:
     """``sha256:`` of the canonical JSON of the arguments as the tool receives them."""
-    return "sha256:" + canonical_hash(arguments)
+    return SHA256 + canonical_hash(arguments)
 
 
 def result_hash(result: Mapping[str, Any]) -> str:
     """``sha256:`` of the canonical JSON of an MCP result in wire form, without its ``_meta``."""
-    return "sha256:" + canonical_hash({k: v for k, v in result.items() if k != "_meta"})
+    return SHA256 + canonical_hash({k: v for k, v in result.items() if k != "_meta"})
 
 
 def checked(spec: Mapping[str, Any] | None) -> str | None:
@@ -108,7 +111,7 @@ def peek(prefix: str, text: Any, what: str) -> tuple[dict, str, str]:
     try:
         body = loads_json(_b64u_dec(body_text))
         text.encode("ascii")
-    except (ValueError, UnicodeError):
+    except ValueError:      # UnicodeError is a ValueError
         raise ToolCheckError(f"{what}_invalid") from None
     if not isinstance(body, dict) or body.get("v") != 1 or body.get("alg") != ALG:
         raise ToolCheckError(f"{what}_invalid")
@@ -177,16 +180,16 @@ def verify_receipt(receipt: Any, *, pinned: str, jti: str, tool: str, stamp: str
     try:
         body, body_text, signature = peek(RECEIPT_PREFIX, receipt, "receipt")
         public = public_from_raw(body.get("key"))
-    except (ToolCheckError, TypeError, ValueError):
+    except (TypeError, ValueError):     # ToolCheckError is a ValueError
         raise ToolCheckError("bad_signature") from None
     if key_fingerprint(public) != pinned or not verify(public, _message(RECEIPT_LABEL, body_text), signature):
         raise ToolCheckError("bad_signature")
     if body.get("jti") != jti or body.get("tool") != tool:
         raise ToolCheckError("mismatch")
     outcome = body.get("outcome")
-    if isinstance(outcome, str) and outcome.startswith("refused:"):
-        reason = outcome[len("refused:"):]
-        raise ToolCheckError("refused:" + (reason if reason in REFUSALS else "other"))
+    if isinstance(outcome, str) and outcome.startswith(REFUSED):
+        reason = outcome[len(REFUSED):]
+        raise ToolCheckError(REFUSED + (reason if reason in REFUSALS else "other"))
     if outcome != "ran" or body.get("stamp_hash") != text_hash(stamp) or body.get("result_hash") != result:
         raise ToolCheckError("mismatch")
     return body
@@ -354,7 +357,7 @@ class ToolChecker:
             raise ToolCheckError("tool_mismatch")                                        # 5
         try:
             received = tool_args_hash(arguments)
-        except (EncodingError, TypeError, ValueError):
+        except (TypeError, ValueError):     # EncodingError is a ValueError
             raise ToolCheckError("args_mismatch") from None
         if not received == payload.get("tool_args_hash") == stamped.get("tool_args_hash"):
             raise ToolCheckError("args_mismatch")                                        # 6

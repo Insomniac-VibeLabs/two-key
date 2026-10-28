@@ -5172,3 +5172,8 @@ MCP proxy only, Q6 above). docs/TOOL_CHECK.md describes it for operators and for
   TOOL_CHECK.md show each token, stamp and receipt as its three parts, because written whole a token's
   `tk1.eyJ...` shape tripped Semgrep's JWT rule (they are made from public seeds). The test run uses
   `-X faulthandler`, so a crash names the test it happened in (one macOS 3.14 run ended with a segfault).
+- SonarCloud's 14 findings on the tool check: each `assertRaises` in test_toolcheck now wraps one call; an
+  `except` no longer lists an exception beside its parent (`EncodingError`, `ToolCheckError` and
+  `UnicodeError` are all `ValueError`s); `sha256:` and `refused:` are constants in toolcheck.py; the witness
+  half of `Ledger._track` is its own method, so neither is over Sonar's complexity limit; and an unused
+  test helper is gone. No behavior changed.

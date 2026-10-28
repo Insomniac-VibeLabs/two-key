@@ -681,20 +681,25 @@ class Ledger:
             self._held[entry.body["tool"]] = entry.seq
         elif entry.kind == "tool_released" and isinstance(entry.body.get("tool"), str):
             self._held.pop(entry.body["tool"], None)
-        elif entry.kind == "witness_pinned":
+        elif entry.kind in ("witness_pinned", "witness_rotated"):
+            self._track_witness(entry, check=verify)
+        seqs = self._kind_seqs.setdefault(entry.kind, [])
+        seqs.append(entry.seq)
+
+    def _track_witness(self, entry: Entry, *, check: bool) -> None:
+        """Move the witness pin for a ``witness_pinned`` or ``witness_rotated`` entry (see ``_track``)."""
+        if entry.kind == "witness_pinned":
             raw = entry.body.get("witness_public_key")
-            if verify:
+            if check:
                 if self._witness_pin is not None:
                     raise LedgerError("ledger chain failed verification: a second witness_pinned entry "
                                       f"at {entry.seq}; the witness key changes only by witness_rotated")
                 _witness_public(raw, f"witness_pinned at {entry.seq}")
             self._witness_pin = (raw, entry.seq, str(entry.body.get("source")))
-        elif entry.kind == "witness_rotated":
-            if verify:
-                self._verify_rotation(entry)
-            self._witness_pin = (entry.body["new_witness_public_key"], entry.seq, "rotated")
-        seqs = self._kind_seqs.setdefault(entry.kind, [])
-        seqs.append(entry.seq)
+            return
+        if check:
+            self._verify_rotation(entry)
+        self._witness_pin = (entry.body["new_witness_public_key"], entry.seq, "rotated")
 
     def _verify_rotation(self, entry: Entry) -> None:
         body = entry.body

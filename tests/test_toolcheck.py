@@ -19,9 +19,9 @@ from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
 from two_key.strict import loads_json
 from two_key.testing import TEST_AGENT, FixedJudge
-from two_key.toolcheck import (META_KEY, STAMP_LABEL, STAMP_PREFIX, SeenRecord, ToolCheckConfig, ToolCheckError,
-                               ToolChecker, key_fingerprint, mcp_receipt, new_tool_key, open_stamp_key, peek, seal,
-                               stamp_key_path, text_hash, tool_args_hash, verify_receipt)
+from two_key.toolcheck import (META_KEY, RECEIPT_LABEL, RECEIPT_PREFIX, STAMP_LABEL, STAMP_PREFIX, SeenRecord, ToolCheckConfig, ToolCheckError,
+                               ToolChecker, key_fingerprint, mcp_receipt, new_tool_key, open_sealed, open_stamp_key,
+                               peek, seal, stamp_key_path, text_hash, tool_args_hash, verify_receipt)
 from perm import private
 
 RULES = [{"id": "tools", "allow_only_tools": ["send", "plain"]}]
@@ -106,9 +106,6 @@ class Deployment(unittest.TestCase):
         self.assertTrue(decision.allowed, decision.reason)
         return decision.token
 
-    def kinds(self):
-        return [e.kind for e in self.tk.ledger.entries]
-
 
 def _load(path):
     from two_key.keys import load_private_key_file
@@ -131,17 +128,18 @@ class Formats(Deployment):
         key = generate_private_key()
         stamp = seal(STAMP_PREFIX, STAMP_LABEL, key, {"v": 1, "alg": "ed25519", "jti": "a"})
         self.assertEqual(peek(STAMP_PREFIX, stamp, "stamp")[0]["jti"], "a")
+        public, as_receipt = key.public_key(), RECEIPT_PREFIX + stamp[len(STAMP_PREFIX):]
         with self.assertRaisesRegex(ToolCheckError, "receipt_invalid"):
-            from two_key.toolcheck import RECEIPT_LABEL, RECEIPT_PREFIX, open_sealed
-            open_sealed(RECEIPT_PREFIX, RECEIPT_LABEL, key.public_key(), "tkr1" + stamp[4:], "receipt")
+            open_sealed(RECEIPT_PREFIX, RECEIPT_LABEL, public, as_receipt, "receipt")
         token = self.token()
         with self.assertRaisesRegex(ToolCheckError, "stamp_invalid"):
             peek(STAMP_PREFIX, token, "stamp")
 
     def test_spec_tool_check_must_be_a_fingerprint_or_exempt(self):
         for bad in ({"key": "md5:1"}, {"key": "sha256:" + "0" * 64, "x": 1}, "yes", True):
+            spec = specs(bad)
             with self.subTest(bad=bad), self.assertRaisesRegex(ConstitutionError, "tool_check"):
-                sign_constitution(PROSE, RULES, self.key, specs(bad))
+                sign_constitution(PROSE, RULES, self.key, spec)
         sign_constitution(PROSE, RULES, self.key, specs("exempt"))
 
     def test_a_tool_without_the_check_keeps_its_spec_hash(self):
@@ -173,8 +171,9 @@ class Gateway(Deployment):
             checker.check(PROJECTED, {META_KEY: check})
 
     def test_a_direct_call_without_the_check_is_refused(self):
+        checker = self.checker()
         with self.assertRaisesRegex(ToolCheckError, "check_missing"):
-            self.checker().check(PROJECTED, {})
+            checker.check(PROJECTED, {})
 
     def test_without_the_proxy_a_checked_tool_is_refused(self):
         gw = self.tk.gateway(tools={"send": lambda a: "ran"})
@@ -196,7 +195,7 @@ class Gateway(Deployment):
         self.assertTrue(got.allowed)
         bad = [e.body for e in self.tk.ledger.entries if e.kind == "tool_receipt_invalid"]
         self.assertEqual(bad[-1]["why"], "mismatch")
-        self.assertNotIn("tool_held", self.kinds())
+        self.assertNotIn("tool_held", [e.kind for e in self.tk.ledger.entries])
 
     def test_high_assurance_withholds_the_output_and_holds_the_tool(self):
         def dropped(out):
@@ -258,10 +257,11 @@ class ToolChecks(Deployment):
         for given, arguments, reason in cases:
             with self.subTest(reason=reason), self.assertRaisesRegex(ToolCheckError, f"^{reason}$"):
                 checker.check(arguments, given)
+        other_tool, much_later = self.checker(tool="plain"), self.checker(clock=lambda: 10 ** 10)
         with self.assertRaisesRegex(ToolCheckError, "^tool_mismatch$"):
-            self.checker(tool="plain").check(PROJECTED, meta)
+            other_tool.check(PROJECTED, meta)
         with self.assertRaisesRegex(ToolCheckError, "^expired$"):
-            self.checker(clock=lambda: 10 ** 10).check(PROJECTED, meta)
+            much_later.check(PROJECTED, meta)
         self.assertEqual(checker.check(PROJECTED, meta).tool, "send")
         with self.assertRaisesRegex(ToolCheckError, "^replayed$"):
             checker.check(PROJECTED, meta)
@@ -272,8 +272,9 @@ class ToolChecks(Deployment):
         self.assertEqual(self.checker(clock=lambda: exp + 5).check(PROJECTED, meta).tool, "send")
         later = self.call()
         exp = loads_json(_b64u_dec(later[META_KEY]["token"].split(".")[1]))["exp"]
+        late = self.checker(clock=lambda: exp + 5.5)
         with self.assertRaisesRegex(ToolCheckError, "^expired$"):
-            self.checker(clock=lambda: exp + 5.5).check(PROJECTED, later)
+            late.check(PROJECTED, later)
 
 
 class Receipts(Deployment):

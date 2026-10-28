@@ -408,7 +408,7 @@ class ToolGateway:
         try:
             if payload.get("tool_args_hash") != tool_args_hash(projected):
                 return "tool_args_mismatch"
-        except (EncodingError, TypeError, ValueError):
+        except (TypeError, ValueError):     # EncodingError is a ValueError
             return "tool_args_mismatch"
         if self.ledger.tool_held(tool):
             return "tool_held"
