@@ -14,7 +14,7 @@ registered. It does not change what Two-Key does.
 `0.7.2` are packaging releases of the 0.7.0 code, made from the `PyPI` branch,
 which swaps the Mermaid diagrams for pictures (PyPI shows the README and
 nothing under `docs/`) and names its own version in the install lines.
-`0.7.3` is the next release of the code, tag `v0.7.3` on `main`. PyPI treats `two-key`, `two_key`, and `two.key` as the same
+`0.7.3` was the next release of the code, tag `v0.7.3` on `main`, and `0.8.0`, tag `v0.8.0`, followed it. PyPI treats `two-key`, `two_key`, and `two.key` as the same
 project. The import name stays `two_key`. The public 1.0 review in
 [ROADMAP.md](../ROADMAP.md) is still ahead.
 
@@ -27,11 +27,11 @@ pip install "two-key[mcp]==X.Y.Z"
 ```
 
 `X.Y.Z` is a version listed on the [project page](https://pypi.org/project/two-key/#history).
-The tag `v0.7.3` on `main` is the git snapshot of `0.7.3`, and can be installed
+The tag `v0.8.0` on `main` is the git snapshot of `0.8.0`, and can be installed
 directly:
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.3"
+pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.8.0"
 ```
 
 | Extra | Pulls in | Needed for |
@@ -163,7 +163,7 @@ create an environment with no reviewer the first time the job asks for it.
 
 ## Tags and `main`
 
-- Do not move `v0.7.3`, `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, or any older tag. A
+- Do not move `v0.8.0`, `v0.7.3`, `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, or any older tag. A
   fix to what is on the index is a new version, never a retag.
 - Do not choose branch `main` in **Run workflow**. The workflow file is on
   `main`, which is why GitHub lists it. The jobs still refuse every ref

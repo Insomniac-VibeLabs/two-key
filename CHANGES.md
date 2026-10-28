@@ -166,6 +166,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Live run 10 findings — 2026-10-28](#live-run-10-findings--2026-10-28)
 - [The proxy's start names its agent — 2026-10-28](#the-proxys-start-names-its-agent--2026-10-28)
 - [Live run 11 findings — 2026-10-28](#live-run-11-findings--2026-10-28)
+- [Release v0.8.0: judge history, ballot records, one proxy per agent, two windows — 2026-10-28](#release-v080-judge-history-ballot-records-one-proxy-per-agent-two-windows--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4602,7 +4603,7 @@ C170, the two cases fixed after run 9z, both passed live. It found two problems 
 
 ## 0.8.0 work: judge history, ballot records, and one proxy per agent — 2026-10-25
 
-On `working`, not released; the version number stays 0.7.3 until the release. Built from the design note the
+Released in 0.8.0 ("Release v0.8.0" below). Built from the design note the
 maintainer approved on 2026-10-25 (decisions D1 to D10). Issue #1.
 
 - **Judge history summary** (`two_key/history.py`). Each judge's prompt gets a `<decision_history>` section,
@@ -5012,3 +5013,38 @@ other three were stopped by a valid rule. These are the fixes from its list of f
   masked (`report.psha`). Both change with every pass, so in run 11 each re-staged prompt hashed differently and
   the judges were asked again in a loop. The maintainer approved this fix, which GrokBot found.
 - Tests: `tests/test_config_cmd.py`, `tests/test_config_set.py`, `tests/test_live_harness.py`.
+
+## Release v0.8.0: judge history, ballot records, one proxy per agent, two windows — 2026-10-28
+
+Package version 0.8.0 (`pyproject.toml`, `two_key.__version__`, `uv.lock`, `server.json`). To be tagged
+`v0.8.0` on `main` after the merge. The sections from "0.8.0 work" on are the detail.
+
+- **Judge history summary** (#1): each judge's prompt carries a `<decision_history>` section built from the
+  ledger, so a repeated bill, a split payment, or a burst of denied attempts is visible to the next decision.
+  Codes, counts, signed values and times only; on by default, fail closed when it cannot be built, bound to
+  each ballot, and rebuilt by `two-key audit --check-history`.
+- **Per-judge ballot records**: each judge's id, vote, confidence, error class and HTTP status, and an HMAC
+  digest of its rationale, never the text.
+- **One proxy per agent** on a ledger (`agent_already_connected`), and `mcp_proxy_started` names its agent.
+- **`two-key ledger-view`**, a read-only ledger audit window (and `--print`), and
+  **`two-key constitution-editor`**, which edits, tries and signs a constitution as `sign-constitution` does.
+- **Setup**: the quorum numbers, the agent's id as `agent_id`, an owner-only ledger whatever the umask, a
+  cloud judge needs `agent_session_env`, and the judge's upstream when Two-Key cannot resolve it.
+- **The official MCP Registry listing** (`server.json`), published after this version is on PyPI.
+- **Live testing**: GrokBot's runs 10 and 11 with real judges. Run 11, the last before the release, found no
+  Two-Key failure: 174 of 177 cases PASS, and the other three were stopped by another valid rule. Its
+  findings are fixed ("Live run 11 findings"). Results are on the `live-runs` branch.
+- 1377 tests.
+
+### Upgrading from 0.7.3
+
+Constitutions, keys and ledgers load unchanged; nothing is re-signed. Keep a backup of the ledger from before
+the upgrade: a ledger written by 0.8.0 is not meant to be opened by 0.7.3 again. Then check:
+
+- Judges get the history summary by default; tune or turn it off under `quorum.judge_history`. The quorum
+  policy's digest changes because it records `judge_history`.
+- A second proxy for the same agent on one ledger refuses to start. Give each its own `agent_id`, or set
+  `one_proxy_per_agent: false` where two are intended.
+- A proxy with a judge that is not on this machine needs `agent_session_env`, or it refuses to start.
+
+docs/UPGRADING.md has the full row.

@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "two-key"
-version = "0.7.3"
+version = "0.8.0"
 description = "Two-Key: a security and dual-authorization layer for AI agents that separates tool access from action authorization with a policy VM, judge quorum, single-use tokens, and an encrypted ledger."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -41,12 +41,13 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.7.3 (package name `two-key`) is tag `v0.7.3` on `main`; 0.7.0 is
+- Package 0.8.0 (package name `two-key`) is tag `v0.8.0` on `main`; 0.7.3 is
+  tag `v0.7.3`; 0.7.0 is
   tag `v0.7.0` (PyPI's 0.7.1 and 0.7.2 are its code, repackaged on the
   `PyPI` branch), 0.6.0 is tag `v0.6.0`, 0.5.0 is
   tag `v0.5.0`, and 0.4.0 (tag `v0.4.0`) was the first release from this repository. Tags `v0.3.1` and earlier are in the archived `two-key-concept` repository. There, tag `v0.3.0` stays on `e44be56`.
   Tag `v0.2.4` stays on `fc836bb`.
-  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.7.3`, `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
+  Tag `v0.2.3` stays on `4a4352e`. Do not move `v0.8.0`, `v0.7.3`, `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, `v0.3.1`, `v0.3.0`, or `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees. `working` is
   where the next changes land.
 - Do not push, force-push, or open PRs unless the operator asks.
@@ -57,7 +58,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10; CI tests 3.10 to 3.14 (3.15 in a Linux job that does not block, until PyYAML ships 3.15 wheels; no `requires-python` cap). Package name `two-key`, import name `two_key`,
-version `0.7.3` on PyPI (`pip install "two-key[yaml]==0.7.3"`), tag `v0.7.3` on `main`. Tags are not moved. docs/PYPI.md is the release process. `server.json` (the MCP Registry listing) carries the same version as `pyproject.toml`; bump them together.
+version `0.8.0` on PyPI (`pip install "two-key[yaml]==0.8.0"`), tag `v0.8.0` on `main`. Tags are not moved. docs/PYPI.md is the release process. `server.json` (the MCP Registry listing) carries the same version as `pyproject.toml`; bump them together.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
@@ -84,8 +85,8 @@ there), not in `pyproject.toml`. CI installs them with `--require-hashes`.
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0); `two-key config show`, `get`, `check`, `set`, and `undo`, and `two-key setup`, read and write the proxy config without the SDK (`setup` needs it only to read a schema digest from the server) |
 
-Index install: `pip install "two-key[yaml]==0.7.3"`.
-From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.7.3"`.
+Index install: `pip install "two-key[yaml]==0.8.0"`.
+From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.8.0"`.
 
 ## Tests and docs
 

@@ -13,7 +13,7 @@ promise: the order may change, and version numbers are targets, not dates.
 
 <!-- toc -->
 - [The path to 1.0](#the-path-to-10)
-- [Where we are (2026-10-23)](#where-we-are-2026-10-23)
+- [Where we are (2026-10-28)](#where-we-are-2026-10-28)
 - [Ground rules](#ground-rules)
 - [0.8.0: Judge history and ballot records](#080-judge-history-and-ballot-records)
 - [0.9.0: Tool-side token check and remote agents](#090-tool-side-token-check-and-remote-agents)
@@ -43,11 +43,11 @@ promise: the order may change, and version numbers are targets, not dates.
 flowchart TD
   subgraph done["Released betas"]
     direction LR
-    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"]
+    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"]
   end
-  subgraph next["Next: two betas, then 1.0.0"]
+  subgraph next["Next: one beta, then 1.0.0"]
     direction LR
-    r08["0.8.0 beta<br/>Judge history<br/>(in progress)"] --> r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+    r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
   end
   done --> next
 ```
@@ -61,7 +61,7 @@ flowchart TD
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners; a start-up check for writable paths; judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
-| 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Built on `working`, not released |
+| 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
 | After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
@@ -78,9 +78,17 @@ Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
 in the same release.
 
-## Where we are (2026-10-23)
+## Where we are (2026-10-28)
 
-- **0.7.3 is released**: tag `v0.7.3` on `main`, and on PyPI. It adds
+- **0.8.0 is released**: tag `v0.8.0` on `main`, and on PyPI. Judges get a
+  summary of recent decisions from the ledger (#1), each judge's ballot is
+  recorded without its rationale text, one proxy serves each agent on a
+  ledger, and two windows arrive: `two-key ledger-view`, a read-only ledger
+  audit, and `two-key constitution-editor`. Live runs 10 and 11 checked it
+  with real judges; run 11, the last before the release, found no Two-Key
+  failure (174 of 177 cases PASS, the other three stopped by another valid
+  rule).
+- **0.7.3** (tag `v0.7.3`) added
   `two-key setup` for a first deployment and `two-key config set`, `get`,
   `undo`, `show` and `check` to change and read one (docs/SETUP.md), every
   change checked as a whole, confirmed when weaker, signed with the principal
@@ -105,14 +113,10 @@ in the same release.
   stated blind spot. Every Two-Key finding is fixed (CHANGES.md); run 9z, a
   regression round, found none. Results live on the `live-runs` branch,
   never on `working` or `main`.
-- **0.8.0 is built on `working`** (2026-10-25), not released: the judge
-  history summary (#1), per-judge ballot records, and one proxy per agent,
-  from the design note the maintainer approved that day. It waits for a
-  live round before release.
-- **Issues**: #13 and #27 shipped in 0.7.3. #1 is built for 0.8.0, and #3
+- **Issues**: #13 and #27 shipped in 0.7.3, and #1 in 0.8.0. #3
   (repository setup after the move) has maintainer settings left to confirm.
-- **Next**: a live round on 0.8.0 and its release, then 0.9.0, the last
-  beta, then the public review and the first stable release, 1.0.
+- **Next**: 0.9.0, the last beta, then the public review and the first
+  stable release, 1.0.
 - **Not yet tested enough: agents on another machine.** The maintainer
   expects an agent connecting from another machine to be the normal case,
   and the same machine an edge case for testing (2026-10-16). Today the
@@ -145,8 +149,9 @@ in the same release.
 
 ## 0.8.0: Judge history and ballot records
 
-Built on `working` (2026-10-25), not released. The design note, decisions
+Released as tag `v0.8.0` on `main`, and on PyPI. The design note, decisions
 D1 to D10, was reviewed and approved by the maintainer before any code.
+CHANGES.md "Release v0.8.0" lists what shipped.
 
 - The judge history summary (#1): Path B judges get a summary of recent
   allows, denies, and abstains, built by `TwoKey` from its own ledger and on
@@ -176,8 +181,8 @@ D1 to D10, was reviewed and approved by the maintainer before any code.
   window, checked as they are typed, a trial call that shows Path A's
   decision and the judge prompt, and signing with the principal key. It
   signs with the same code as `sign-constitution` and adds no format.
-- Before release: a live round that covers the first three, and the release
-  steps in [PYPI.md](docs/PYPI.md).
+- Done: live runs 10 and 11 with real judges covered the first three; the
+  release follows [PYPI.md](docs/PYPI.md).
 
 ## 0.9.0: Tool-side token check and remote agents
 

@@ -72,7 +72,11 @@ What you get:
 - **Small on purpose.** Python 3.10 to 3.14, one required dependency
   (`cryptography`), Apache-2.0.
 
-**Status:** beta. 0.7.3 is the current release: it adds `two-key setup` and
+**Status:** beta. 0.8.0 is the current release: judges see a summary of
+recent decisions (a repeated bill, a split payment, a burst of denied
+attempts), the ledger keeps each judge's ballot, one proxy serves each agent,
+and two windows arrive: a read-only ledger audit (`two-key ledger-view`) and
+a constitution editor. 0.7.3 added `two-key setup` and
 `two-key config set`, `get`, `undo` and `check` for setting up and changing a
 deployment, a signed serial so a ledger never goes back to older rules, and
 start-up checks for the upstream server's files behind a launcher. 0.7.0
@@ -102,13 +106,13 @@ on it.
 
 ## Quick start
 
-Install 0.7.3 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
+Install 0.8.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 
 ```bash
-pip install "two-key[yaml]==0.7.3"
+pip install "two-key[yaml]==0.8.0"
 ```
 
-Tag `v0.7.3` on `main` is the same code.
+Tag `v0.8.0` on `main` is the same code.
 
 Or run the offline demo from a clone. It uses test-double judges, so it
 needs no API keys:
@@ -130,7 +134,7 @@ around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp]==0.7.3"
+pip install "two-key[mcp]==0.8.0"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -668,8 +672,8 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 The MCP adapter shipped in 0.5.0; Windows support, DLP and antivirus hooks,
 and judge connection reuse shipped in 0.6.0. The ledger export for a SIEM
 shipped in 0.7.0, and the setup and change commands and the signed serial
-in 0.7.3. The judge history summary comes in 0.8.0 and the last beta, 0.9.0,
-after it; a public review and the first stable release, 1.0, come next.
+in 0.7.3, and the judge history summary in 0.8.0. The last beta, 0.9.0, comes
+next; a public review and the first stable release, 1.0, come next.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
@@ -678,11 +682,11 @@ are targets, not dates. The detail, and what comes after 1.0, is in
 flowchart TD
   subgraph done["Released betas"]
     direction LR
-    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"]
+    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"]
   end
-  subgraph next["Next: two betas, then 1.0.0"]
+  subgraph next["Next: one beta, then 1.0.0"]
     direction LR
-    r08["0.8.0 beta<br/>Judge history<br/>(in progress)"] --> r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+    r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
   end
   done --> next
 ```
@@ -694,7 +698,7 @@ flowchart TD
 | 0.6.0 | Windows support; DLP and antivirus hooks that call external scanners (ClamAV, ICAP products, a command, Python); judge connection reuse (#6) | Released, tag `v0.6.0` |
 | 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and `config set`, `get`, `undo`, `show` and `check`; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13) | Released, tag `v0.7.3` |
-| 0.8.0 | Judge history summary (#1), per-judge ballot records, and one proxy per agent | In progress |
+| 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a ledger audit window and a constitution editor | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart, and formats frozen for 1.0 | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
 | After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
@@ -702,14 +706,16 @@ flowchart TD
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). Version 0.7.3 is on PyPI. It is this beta, not
+three (HOWTO "Platforms"). Version 0.8.0 is on PyPI. It is this beta, not
 the 1.0 community review. Tags are not moved.
 
 ```bash
-pip install "two-key[yaml]==0.7.3"
+pip install "two-key[yaml]==0.8.0"
 ```
 
-`v0.7.3` adds `two-key setup` and the `config` commands, a principal key
+`v0.8.0` gives the judges a summary of recent decisions, keeps each judge's
+ballot in the ledger, lets one proxy serve each agent, and adds the ledger
+audit window and the constitution editor. `@v0.7.3` adds `two-key setup` and the `config` commands, a principal key
 encrypted with a passphrase, a signed serial so a ledger never goes back to
 older rules, and start-up checks for the upstream server's files.
 `main` holds that release and the fixes merged since; `working` is where the
@@ -767,6 +773,12 @@ Upgrading from an older version: read the "Upgrading" notes in
   `high_assurance`, refuses) when a launcher such as `sudo` or `npx` hides
   them, and once a ledger has run a constitution with a `serial` it refuses
   an older one. "Release v0.7.3" > "Upgrading from 0.7.0" in CHANGES.md.
+- 0.8.0 loads 0.7.3 constitutions, keys, ledgers, and `proxy.yaml` files
+  unchanged. Check before upgrading: judges now get a history summary (on by
+  default), a second proxy for the same agent on one ledger refuses to start,
+  and a proxy with a cloud judge needs `agent_session_env`. Keep a backup of
+  the ledger from before the upgrade. "Release v0.8.0" > "Upgrading from
+  0.7.3" in CHANGES.md.
 
 A clone installed with `pip install -e` follows the ranges in
 `pyproject.toml`. CI does not: it installs the versions in `uv.lock`

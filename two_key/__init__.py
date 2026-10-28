@@ -9,7 +9,7 @@ the operator's antivirus or DLP product. It is not a SIEM either: from 0.7.0
 ``two_key.siem`` copies allowlisted ledger fields to the operator's collector.
 """
 
-__version__ = "0.7.3"
+__version__ = "0.8.0"
 
 from .core import Decision, TwoKey
 

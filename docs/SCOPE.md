@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.7.3, tag `v0.7.3` on `main`. What each release
+`two-key` is beta (pre-1.0). Package version 0.8.0, tag `v0.8.0` on `main`. What each release
 shipped is under "Shipped" in [ROADMAP.md](../ROADMAP.md); tags and branches are in
 [AGENTS.md](../AGENTS.md).
 
@@ -104,7 +104,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   older, reused, or missing serial. The start-up checks also look at the
   upstream server's files named in `upstream.command` and
   `upstream.check_paths` (#13)
-- in 0.8.0 (on `working`, not released): the judge history summary (#1,
+- in 0.8.0: the judge history summary (#1,
   `two_key/history.py`). Each judge's prompt gets a
   `<decision_history>` section built from the ledger: recent decisions on
   the same tool and signed counterparty, ages, totals of redeemed calls,

@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Judges and quorum
 
-This document describes judge and quorum behavior in `two-key` 0.7.3 (tag `v0.7.3` on `main`). It is not an independent review or a claim of formal verification. If this document disagrees with the implementation, the code wins; correct the document after verifying the intended behavior.
+This document describes judge and quorum behavior in `two-key` 0.8.0 (tag `v0.8.0` on `main`). It is not an independent review or a claim of formal verification. If this document disagrees with the implementation, the code wins; correct the document after verifying the intended behavior.
 
 See [THREAT_MODEL.md](THREAT_MODEL.md) for the threat register, [SCOPE.md](SCOPE.md) for the project's boundaries, and [FIT.md](FIT.md) for when this package is or is not suitable.
 

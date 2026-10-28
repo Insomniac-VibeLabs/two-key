@@ -6,9 +6,9 @@ testing and automated scanners, not independently audited. Apache-2.0.
 
 Package: two-key
 Import: two_key
-Package version: 0.7.3 (two-key setup and config set, get, undo, show and check; a principal key with a passphrase; a signed constitution serial against older rules; the upstream server's files in the start-up checks). Tag v0.7.3 is on main; so are v0.7.0 (the SIEM export, a start-up check for the account the monitored agent runs as, a count of refused gateway tokens), v0.6.0 (Windows support, content scanning through your antivirus or DLP product, a start-up check for writable paths), v0.5.0 (MCP proxy, caller-supplied facts, constitution v3) and v0.4.0 (package renamed from two-key-concept). Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
+Package version: 0.8.0 (a judge history summary from the ledger, per-judge ballot records, one proxy per agent, the ledger-view audit window and the constitution editor). Tag v0.8.0 is on main; so are v0.7.3 (two-key setup and config set, get, undo, show and check; a principal key with a passphrase; a signed constitution serial against older rules; the upstream server's files in the start-up checks), v0.7.0 (the SIEM export, a start-up check for the account the monitored agent runs as, a count of refused gateway tokens), v0.6.0 (Windows support, content scanning through your antivirus or DLP product, a start-up check for writable paths), v0.5.0 (MCP proxy, caller-supplied facts, constitution v3) and v0.4.0 (package renamed from two-key-concept). Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-0.7.3 is on PyPI (0.7.1 and 0.7.2 are the 0.7.0 code, repackaged). Distribution name two-key, import two_key, extras yaml and mcp. Install two-key[yaml]==0.7.3, or two-key[mcp]==0.7.3 for the proxy. Tags are not moved. docs/PYPI.md is the release process: trusted publishing, no token in the repo. server.json lists the proxy on the official MCP Registry as io.github.Insomniac-VibeLabs/two-key (docs/PYPI.md).
+0.8.0 is on PyPI (0.7.1 and 0.7.2 are the 0.7.0 code, repackaged). Distribution name two-key, import two_key, extras yaml and mcp. Install two-key[yaml]==0.8.0, or two-key[mcp]==0.8.0 for the proxy. Tags are not moved. docs/PYPI.md is the release process: trusted publishing, no token in the repo. server.json lists the proxy on the official MCP Registry as io.github.Insomniac-VibeLabs/two-key (docs/PYPI.md).
 uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged. CI tools (uv, build, coverage, bandit, twine, cyclonedx-bom) are hash-pinned in .github/requirements/.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
@@ -58,7 +58,7 @@ most once an interval, on stderr and as a gateway_token_refused event marked led
 token text is kept and nothing is written to the ledger. Standard library only, no new dependency.
 Two-Key is not a SIEM: storing, searching, retaining, and alerting stay with the collector.
 
-0.8.0 (on the working branch, not released): judge history summary (#1, two_key/history.py). Each judge's
+0.8.0: judge history summary (#1, two_key/history.py). Each judge's
 prompt gets a <decision_history> section built by TwoKey from its own ledger: recent decisions on the same tool
 and signed counterparty (ages, outcomes, reason codes, signed amounts), totals of redeemed calls over 7/30/90
 days, allowed calls not run, denies in the last hour and day, scan verdicts over 7 days, and attempt episodes
