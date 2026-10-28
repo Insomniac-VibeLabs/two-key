@@ -9,7 +9,7 @@ key. It refuses a verifier whose key is the principal key, and it redeems a
 token only if the verifier's key fingerprint is the one pinned in the
 ledger's ``constitution_loaded`` entry (``capability_key_mismatch``). A redemption intent is checkpointed before the tool runs. A later
 retry of that intent does not run the tool. A tool exception appends an
-abort and leaves the token usable. A crash after a successful return
+abort, and from 0.9.0 the token stays spent (``already_attempted``): the agent asks again. A crash after a successful return
 cannot run the token again, because the intent is already on the ledger.
 The gateway runs in the ``TwoKey`` process, on the ledger object that ``TwoKey`` uses
 (``TwoKey.gateway()``). A gateway in another process or on another host is not supported (#45): a

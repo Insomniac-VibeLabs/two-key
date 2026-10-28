@@ -673,8 +673,8 @@ class Ledger:
             self._started.discard(jti)
         elif entry.kind == "redemption_started" and jti:
             self._started.add(jti)
-        elif entry.kind == "redemption_aborted" and jti:
-            self._started.discard(jti)
+        # 0.9.0: redemption_aborted leaves the jti started, so a token whose tool failed is spent (already_attempted).
+        # A ledger written by 0.8.0 may hold a later redemption of that jti; it still reads as redeemed.
         elif entry.kind == "witness_pinned":
             raw = entry.body.get("witness_public_key")
             if verify:

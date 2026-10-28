@@ -116,7 +116,7 @@ class GatewayLocks(unittest.TestCase):
         self.assertEqual(gw.invoke(token, "search", {"q": "weather"}).reason, "tool_error:RuntimeError")
         self.assert_empty(gw)
         gw.tools["search"] = lambda a: "ok"
-        self.assertEqual(gw.invoke(token, "search", {"q": "weather"}).reason, "redeemed")
+        self.assertEqual(gw.invoke(token, "search", {"q": "weather"}).reason, "already_attempted")
         self.assert_empty(gw)
 
     def test_lock_file_failure_removes_the_entry(self):

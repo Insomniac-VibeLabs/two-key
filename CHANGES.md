@@ -170,6 +170,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Publish from the PyPI branch only — 2026-10-28](#publish-from-the-pypi-branch-only--2026-10-28)
 - [One confirm for every tool: `tools[*].claim` — 2026-10-28](#one-confirm-for-every-tool-toolsclaim--2026-10-28)
 - [A setup window beside the terminal: `two-key setup --window` — 2026-10-28](#a-setup-window-beside-the-terminal-two-key-setup---window--2026-10-28)
+- [A tool error spends the token — 2026-10-28](#a-tool-error-spends-the-token--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5099,3 +5100,12 @@ the same files from the terminal and from the window. With `--answers FILE` the 
 - ROADMAP: the "Not planned" line no longer excludes a GUI that holds the signing key (maintainer, 2026-10-28), and
   the 0.9.0 section lists the setup window, `tools[*].claim` and quantum-resistant signatures. Docs: SETUP.md "The
   setup window", HOWTO, THREAT_MODEL, AGENTS.md, llms.txt.
+
+## A tool error spends the token — 2026-10-28
+
+Maintainer's decision on #28 (Q6: B, 2026-10-28). Until now `redemption_aborted` put the token back: after a tool
+raised, the same token could be redeemed again until it expired (120 seconds by default, at most 300), so a tool
+that did part of its work and then failed could run twice on one approval. Now an abort leaves the token spent, for
+every tool and every route: a second try is refused `already_attempted`, after a restart too, and the agent asks
+again (the judges decide again). A ledger written by 0.8.0 that holds a redemption after an abort still reads as
+redeemed. HOWTO, THREAT_MODEL and the gateway's docstring say so.

@@ -1577,8 +1577,10 @@ rejected; bring such a token in through `env` or `callback`.
 
 A redemption intent is checkpointed before the tool runs. A crash after that
 intent, including after the tool has returned, does not run the token again.
-A tool exception appends an abort and leaves the token usable. A crash before
-the tool runs also blocks a retry.
+A tool exception appends an abort, and from 0.9.0 the token stays spent
+(`already_attempted`), so a tool that did part of its work and then failed
+does not run again on the same token. The agent asks again, and the judges
+decide again. A crash before the tool runs also blocks a retry.
 
 ### Deployment boundary: the gateway runs in the TwoKey process
 
@@ -2148,7 +2150,7 @@ an argument value.
 | `file_too_large`, `too_many_files`, `call_files_too_large` | A declared file is over its `max_bytes`, or the call carries more than 32 files or 100 MiB of them. Denied before the scanner and both keys, under every stance |
 | `file_unreadable` | A declared file could not be read: bad base64, a value of the wrong type, a path outside its folder, a link, a missing file. Denied the same way |
 | any `two-key authorize` reason | `rule_denied:<rule id>`, `counterparty_not_allowed`, `derive_failed:...`, `insufficient_yes:...`, `cloud_judge_session_required`, `args_too_large`, and the others in "Parsing and limits" and "Quorum policy" |
-| `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`. After a timeout the server may still have done the work. The proxy does not retry |
+| `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`. After a timeout the server may still have done the work. The proxy does not retry, and the token is spent: the agent asks again |
 | `upstream_result_unreadable` | The upstream returned something that is not a tool result |
 
 An upstream result with `isError: true` is the server's own answer: the

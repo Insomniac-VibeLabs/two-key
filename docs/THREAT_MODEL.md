@@ -325,7 +325,9 @@ flowchart TD
   it. `revoke` ends earlier tokens only: it does not stop new approvals and it
   does not survive a restart (see HOWTO, "Revoke outstanding tokens").
 - A second run of a token after `redemption_started` has been checkpointed.
-  A tool exception writes `redemption_aborted` and leaves the token usable.
+  A tool exception writes `redemption_aborted`, and from 0.9.0 the token
+  stays spent (`already_attempted`): a tool that acted and then failed does
+  not run twice on one token. The agent asks again.
 - A silent edit of a ledger record that still verifies, and opening the log
   with only the principal key. The head needs a witness signature as well.
 - A replaced `witness.pem`, or a head signed by another witness key, on a
