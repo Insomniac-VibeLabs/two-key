@@ -5059,3 +5059,5 @@ stays where it is: it is the git snapshot of 0.8.0, not the upload. The tag-vers
 the trigger. docs/PYPI.md and the README's file table say so.
 
 The README drops the bold line under the banner, which repeated the opening sentence (Stephan's edit on `main`, b4c3095, brought to `working`).
+
+0.8.0 is listed on the official MCP Registry as `io.github.Insomniac-VibeLabs/two-key` (2026-10-28). docs/PYPI.md now says the browser sign-in is refused for an organization name and a `read:org` token is needed.

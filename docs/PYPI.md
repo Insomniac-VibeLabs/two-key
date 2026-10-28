@@ -220,10 +220,16 @@ After the release is on PyPI, from a clone of the release commit:
 
 ```bash
 brew install mcp-publisher        # or the release download from github.com/modelcontextprotocol/registry
-mcp-publisher login github        # as an Owner of Insomniac-VibeLabs
+mcp-publisher login github --token <classic PAT, read:org only, short expiry>   # an Owner of Insomniac-VibeLabs
 mcp-publisher publish
 curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Insomniac-VibeLabs/two-key"
 ```
+
+The plain `mcp-publisher login github` (browser sign-in) cannot read an
+organization role, so it is refused with 403 for this name; a classic
+personal access token with only `read:org`, deleted afterwards, works. No
+local tools are needed: a GitHub Codespace on `main` runs these commands in
+the browser (0.8.0 was listed this way on 2026-10-28).
 
 Each later release is published the same way, after its upload to PyPI.
 A listing cannot be changed for a version already published; a fix is a
