@@ -279,6 +279,7 @@ class Calls(unittest.TestCase):
         core = self.core(tools={"pay_vendor": {"claim": "floor"}})
         core.record_start()
         body = [e for e in core.two_key.ledger.entries if e.kind == "mcp_proxy_started"][-1].body
+        self.assertEqual(body["agent_id"], "unnamed")             # no agent_id in this proxy.yaml
         self.assertEqual(body["upstream_program"], "billing-mcp")
         self.assertTrue(body["upstream_command_digest"].startswith("sha256:"))
         self.assertEqual(body["schema_digest_pinned"], DIGEST)

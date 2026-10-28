@@ -412,7 +412,9 @@ class ProxyCore:
     def record_start(self) -> None:
         """Ledger ``mcp_proxy_started``: what this proxy serves, so an audit can tie decisions to a setup."""
         command = list(self.config.upstream.command)
-        body = {"upstream_program": Path(command[0]).name[:128],
+        # The agent this proxy serves, as one_proxy_per_agent counts it: the operator's agent_id, or "unnamed".
+        body = {"agent_id": self.config.agent_id or "unnamed",
+                "upstream_program": Path(command[0]).name[:128],
                 "upstream_command_digest": "sha256:" + canonical_hash(command),
                 "schema_digest_pinned": self.config.upstream.schema_digest,
                 "schema_digest_seen": self.selection.digest,

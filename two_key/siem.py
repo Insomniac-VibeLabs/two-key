@@ -320,7 +320,7 @@ KINDS: dict[str, KindSpec] = {
     "redemption_aborted": KindSpec(sent=("jti", "tool"), severity=WARNING),
     "revocation": KindSpec(hashed=("reason",), severity=NOTICE),
     "mcp_proxy_started": KindSpec(
-        sent=("upstream_program", "upstream_command_digest", "schema_digest_pinned", "schema_digest_seen",
+        sent=("agent_id", "upstream_program", "upstream_command_digest", "schema_digest_pinned", "schema_digest_seen",
               "on_schema_change", "allow_unresolved_identity", "signed_tools_not_listed"),
         excluded=("tools",), extract=_proxy_fields),
     "tool_not_offered": KindSpec(sent=("origin", "tool"), severity=WARNING),

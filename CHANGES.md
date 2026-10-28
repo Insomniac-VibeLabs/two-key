@@ -164,6 +164,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Setup: an owner-only ledger, and the agent's id in `proxy.yaml` — 2026-10-27](#setup-an-owner-only-ledger-and-the-agents-id-in-proxyyaml--2026-10-27)
 - [The proxy refuses to start with a cloud judge and no agent session — 2026-10-27](#the-proxy-refuses-to-start-with-a-cloud-judge-and-no-agent-session--2026-10-27)
 - [Live run 10 findings — 2026-10-28](#live-run-10-findings--2026-10-28)
+- [The proxy's start names its agent — 2026-10-28](#the-proxys-start-names-its-agent--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -4975,3 +4976,15 @@ GrokBot's live run 10 on `working` passed all six items. These are the fixes fro
 - Tests: `tests/test_config_cmd.py`, `tests/test_constitution_editor.py`, `tests/test_cli_witness.py`,
   `tests/test_ledger_view.py`. `tests/test_judge_history.py` test 10 (two threads in flight) was flaky: one call
   could finish before the other built its summary. Its judge now waits until both calls have asked it.
+
+## The proxy's start names its agent — 2026-10-28
+
+The maintainer approved this after run 10, which found the `mcp_proxy_started` row's agent column empty in
+`ledger-view`.
+
+- `mcp_proxy_started` now records `agent_id`: the proxy's `agent_id` from `proxy.yaml`, or `unnamed` when it
+  has none, the same name `one_proxy_per_agent` and `agent_already_connected` use. It is the operator's
+  setting, never agent text, and the SIEM copy carries it like `attempt_episode`'s. Entries written before this
+  change have no such field; nothing reads it to decide a call.
+- docs/HOWTO.md (what the proxy ledgers at start) and docs/LEDGER_VIEW.md say so.
+- Tests: `tests/test_mcp_proxy.py` (`test_start_is_ledgered`), `tests/test_siem.py` (the field is sent).

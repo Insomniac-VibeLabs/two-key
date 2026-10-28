@@ -69,7 +69,7 @@ shows an empty cell.
 The table starts with the fields most audits need (`seq`, `kind`, `at`, `agent.id`, `agent_id`, `tool`,
 `subject.tool`, `allowed`, `passed`, `reason`, `ballots[].judge_id`, `ballots[].vote`, `jti`, where the ledger
 has them). Decisions and proposals name the agent as `agent.id`; an `attempt_episode` and an
-`agent_already_connected` entry name it as `agent_id`. `mcp_proxy_started` names no agent.
+`agent_already_connected` and an `mcp_proxy_started` entry name it as `agent_id`.
 **Columns** picks others: the columns already shown keep their place, and new ones follow. **Defaults** puts
 back the starting columns. Every field can be searched and filtered whether or not it is a column.
 

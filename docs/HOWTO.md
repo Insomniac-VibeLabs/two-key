@@ -2060,7 +2060,8 @@ it writes anything ([SETUP](SETUP.md)).
   upstream child, lists its tools (every page), and checks the schema
   digest. It imports each fact hook and refuses to start when a
   caller-supplied field a tool maps has no hook. Last, it ledgers
-  `mcp_proxy_started`: the upstream program and a digest of its command,
+  `mcp_proxy_started`: the agent it serves (`agent_id`, or `unnamed`), the
+  upstream program and a digest of its command,
   both schema digests, `on_schema_change`, `allow_unresolved_identity`, and
   each tool's claim and fact fields.
 - **The upstream child** gets `upstream.command`, no shell, and only the
