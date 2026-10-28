@@ -7,7 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # Two-Key
 
-**AI agent authorization and MCP gateway — dual-path policy + judge approval, single-use capability tokens, and an encrypted ledger.**
+**Two independent keys must turn before an AI agent can act.  No human needed.**
+
+**AI agent authorization and MCP gateway with dual-path policy. Bytecode policy combined with AI judge approval, single-use capability tokens, and an encrypted ledger.**
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/PyPI/docs/images/two-key-banner.png" alt="Two-Key — Authorization and execution control for AI agents">
@@ -17,8 +19,6 @@ SPDX-License-Identifier: Apache-2.0
 
 [![tests](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key)](https://github.com/Insomniac-VibeLabs/two-key/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Insomniac-VibeLabs/two-key/blob/main/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/security.yml) [![Semgrep](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/semgrep.yml)[![CodeQL](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/codeql.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key/actions/workflows/codeql.yml) [![DeepSource](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key.svg/?label=active+issues&show_trend=true)](https://app.deepsource.com/gh/Insomniac-VibeLabs/two-key/)
-
-**Two independent keys must turn before an AI agent can act.**
 
 **🎯 The Problem**
 
