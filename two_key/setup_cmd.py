@@ -36,6 +36,8 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from . import _platform, writable
+from .constitution import TOOL_CHECK_KEY
+from .toolcheck import EXEMPT
 from .config_set import (CONSTITUTION, JUDGES, PROXY, RULES, Confirm, ConfigChangeError, LEDGER_KIND,
                          account_label, dump, refuse_root, sha256, terminal_confirm, weaker_quorum)
 
@@ -116,7 +118,7 @@ def interview(ask: Ask = input) -> dict:
               "encrypt the key with (blank: not encrypted): ")
     if not _optional(out, "rules_file", ask, "Rules to sign: a reviewed rules file (for the proxy, rules.draft.yaml "
                      "from two-key mcp-draft-specs), or blank for a starter: "):
-        out["tools"] = _ask_tools(ask)
+        out["tools"] = _ask_tools(ask, out["profile"] if out["route"] == "proxy" else None)
     _optional(out, "prose_file", ask, "The prose the judges read: a file, or blank for a starter you edit later: ")
     if out["route"] == "proxy":
         command = shlex.split(_ask(ask, "Upstream MCP server: the command that starts it"))
@@ -258,12 +260,34 @@ def _ask_history(ask: Ask) -> dict:
         raise SetupError("judge_history: the episode counts are whole numbers") from None
 
 
-def _ask_tools(ask: Ask) -> list[dict]:
-    """The starter rules' tools: each id, whether a call can be undone, and its lowest data class."""
-    return [{"id": tool,
-             "irreversible": _yes(ask, f"Tool {tool}: can a call not be undone?", True),
-             "data_class_floor": _ask(ask, f"Tool {tool}: lowest data class", "classified", DATA_CLASSES)}
-            for tool in shlex.split(_ask(ask, "Starter: the tool ids to allow, separated by spaces"))]
+def _ask_tools(ask: Ask, profile: str | None) -> list[dict]:
+    """The starter rules' tools: each id, whether a call can be undone, and its lowest data class; behind the
+    proxy (``profile`` given), also its tool check (#28)."""
+    tools = []
+    for tool in shlex.split(_ask(ask, "Starter: the tool ids to allow, separated by spaces")):
+        entry = {"id": tool,
+                 "irreversible": _yes(ask, f"Tool {tool}: can a call not be undone?", True),
+                 "data_class_floor": _ask(ask, f"Tool {tool}: lowest data class", "classified", DATA_CLASSES)}
+        if profile is not None:
+            _ask_tool_check(entry, ask, profile)
+        tools.append(entry)
+    return tools
+
+
+def _ask_tool_check(entry: dict, ask: Ask, profile: str) -> None:
+    """The tool check: the fingerprint of the tool's receipt key, ``exempt``, or (not under high_assurance) off."""
+    needed = profile == "high_assurance"
+    question = (f"Tool {entry['id']}: tool check (docs/TOOL_CHECK.md): the receipt key's fingerprint "
+                "(sha256:..., from two-key tool-key new), or exempt" + ("" if needed else ", or blank for off"))
+    while True:
+        answer = ask(question + ": ").strip()
+        if not answer and not needed:
+            return
+        value = answer if answer == EXEMPT else {"key": answer}
+        if not tool_check_problems({"route": "proxy", "profile": profile, "tools": [dict(entry, tool_check=value)]}):
+            entry["tool_check"] = value
+            return
+        print("  give sha256: and 64 hex digits, or exempt" + ("" if needed else ", or leave it blank"))
 
 
 def cloud_judges(judges: Any) -> list[str]:
@@ -311,14 +335,45 @@ def _quorum_answer(answers: Mapping) -> dict:
 
 
 def weaker_reasons(answers: Mapping) -> list[str]:
-    """Why the answers' quorum enforces less than the profile's own, one line each (as ``config set`` words it)."""
+    """Why the answers enforce less than the profile's own, one line each (as ``config set`` words it): a lower
+    quorum number, or under ``high_assurance`` a tool exempt from the tool check."""
+    profile = answers.get("profile", "default")
+    exempt = [f"tool_specs.{t['id']}.tool_check: exempt" for t in _tools(answers)
+              if profile == "high_assurance" and t.get("tool_check") == EXEMPT]
     counts = _quorum_answer(answers)
     if not counts:
-        return []
-    profile = answers.get("profile", "default")
+        return exempt
     judges = answers.get("judges")
     n_judges = len(judges) if isinstance(judges, list) else 0
-    return weaker_quorum(_policy(profile, {}, n_judges), _policy(profile, counts, n_judges))
+    return weaker_quorum(_policy(profile, {}, n_judges), _policy(profile, counts, n_judges)) + exempt
+
+
+def _tools(answers: Mapping) -> list[Mapping]:
+    tools = answers.get("tools")
+    return [t for t in tools if isinstance(t, Mapping) and isinstance(t.get("id"), str)] \
+        if isinstance(tools, list) else []
+
+
+def tool_check_problems(answers: Mapping) -> list[str]:
+    """What is wrong with the starter tools' tool checks (#28): only behind the proxy, a fingerprint or
+    ``exempt``, and under ``high_assurance`` one or the other for every tool (the proxy refuses to start). A
+    reviewed rules file is checked by ``config check`` instead."""
+    if answers.get("rules_file"):
+        return []
+    out = []
+    proxy = answers.get("route", "proxy") == "proxy"
+    for tool in _tools(answers):
+        value = tool.get("tool_check")
+        if value is None:
+            if proxy and answers.get("profile") == "high_assurance":
+                out.append(f"tool {tool['id']}: high_assurance needs the tool check: a receipt key's fingerprint "
+                           "(two-key tool-key new) or exempt")
+        elif not proxy:
+            out.append(f"tool {tool['id']}: the tool check is only for tools behind two-key mcp-proxy")
+        elif value != EXEMPT and not (isinstance(value, Mapping) and set(value) == {"key"}
+                                      and isinstance(value["key"], str) and TOOL_CHECK_KEY.fullmatch(value["key"])):
+            out.append(f"tool {tool['id']}: tool_check is exempt or {{key: sha256:<64 hex digits>}}")
+    return out
 
 
 def load_answers(path: str) -> dict:
@@ -375,6 +430,8 @@ def starter_rules(tools: Any) -> dict:
             raise SetupError("tools: each tool is a mapping with an id")
         specs[tool["id"]] = {"irreversible": tool.get("irreversible", True),
                              "data_class_floor": tool.get("data_class_floor", "classified")}
+        if tool.get("tool_check") is not None:
+            specs[tool["id"]]["tool_check"] = tool["tool_check"]
     # serial 1: every later change signs a higher one, and the ledger refuses to go back (live run 9x, C44)
     return {"serial": 1, "hard_rules": [{"id": "tools", "allow_only_tools": list(specs)}], "tool_specs": specs}
 
@@ -479,6 +536,9 @@ def _build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] |
         raise SetupError(f"route: expected one of {list(ROUTES)}")
     if answers.get("profile", "default") not in PROFILES:
         raise SetupError(f"profile: expected one of {list(PROFILES)}")
+    problems = tool_check_problems(answers)
+    if problems:
+        raise SetupError("tools: " + "; ".join(problems))
     weaker = _confirmed_weaker(answers, confirm_weaker, confirm, out)
     passphrase = _new_passphrase(answers.get("key_passphrase_file"))
     target = Path(os.path.abspath(target))

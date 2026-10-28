@@ -31,6 +31,7 @@ from ..canonical import canonical_hash
 from ..derive import size_record
 from ..fields import field_mappings
 from ..guard import Guard, GuardConfigError, GuardedTool
+from ..toolcheck import META_KEY, mcp_receipt
 from .config import ProxyConfig, ProxyConfigError, ToolPolicy, UpstreamConfig
 
 _NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
@@ -383,8 +384,13 @@ class ProxyCore:
             raise ProxyConfigError(f"tools: fact hooks for {unused}, which the proxy does not offer")
         specs = two_key.compiled.tool_specs
         self._specs = {tool_id: specs[tool_id] for tool_id in selection.views}
+        unchecked = tool_check_missing(two_key, self._specs)
+        if unchecked:
+            raise ProxyConfigError(unchecked)
         self.guard = Guard(two_key, origin=ORIGIN, agent_id=config.agent_id, hosting=config.hosting)
         self.gateway = self.guard.gateway
+        # The tool check (#28) is for upstream tools only: the receipt comes back in the result's _meta.
+        self.gateway.receipt_reader = mcp_receipt
         for tool_id, name in selection.upstream_names.items():
             policy = config.tool_policy(tool_id)
             try:
@@ -394,9 +400,12 @@ class ProxyCore:
                 raise ProxyConfigError(f"tools.{tool_id}: {e}") from None
 
     @staticmethod
-    def _tool(upstream_call: UpstreamCall, name: str) -> Callable[[dict], Any]:
-        def run(arguments: dict) -> Any:
-            return upstream_call(name, arguments)
+    def _tool(upstream_call: UpstreamCall, name: str) -> Callable[..., Any]:
+        def run(arguments: dict, check: dict | None = None) -> Any:
+            if check is None:
+                return upstream_call(name, arguments)
+            # A checked tool: the spent token and its redeem stamp go in the request's _meta (#28).
+            return upstream_call(name, arguments, {META_KEY: check})
         return run
 
     def list_tools(self) -> list[dict]:
@@ -486,6 +495,19 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
     except (OSError, ValueError, JudgeConfigError, IdentityError, LedgerError, ConstitutionError,
             ConstitutionSignatureError, TwoKeyConfigError, ScanConfigError, SiemConfigError) as e:
         raise ProxyConfigError(f"{type(e).__name__}: {e}") from None
+
+
+def tool_check_missing(two_key: Any, specs: Mapping[str, Mapping[str, Any]]) -> str | None:
+    """Under ``high_assurance`` every tool the proxy offers has its tool check on, or is ``exempt`` (a weaker
+    setting, confirmed when it was signed). Why the proxy refuses to start, or None (#28, Q1)."""
+    if not getattr(getattr(two_key, "quorum", None), "is_high_assurance", False):
+        return None
+    missing = sorted(tool for tool, spec in specs.items() if "tool_check" not in spec)
+    if not missing:
+        return None
+    return (f"tool_check_required: high_assurance needs the tool check for {missing}; give each a receipt key "
+            "(two-key tool-key new, then tool_specs.<tool>.tool_check.key) or mark it exempt, and re-sign "
+            "(docs/TOOL_CHECK.md)")
 
 
 def cloud_session_missing(config: ProxyConfig, judges: Any) -> str | None:

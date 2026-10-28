@@ -44,10 +44,17 @@ READ_ONLY = "readonly"
 SHOWN_ONLY = "disabled"
 JUDGE_KEYS = ("id", "type", "model", "base_url", "maker", "upstream", "auth_env")
 AGENT_KEYS = ("id", "model", "provider", "base_url", "upstream", "credential_env")
-TOOL_COLUMNS = ("id", "irreversible", "data_class_floor")
+TOOL_COLUMNS = ("id", "irreversible", "data_class_floor", "tool_check")
 ON_FAILURE = ("deny", "judge_without_history")
 HA_HELP = ("High assurance: two judges from two different model makers, at least one on this machine, and a yes "
            "from a judge on this machine. Each quorum number can be raised, never lowered below the profile's.")
+
+
+def _check_text(value) -> str:
+    """A tool's tool check as the table and the entry show it: the fingerprint, ``exempt``, or blank (off)."""
+    if isinstance(value, dict):
+        return str(value.get("key", ""))
+    return "" if value is None else str(value)
 
 
 def _help(parent, text: str) -> None:
@@ -102,7 +109,8 @@ class SetupWindow:
         self.one_proxy = tk.BooleanVar(master=root, value=True)
         self.judge_var = {k: tk.StringVar(master=root) for k in JUDGE_KEYS}
         self.agent_var = {k: tk.StringVar(master=root) for k in AGENT_KEYS}
-        self.tool_var = {"id": tk.StringVar(master=root), "data_class_floor": tk.StringVar(master=root)}
+        self.tool_var = {"id": tk.StringVar(master=root), "data_class_floor": tk.StringVar(master=root),
+                         "tool_check": tk.StringVar(master=root)}
         self.tool_irreversible = tk.BooleanVar(master=root, value=True)
         self.quorum = {name: tk.IntVar(master=root, value=1) for name in QUORUM_COUNTS}
         self.status = ttk.Label(root, padding=8, anchor="w")
@@ -202,15 +210,18 @@ class SetupWindow:
         _row(form, "Prose file (blank: the starter, edit it later)", self.var["prose_file"], 1,
              browse=lambda: self._browse_file("prose_file"))
         _help(tab, "Starter rules: the tools to allow, whether a call can be undone, and each tool's lowest data "
-                   "class. Ignored when a rules file is given.")
+                   "class. Ignored when a rules file is given. Behind the proxy, a tool's check (docs/TOOL_CHECK.md) "
+                   "is its receipt key's fingerprint from two-key tool-key new, or exempt; high assurance needs one "
+                   "or the other.")
         self.tool_table = self._table(tab, TOOL_COLUMNS, self._tool_clicked, height=6)
         form = ttk.Frame(tab)
         form.pack(fill="x", pady=6)
         form.columnconfigure(1, weight=1)
         _row(form, "tool id", self.tool_var["id"], 0)
         _row(form, "lowest data class", self.tool_var["data_class_floor"], 1, choices=DATA_CLASSES)
+        _row(form, "tool check (sha256:..., exempt, or blank: off)", self.tool_var["tool_check"], 2)
         ttk.Checkbutton(form, text="a call cannot be undone", variable=self.tool_irreversible).grid(
-            row=2, column=1, sticky="w")
+            row=3, column=1, sticky="w")
         self._buttons(tab, ("Add", self.add_tool), ("Remove", self.remove_tool))
 
     def _build_proxy(self, tab) -> None:
@@ -244,7 +255,8 @@ class SetupWindow:
         self.open_editor.pack(side="left")
         self.open_ledger.pack(side="left", padx=6)
 
-    def _table(self, parent, columns: tuple[str, ...], clicked, *, height: int = 5) -> ttk.Treeview:
+    @staticmethod
+    def _table(parent, columns: tuple[str, ...], clicked, *, height: int = 5) -> ttk.Treeview:
         table = ttk.Treeview(parent, columns=columns, show="headings", height=height, selectmode="browse")
         for col in columns:
             table.heading(col, text=col.replace("_", " "))
@@ -332,7 +344,8 @@ class SetupWindow:
 
     def _load_proxy(self, answers: dict) -> None:
         upstream = answers.get("upstream") if isinstance(answers.get("upstream"), dict) else {}
-        self.var["command"].set(shlex.join(upstream.get("command") or []))
+        command = upstream.get("command") or []
+        self.var["command"].set(shlex.join(command))
         self.var["schema_digest"].set(upstream.get("schema_digest") or "")
         self.one_proxy.set(answers.get("one_proxy_per_agent", True) is not False)
 
@@ -343,7 +356,7 @@ class SetupWindow:
         try:
             numbers = profile_quorum(self._profile(), max(1, len(self.judges)))
         except SetupError:
-            numbers = {name: 1 for name in QUORUM_COUNTS}
+            numbers = dict.fromkeys(QUORUM_COUNTS, 1)
         numbers.update({k: v for k, v in given.items() if k in numbers and isinstance(v, int)})
         lowest = quorum_minimums(self._profile(), len(self.judges))
         for name, var in self.quorum.items():
@@ -382,8 +395,12 @@ class SetupWindow:
         if not tool_id:
             return
         self.tools = [t for t in self.tools if t["id"] != tool_id]
-        self.tools.append({"id": tool_id, "irreversible": bool(self.tool_irreversible.get()),
-                           "data_class_floor": self.tool_var["data_class_floor"].get() or "classified"})
+        tool = {"id": tool_id, "irreversible": bool(self.tool_irreversible.get()),
+                "data_class_floor": self.tool_var["data_class_floor"].get() or "classified"}
+        check = self.tool_var["tool_check"].get().strip()
+        if check:
+            tool["tool_check"] = check if check == "exempt" else {"key": check}
+        self.tools.append(tool)
         self._show_tables()
         self.refresh()
 
@@ -401,6 +418,7 @@ class SetupWindow:
             self.tool_var["id"].set(tool["id"])
             self.tool_var["data_class_floor"].set(tool.get("data_class_floor", "classified"))
             self.tool_irreversible.set(bool(tool.get("irreversible", True)))
+            self.tool_var["tool_check"].set(_check_text(tool.get("tool_check")))
 
     def reset_quorum(self) -> None:
         self._quorum_touched = False
@@ -421,7 +439,8 @@ class SetupWindow:
                                      (self.tool_table, self.tools, TOOL_COLUMNS)):
             table.delete(*table.get_children())
             for row in rows:
-                table.insert("", "end", values=[str(row.get(c, "")) for c in columns])
+                table.insert("", "end", values=[_check_text(row.get(c)) if c == "tool_check" else str(row.get(c, ""))
+                                                for c in columns])
 
     # -- keeping the pages current -------------------------------------------------------------------------
 

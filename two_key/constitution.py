@@ -40,11 +40,29 @@ _V3_SIGNED_KEYS = _V2_SIGNED_KEYS | {"serial"}
 # (two_key/settings.py) read the same sets the validators use.
 RULES_FILE_KEYS = ("hard_rules", "tool_specs", "fields", "serial")
 TOOL_SPEC_KEYS = ("irreversible", "data_class_floor", "amount", "counterparties", "payload", "deny_unmapped",
-                  "fields")
+                  "fields", "tool_check")
+# A tool's check (#28, docs/TOOL_CHECK.md): the fingerprint of the tool's receipt key, or "exempt".
+TOOL_CHECK_KEY = re.compile(r"sha256:[0-9a-f]{64}")
+TOOL_CHECK_KEYS = ("key",)
 AMOUNT_KEYS = ("json_path", "unit", "currency_path")
 COUNTERPARTY_KEYS = ("json_path", "allow")
 PAYLOAD_KEYS = ("json_path", "shape", "max_length")
 FIELD_MAPPING_KEYS = ("json_path", "source", "encrypted")
+
+
+def _tool_check(tool: str, spec: Mapping) -> dict:
+    """``{"tool_check": ...}`` when the spec sets it, else ``{}``. The value is ``exempt``, or
+    ``{key: "sha256:<64 hex>"}``: the fingerprint of the key that signs the tool's receipts."""
+    if "tool_check" not in spec:
+        return {}
+    value = spec["tool_check"]
+    if value == "exempt":
+        return {"tool_check": value}
+    if isinstance(value, Mapping) and set(value) == set(TOOL_CHECK_KEYS) and isinstance(value["key"], str) \
+            and TOOL_CHECK_KEY.fullmatch(value["key"]):
+        return {"tool_check": {"key": value["key"]}}
+    raise ConstitutionError(f"tool_specs.{tool}.tool_check: expected exempt or {{key: sha256:<64 hex digits>}} "
+                            "(two-key tool-key new prints the fingerprint)")
 
 
 class ConstitutionSignatureError(ValueError):
@@ -412,6 +430,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
         }
         if fields_out:      # absent for a tool with no custom fields, so its spec hashes as before
             out[tool]["fields"] = fields_out
+        out[tool].update(_tool_check(tool, spec))      # absent unless set, for the same reason
     allow = _allow_listed(rules)
     missing = [tool for tool in allow if tool not in out]
     if missing:

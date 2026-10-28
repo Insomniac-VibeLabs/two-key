@@ -180,6 +180,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [docs/SETUP.md](docs/SETUP.md) | `two-key setup` for a first deployment, `config set`, `get`, and `undo` to change one setting, and `config key-passphrase` to encrypt the principal key: who may run them, what they check, and what they refuse |
 | [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
 | [docs/SIEM.md](docs/SIEM.md) | Sending the ledger to a SIEM, and checking a copy against it (0.7.0) |
+| [docs/TOOL_CHECK.md](docs/TOOL_CHECK.md) | The tool check: a tool behind the proxy refuses a call that did not come through both keys, and signs a receipt (0.9.0) |
 | [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Trust boundaries and residual risk |
 | [docs/SCOPE.md](docs/SCOPE.md) | What is included, left out, and planned |
@@ -654,8 +655,10 @@ audited. It is not a FIPS 140-3 validated module.
   behind until it returns, and what the collector keeps or alerts on is
   yours, not Two-Key's ([docs/SIEM.md](docs/SIEM.md)).
 - Behind the MCP proxy, an agent that can reach the upstream server directly
-  bypasses it, and an upstream server running as the proxy's OS user can
-  read the proxy's keys. Run each as its own user (HOWTO "Key custody").
+  bypasses it, unless the tool checks each call itself
+  ([docs/TOOL_CHECK.md](docs/TOOL_CHECK.md), 0.9.0), and an upstream server
+  running as the proxy's OS user can read the proxy's keys. Run each as its
+  own user (HOWTO "Key custody").
 - A key backup is only as strong as its passphrase. The bundle is the keys.
   PBKDF2 slows guessing and is not memory-hard. It is not a seed phrase and
   not an external anchor. A restore onto a newer ledger fills missing key

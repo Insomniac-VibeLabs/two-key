@@ -2110,6 +2110,8 @@ on stderr and exits 1.
 | `check_path_missing: upstream.check_paths[<n>]: <path> does not exist` | An entry names nothing | Fix the path, or remove the entry |
 | `unresolved_identity: ...` | Two-Key cannot tell who serves a judge or the agent (a local proxy serving an alias, an unrecognized host), so it cannot rule out a judge that is the agent. `two-key config check` names each one as a `WARN` first | Declare `upstream:` for that side in `judges.yaml`, or set `allow_unresolved_identity: true` to accept the risk |
 | `tools: [...] are not tools in the signed constitution` | A `tools:` entry names an unsigned tool | Remove it, or sign the tool |
+| `tool_check_required: high_assurance needs the tool check for [...]` | Under `high_assurance`, a tool the proxy offers has no `tool_check` in its signed spec | Give it a receipt key, or mark it `exempt` (weaker), and re-sign ([TOOL_CHECK](TOOL_CHECK.md)) |
+| `TwoKeyConfigError: stamp_key_missing: ...`, `stamp_key_changed: ...` | The gateway's stamp key is gone or is not the one the ledger pins; the checking tools would refuse every stamp | Restore the key from where it was (it sits beside `capability.pem`) |
 | `upstream_unavailable: <type>: ...` | The child did not start, or did not speak MCP | Check the command and its user |
 | `upstream_duplicate_tool`, `upstream_tool_unreadable`, `upstream_too_many_tools`, `upstream_too_many_pages` | The upstream's tool list cannot be pinned | Fix or replace the server |
 | `upstream_name_collision` | Two signed tools map to one upstream name | Fix `upstream_name` |
@@ -2150,6 +2152,9 @@ an argument value.
 | `file_too_large`, `too_many_files`, `call_files_too_large` | A declared file is over its `max_bytes`, or the call carries more than 32 files or 100 MiB of them. Denied before the scanner and both keys, under every stance |
 | `file_unreadable` | A declared file could not be read: bad base64, a value of the wrong type, a path outside its folder, a link, a missing file. Denied the same way |
 | any `two-key authorize` reason | `rule_denied:<rule id>`, `counterparty_not_allowed`, `derive_failed:...`, `insufficient_yes:...`, `cloud_judge_session_required`, `args_too_large`, and the others in "Parsing and limits" and "Quorum policy" |
+| `tool_receipt_invalid:<why>` | Under `high_assurance`: a checked tool's receipt was missing (`missing`), signed by another key (`bad_signature`), for another call or result (`mismatch`), or the tool refused (`refused:<reason>`). The agent gets no output, and the tool is held | Look at the tool's key and clock, then `two-key tool release TOOL --reason ...` ([TOOL_CHECK](TOOL_CHECK.md#what-two-key-does-with-the-receipt)) |
+| `tool_held` | A checked tool is held after a bad receipt | As above |
+| `tool_args_mismatch` | The token does not bind the arguments the tool would get | Ask again; report it if it repeats |
 | `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`. After a timeout the server may still have done the work. The proxy does not retry, and the token is spent: the agent asks again |
 | `upstream_result_unreadable` | The upstream returned something that is not a tool result |
 
@@ -2171,7 +2176,8 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 - **The agent host's user** must not be able to read any of that, change
   `proxy.yaml` or the constitution, or reach the upstream server or its
   credential by another path. An agent that can call the upstream directly
-  bypasses the proxy (THREAT_MODEL). [docs/CONNECTING.md](CONNECTING.md)
+  bypasses the proxy (THREAT_MODEL), unless the tool checks each call itself
+  ([TOOL_CHECK](TOOL_CHECK.md)). [docs/CONNECTING.md](CONNECTING.md)
   covers every connection and hook, the client's other tools, services on
   the same machine, and a checklist.
 - **The upstream server's user** (`mcp-billing`) gets only its own
@@ -2204,6 +2210,10 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 - **The pin covers what the agent is shown,** not what the server does: a
   server can change its behavior without changing a schema. Pin the
   version.
+- **The upstream trusts its caller unless it checks.** A tool that checks
+  each call itself (the tool check, [TOOL_CHECK](TOOL_CHECK.md)) refuses a
+  call that did not come through both keys and signs a receipt the ledger
+  keeps; one that does not is open to anything that can reach it.
 - **Results are not read.** An upstream result can carry injected text back
   to the agent. Two-Key judges each later call on its own terms; it does not
   scan the result.

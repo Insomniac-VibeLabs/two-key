@@ -90,7 +90,7 @@ The same keys go in an `--answers` file (YAML or JSON). An unknown key is refuse
 | `quorum` | The quorum's numbers: `required_yes`, `min_responding`, `min_distinct_providers`, `min_makers` and `min_local_judges` ([below](#the-quorum-numbers)). Any you leave out keep the profile's own | the profile's own |
 | `monitored_agent` | `id`, `model`, `provider`, `base_url`, `upstream` (asked as for a judge), and `credential_env` (or `credential: none`) | (asked) |
 | `rules_file` | A rules file you reviewed. For the proxy, the `rules.draft.yaml` that `two-key mcp-draft-specs` drafted from the server | none |
-| `tools` | Without `rules_file`: the tools a starter allows, each with `id` and, optionally, `irreversible` (default `true`) and `data_class_floor` (default `classified`) | (asked) |
+| `tools` | Without `rules_file`: the tools a starter allows, each with `id` and, optionally, `irreversible` (default `true`), `data_class_floor` (default `classified`) and, for the proxy route only, `tool_check`: `{key: sha256:...}` (the fingerprint `two-key tool-key new` prints) or `exempt` ([TOOL_CHECK](TOOL_CHECK.md)). Under `high_assurance` every tool needs one or the other, and `exempt` is weaker | (asked) |
 | `prose_file` | The prose the judges read. Without it, a short starter you edit later | the starter |
 | `upstream` | Proxy only: `command` (a list; the wizard splits a line as a shell would, and the proxy runs it without a shell) and `schema_digest` | (asked) |
 | `agent_session_env` | Proxy only: the name of the variable that holds the agent's session. Needed when a judge runs in the cloud ([below](#a-cloud-judge-needs-the-agents-session)) | none |
@@ -201,6 +201,9 @@ SHA-256 digest of each file it wrote except the private key, and the digest of t
   (`not_confirmed`), and a `quorum` answer with a key other than the five numbers.
 - A proxy with a cloud judge and no `agent_session_env` (`cloud_judge_session_required`, through
   `config check`).
+- A starter tool with no tool check under `high_assurance`, a `tool_check` that is neither `exempt` nor a
+  fingerprint, and a `tool_check` on the guard or library route (`tools: ...`). With a rules file, `config
+  check` fails a `high_assurance` proxy whose tools have neither (`tool_check_required`).
 - An answer the loaders refuse (an unknown judge type, a tool with no spec, a malformed digest), and anything
   `config check` fails (`config_check_failed`). `high_assurance` with fewer judges than it needs is one such
   failure. A variable the config names that is not set in your shell does not count
@@ -250,7 +253,7 @@ With `--answers`, the window opens filled in from that file. Its pages follow th
 | Judges | Each judge: id, type, model, base URL, maker, upstream (only needed when the address does not say who serves the model), and the name of its API key's variable |
 | Quorum | The five numbers, filled in with the profile's own for these judges; **Use the profile's numbers** puts them back |
 | Agent and history | The monitored agent, and the judge history summary |
-| Rules and prose | A reviewed rules file, or the starter tools; the prose file, or the starter |
+| Rules and prose | A reviewed rules file, or the starter tools (with each tool's check, for the proxy); the prose file, or the starter |
 | Proxy | The upstream command, its schema digest (blank: read from the server), the agent session's variable, and one proxy per agent. Turned off for the guard and library routes |
 | Review and set up | Every answer, every problem, warning and weaker setting, the typed `yes`, **Save answers file**, and **Set up** |
 
@@ -273,6 +276,7 @@ change:
 | `quorum.require_local_yes` | true: a judge on this machine must vote yes |
 | `on_writable_paths` | refuse: the proxy does not start when another account can change a file it runs or reads |
 | `on_agent_access` | refuse: the proxy does not start when the agent's account could reach Two-Key's files |
+| `tool_specs.<tool>.tool_check` | required behind the proxy: a receipt key, or `exempt` (weaker, typed yes) ([TOOL_CHECK](TOOL_CHECK.md)) |
 | a plaintext SIEM sink | refused |
 | `upstream.check_paths` | required: the upstream server's files are checked, or the proxy does not start |
 
@@ -406,7 +410,8 @@ loaded the way the proxy loads them, not from the key you typed. Each of these i
 | `quorum.ballot_binding`, `heterogeneity_scope` | `echo` becomes `stamp`, `responding` becomes `selection` |
 | `judges` | A judge is added or removed, or any of its keys changes but `timeout`, `json_mode`, `max_tokens`, `response_format`, and `reasoning_effort` |
 | `monitored_agent` | It is removed or changed (judges are checked against it) |
-| Signed rules | Anything but adding a rule, turning `irreversible` or `deny_unmapped` on, or raising a `data_class_floor`: whether an edit to a rule allows more cannot be told in general |
+| `tool_specs.<tool>.tool_check` | It is set to `exempt`, removed, or given another key (turning it on is stronger) |
+| Signed rules | Anything but adding a rule, turning `irreversible` or `deny_unmapped` on, raising a `data_class_floor`, or turning the tool check on: whether an edit to a rule allows more cannot be told in general |
 
 An `undo` that weakens needs `--confirm-weaker` too: undoing a stricter setting is weaker. `setup` reads
 its quorum numbers the same way, against the profile's own ([above](#the-quorum-numbers)).

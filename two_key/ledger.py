@@ -317,6 +317,8 @@ class Ledger:
         self.entries: list[Entry] = []
         self._redeemed: set[str] = set()
         self._started: set[str] = set()
+        # Tools held after a bad receipt under high_assurance (#28): tool -> the tool_held entry's seq.
+        self._held: dict[str, int] = {}
         self._configured_witness = None if witness_public_key is None else public_raw(witness_public_key)
         self._witness_pin: tuple[str, int, str] | None = None    # (raw key, seq, source) pinned in the ledger
         self._head_witness: str | None = None                   # the witness key in the verified head
@@ -675,6 +677,10 @@ class Ledger:
             self._started.add(jti)
         # 0.9.0: redemption_aborted leaves the jti started, so a token whose tool failed is spent (already_attempted).
         # A ledger written by 0.8.0 may hold a later redemption of that jti; it still reads as redeemed.
+        elif entry.kind == "tool_held" and isinstance(entry.body.get("tool"), str):
+            self._held[entry.body["tool"]] = entry.seq
+        elif entry.kind == "tool_released" and isinstance(entry.body.get("tool"), str):
+            self._held.pop(entry.body["tool"], None)
         elif entry.kind == "witness_pinned":
             raw = entry.body.get("witness_public_key")
             if verify:
@@ -1252,6 +1258,13 @@ class Ledger:
 
     def redemption_started(self, jti: str) -> bool:
         return jti in self._started and jti not in self._redeemed
+
+    def tool_held(self, tool: str) -> bool:
+        """True while ``tool`` is held: a ``tool_held`` entry with no ``tool_released`` after it (#28)."""
+        return tool in self._held
+
+    def held_tools(self) -> list[str]:
+        return sorted(self._held)
 
     def last_before(self, size: int, kind: str) -> Entry | None:
         """The last entry of ``kind`` with ``seq`` below ``size``, or None.

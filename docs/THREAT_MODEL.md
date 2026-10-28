@@ -355,7 +355,8 @@ flowchart TD
   environment, or `proxy.yaml`, and the upstream server runs as an OS user
   that cannot read them either (HOWTO "Key custody").
 - The gateway is the only holder of tool credentials. This package cannot
-  stop an agent that can call the tool by another path.
+  stop an agent that can call the tool by another path, unless the tool
+  checks each call itself (docs/TOOL_CHECK.md, MCP proxy only).
 - The principal key and the ledger key are not both in the attacker's
   hands, unless the witness public key is configured outside the ledger.
   With that pin, the assumption is that the principal, witness, and ledger
@@ -444,7 +445,11 @@ claims to close.
 - MCP proxy (0.5.0):
   - An agent that can reach the upstream server directly, or holds its
     credential, bypasses the proxy entirely. The proxy cannot see or stop
-    that.
+    that. From 0.9.0 a tool with the tool check on (docs/TOOL_CHECK.md)
+    refuses such a call itself: it runs only with a spent token and a redeem
+    stamp, and signs a receipt the gateway checks and ledgers. A tool
+    without the check, or a server that runs the tool after the check
+    refuses, is still bypassed.
   - An upstream server run as the proxy's OS user can read every key the
     proxy holds (principal, ledger, witness, capability), the judge keys,
     and the proxy's environment through `/proc`. The proxy does not change

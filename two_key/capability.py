@@ -193,9 +193,10 @@ class CapabilityIssuer(CapabilityVerifier):
               bytecode_hash: str, nl_hash: str, ttl_seconds: int = 120,
               spec_hash: str = "", form: dict | None = None,
               claimed_data_class: str | None = None, args_digest: str | None = None,
-              scan: dict | None = None) -> IssuedCapability:
+              scan: dict | None = None, tool_args_digest: str | None = None) -> IssuedCapability:
         """Mint a token. ``args_digest`` is ``args_hash(arguments)`` when the caller already encoded them.
-        ``scan`` (a scanned tool only) binds the verdict and each file's digest; the gateway checks them."""
+        ``scan`` (a scanned tool only) binds the verdict and each file's digest; the gateway checks them.
+        ``tool_args_digest`` (a tool with the tool check on, #28) is the hash of the arguments the tool receives."""
         if self.private_key is None:
             raise TokenError("verifier_cannot_mint")
         valid_ttl(ttl_seconds)
@@ -220,6 +221,8 @@ class CapabilityIssuer(CapabilityVerifier):
             payload["claimed_data_class"] = claimed_data_class
         if scan is not None:      # absent otherwise, so a token for an unscanned tool keeps its 0.5.0 shape
             payload["scan"] = scan
+        if tool_args_digest is not None:      # absent otherwise, so other tokens keep their 0.8.0 shape
+            payload["tool_args_hash"] = tool_args_digest
         body = _b64u(canonical_bytes(payload))
         signature = sign(self.private_key, body.encode("ascii"))
         return IssuedCapability(f"tk1.{body}.{signature}", payload)

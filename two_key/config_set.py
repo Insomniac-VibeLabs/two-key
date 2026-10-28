@@ -639,6 +639,8 @@ def _same_or_tighter(key: str, old, new) -> bool:
         return not old and new is True
     if key == "data_class_floor":
         return _FLOOR_RANK.get(new, 4) > _FLOOR_RANK.get(old, 4)
+    if key == "tool_check":     # #28: turning the check on is stronger; exempt, off or another key is not
+        return (old in (None, "exempt") and isinstance(new, Mapping)) or (old == "exempt" and new is None)
     return False
 
 

@@ -54,6 +54,7 @@ from .derive import (MAX_ARGS_BYTES, DeriveError, args_too_large, blocked_from_r
                      derive, dropped_keys, form_for, forms_match, project_arguments, size_record)
 from .ledger import LedgerError
 from .scan import CALL_VERDICTS, ENCRYPTED
+from .toolcheck import ToolCheckError, checked, text_hash, tool_args_hash, verify_receipt
 
 
 _MAX_REASON_CHARS = 200
@@ -139,7 +140,8 @@ def _as_verifier(issuer) -> CapabilityVerifier:
 class ToolGateway:
     def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None,
                  max_denied_jtis: int | None = None,
-                 deny_inflight_wait_seconds: float | None = None, scanner=None, refused_tokens=None):
+                 deny_inflight_wait_seconds: float | None = None, scanner=None, refused_tokens=None,
+                 stamp_signer=None, receipt_reader=None, high_assurance: bool = False):
         self.ledger = ledger
         _warn_unbound_ledger(ledger)
         self.issuer = _as_verifier(issuer)
@@ -155,6 +157,12 @@ class ToolGateway:
         # 0.7.0: counts tokens that do not verify, which are refused without a ledger entry so an
         # unauthenticated caller cannot fill the ledger (two_key.siem.RefusedTokens). None: not counted.
         self.refused_tokens = refused_tokens
+        # The tool check (#28, two_key/toolcheck.py), for a tool whose signed spec pins a receipt key. The stamp
+        # signer signs redeem stamps only. receipt_reader(output) -> (receipt, result hash) is set by the MCP
+        # proxy, the only route the check is for: without it a checked tool is refused (tool_check_needs_proxy).
+        self.stamp_signer = stamp_signer
+        self.receipt_reader = receipt_reader
+        self.high_assurance = high_assurance
         # One in-process lock per jti being redeemed. #42: _lock_refs counts the threads that hold or
         # wait on each lock, under _locks_guard; the entry is removed when the count reaches zero, so the
         # map holds only jtis in flight. No LRU cap: evicting a held lock would split one jti in two.
@@ -201,9 +209,9 @@ class ToolGateway:
             if self.refused_tokens is not None:
                 self.refused_tokens.note(e)
             return GatewayResult(False, str(e))
-        result, encoded = self._invoke_verified(payload, tool, arguments, facts)
-        if result.allowed or result.reason.startswith(("ledger_failed:", "tool_error:")):
-            return result      # a tool error is already ledgered (redemption_aborted); a ledger failure cannot be
+        result, encoded = self._invoke_verified(payload, tool, arguments, facts, token)
+        if result.allowed or result.reason.startswith(("ledger_failed:", "tool_error:", "tool_receipt_invalid:")):
+            return result      # a tool error or a bad receipt is already ledgered; a ledger failure cannot be
         return self._record_deny(result, payload, tool, encoded)
 
     def _record_deny(self, result: GatewayResult, payload: dict, tool, encoded: dict) -> GatewayResult:
@@ -257,9 +265,9 @@ class ToolGateway:
                     self._denied_jtis_guard.notify_all()
 
     def _invoke_verified(self, payload: dict, tool: str, arguments: dict,
-                         facts: dict | None = None) -> tuple[GatewayResult, dict]:
+                         facts: dict | None = None, token: str | None = None) -> tuple[GatewayResult, dict]:
         """Run the checks and the tool; also return the plain copy and encoded bytes, as far as they got."""
-        encoded: dict = {}
+        encoded: dict = {"token": token}
         result = self._redeem(payload, tool, arguments, encoded, facts)
         return result, encoded
 
@@ -356,6 +364,11 @@ class ToolGateway:
         fn = self.tools.get(tool)
         if fn is None:
             return GatewayResult(False, "tool_not_registered")
+        projected = project_arguments(spec, arguments, dict(derived.fields))
+        pinned = checked(spec)
+        problem = self._check_ready(pinned, payload, tool, projected)
+        if problem:
+            return GatewayResult(False, problem)
         with self._hold(payload["jti"]):
             if self.ledger.is_redeemed(payload["jti"]):
                 return GatewayResult(False, "already_redeemed")
@@ -370,23 +383,81 @@ class ToolGateway:
                 if not same:
                     return GatewayResult(False, "file_changed")
             try:
-                self.ledger.record("redemption_started", {"jti": payload["jti"], "tool": tool,
-                                                          "dropped_keys": dropped_keys(spec, arguments)})
+                started = self.ledger.record("redemption_started", {"jti": payload["jti"], "tool": tool,
+                                                                    "dropped_keys": dropped_keys(spec, arguments)})
             except Exception as e:      # not only LedgerError: an OSError (disk full) must not escape invoke (#60)
                 return GatewayResult(False, _ledger_failed(e))
             try:
-                output = fn(project_arguments(spec, arguments, dict(derived.fields)))
+                output, stamp = self._call(fn, projected, pinned, encoded["token"], payload, started.seq)
             except Exception as e:
                 try:
                     self.ledger.record("redemption_aborted", {"jti": payload["jti"], "tool": tool})
                 except Exception as le:
                     return GatewayResult(False, _ledger_failed(le))
                 return GatewayResult(False, f"tool_error:{type_tag(e)}", None)
-            try:
-                self.ledger.record("redemption", {"jti": payload["jti"], "tool": tool})
-            except Exception as e:
-                return GatewayResult(False, _ledger_failed(e), output)
+            return self._finish(payload, tool, pinned, stamp, output)
+
+    def _check_ready(self, pinned: str | None, payload: dict, tool: str, projected: dict) -> str | None:
+        """Why a call to a checked tool cannot go ahead, before anything is ledgered as started; else None."""
+        if pinned is None:
+            return None
+        if self.receipt_reader is None:
+            return "tool_check_needs_proxy"     # Q5: only a tool behind two-key mcp-proxy can be checked
+        if self.stamp_signer is None:
+            return "stamp_key_missing"
+        try:
+            if payload.get("tool_args_hash") != tool_args_hash(projected):
+                return "tool_args_mismatch"
+        except (EncodingError, TypeError, ValueError):
+            return "tool_args_mismatch"
+        if self.ledger.tool_held(tool):
+            return "tool_held"
+        return None
+
+    def _call(self, fn, projected: dict, pinned: str | None, token: str, payload: dict, seq: int) -> tuple:
+        """Run the tool: (output, stamp), the stamp None for an unchecked tool. For a checked one the token is
+        spent: only now do the token and the stamp leave this process (R8)."""
+        if pinned is None:
+            return fn(projected), None
+        stamp = self.stamp_signer.stamp(token, payload, seq)
+        return fn(projected, {"token": token, "stamp": stamp}), stamp
+
+    def _finish(self, payload: dict, tool: str, pinned: str | None, stamp: str | None, output: Any) -> GatewayResult:
+        """Ledger the redemption: at once for an unchecked tool, after its receipt for a checked one."""
+        if pinned is not None:
+            return self._receipt(payload, tool, pinned, stamp, output)
+        try:
+            self.ledger.record("redemption", {"jti": payload["jti"], "tool": tool})
+        except Exception as e:
+            return GatewayResult(False, _ledger_failed(e), output)
         return GatewayResult(True, "redeemed", output)
+
+    def _receipt(self, payload: dict, tool: str, pinned: str, stamp: str, output: Any) -> GatewayResult:
+        """Check the tool's receipt and ledger the redemption. A missing or bad one is ``tool_receipt_invalid``,
+        sent to the SIEM at once; under ``high_assurance`` the agent gets a refusal instead of the output, and the
+        tool is held until ``two-key tool release``."""
+        jti = payload["jti"]
+        try:
+            receipt, digest = self.receipt_reader(output)
+            verify_receipt(receipt, pinned=pinned, jti=jti, tool=tool, stamp=stamp, result=digest)
+            why = None
+        except ToolCheckError as e:
+            why = e.reason
+        except Exception as e:      # the reader failed on this output: not a receipt Two-Key can vouch for
+            why = f"unreadable:{type_tag(e)}"
+        body = {"jti": jti, "tool": tool, "stamp_hash": text_hash(stamp)}
+        try:
+            if why is None:
+                self.ledger.record("redemption", {**body, "receipt_hash": text_hash(receipt), "receipt_outcome": "ran"})
+                return GatewayResult(True, "redeemed", output)
+            self.ledger.record("tool_receipt_invalid", {"jti": jti, "tool": tool, "why": why})
+            self.ledger.record("redemption", {**body, "receipt_hash": None, "receipt_outcome": why})
+            if not self.high_assurance:
+                return GatewayResult(True, "redeemed", output)
+            self.ledger.record("tool_held", {"tool": tool, "jti": jti, "why": why})
+        except Exception as e:
+            return GatewayResult(False, _ledger_failed(e), output if why is None else None)
+        return GatewayResult(False, f"tool_receipt_invalid:{why}")
 
     def refused_token_counts(self) -> dict:
         """Tokens refused without a ledger entry since the last report, by class. Empty without a counter."""

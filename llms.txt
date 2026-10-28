@@ -74,6 +74,12 @@ one row per entry in a read-only tkinter window: every field (seq, kind, and eac
 lists as name[]) searchable, filterable (contains, equals, starts-with, ends-with, regex, gt/ge/lt/le, empty, and
 negations; all or any), and sortable on several keys. --print writes the matches as JSON Lines; --fields lists the
 names. No network port, no export, never appends (docs/LEDGER_VIEW.md).
+The tool check (0.9.0, #28; two_key/toolcheck.py, docs/TOOL_CHECK.md): a tool behind two-key mcp-proxy whose signed
+spec has tool_check {key: sha256:...} runs a call only with the spent token and a redeem stamp the proxy sends in MCP
+_meta, refuses replays through a SQLite seen record, and signs a receipt the gateway checks and ledgers;
+high_assurance requires it (or exempt, weaker) and holds a tool after a bad receipt until two-key tool release.
+two-key tool-key new makes a tool's key; two-key tool-key trust writes Two-Key's two public keys. A tool error
+spends the token (already_attempted on a retry).
 two-key setup --window (two_key/setup_form.py, two_key/setup_gui.py) asks setup's questions in a tkinter window instead
 of on the terminal and runs the same build, so the files and refusals are the same; a High assurance switch locks the
 profile's settings and makes its quorum numbers minimums; Save answers file writes JSON for setup --answers.

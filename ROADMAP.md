@@ -192,8 +192,9 @@ frozen, so the public review looks at the final shape.
 - An optional tool-side token check (#28): a way for a tool, or a thin
   wrapper in front of it, to check that a call was authorized. Off by
   default; the gateway stays in the `TwoKey` process and still verifies
-  only. It touches tokens and the gateway, so a design note and the
-  maintainer's security review come before any code.
+  only. Design note approved by the maintainer (2026-10-28); built for tools
+  behind `two-key mcp-proxy`, required under `high_assurance`
+  (docs/TOOL_CHECK.md). A tool error now spends the token for every tool.
 - A live run with the agent on another machine over SSH ("Where we are"
   above), on machines the maintainer sets up. The network transport
   question is answered with the standing decision: stdio only, remote

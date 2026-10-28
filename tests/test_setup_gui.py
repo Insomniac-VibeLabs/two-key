@@ -96,7 +96,8 @@ class Window(unittest.TestCase):
         self.top.update_idletasks()
         return window
 
-    def fill(self, window, judges=(JUDGE,)):
+    @staticmethod
+    def fill(window, judges=(JUDGE,), check=""):
         for judge in judges:
             for key, var in window.judge_var.items():
                 var.set(judge.get(key, ""))
@@ -105,6 +106,7 @@ class Window(unittest.TestCase):
             var.set(AGENT.get(key, ""))
         window.tool_var["id"].set("tool_a")
         window.tool_var["data_class_floor"].set("personal")
+        window.tool_var["tool_check"].set(check)
         window.tool_irreversible.set(False)
         window.add_tool()
         window.var["command"].set("server --flag")
@@ -140,7 +142,7 @@ class Window(unittest.TestCase):
 
     def test_high_assurance_switch_raises_the_numbers_and_locks_them_as_minimums(self):
         window = self.window()
-        self.fill(window, judges=(LOCAL, dict(JUDGE, id="j2")))
+        self.fill(window, judges=(LOCAL, dict(JUDGE, id="j2")), check="sha256:" + "1" * 64)
         window.high.set(True)
         self.top.update()
         lowest = setup_form.quorum_minimums("high_assurance", 2)
@@ -156,6 +158,20 @@ class Window(unittest.TestCase):
         window.high.set(False)
         self.top.update()
         self.assertFalse(window.ha_box.winfo_manager())
+
+    def test_high_assurance_needs_each_tools_check(self):
+        window = self.window()
+        self.fill(window, judges=(LOCAL, dict(JUDGE, id="j2")))
+        window.high.set(True)
+        self.top.update()
+        window.refresh()
+        self.assertIn("tool tool_a: high_assurance needs the tool check", window.status.cget("text"))
+        window.tool_table.selection_set(window.tool_table.get_children()[0])
+        window._tool_clicked()
+        window.tool_var["tool_check"].set("exempt")
+        window.add_tool()
+        self.assertEqual(window.answers()["tools"][0]["tool_check"], "exempt")
+        self.assertIn("tool_specs.tool_a.tool_check: exempt", window.review_box.get("1.0", "end"))
 
     def test_weaker_needs_the_typed_yes(self):
         window = self.window()

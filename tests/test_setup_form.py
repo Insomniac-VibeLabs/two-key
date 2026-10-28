@@ -36,6 +36,7 @@ ANSWERS = {"route": "proxy", "profile": "default", "judges": [JUDGE],
            "judge_history": {"enabled": True, "on_failure": "deny", "burst_denies": 5, "burst_minutes": 10},
            "tools": [{"id": "tool_a", "irreversible": False, "data_class_floor": "personal"}],
            "upstream": {"command": ["server"], "schema_digest": DIGEST}, "one_proxy_per_agent": True}
+CHECK = {"key": "sha256:" + "1" * 64}
 NO_RUNTIME = mock.patch("two_key.writable.runtime_targets", return_value=[])
 
 
@@ -93,11 +94,19 @@ class Review(unittest.TestCase):
         self.assertEqual((lowest["required_yes"], lowest["min_makers"], lowest["min_local_judges"]), (2, 2, 1))
         self.assertEqual(setup_form.quorum_minimums("default", 2)["min_local_judges"], 0)
         answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
-                       quorum=dict(lowest, required_yes=1))
+                       quorum=dict(lowest, required_yes=1), tools=[dict(ANSWERS["tools"][0], tool_check=CHECK)])
         found = setup_form.review(answers)
         self.assertIn("quorum: required_yes is at least 2 under high_assurance", found.problems)
         found = setup_form.review(dict(answers, quorum=dict(lowest, required_yes=2)))
         self.assertTrue(found.ready, found.problems)
+
+    def test_high_assurance_needs_the_tool_check_and_exempt_is_weaker(self):
+        answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                       quorum=setup_form.quorum_minimums("high_assurance", 2))
+        self.assertTrue(any("needs the tool check" in p for p in setup_form.review(answers).problems))
+        exempt = setup_form.review(dict(answers, tools=[dict(ANSWERS["tools"][0], tool_check="exempt")]))
+        self.assertTrue(exempt.ready, exempt.problems)
+        self.assertEqual(exempt.weaker, ["tool_specs.tool_a.tool_check: exempt"])
 
     def test_high_assurance_needs_two_judges(self):
         found = setup_form.review(dict(ANSWERS, profile="high_assurance",

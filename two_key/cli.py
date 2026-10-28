@@ -289,6 +289,74 @@ def _open_ledger(args, key):
         return None
 
 
+def _tool_key_new(args) -> int:
+    """``two-key tool-key new``: a tool's receipt key (#28), owner-only, and the fingerprint to sign into its spec."""
+    from .toolcheck import new_tool_key
+    try:
+        fingerprint = new_tool_key(args.out)
+    except FileExistsError:
+        raise SystemExit(f"--out: {args.out} exists; a tool key is never replaced in place") from None
+    print(json.dumps({"ok": True, "tool_private_key": str(args.out), "fingerprint": fingerprint,
+                      "next": "sign it into the tool's spec as tool_check: {key: <fingerprint>} (two-key config set "
+                              "tool_specs.<tool>.tool_check, or the constitution editor); keep the key file where "
+                              "only the tool's account can read it"}, indent=2))
+    return 0
+
+
+def _tool_key_trust(args) -> int:
+    """``two-key tool-key trust``: Two-Key's two public keys for a checking tool, each checked against the
+    fingerprint the ledger pins, written to ``--out`` with the fingerprints to put in the tool's config."""
+    from .capability import capability_key_fingerprint
+    from .keys import load_public_key, save_public_key
+    from .toolcheck import key_fingerprint, stamp_key_path
+    ledger = _open_ledger(args, _principal_key(args))
+    if ledger is None:
+        return 1
+    loaded = ledger.last_before(ledger.size(), "constitution_loaded")
+    body = loaded.body if loaded is not None else {}
+    if not body.get("stamp_key_fingerprint"):
+        print(json.dumps({"ok": False, "error": "no tool in the running constitution has the tool check on, so "
+                                                "this ledger pins no stamp key; sign tool_check into a tool's spec "
+                                                "and start Two-Key once"}, indent=2))
+        return 1
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    written = {}
+    for name, source, pinned, fp in (
+            ("capability", ledger.capability_key_path().with_name("capability.pub.pem"),
+             body.get("capability_key_fingerprint"), capability_key_fingerprint),
+            ("stamp", stamp_key_path(ledger).with_name("stamp.pub.pem"), body["stamp_key_fingerprint"],
+             key_fingerprint)):
+        public = load_public_key(source)
+        if fp(public) != pinned:
+            print(json.dumps({"ok": False, "error": f"{source} is not the {name} key the ledger pins"}, indent=2))
+            return 1
+        target = out / f"two-key-{name}.pub.pem"
+        save_public_key(target, public)
+        written[f"{name}_public_key"] = str(target)
+        written[f"{name}_key_fingerprint"] = pinned
+    print(json.dumps({"ok": True, **written,
+                      "next": "put these paths and fingerprints in the tool's check config (docs/TOOL_CHECK.md)"},
+                     indent=2))
+    return 0
+
+
+def _tool_release(args) -> int:
+    """``two-key tool release``: calls to a tool held after a bad receipt go ahead again; ledgered with why."""
+    reason = (args.reason or "").strip()
+    if not reason:
+        raise SystemExit("--reason: say why the tool can be trusted again; it is recorded in the ledger")
+    ledger = _open_ledger(args, _principal_key(args))
+    if ledger is None:
+        return 1
+    if not ledger.tool_held(args.tool):
+        print(json.dumps({"ok": False, "error": f"{args.tool} is not held", "held": ledger.held_tools()}, indent=2))
+        return 1
+    ledger.record("tool_released", {"tool": args.tool, "reason": reason[:200]})
+    print(json.dumps({"ok": True, "released": args.tool, "held": ledger.held_tools()}, indent=2))
+    return 0
+
+
 def _rotate_witness(args) -> int:
     from .ledger import LedgerError
     key = _principal_key(args)
@@ -958,6 +1026,29 @@ def main(argv: list[str] | None = None) -> int:
     siem_verify.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     siem_verify.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     siem_verify.set_defaults(func=_siem_verify)
+    tool_key = sub.add_parser("tool-key", help="keys for the tool check (docs/TOOL_CHECK.md)")
+    tool_key_sub = tool_key.add_subparsers(dest="tool_key_cmd", required=True)
+    maker = tool_key_sub.add_parser("new", help="make a tool's receipt key and print its fingerprint")
+    maker.add_argument("--out", required=True, metavar="FILE", help="the new private key file (never replaced)")
+    maker.set_defaults(func=_tool_key_new)
+    truster = tool_key_sub.add_parser("trust", help="write Two-Key's two public keys for a checking tool, each "
+                                                    "checked against the ledger's pin")
+    _add_key(truster)
+    truster.add_argument("--ledger", required=True)
+    truster.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    truster.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    truster.add_argument("--out", required=True, metavar="DIR", help="the folder to write the two public keys to")
+    truster.set_defaults(func=_tool_key_trust)
+    tool = sub.add_parser("tool", help="a checked tool held after a bad receipt")
+    tool_sub = tool.add_subparsers(dest="tool_cmd", required=True)
+    releaser = tool_sub.add_parser("release", help="let calls to a held tool go ahead again, ledgered with why")
+    _add_key(releaser)
+    releaser.add_argument("tool", help="the tool's signed id")
+    releaser.add_argument("--ledger", required=True)
+    releaser.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    releaser.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    releaser.add_argument("--reason", required=True, help="why the tool can be trusted again (at most 200 characters)")
+    releaser.set_defaults(func=_tool_release)
     proxy = sub.add_parser("mcp-proxy", help="serve an upstream MCP server's signed tools over stdio, through "
                                              "both keys (needs the mcp extra)")
     proxy.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)

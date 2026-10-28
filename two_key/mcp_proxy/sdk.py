@@ -114,12 +114,14 @@ def build_server(core: ProxyCore) -> Server:
 
 def upstream_caller(client: Client, timeout_seconds: float):
     """The gateway's tool for every exposed tool: a blocking call from the worker thread to the upstream."""
-    async def call(name: str, arguments: dict) -> Any:
+    async def call(name: str, arguments: dict, meta: dict | None) -> Any:
         with anyio.fail_after(timeout_seconds):
-            return await client.call_tool(name, arguments)
+            if meta is None:
+                return await client.call_tool(name, arguments)
+            return await client.call_tool(name, arguments, meta=meta)      # a checked tool (#28)
 
-    def run(name: str, arguments: dict) -> Any:
-        return anyio.from_thread.run(call, name, arguments)
+    def run(name: str, arguments: dict, meta: dict | None = None) -> Any:
+        return anyio.from_thread.run(call, name, arguments, meta)
     return run
 
 

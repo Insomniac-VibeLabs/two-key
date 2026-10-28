@@ -171,6 +171,7 @@ SPDX-License-Identifier: Apache-2.0
 - [One confirm for every tool: `tools[*].claim` — 2026-10-28](#one-confirm-for-every-tool-toolsclaim--2026-10-28)
 - [A setup window beside the terminal: `two-key setup --window` — 2026-10-28](#a-setup-window-beside-the-terminal-two-key-setup---window--2026-10-28)
 - [A tool error spends the token — 2026-10-28](#a-tool-error-spends-the-token--2026-10-28)
+- [The tool check: a tool behind the proxy checks its own calls (#28) — 2026-10-28](#the-tool-check-a-tool-behind-the-proxy-checks-its-own-calls-28--2026-10-28)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5109,3 +5110,42 @@ that did part of its work and then failed could run twice on one approval. Now a
 every tool and every route: a second try is refused `already_attempted`, after a restart too, and the agent asks
 again (the judges decide again). A ledger written by 0.8.0 that holds a redemption after an abort still reads as
 redeemed. HOWTO, THREAT_MODEL and the gateway's docstring say so.
+
+## The tool check: a tool behind the proxy checks its own calls (#28) — 2026-10-28
+
+Built from the design note the maintainer approved on 2026-10-28 (risks R1 to R11; Q1 to Q3 A, Q4 SQLite, Q5 the
+MCP proxy only, Q6 above). docs/TOOL_CHECK.md describes it for operators and for tool authors in any language.
+
+- A tool's **signed** spec takes `tool_check`: `{key: sha256:<fingerprint>}` turns the check on, `exempt` leaves it
+  off. Absent, nothing changes: tokens, the ledger and the gateway behave as in 0.8.0, and the spec hashes as before.
+- For a checked tool the token gains `tool_args_hash` (the arguments as the tool receives them, after projection).
+  The gateway checks it (`tool_args_mismatch`), writes `redemption_started`, then signs a **redeem stamp**
+  (`tks1`, label `two-key-redeem-stamp/1`) with a new **stamp key** that signs nothing else, and the proxy sends
+  the token and stamp in the request's `_meta` under `io.github.insomniac-vibelabs/two-key`.
+- New `two_key/toolcheck.py`: the tool's checks in a fixed order (`check_missing`, `stamp_invalid`,
+  `token_invalid`, `stamp_mismatch`, `tool_mismatch`, `args_mismatch`, `expired` with a fixed 5-second
+  allowance, `replayed` through an owner-only SQLite seen record), a signed **receipt** (`tkr1`, label
+  `two-key-tool-receipt/1`) over the jti, the stamp and the result, and `mcp_call` for a server on the MCP
+  Python SDK. Any error inside the helper is a refusal.
+- The gateway checks the receipt against the pinned key and writes `redemption` with `stamp_hash`,
+  `receipt_hash` and `receipt_outcome`. A missing or bad one is `tool_receipt_invalid` (sent to the SIEM); under
+  `high_assurance` the agent gets no output and the tool is held (`tool_held`, kept across restarts) until
+  `two-key tool release TOOL --reason TEXT` (`tool_released`).
+- `high_assurance`: `mcp-proxy` refuses to start (`tool_check_required`) and `config check` fails for a tool with
+  neither a key nor `exempt`; `exempt` is weaker (typed yes). `config check` lists each tool's check.
+- New commands: `two-key tool-key new --out FILE` (a tool's key and its fingerprint), `two-key tool-key trust`
+  (Two-Key's two public keys, checked against the ledger's pins), `two-key tool release`.
+- `constitution_loaded` records `stamp_key_fingerprint` and `tool_check_keys` when a tool is checked.
+- Setup asks for each starter tool's check on the proxy route, and the setup window has a column for it; the High
+  assurance switch makes it required. A check on the guard or library route is refused (Q5): there the tool runs
+  in Two-Key's own process.
+- Tests: `tests/test_toolcheck.py` (each check, the receipt reasons, both profiles, the hold surviving a restart),
+  `tests/test_toolcheck_mcp.py` (a real MCP server behind the proxy: a call through it passes, the same call sent
+  to the server directly is refused), and `tests/test_toolcheck_vectors.py` (the test vectors in TOOL_CHECK.md).
+- Docs: TOOL_CHECK.md (new), HOWTO, CONNECTING, SETUP, SETTINGS (generated), SCOPE, THREAT_MODEL, UPGRADING, README,
+  ROADMAP, AGENTS.md, llms.txt.
+- Differs from the design note in one detail: the stamp's hash is in `redemption`, not `redemption_started`, since
+  the stamp names the `redemption_started` entry's position and is signed after it.
+- The setup window's PR checks: the starting quorum is `dict.fromkeys` (SonarCloud S7519); `_table` and the test's
+  `fill` are static methods (DeepSource PYL-R0201); the upstream command is read on its own line before
+  `shlex.join`, which DeepSource took for an SQL join (PY-W0800).

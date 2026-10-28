@@ -43,6 +43,8 @@ ANSWERS = {
     "tools": [{"id": "tool_a", "irreversible": False, "data_class_floor": "personal"}],
     "upstream": {"command": ["server"], "schema_digest": DIGEST},
 }
+# Under high_assurance every tool behind the proxy has the tool check on (#28).
+CHECKED_TOOLS = [dict(ANSWERS["tools"][0], tool_check={"key": "sha256:" + "1" * 64})]
 NO_RUNTIME = mock.patch("two_key.writable.runtime_targets", return_value=[])
 
 
@@ -145,15 +147,35 @@ class Setup(Deployment):
 
     def test_high_assurance_with_one_judge_is_refused(self):
         with self.assertRaisesRegex(setup_cmd.SetupError, "too_few_judges"):
-            quiet(setup_cmd.build, dict(ANSWERS, profile="high_assurance"), self.base / "ha", environ={})
+            quiet(setup_cmd.build, dict(ANSWERS, profile="high_assurance", tools=CHECKED_TOOLS), self.base / "ha",
+                  environ={})
         self.assertFalse((self.base / "ha").exists())
 
     def test_high_assurance_writes_refuse_for_the_writable_path_check(self):
-        answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR")
+        answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                   tools=CHECKED_TOOLS)
         quiet(setup_cmd.build, answers, self.base / "ha", environ={})
         text = (self.base / "ha" / "proxy.yaml").read_text(encoding="utf-8")
         self.assertIn("on_writable_paths: refuse", text)
         self.assertIn("var: JUDGE_KEY_VAR", (self.base / "ha" / "judges.yaml").read_text(encoding="utf-8"))
+
+    def test_high_assurance_needs_the_tool_check_on_each_tool(self):
+        answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR")
+        with self.assertRaisesRegex(setup_cmd.SetupError, "tool tool_a: high_assurance needs the tool check"):
+            quiet(setup_cmd.build, answers, self.base / "ha", environ={})
+        exempt = dict(answers, tools=[dict(ANSWERS["tools"][0], tool_check="exempt")])
+        with self.assertRaisesRegex(setup_cmd.SetupError, "weaker: tool_specs.tool_a.tool_check: exempt"):
+            quiet(setup_cmd.build, exempt, self.base / "ha", environ={})
+        result = quiet(setup_cmd.build, exempt, self.base / "ha", environ={}, confirm_weaker=True,
+                       confirm=lambda _p: True)[0]
+        self.assertEqual(result["weaker"], ["tool_specs.tool_a.tool_check: exempt"])
+
+    def test_the_tool_check_is_only_for_the_proxy(self):
+        with self.assertRaisesRegex(setup_cmd.SetupError, "only for tools behind two-key mcp-proxy"):
+            quiet(setup_cmd.build, dict(ANSWERS, route="guard", tools=CHECKED_TOOLS), self.base / "g", environ={})
+        with self.assertRaisesRegex(setup_cmd.SetupError, "exempt or"):
+            quiet(setup_cmd.build, dict(ANSWERS, tools=[dict(ANSWERS["tools"][0], tool_check={"key": "x"})]),
+                  self.base / "g", environ={})
 
     def test_a_rules_file_without_a_serial_is_signed_with_a_warning(self):
         """Run 9y, S8: the starter rules have serial 1; a rules file without one is signed as it is, with a warning
@@ -209,7 +231,7 @@ class Setup(Deployment):
                    "no", "", "", "", "", "",    # the quorum: the default profile's numbers for one judge
                    "agent", "some-model", "other", "https://agent.example/v1", "", "AGENT_KEY_VAR",
                    "", "", "", "",          # judge history: on, deny on failure, 5 denies, 10 minutes
-                   "", "", "tool_a", "no", "public", "", "server --stdio", DIGEST, "",
+                   "", "", "tool_a", "no", "public", "", "", "server --stdio", DIGEST, "",
                    ""]                      # one proxy per agent: yes
         asked = []
 
@@ -242,7 +264,7 @@ class Setup(Deployment):
         replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:8081/v1", "", "api.x.ai",
                    "", "no", "", "", "", "", "",
                    "agent", "claude-sonnet", "anthropic", "https://api.anthropic.com", "AGENT_KEY_VAR",
-                   "", "", "", "", "", "", "tool_a", "no", "public", "", "server --stdio", DIGEST, "", ""]
+                   "", "", "", "", "", "", "tool_a", "no", "public", "", "", "server --stdio", DIGEST, "", ""]
         asked = []
 
         def ask(prompt):
@@ -326,6 +348,7 @@ class SetupQuorum(unittest.TestCase):
 
     def test_lowering_a_high_assurance_floor_turns_it_off(self):
         answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                   tools=CHECKED_TOOLS,
                        quorum={"min_makers": 1})
         self.refused("weaker: quorum: high_assurance turned off; quorum.min_makers: lowered", answers)
 
@@ -372,7 +395,7 @@ class SetupQuorum(unittest.TestCase):
     # serves the model.
     START = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "", ""]
     AGENT = ["agent", "some-model", "other", "https://agent.example/v1", "", "AGENT_KEY_VAR", "", "", "", "", "", "",
-             "tool_a", "no", "public", "", "server", DIGEST]
+             "tool_a", "no", "public", "", "", "server", DIGEST]
 
     def test_the_interview_keeps_a_lower_number_only_after_a_typed_yes(self):
         second = ["yes", "openai_compatible", "j2", "m2", "http://127.0.0.1:11435/v1", "maker2", "", "", "no"]
@@ -662,7 +685,8 @@ class EveryTool(Deployment):
 
 
 class HighAssurance(Deployment):
-    answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR")
+    answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                   tools=CHECKED_TOOLS)
 
     def test_what_the_profile_forbids_stays_forbidden(self):
         self.refused("config_check_failed: on_agent_access: high_assurance", "on_agent_access", "warn",
@@ -670,6 +694,16 @@ class HighAssurance(Deployment):
         self.refused("config_check_failed: on_writable_paths", "on_writable_paths", "warn", confirm_weaker=True)
         self.refused("config_check_failed: siem_plaintext_refused", "siem",
                      {"sinks": [{"type": "syslog", "host": "127.0.0.1", "transport": "tcp"}]}, confirm_weaker=True)
+
+    def test_config_check_lists_the_tool_checks(self):
+        from two_key import config_cmd
+        found = config_cmd.check(self.proxy, {"AGENT_KEY_VAR": "set", "JUDGE_KEY_VAR": "set", "SESSION_VAR": "s"})
+        self.assertIn((config_cmd.OK, "tool_check: on for ['tool_a']; exempt: none; off: none"), found)
+
+    def test_turning_the_tool_check_off_is_weaker(self):
+        kw = {"key_path": str(self.key), "rules_path": str(self.rules)}
+        self.refused("weaker: tool_specs.tool_a.tool_check: changed", "tool_specs.tool_a.tool_check", "exempt", **kw)
+        self.refused("tool_check_required", "tool_specs.tool_a.tool_check", unset=True, confirm_weaker=True, **kw)
 
     def test_turning_it_off_is_weaker(self):
         self.refused("weaker: quorum: high_assurance turned off", "quorum.profile", "default")

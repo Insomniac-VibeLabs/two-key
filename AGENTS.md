@@ -95,7 +95,7 @@ From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-Vib
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/CONSTITUTION_EDITOR.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
+  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/CONSTITUTION_EDITOR.md`, `docs/TOOL_CHECK.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
 - A new setting (a key a loader accepts) gets a row in `two_key/settings.py`.
   `docs/SETTINGS.md` is generated from it: run `python tests/test_settings_doc.py
@@ -424,6 +424,12 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   `two_key/constitution_editor.py`, the window in
   `two_key/constitution_gui.py` (`tests/test_constitution_editor.py`,
   `tests/test_constitution_gui.py`).
+- The tool check (#28, 0.9.0, `two_key/toolcheck.py`, docs/TOOL_CHECK.md) is for tools behind
+  `two-key mcp-proxy` only, turned on in the tool's signed spec (`tool_check`), and required (or `exempt`,
+  weaker) under `high_assurance`. The stamp key signs stamps only; every signed object carries a purpose label;
+  the token and stamp leave the process only after `redemption_started`. The tool helper fails closed: keep
+  every error inside it a refusal. The test vectors in docs/TOOL_CHECK.md are generated
+  (`python tests/test_toolcheck_vectors.py --write`). A tool error spends the token for every tool.
 - `two-key setup --window` (0.9.0) is a front end only: it builds the same
   answers the terminal interview does and calls the same
   `setup_cmd.build`, so it can never write what `setup --answers` would

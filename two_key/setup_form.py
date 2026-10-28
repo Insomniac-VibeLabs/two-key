@@ -26,12 +26,14 @@ from typing import Any, Mapping
 
 from . import _platform
 from .setup_cmd import (ANSWER_KEYS, PROFILES, QUORUM_COUNTS, ROUTES, SetupError, build, cloud_judges,
-                        load_answers, needs_upstream, profile_quorum, quorum_findings, weaker_reasons)
+                        load_answers, needs_upstream, profile_quorum, quorum_findings, tool_check_problems,
+                        weaker_reasons)
 
 HIGH_ASSURANCE = "high_assurance"
 # What the high_assurance profile sets beyond the quorum numbers (docs/SETTINGS.md, "high_assurance"). The window
 # shows each one grayed out while the switch is on.
 HIGH_ASSURANCE_SETTINGS = (
+    ("tool_specs.<tool>.tool_check", "required behind the proxy: a receipt key, or exempt (weaker, typed yes)"),
     ("quorum.require_local_yes", "true: a judge on this machine must vote yes"),
     ("on_writable_paths", "refuse: the proxy does not start when another account can change a file it runs or reads"),
     ("on_agent_access", "refuse: the proxy does not start when the agent's account could reach Two-Key's files"),
@@ -135,6 +137,7 @@ def _source_problems(answers: Mapping) -> list[str]:
     out = []
     if not answers.get("rules_file") and not answers.get("tools"):
         out.append("rules: give a reviewed rules file, or name at least one tool for the starter rules")
+    out += tool_check_problems(answers)
     passphrase = answers.get("key_passphrase_file")
     if passphrase and not os.path.isabs(str(passphrase)):
         out.append("principal key: the passphrase file needs an absolute path")

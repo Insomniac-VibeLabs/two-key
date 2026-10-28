@@ -282,7 +282,8 @@ KINDS: dict[str, KindSpec] = {
         excluded=("tail_file",), severity=NOTICE),
     "constitution_loaded": KindSpec(
         sent=("digest", "bytecode_hash", "nl_hash", "spec_hash", "policy_digest",
-              "capability_key_fingerprint", "serial", "previous_digest"),
+              "capability_key_fingerprint", "serial", "previous_digest", "stamp_key_fingerprint",
+              "tool_check_keys"),
         excluded=("quorum_policy", "judge_agent_separation", "scanner", "same_model_tenant_optin",
                   "same_model_tenant_optin_pairs", "history_agent_ids"),
         extract=_constitution_fields),
@@ -316,7 +317,12 @@ KINDS: dict[str, KindSpec] = {
     "agent_already_connected": KindSpec(sent=("agent_id", "origin"), severity=WARNING),
     "gateway_denied": KindSpec(sent=("reason", "jti", "tool"), severity=WARNING),
     "redemption_started": KindSpec(sent=("jti", "tool"), excluded=("dropped_keys",)),
-    "redemption": KindSpec(sent=("jti", "tool")),
+    "redemption": KindSpec(sent=("jti", "tool", "stamp_hash", "receipt_hash", "receipt_outcome")),
+    # The tool check (#28): a checked tool's receipt was missing or bad; under high_assurance the tool is then held
+    # until the operator releases it (two-key tool release).
+    "tool_receipt_invalid": KindSpec(sent=("jti", "tool", "why"), severity=WARNING),
+    "tool_held": KindSpec(sent=("tool", "jti", "why"), severity=WARNING),
+    "tool_released": KindSpec(sent=("tool",), hashed=("reason",), severity=NOTICE),
     "redemption_aborted": KindSpec(sent=("jti", "tool"), severity=WARNING),
     "revocation": KindSpec(hashed=("reason",), severity=NOTICE),
     "mcp_proxy_started": KindSpec(
@@ -342,7 +348,7 @@ UNLEDGERED = {
 
 _DENY_KINDS = frozenset({"gateway_denied", "tool_not_offered", "redemption_aborted", "gateway_token_refused",
                          "scanner_unavailable", "judge_history_failed", "attempt_episode",
-                         "agent_already_connected"})
+                         "agent_already_connected", "tool_receipt_invalid", "tool_held"})
 
 
 def spec_for(kind: str) -> KindSpec:

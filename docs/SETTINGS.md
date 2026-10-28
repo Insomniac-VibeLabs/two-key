@@ -71,6 +71,7 @@ constitution does not yet state a minimum profile.
 | `on_writable_paths` | `warn` | always refuses; `warn` is refused |
 | `on_agent_access` | `refuse` | always refuses; `warn` is refused |
 | a plaintext SIEM sink (`udp`, `tcp`, `http://`) | allowed, with a start-up warning | refused (`siem_plaintext_refused`) |
+| a tool behind the proxy with no `tool_check` | allowed: the tool check is off | refused (`tool_check_required`); `exempt` is allowed and weaker |
 | a scan stance other than `strict` (set by the signed `scan` rule) | allowed | allowed, with a start-up warning |
 | one judge with `required_yes: 1` | `lone_judge_warning` | not reachable: two makers are needed |
 | a quorum that could be too lenient (one judge, a minority approving, one provider or maker) | a `WARN` in `config check` and `setup` | the same, where it can still apply |
@@ -300,6 +301,8 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `tool_specs.<tool>.payload[].shape` | none |  | `string`, `number`, or `list`. |
 | `tool_specs.<tool>.payload[].max_length` | none |  | A positive integer, for a `string` or `list`. |
 | `tool_specs.<tool>.deny_unmapped` | false |  | `true` denies an argument the spec does not name, instead of dropping it. |
+| `tool_specs.<tool>.tool_check` | none (off) |  | The tool check (docs/TOOL_CHECK.md), for a tool behind `two-key mcp-proxy`: `{key: sha256:...}` turns it on, `exempt` leaves it off. `high_assurance` refuses to start with a tool that has neither; `exempt` and turning it off are weaker. |
+| `tool_specs.<tool>.tool_check.key` | required with a mapping |  | The fingerprint of the key that signs the tool's receipts, as `two-key tool-key new` prints it. |
 | `tool_specs.<tool>.fields` | none |  | Maps each custom field to an argument, or marks it `not_applicable`. |
 | `tool_specs.<tool>.fields.<name>.json_path` | none |  | The argument that holds the field's value. |
 | `tool_specs.<tool>.fields.<name>.source` | the arguments |  | `caller` for a fact the proxy's hook supplies. |
