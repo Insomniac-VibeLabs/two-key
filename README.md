@@ -9,7 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 
 **Two independent keys must turn before an AI agent can act.  No human needed.**
 
-**AI agent authorization and MCP gateway with dual-path policy. Bytecode policy combined with AI judge approval, single-use capability tokens, and an encrypted ledger.**
+**AI agent authorization and MCP gateway with dual-path authorization. Deterministic bytecode policy combined with AI judge approval, single-use capability tokens, and an encrypted ledger.**
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/PyPI/docs/images/two-key-banner.png" alt="Two-Key — Authorization and execution control for AI agents">
