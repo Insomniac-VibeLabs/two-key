@@ -12,7 +12,7 @@ SPDX-License-Identifier: Apache-2.0
 **AI agent authorization and MCP gateway with dual-path authorization. Deterministic bytecode policy combined with AI judge approval, single-use capability tokens, and an encrypted ledger.**
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/PyPI/docs/images/two-key-banner.png" alt="Two-Key — Authorization and execution control for AI agents">
+  <img src="https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/0ec76d21e88610654fcda8dd23a440c1ebe09476/docs/images/two-key-banner.png" alt="Two-Key — Authorization and execution control for AI agents">
 </p>
 
 **Two independent keys must turn before an AI agent can act.**
@@ -84,7 +84,7 @@ added the SIEM export, a start-up check that refuses to run when the
 monitored agent is Two-Key's own account, and a count of the tokens the
 gateway refuses.
 Maintainer-reviewed and tested with live LLM agents and judges. Read
-[Known limits](#known-limits) and [docs/FIT.md](docs/FIT.md) before you rely
+[Known limits](#known-limits) and [docs/FIT.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/FIT.md) before you rely
 on it.
 
 ## Contents
@@ -106,7 +106,7 @@ on it.
 
 ## Quick start
 
-Install 0.8.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
+Install 0.8.0 from PyPI ([docs/PYPI.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/PYPI.md)):
 
 ```bash
 pip install "two-key[yaml]==0.8.0"
@@ -126,8 +126,8 @@ python -m two_key authorize --help
 ```
 
 Real judges are configured in `examples/judges.yaml`. The operator guide is
-[docs/HOWTO.md](docs/HOWTO.md). Before a real agent runs, close every way
-around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
+[docs/HOWTO.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/HOWTO.md). Before a real agent runs, close every way
+around Two-Key: [docs/CONNECTING.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/CONNECTING.md).
 
 ## Put Two-Key in front of an MCP server
 
@@ -145,28 +145,17 @@ keys before the server sees it. Facts such as a purchase-order match come
 from your own hook, never from the agent. A refused call comes back to the
 agent as a tool error with a reason code.
 
-```mermaid
-flowchart TD
-  host["Agent host<br/>MCP client"] -- "tools/list and<br/>tools/call, stdio" --> tk
-  subgraph proxy["two-key mcp-proxy, its own OS user"]
-    hooks["Fact hooks<br/>your code"] -- "facts" --> tk["Two-Key<br/>checks policy,<br/>asks judges"]
-    tk -- "token" --> gw["Gateway<br/>same process"]
-  end
-  tk -. "normalized record" .-> judges["Judges"]
-  gw -- "projected args,<br/>stdio" --> up["Upstream<br/>MCP server<br/>child process,<br/>third OS user"]
-  up --> sor["System<br/>of record"]
-  hooks -. "look facts up" .-> sor
-```
+![The agent host, an MCP client, sends tools/list and tools/call over stdio to two-key mcp-proxy, which runs as its own OS user. Inside it, your fact hooks feed facts to Two-Key, which checks policy and asks the judges; the gateway, in the same process, takes the token and sends projected arguments over stdio to the upstream MCP server, a child process under a third OS user. The judges get the normalized record, and the hooks and the upstream server reach the system of record, all outside the proxy.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/0ec76d21e88610654fcda8dd23a440c1ebe09476/docs/images/pypi/0.8.0/agent-host-to-proxy.png)
 
-`two-key setup` writes a first deployment; `two-key config set`, `get`, and `undo` change one setting at a time, checked and recorded in the ledger, and `config key-passphrase` encrypts the principal key ([SETUP](docs/SETUP.md)). `two-key config check --config proxy.yaml` says whether the proxy would start, and `config show` prints the settings it resolves to; both are read-only (HOWTO "Look at a config without starting the proxy"). `two-key mcp-draft-specs` drafts the tool specs from the server's own
+`two-key setup` writes a first deployment; `two-key config set`, `get`, and `undo` change one setting at a time, checked and recorded in the ledger, and `config key-passphrase` encrypts the principal key ([SETUP](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SETUP.md)). `two-key config check --config proxy.yaml` says whether the proxy would start, and `config show` prints the settings it resolves to; both are read-only (HOWTO "Look at a config without starting the proxy"). `two-key mcp-draft-specs` drafts the tool specs from the server's own
 schemas for you to review and sign. The walkthrough, with a worked
 example, is HOWTO
-["Put Two-Key in front of an MCP server"](docs/HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).
+["Put Two-Key in front of an MCP server"](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).
 Run the proxy and the upstream server as separate OS users, so neither the
 agent nor the server can reach the proxy's keys (HOWTO "Key custody").
 The proxy speaks stdio only and does not listen on the network; an agent
 on another machine starts it over SSH with a forced command
-([CONNECTING](docs/CONNECTING.md#an-agent-on-another-machine-route-1-over-ssh)),
+([CONNECTING](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/CONNECTING.md#an-agent-on-another-machine-route-1-over-ssh)),
 a route that still needs live testing. From 0.7.0 the proxy
 refuses to start when the account that started it is Two-Key's own, is
 root, or can change Two-Key's files (`on_agent_access`).
@@ -175,22 +164,22 @@ root, or can change Two-Key's files (`on_agent_access`).
 
 | Read | For |
 | --- | --- |
-| [docs/FIT.md](docs/FIT.md) | Whether Two-Key is the right control for you |
-| [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
-| [docs/CONNECTING.md](docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
-| [docs/SETTINGS.md](docs/SETTINGS.md) | Every setting: its file, default, what `high_assurance` does to it, and who may change it |
-| [docs/SETUP.md](docs/SETUP.md) | `two-key setup` for a first deployment, `config set`, `get`, and `undo` to change one setting, and `config key-passphrase` to encrypt the principal key: who may run them, what they check, and what they refuse |
-| [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
-| [docs/SIEM.md](docs/SIEM.md) | Sending the ledger to a SIEM, and checking a copy against it (0.7.0) |
-| [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
-| [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Trust boundaries and residual risk |
-| [docs/SCOPE.md](docs/SCOPE.md) | What is included, left out, and planned |
-| [docs/COMPARISON.md](docs/COMPARISON.md) | What Two-Key is not a substitute for |
-| [ROADMAP.md](ROADMAP.md) | The path to 1.0 |
-| [CHANGES.md](CHANGES.md) | Every change, with upgrade notes |
-| [SECURITY.md](SECURITY.md) | How to report a vulnerability |
-| [docs/UPGRADING.md](docs/UPGRADING.md) | Upgrading to a new version and keeping your keys and ledger |
-| [docs/PYPI.md](docs/PYPI.md) | Registering the package name and publishing a release |
+| [docs/FIT.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/FIT.md) | Whether Two-Key is the right control for you |
+| [docs/HOWTO.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
+| [docs/CONNECTING.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
+| [docs/SETTINGS.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SETTINGS.md) | Every setting: its file, default, what `high_assurance` does to it, and who may change it |
+| [docs/SETUP.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SETUP.md) | `two-key setup` for a first deployment, `config set`, `get`, and `undo` to change one setting, and `config key-passphrase` to encrypt the principal key: who may run them, what they check, and what they refuse |
+| [docs/SCANNERS.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
+| [docs/SIEM.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SIEM.md) | Sending the ledger to a SIEM, and checking a copy against it (0.7.0) |
+| [docs/JUDGES_AND_QUORUM.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
+| [docs/THREAT_MODEL.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/THREAT_MODEL.md) | Trust boundaries and residual risk |
+| [docs/SCOPE.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SCOPE.md) | What is included, left out, and planned |
+| [docs/COMPARISON.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/COMPARISON.md) | What Two-Key is not a substitute for |
+| [ROADMAP.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/ROADMAP.md) | The path to 1.0 |
+| [CHANGES.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/CHANGES.md) | Every change, with upgrade notes |
+| [SECURITY.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/SECURITY.md) | How to report a vulnerability |
+| [docs/UPGRADING.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/UPGRADING.md) | Upgrading to a new version and keeping your keys and ledger |
+| [docs/PYPI.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/PYPI.md) | Registering the package name and publishing a release |
 
 ## Components
 
@@ -198,7 +187,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 - **Policy Enforcer (Path A)**: Deterministic bytecode policy VM. It evaluates structured fields derived from the argument bytes according to the signed tool specs. It does not read free text or English.
 - **Judge (Path B)**: Trusted AI agent (local or cloud, preferably suited to the use case). It scores the normalized action record (and optionally the proposal). It has no direct access to any registered tool.
 - **Monitored Agent**: The untrusted agent under constraint. It proposes actions; it has no direct access to any registered tool.
-- **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported, by design ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
+- **Tool Gateway**: Accepts a single-use capability token and invokes the registered tool. It runs in the `TwoKey` process on the `TwoKey` ledger object (`TwoKey.gateway()`); a gateway in another process or on another host is not supported, by design ([why](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)). Its verifier holds only the capability public key, so it cannot mint. That is an API property, not key isolation.
 - **Registered Tool**: The tool protected by the dual-path authorization and the capability token.
 - **MCP proxy** (0.5.0; the `mcp` extra): `two-key mcp-proxy` sits between an MCP client and one upstream MCP server. It shows the agent only the signed tools, pins their schemas, and runs every `tools/call` through both keys and the in-process gateway. `two-key mcp-draft-specs` drafts the tool specs for the principal to review and sign. See HOWTO "Put Two-Key in front of an MCP server".
 - **SIEM export** (0.7.0): the ledger can copy each entry, as
@@ -206,7 +195,7 @@ root, or can change Two-Key's files (`on_agent_access`).
   writes the same events to a file that `two-key siem-verify` checks back
   against the ledger. A per-kind field allowlist decides what leaves: reason
   codes, digests, sizes, the tool id, and the data class, never argument
-  values or proposal text. See [docs/SIEM.md](docs/SIEM.md).
+  values or proposal text. See [docs/SIEM.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SIEM.md).
 - **Caller-supplied facts and the guard** (0.5.0): a field declared `source: caller` gets its value from your integration (`facts=`), never from the agent's arguments, and is looked up again before the tool runs. `two_key.guard.Guard` does both lookups and both keys in one call for any agent loop; the MCP proxy runs on it. See HOWTO "Caller-supplied facts".
 
 ## Dual-path authorization
@@ -222,7 +211,7 @@ use that pass to run the tool.
    - It reads five built-in fields (`tool`, `amount_usd`, `data_class`,
      `counterparty`, and `irreversible`) plus any custom fields the
      principal declares under `fields:` (boolean, integer, enum, or string;
-     up to 64; see [examples/custom_fields.yaml](examples/custom_fields.yaml)
+     up to 64; see [examples/custom_fields.yaml](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/examples/custom_fields.yaml)
      and HOWTO "Custom Path A fields"). A field's description is a signed
      note for people, never a rule.
    - Only the tool's name is required. A tool spec may leave out
@@ -233,7 +222,7 @@ use that pass to run the tool.
    - **Where the values come from.** The signed constitution must include
      `tool_specs`. Without them it will not sign and will not load. Two-Key
      reads the field values from the call's actual argument bytes, in
-     [two_key/derive.py](two_key/derive.py). If the agent claims a value
+     [two_key/derive.py](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/two_key/derive.py). If the agent claims a value
      that disagrees with the bytes, the call is denied.
    - **Keys the spec does not name.** They never reach the tool.
      `deny_unmapped` is off by default, so the call can still be allowed and
@@ -333,47 +322,7 @@ calls the gateway. The caller runs the agent. Two-Key then runs both paths
 once the call is well-formed and within limits.
 Only the gateway runs a tool.
 
-```mermaid
-flowchart TD
-  constitution["Signed<br/>Constitution"] --> compile["Compile"]
-  compile --> bytecode["Path A<br/>Policy"]
-  compile --> judgeText["Path B<br/>Judges"]
-
-  instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
-  agent -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>Authorize"]
-
-  authorize --> early{"Early deny?<br/>malformed / size<br/>agent declined<br/>file limits"}
-  early -->|yes| ledger["Encrypted<br/>Ledger"]
-  early -->|no| derive["Derive fields"]
-
-  derive -.->|"optional"| hook["AV/DLP<br/>Hook"]
-  hook -.-> derive
-
-  derive --> pathA["Path A<br/>Policy VM"]
-  bytecode --> pathA
-
-  derive --> pbCheck{"Unreadable call:<br/>do judges get the<br/>raw arguments?"}
-  pbCheck -->|"no"| skipped["Path B skipped<br/>= deny, no token"]
-  pbCheck -->|"yes, or the call<br/>was readable"| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
-  judgeText --> pathB
-
-  pathA --> gate{"Both paths<br/>allow?"}
-  pathB --> gate
-  skipped --> gate
-
-  pathA --> ledger
-  pathB --> ledger
-  skipped --> ledger
-
-  gate -->|no| ledger
-  gate -->|yes| token["Single-Use<br/>Capability<br/>Token"]
-
-  token --> gateway["Tool<br/>Gateway"]
-  gateway -->|"verify"| tool["Registered<br/>Tool"]
-  gateway --> ledger
-
-  ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
-```
+![A signed constitution is compiled into the Path A policy and the Path B judges. A proposal or decline from the monitored agent goes to Two-Key, which denies early if it is malformed, over a size or file limit, or declined. Otherwise fields are derived, with an optional AV/DLP hook; an unreadable call skips Path B and is denied with no token. Path A and the judges (one or more, with a configurable quorum) run, and only if both allow is a single-use capability token minted for the tool gateway, which verifies it and runs the registered tool once. Every outcome goes to the encrypted ledger, optionally copied to a SIEM over syslog or HTTPS.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/0ec76d21e88610654fcda8dd23a440c1ebe09476/docs/images/pypi/0.8.0/authorize-flow.png)
 
 A call that could not be read under its signed spec (`derive_failed:`) is already
 denied by Path A. Unless `tool_args_on_derive_deny` is set, the judges are not shown
@@ -487,60 +436,7 @@ tool arguments, the action claim, or a structured proposal nested more than
 
 One call, in code order:
 
-```mermaid
-sequenceDiagram
-  participant Caller
-  participant Agent as Monitored agent
-  participant TwoKey
-  participant PathA as Path A VM
-  participant PathB as Path B quorum
-  participant Judge as Judges
-  participant Ledger
-  participant Gateway
-  participant Tool
-
-  Caller->>Agent: instruction, constitution prose, opt-in vocabulary (syntax only)
-  Agent-->>Caller: JSON proposal or decline, no tool call
-  Caller->>TwoKey: proposal and agent_session
-  alt agent declined
-    TwoKey->>Ledger: decision agent_declined, with the decline reason
-    TwoKey-->>Caller: deny, neither path runs, no token
-  end
-  alt malformed or over a size limit
-    Note over TwoKey: malformed_proposal, proposal_too_large,<br/>action_too_large, malformed_action,<br/>args_too_large, invalid_call, file limits
-    TwoKey->>Ledger: decision with size and digest only
-    TwoKey-->>Caller: deny, neither path runs
-  end
-  TwoKey->>PathA: structured fields (after optional scan / derive)
-  PathA-->>TwoKey: allow or deny
-  alt unreadable call, judges get no arguments
-    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed), so the call is denied
-    TwoKey->>Ledger: proposal, path_a, path_b skipped
-  else
-    TwoKey->>PathB: action record and binding hashes
-    Note over PathB: args omitted on derive deny unless tool_args_on_derive_deny
-    Note over PathB: scan flag can also withhold args/proposal
-    PathB->>Judge: score in parallel, own credentials
-    Judge-->>PathB: yes, no, or abstain
-    PathB-->>TwoKey: quorum pass or deny
-    TwoKey->>Ledger: proposal, path_a, path_b
-  end
-  alt both allow
-    TwoKey->>Ledger: capability_issued, then decision
-    TwoKey-->>Caller: single-use token
-    Caller->>Gateway: token, tool, arguments
-    Note over Gateway: same process as TwoKey,<br/>verifies with capability public key only
-    opt authenticated token refused
-      Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
-    end
-    Gateway->>Ledger: redemption_started
-    Gateway->>Tool: registered function
-    Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
-  else either path denies or skipped
-    TwoKey->>Ledger: decision, no token
-    TwoKey-->>Caller: deny
-  end
-```
+![Sequence: the caller sends the instruction to the monitored agent, which returns a JSON proposal or a decline. Two-Key denies declined, malformed or oversized proposals before either path runs. Otherwise Path A checks the structured fields and the Path B quorum asks the judges in parallel; an unreadable call skips Path B and is denied. Every decision is ledgered, and only when both allow is a single-use token issued, which the gateway verifies with the capability public key and redeems by running the tool once.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/0ec76d21e88610654fcda8dd23a440c1ebe09476/docs/images/pypi/0.8.0/authorize-sequence.png)
 
 The token is signed by the capability key (`<ledger>.capability/capability.pem`,
 outside the ledger directory). It is bound to the tool, the argument hash,
@@ -564,7 +460,7 @@ or changed key refuses to start. Its fingerprint is recorded in
 The gateway runs in the `TwoKey` process, on the ledger object `TwoKey`
 uses. Build it with `TwoKey.gateway()`. A gateway in another process or on
 another host is not supported, by design
-([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)):
+([why](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)):
 a `Ledger` opened elsewhere does not see tokens issued after it opened, so
 it refuses them, and it would hold the principal, witness, and ledger keys
 anyway. A gateway built on a ledger no `TwoKey` in the process opened emits
@@ -593,9 +489,9 @@ Not in this repository:
 Some of this is planned as optional additions. See the
 [roadmap](#roadmap). DLP and antivirus hooks shipped in 0.6.0 (an interface
 that calls your antivirus or DLP product, not a scanning engine:
-[docs/SCANNERS.md](docs/SCANNERS.md)). The SIEM export, which shipped in
+[docs/SCANNERS.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SCANNERS.md)). The SIEM export, which shipped in
 0.7.0, feeds the collector you run; it does not store, search, or alert
-([docs/SIEM.md](docs/SIEM.md)). After 1.0 come PKI with
+([docs/SIEM.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SIEM.md)). After 1.0 come PKI with
 certificate recovery and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
 backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
 phrases are not planned.
@@ -646,7 +542,7 @@ audited. It is not a FIPS 140-3 validated module.
 - Identities are bare keys. There is no certificate chain, expiry, or
   revocation. PKI with certificate recovery is on the roadmap.
 - It is not an antivirus or DLP product. From 0.6.0 it can
-  call one you run ([docs/SCANNERS.md](docs/SCANNERS.md)). Without one, a
+  call one you run ([docs/SCANNERS.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SCANNERS.md)). Without one, a
   content leak in free text rests on the judges. Tool results are never
   scanned.
 - It is not a SIEM. From 0.7.0 it can send each ledger entry
@@ -654,7 +550,7 @@ audited. It is not a FIPS 140-3 validated module.
   refused under `high_assurance` and warns otherwise. Whoever can read that
   collector reads ledger metadata, a collector that is down leaves the copy
   behind until it returns, and what the collector keeps or alerts on is
-  yours, not Two-Key's ([docs/SIEM.md](docs/SIEM.md)).
+  yours, not Two-Key's ([docs/SIEM.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/SIEM.md)).
 - Behind the MCP proxy, an agent that can reach the upstream server directly
   bypasses it, and an upstream server running as the proxy's OS user can
   read the proxy's keys. Run each as its own user (HOWTO "Key custody").
@@ -665,7 +561,7 @@ audited. It is not a FIPS 140-3 validated module.
   a token spent after the backup look unspent, and it replaces a key file
   that differs.
 
-The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+The full register is [docs/THREAT_MODEL.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/THREAT_MODEL.md).
 
 ## Roadmap
 
@@ -676,20 +572,9 @@ in 0.7.3, and the judge history summary in 0.8.0. The last beta, 0.9.0, comes
 next; a public review and the first stable release, 1.0, come next.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
-[ROADMAP.md](ROADMAP.md).
+[ROADMAP.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/ROADMAP.md).
 
-```mermaid
-flowchart TD
-  subgraph done["Released betas"]
-    direction LR
-    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"]
-  end
-  subgraph next["Next: one beta, then 1.0.0"]
-    direction LR
-    r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
-  end
-  done --> next
-```
+![Version line: 0.4.0 (package two-key), 0.5.0 (MCP adapter), 0.6.0 (DLP and AV hooks), 0.7.0 (SIEM export), 0.7.3 (setup commands) and 0.8.0 (judge history) are released betas. Next is one more beta, 0.9.0 (token check, remote agents), then the 1.0.0 stable release; after 1.0 come PKI, FIPS, a GUI and more.](https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/0ec76d21e88610654fcda8dd23a440c1ebe09476/docs/images/pypi/0.8.0/version-line.png)
 
 | Version | What | Status |
 | --- | --- | --- |
@@ -732,7 +617,7 @@ drafter, caller-supplied facts, the guard core, and constitution v3.
 `fc836bb`, `v0.2.3` on `4a4352e`, and `v0.2.0` on `2f756ac`.
 
 Upgrading from an older version: read the "Upgrading" notes in
-[CHANGES.md](CHANGES.md) for every version you skip.
+[CHANGES.md](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/CHANGES.md) for every version you skip.
 
 - 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses some judges
   0.2.2 accepted (one holding the agent's credential without sending it,
@@ -741,7 +626,7 @@ Upgrading from an older version: read the "Upgrading" notes in
   from 0.1.12" from older versions).
 - 0.2.4 writes a head anchor on the first open of an existing ledger and
   refuses a rolled-back ledger directory: "Upgrading from 0.2.3".
-- 0.3.0 adds key backup, custom Path A fields, and `TwoKey.gateway()` ([why it stays in process](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
+- 0.3.0 adds key backup, custom Path A fields, and `TwoKey.gateway()` ([why it stays in process](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
   Existing ledgers and constitutions open unchanged: "Upgrading from
   0.2.4". A constitution that declares custom fields signs as v2, which
   installs before 0.3.0 refuse: "Custom Path A fields" > "Upgrading".
@@ -833,4 +718,4 @@ Development moved here from the archived
 [two-key-concept](https://github.com/Insomniac-VibeLabs/two-key-concept)
 repository at 0.3.1; its history is preserved in this repository.
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](https://github.com/Insomniac-VibeLabs/two-key/blob/v0.8.0/LICENSE).
