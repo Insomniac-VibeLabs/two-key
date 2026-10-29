@@ -3399,3 +3399,12 @@ Details:
 - Harness bug found and fixed on `working` (72dd69e): `decision_history` timestamps and counters changed `prompt_sha` on every re-staged pass, so judges were asked again in a loop.
 - Cyber-designed: 12 rounds, toned down; see NOTES.md.
 - `tests/live/run11/`: REPORT.md, NOTES.md, LIVE_RESULTS.md (codes only).
+
+## Live run 12 results — 2026-10-29
+
+- Build: `working` @ b0a2c7c (the 0.9.0 round; version string still 0.8.0). Python 3.14.8, cryptography 50.0.2.
+- A1 self-test 175 PASS / 1 FAIL / 1 ERROR (stale C140, C94); A2 sabotage: every weakening caught, including `gateway_skips_argument_hash` (run 11 blind spot); A6 unit 1469 passed / 3 skipped (mcp) and 1451 / 21 (no mcp).
+- Live relay pass (32 rounds): 177 cases, 172 PASS / 2 INCONCLUSIVE / 2 FAIL / 1 ERROR, 0 referee incidents. Non-PASS are harness cases: C140 and C94 stale for #28 (high_assurance needs the tool check), C32 expectation too narrow (denied earlier, stronger), C19 and C72 inconclusive; nothing forbidden ran. A4 PASS; A5 PASS on 44 ledgers, every fingerprint `hybrid-sha256:`.
+- Part B key upgrade 9/9 (B3 with real judges), Part C hybrid signatures 5/5, Part D tool check 11/11, Part E 7/7 (E4 Ollama quickstart N/A), extras X1-X9 all PASS. F1: 8 UPGRADING rows differ from Part B; F2 FIPS wording consistent.
+- 32 findings (about 27 fix, 5 WAD); see REPORT.md "Claude: fix vs WAD".
+- `tests/live/run12/`: REPORT.md, NOTES.md, LIVE_RESULTS.md (codes only), shots/ (E3 window tabs; B2/B8/D6 rendered from logs).
