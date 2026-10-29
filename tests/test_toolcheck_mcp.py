@@ -98,6 +98,23 @@ class ThroughTheProxy(unittest.TestCase):
         self.assertTrue(result.is_error)
         self.assertIn("check_missing", result.content[0].text)
 
+    def test_a_held_tool_is_refused_through_the_proxy_before_the_judges(self):
+        """Live run 12, D6c: a call to a held tool reached the judges and got a token before tool_held."""
+        self.tk.ledger.record("tool_held", {"tool": "pay_vendor", "jti": "j", "why": "bad_signature"})
+        before = self.tk.ledger.size()
+
+        async def body(client):
+            return await client.call_tool("pay_vendor", CALL)
+        result = self.run_client(body)
+        self.assertTrue(result.is_error)
+        self.assertIn("tool_held", result.content[0].text)
+        kinds = [e.kind for e in self.tk.ledger.entries[before:]]
+        self.assertNotIn("capability_issued", kinds)
+        self.assertNotIn("redemption_started", kinds)
+        decision = [e.body for e in self.tk.ledger.entries[before:] if e.kind == "decision"][-1]
+        self.assertEqual(decision["reason"], "tool_held")
+        self.assertNotIn("path_b", decision)
+
     def test_high_assurance_refuses_to_start_with_an_unchecked_tool(self):
         tk = two_key(self.tmp / "ha", specs=SPECS)
         self.addCleanup(tk.close)
