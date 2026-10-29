@@ -8,8 +8,9 @@ SPDX-License-Identifier: Apache-2.0
 
 Beta (pre-1.0), maintainer-reviewed, not yet independently audited. Every algorithm it uses is FIPS-approved; a FIPS
 140-3 approved mode follows once a validated module offers ML-DSA-65 ([ROADMAP](../ROADMAP.md#fips-approved-mode)).
-This page describes `two-key` 0.8.0, which is on PyPI (`pip install "two-key"`); the release steps are
-[PYPI.md](PYPI.md). 0.8.0 gives the judges a summary of recent decisions, records each judge's ballot, and
+This page describes `two-key` 0.9.0, which is on PyPI (`pip install "two-key"`); the release steps are
+[PYPI.md](PYPI.md). 0.9.0 signs everything with hybrid Ed25519 + ML-DSA-65 keys, adds the tool check for a
+tool behind the proxy, and adds a setup window; 0.8.0 gave the judges a summary of recent decisions, records each judge's ballot, and
 adds a ledger audit window and a constitution editor; 0.7.3 added `two-key setup` and the `config` commands, a passphrase on the principal key,
 and a signed serial against older rules; 0.7.0 added the SIEM export and a start-up check for a monitored agent that runs as
 Two-Key's own account; 0.6.0 added Windows support, content scanning through your antivirus or DLP

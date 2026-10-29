@@ -6,8 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.8.0, tag `v0.8.0` on `main`, is the latest release; the 0.9.0
-work on `working` is described here too and marked 0.9.0. What each release
+`two-key` is beta (pre-1.0). Package version 0.9.0, tag `v0.9.0` on `main`, is the latest release; what
+it added is marked 0.9.0. What each release
 shipped is under "Shipped" in [ROADMAP.md](../ROADMAP.md); tags and branches are in
 [AGENTS.md](../AGENTS.md).
 
@@ -127,7 +127,7 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   same code as `sign-constitution` ([CONSTITUTION_EDITOR.md](CONSTITUTION_EDITOR.md))
   The MCP proxy allows one proxy per agent by default
   (`one_proxy_per_agent`)
-- in 0.9.0 (on `working`, not released yet): every signature is hybrid
+- in 0.9.0: every signature is hybrid
   Ed25519 + ML-DSA-65, and a 0.8.0 deployment's keys are upgraded once at
   the first start (`keys_upgraded`, [UPGRADING.md](UPGRADING.md#the-key-upgrade-090));
   a tool behind the proxy can check each call itself and sign a receipt

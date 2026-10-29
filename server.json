@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://insomniac-vibelabs.github.io/Insomniac-VibeLabs-Webpage/two-key.html",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "two-key",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "transport": {
         "type": "stdio"
       },

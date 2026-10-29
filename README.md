@@ -70,11 +70,14 @@ What you get:
 - **Small on purpose.** Python 3.10 to 3.14, one required dependency
   (`cryptography`), Apache-2.0.
 
-**Status:** beta. 0.8.0 is the current release: judges see a summary of
-recent decisions (a repeated bill, a split payment, a burst of denied
-attempts), the ledger keeps each judge's ballot, one proxy serves each agent,
-and two windows arrive: a read-only ledger audit (`two-key ledger-view`) and
-a constitution editor. 0.7.3 added `two-key setup` and
+**Status:** beta. 0.9.0 is the current release, the last beta before 1.0:
+every signature is hybrid Ed25519 + ML-DSA-65 (quantum-resistant), a 0.8.0
+deployment's keys are upgraded once at the first start, a tool behind the
+proxy can check its own calls (the tool check), a tool error spends its
+token, and `two-key setup --window` sets up in a window. 0.8.0 added a
+summary of recent decisions for the judges, each judge's ballot in the
+ledger, one proxy per agent, a read-only ledger audit window
+(`two-key ledger-view`) and a constitution editor. 0.7.3 added `two-key setup` and
 `two-key config set`, `get`, `undo` and `check` for setting up and changing a
 deployment, a signed serial so a ledger never goes back to older rules, and
 start-up checks for the upstream server's files behind a launcher. 0.7.0
@@ -104,10 +107,10 @@ on it.
 
 ## Quick start
 
-Install 0.8.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
+Install 0.9.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 
 ```bash
-pip install "two-key[yaml]==0.8.0"
+pip install "two-key[yaml]==0.9.0"
 ```
 
 Tag `v0.8.0` on `main` is the same code.
@@ -135,7 +138,7 @@ around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp]==0.8.0"
+pip install "two-key[mcp]==0.9.0"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -676,14 +679,16 @@ flowchart TD
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). Version 0.8.0 is on PyPI. It is this beta, not
+three (HOWTO "Platforms"). Version 0.9.0 is on PyPI. It is this beta, not
 the 1.0 community review. Tags are not moved.
 
 ```bash
-pip install "two-key[yaml]==0.8.0"
+pip install "two-key[yaml]==0.9.0"
 ```
 
-`v0.8.0` gives the judges a summary of recent decisions, keeps each judge's
+`v0.9.0` signs everything with hybrid Ed25519 + ML-DSA-65 keys and upgrades a
+0.8.0 deployment's keys once, adds the tool check, spends a token on a tool
+error, and adds the setup window. `@v0.8.0` gives the judges a summary of recent decisions, keeps each judge's
 ballot in the ledger, lets one proxy serve each agent, and adds the ledger
 audit window and the constitution editor. `@v0.7.3` adds `two-key setup` and the `config` commands, a principal key
 encrypted with a passphrase, a signed serial so a ledger never goes back to

@@ -189,7 +189,8 @@ CHANGES.md "Release v0.8.0" lists what shipped.
 
 ## 0.9.0: Tool-side token check and remote agents
 
-Planned, the last beta. Everything 1.0 will contain is in, tested on real deployments, and
+Version 0.9.0, the last beta: to be tagged `v0.9.0` on `main` and published after the merge. CHANGES.md
+"Release v0.9.0" lists what ships. Everything 1.0 will contain is in, tested on real deployments, and
 frozen, so the public review looks at the final shape.
 
 - An optional tool-side token check (#28): a way for a tool, or a thin
@@ -204,13 +205,13 @@ frozen, so the public review looks at the final shape.
   agents over SSH.
 - A ten-minute quickstart and a demo with a real MCP server.
 - `two-key config set 'tools[*].claim'`: one setting on every tool as one change, one confirmation and one
-  ledger entry (live run 11; on `working`).
+  ledger entry (live run 11).
 - A setup window, `two-key setup --window`, beside the terminal setup (maintainer's request, 2026-10-28):
   the same answers and the same `build`, a High assurance switch that locks the profile's settings and makes
-  its quorum numbers minimums, and a Save answers file for a server with no screen (on `working`).
+  its quorum numbers minimums, and a Save answers file for a server with no screen.
 - Quantum-resistant signatures (maintainer's decision, 2026-10-28; design approved 2026-10-29): every
   signature is hybrid Ed25519 plus ML-DSA-65, and a 0.8.0 deployment's keys are upgraded once at its first
-  start (`keys_upgraded`) (on `working`; [Post-quantum signatures](#post-quantum-signatures)). FIPS 140-3
+  start (`keys_upgraded`) ([Post-quantum signatures](#post-quantum-signatures)). FIPS 140-3
   approved mode follows once a validated module offers ML-DSA-65 ([FIPS approved mode](#fips-approved-mode)).
 - A freeze for 1.0: what 1.0 keeps stable (constitution, rules and judge
   configuration shapes, the ledger and token formats, the SIEM schema, the
@@ -282,7 +283,7 @@ from a lost or compromised certificate. It builds on the key backup from 0.3.
 
 ### Post-quantum signatures
 
-Moved into 0.9.0 (maintainer's decision, 2026-10-28) and built on `working`.
+Moved into 0.9.0 (maintainer's decision, 2026-10-28) and built for it.
 Until then every signature was Ed25519, which a large quantum computer could
 forge. AES-256-GCM and SHA-256 are not the concern at these sizes.
 

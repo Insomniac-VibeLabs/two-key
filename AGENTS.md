@@ -57,7 +57,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10; CI tests 3.10 to 3.14 (3.15 in a Linux job that does not block, until PyYAML ships 3.15 wheels; no `requires-python` cap). Package name `two-key`, import name `two_key`,
-version `0.8.0` on PyPI (`pip install "two-key[yaml]==0.8.0"`), tag `v0.8.0` on `main`. Tags are not moved. docs/PYPI.md is the release process. `server.json` (the MCP Registry listing) carries the same version as `pyproject.toml`; bump them together.
+version `0.9.0` on PyPI (`pip install "two-key[yaml]==0.9.0"`), tag `v0.9.0` on `main`. Tags are not moved. docs/PYPI.md is the release process. `server.json` (the MCP Registry listing) carries the same version as `pyproject.toml`; bump them together.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
@@ -84,7 +84,7 @@ there), not in `pyproject.toml`. CI installs them with `--require-hashes`.
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0); `two-key config show`, `get`, `check`, `set`, and `undo`, and `two-key setup`, read and write the proxy config without the SDK (`setup` needs it only to read a schema digest from the server) |
 
-Index install: `pip install "two-key[yaml]==0.8.0"`.
+Index install: `pip install "two-key[yaml]==0.9.0"`.
 From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.8.0"`.
 
 ## Tests and docs

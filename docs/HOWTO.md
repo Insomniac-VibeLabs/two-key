@@ -114,8 +114,8 @@ version pinned in `.github/requirements/uv.in`, run `uv sync --locked
 with that same uv and commit it. The lock is not a consumer pin: a git
 install still uses the ranges.
 
-Version 0.8.0 is on PyPI, and is tag `v0.8.0` on `main`. Install with
-`pip install "two-key[yaml]==0.8.0"` (the `mcp` extra for the proxy).
+Version 0.9.0 is on PyPI, and is tag `v0.9.0` on `main`. Install with
+`pip install "two-key[yaml]==0.9.0"` (the `mcp` extra for the proxy).
 The release steps are [PYPI.md](PYPI.md). A checkout install, above, is
 for working in this repository.
 

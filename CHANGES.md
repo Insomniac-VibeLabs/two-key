@@ -181,6 +181,7 @@ SPDX-License-Identifier: Apache-2.0
 - [A SIEM test that no longer races the clock — 2026-10-29](#a-siem-test-that-no-longer-races-the-clock--2026-10-29)
 - [FIPS mode after 1.0, and a clearer README — 2026-10-29](#fips-mode-after-10-and-a-clearer-readme--2026-10-29)
 - [Live run 12 findings — 2026-10-29](#live-run-12-findings--2026-10-29)
+- [Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29](#release-v090-hybrid-signatures-the-tool-check-a-setup-window--2026-10-29)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5366,3 +5367,31 @@ the tool check and the setup window. Nothing it found let a forbidden call run. 
   earlier `caller_field_in_arguments:po_matched` deny, as C79 does; C19 counts any `pay_vendor` call as the
   attempt, so a disguised "part 1 of installments" payment is graded; C72 accepts the judges' `insufficient_yes`
   when the scanner does not flag a credential in the body.
+
+## Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29
+
+Package version 0.9.0 (`pyproject.toml`, `two_key.__version__`, `uv.lock`, `server.json`), the last beta before
+1.0.0. To be tagged `v0.9.0` on `main` after the merge. The sections from "One confirm for every tool" on are the
+detail.
+
+- **Hybrid quantum-resistant signatures**: every key is an Ed25519 key and an ML-DSA-65 (FIPS 204) key that sign
+  together: tokens (`tk2`), the constitution, the ledger head and anchor, the witness, and the tool check's
+  stamps and receipts. No Ed25519-only fallback (`ml_dsa_unavailable`). Needs `cryptography` 48 or later.
+- **The key upgrade**: the first start of 0.9.0 upgrades a 0.8.0 deployment's keys once, signs the constitution
+  again with the same body, and records `keys_upgraded`. It cannot be undone.
+- **The tool check** (#28): a tool behind the MCP proxy checks that a call came through both keys and signs a
+  receipt the ledger records. Optional; required (or `exempt`) under `high_assurance`. docs/TOOL_CHECK.md.
+- **A tool error spends the token.**
+- **`two-key setup --window`**, the setup window beside the terminal interview, and **`tools[*].claim`** in
+  `config set`: one confirmation and one ledger entry for every tool.
+- **A ten-minute quickstart** (docs/QUICKSTART.md), run in CI.
+- **Live testing**: GrokBot's run 12 tested the key upgrade on copies of a 0.8.0 deployment, hybrid signatures,
+  the tool check and the setup window. Nothing it found let a forbidden call run; its live cases that did not
+  pass were stale or too narrow, and its findings are fixed ("Live run 12 findings").
+- 1480 tests.
+
+### Upgrading from 0.8.0
+
+See "Upgrading from 0.8.0" under "Docs: upgrading from 0.8.0 to 0.9.0" above, and docs/UPGRADING.md, "From 0.8.0
+to 0.9.0, step by step". In short: stop and back up, install 0.9.0, start once (which upgrades the keys, once and
+for good), and back up again at once.

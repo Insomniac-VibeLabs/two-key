@@ -6,8 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # Threat model
 
-This is the design model for `two-key` 0.8.0 (tag `v0.8.0` on `main`), the latest release, and for the
-0.9.0 work on `working`, marked 0.9.0 where it applies. What each
+This is the design model for `two-key` 0.9.0 (tag `v0.9.0` on `main`), the latest release; what 0.9.0
+added is marked 0.9.0 where it applies. What each
 release added to the model is under [Changes by release](#changes-by-release) at the end of
 this page. Tags and branches are in [AGENTS.md](../AGENTS.md), and the full history is
 [CHANGES.md](../CHANGES.md).
@@ -952,7 +952,7 @@ here.
 
 What each release added to the model, newest first. Each is described where it applies below.
 
-- 0.9.0 (on `working`, not released yet): hybrid Ed25519 + ML-DSA-65 signatures for every key
+- 0.9.0: hybrid Ed25519 + ML-DSA-65 signatures for every key
   (`two_key/keys.py`) and the one-time key upgrade of a 0.8.0 deployment (`two_key/upgrade.py`,
   `keys_upgraded`); the tool check (`two_key/toolcheck.py`): redeem stamps signed by a stamp-only key,
   tool receipts ledgered, and a held tool under `high_assurance`; a tool error spends the token; the
