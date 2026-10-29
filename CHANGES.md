@@ -5163,7 +5163,11 @@ MCP proxy only, Q6 above). docs/TOOL_CHECK.md describes it for operators and for
   checks the page still has the blocks and markers the script expects.
 - Fix: `two-key authorize` printed a Python traceback when Two-Key refused to start (for example, the monitored
   agent's `credential_env` variable not set). It now prints `two-key: refused to start: <why>` and exits 1.
-- The README is unchanged; a link to the quickstart from its Quick start section is proposed to the maintainer.
+- Step 3 sets up either in the terminal (`two-key setup --answers`, run in CI) or in the setup window
+  (`two-key setup --window --answers`, from the same answers file). `tests/test_setup_gui.py` opens the window
+  from the page's own answers file and sets up from it, so the window half is tested where a display is.
+- README: one sentence in Quick start links to the quickstart, for the command line and the windows (the
+  maintainer's yes, 2026-10-28).
 
 ## Tool check CI fixes — 2026-10-28
 

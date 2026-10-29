@@ -18,9 +18,12 @@ next.
 You need Linux or macOS, Python 3.10 or later, and [Ollama](https://ollama.com) for the judge. On Windows the
 `two-key` commands are the same; the shell lines around them need PowerShell's syntax instead.
 
-Every command on this page runs in CI on each change ([tests/quickstart_run.py](../tests/quickstart_run.py)),
-except the two marked below: CI installs from the checkout, and it answers for the judge with a stand-in that
-always votes yes, so the result there doesn't depend on a model.
+You can set up, and look at the ledger, on the command line or in a window; the page shows both ways.
+
+Every terminal command on this page runs in CI on each change
+([tests/quickstart_run.py](../tests/quickstart_run.py)), except the ones marked below: CI installs from the
+checkout, it has no display for the windows, and it answers for the judge with a stand-in that always votes yes,
+so the result there doesn't depend on a model.
 
 ## 1. Install
 
@@ -47,10 +50,10 @@ Leave it running, and use a second terminal for the rest.
 
 ## 3. Set up a deployment
 
-`two-key setup` asks its questions on the terminal, or reads the answers from a file, as here. This one sets up
-the guard route (you call Two-Key yourself), one local judge, the agent you will be playing, and one allowed
-tool, `pay_vendor`. The agent is declared by you, never by the agent; Two-Key refuses to start if a judge
-could be the agent ([SETUP](SETUP.md#the-questions) has every answer key).
+`two-key setup` asks its questions on the terminal or in a window, and either can start from a file of answers.
+This file sets up the guard route (you call Two-Key yourself), one local judge, the agent you will be playing,
+and one allowed tool, `pay_vendor`. The agent is declared by you, never by the agent; Two-Key refuses to start
+if a judge could be the agent ([SETUP](SETUP.md#the-questions) has every answer key).
 
 ```bash
 cat > answers.yaml <<'EOF'
@@ -70,11 +73,34 @@ monitored_agent:
 tools:
   - id: pay_vendor
 EOF
+```
+
+Then set up from it, in the terminal or in the setup window. Both hand the same answers to the same code and
+write the same files.
+
+**In the terminal:**
+
+```bash
 two-key setup --dir quickstart --answers answers.yaml
 ```
 
-It writes the folder `quickstart`: a new principal key, the rules signed with it, the judges file, and a new
-ledger. Its last lines list what to do next. Nothing in it is shared with anyone.
+Its last lines list what to do next.
+
+**Or in the setup window**, which opens with every page filled in from the file:
+
+<!-- quickstart: skip (CI has no display; tests/test_setup_gui.py sets up from this same file in the window) -->
+```bash
+two-key setup --dir quickstart --window --answers answers.yaml
+```
+
+Look through the pages: Deployment, Judges, Quorum, Agent and history, Rules and prose. The Proxy page is turned
+off, because the guard route has no proxy. The status line under the pages says `Ready to set up`. On **Review
+and set up**, press **Set up**. Without `--answers`, the window opens empty and you fill in the same answers
+yourself ([SETUP](SETUP.md#the-setup-window-two-key-setup---window)). The window needs tkinter; without it, or
+without a display, it says so and points back to the terminal.
+
+Either way you now have the folder `quickstart`: a new principal key, the rules signed with it, the judges file,
+and a new ledger. Nothing in it is shared with anyone.
 
 ## 4. A call Two-Key allows
 
@@ -120,8 +146,9 @@ search, filter and sort its entries:
 two-key ledger-view --key principal.pem --ledger ledger
 ```
 
-Type `decision` in the search box to see the two decisions. Without a display (or without tkinter), print the
-same entries instead, one JSON line each:
+If you set up in the window, its **Open the ledger view** button opens the same window. Type
+`decision` in the search box to see the two decisions. Without a display (or without tkinter), print the same
+entries instead, one JSON line each:
 
 <!-- quickstart: expect=rule_denied:tools -->
 ```bash
@@ -133,8 +160,7 @@ The ledger view never changes the ledger. [LEDGER_VIEW](LEDGER_VIEW.md) shows wh
 ## Next
 
 - Put Two-Key in front of an MCP server, so the agent's tool calls go through both keys:
-  [HOWTO](HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy). `two-key setup --window` asks the
-  same questions in a window ([SETUP](SETUP.md#the-setup-window-two-key-setup---window)).
+  [HOWTO](HOWTO.md#put-two-key-in-front-of-an-mcp-server-two-key-mcp-proxy).
 - Close every way around Two-Key before a real agent runs: [CONNECTING](CONNECTING.md).
 - Add judges from other makers, or choose the `high_assurance` profile:
   [JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md).

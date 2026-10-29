@@ -25,6 +25,11 @@ try:
 except ImportError:                 # this Python was built without tkinter
     tk = None
 
+try:
+    import yaml
+except ImportError:                 # installed without the yaml extra
+    yaml = None
+
 from two_key import _platform, cli, config_set, setup_cmd, setup_form
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -200,6 +205,22 @@ class Window(unittest.TestCase):
         window.refresh()
         self.assertEqual(window.notebook.tab(window.proxy_tab, "state"), "disabled")
         self.assertNotIn("upstream", window.answers())
+
+    @unittest.skipIf(yaml is None, "the quickstart's answers file is YAML")
+    def test_the_quickstart_answers_set_up_in_the_window(self):
+        # docs/QUICKSTART.md step 3 offers the window beside the terminal; CI runs the terminal half.
+        page = (ROOT / "docs" / "QUICKSTART.md").read_text(encoding="utf-8")
+        answers_file = self.base / "answers.yaml"
+        answers_file.write_text(page.split("cat > answers.yaml <<'EOF'\n", 1)[1].split("\nEOF\n", 1)[0] + "\n",
+                                encoding="utf-8")
+        window = self.window(setup_form.open_answers(answers_file))
+        window.refresh()
+        self.assertIn("Ready to set up", window.status.cget("text"))
+        self.assertEqual(window.notebook.tab(window.proxy_tab, "state"), "disabled")
+        self.assertIsNotNone(window.set_up(), window.status.cget("text"))
+        for name in ("constitution.signed.json", "judges.yaml", "ledger"):
+            self.assertTrue((self.base / "deployment" / name).exists(), name)
+        self.assertEqual(str(window.open_ledger.cget("state")), "normal")
 
 
 class CommandLine(unittest.TestCase):

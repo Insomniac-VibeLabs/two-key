@@ -123,6 +123,9 @@ python -m two_key demo
 python -m two_key authorize --help
 ```
 
+For a ten-minute walkthrough from install to an allowed and a refused call with a local judge, on the command
+line or in the setup and ledger windows, see [docs/QUICKSTART.md](docs/QUICKSTART.md).
+
 Real judges are configured in `examples/judges.yaml`. The operator guide is
 [docs/HOWTO.md](docs/HOWTO.md). Before a real agent runs, close every way
 around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).

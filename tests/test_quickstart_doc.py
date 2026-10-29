@@ -18,10 +18,12 @@ class QuickstartPage(unittest.TestCase):
     def test_the_page_has_its_steps_and_each_marker_is_read(self):
         found = blocks(DOC.read_text(encoding="utf-8"))
         run = [b for b in found if not b.skip]
-        self.assertEqual(len(found), 7)
-        self.assertIn("two-key setup --dir quickstart", run[0].code)
-        self.assertEqual([b.exit for b in run], [0, 0, 2, 0])
-        self.assertEqual([b.expect for b in run], [None, "both_paths_allow", "rule_denied:tools",
+        self.assertEqual(len(found), 9)
+        self.assertIn("cat > answers.yaml", run[0].code)
+        self.assertIn("two-key setup --dir quickstart --answers", run[1].code)
+        self.assertIn("--window", [b for b in found if b.skip][2].code)
+        self.assertEqual([b.exit for b in run], [0, 0, 0, 2, 0])
+        self.assertEqual([b.expect for b in run], [None, None, "both_paths_allow", "rule_denied:tools",
                                                    "rule_denied:tools"])
 
     def test_a_marker_sets_the_exit_code_and_the_text_to_expect(self):
