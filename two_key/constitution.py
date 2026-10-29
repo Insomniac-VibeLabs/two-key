@@ -20,7 +20,7 @@ from .canonical import canonical_bytes, canonical_hash
 from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path, has_caller_fields,
                      has_exact_fields, is_caller, rule_fields, validate_fields)
 from .derive import DOMAIN, is_domain_entry
-from .keys import fingerprint, sign, verify
+from .keys import classical_half, fingerprint, is_hybrid, sign, verify
 from .policy_vm import ConstitutionError, validate_rules
 
 FORMAT_V1 = "two-key-constitution-v1"
@@ -583,6 +583,16 @@ def load_envelope(path: Path | str) -> dict:
         raise ConstitutionError(f"constitution {path}: {e}") from None
 
 
+def _signature_failed(public_key, message: bytes, signature) -> str:
+    """Why a constitution's signature failed. One by the hybrid principal's own Ed25519 half is the 0.8.0 key's,
+    from before the key upgrade: refused, not signed again, since an Ed25519-only signature is not enough."""
+    if is_hybrid(public_key) and verify(classical_half(public_key), message, signature):
+        return ("constitution signature failed: it is signed by this principal's 0.8.0 Ed25519 key, from before "
+                "the key upgrade; sign it again (two-key keys upgrade --key KEY --ledger DIR --constitution FILE, "
+                "or two-key sign-constitution; docs/UPGRADING.md)")
+    return "constitution signature failed"
+
+
 def verify_signed(envelope: dict, public_key) -> Constitution:
     fmt = envelope.get("format") if isinstance(envelope, dict) else None
     if fmt not in (FORMAT_V1, FORMAT_V2, FORMAT_V3):
@@ -594,8 +604,9 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
     signed = envelope.get("signed")
     if not isinstance(signed, dict):
         raise ConstitutionSignatureError("missing signed body")
-    if not verify(public_key, canonical_bytes(signed), envelope.get("signature") or ""):
-        raise ConstitutionSignatureError("constitution signature failed")
+    signature = envelope.get("signature") or ""
+    if not verify(public_key, canonical_bytes(signed), signature):
+        raise ConstitutionSignatureError(_signature_failed(public_key, canonical_bytes(signed), signature))
     if fmt in (FORMAT_V2, FORMAT_V3):
         extra = set(signed) - (_V3_SIGNED_KEYS if fmt == FORMAT_V3 else _V2_SIGNED_KEYS)
         if extra:

@@ -111,11 +111,14 @@ _UPGRADE_SIGNATURES = ("old_principal_signature", "new_principal_signature", "ol
                        "new_witness_signature")
 
 
+_SHA256 = "sha256:"      # the prefix of a digest, and of a 0.8.0 Ed25519 key's fingerprint
+
+
 def witness_key_fingerprint(raw: str) -> str:
     """The fingerprint of a raw witness public key (the base64 form the head carries): ``hybrid-sha256:`` for a
     hybrid key, ``sha256:`` for a 0.8.0 Ed25519 key, then the hex SHA-256 (``keys.key_fingerprint``)."""
     data = base64.b64decode(raw)
-    return ("sha256:" if len(data) == ED_PUB_BYTES else "hybrid-sha256:") + hashlib.sha256(data).hexdigest()
+    return (_SHA256 if len(data) == ED_PUB_BYTES else "hybrid-sha256:") + hashlib.sha256(data).hexdigest()
 
 
 def _witness_public(raw, what: str):
@@ -270,7 +273,7 @@ def omitted_body(body: dict, error: Exception) -> dict:
     except (RecursionError, ValueError, TypeError):
         data = None
     return {**kept, "body_size": -1 if data is None else len(data),
-            "body_digest": None if data is None else "sha256:" + hashlib.sha256(data).hexdigest(),
+            "body_digest": None if data is None else _SHA256 + hashlib.sha256(data).hexdigest(),
             "body_omitted": True, "body_error": str(error)[:_KEEP_CHARS]}
 
 
@@ -1269,7 +1272,7 @@ class Ledger:
             if os.path.lexists(tmp) and not tmp.is_symlink():
                 os.unlink(tmp)
             _platform.fsync_dir(self.path)
-        body = {"dropped_bytes": len(tail), "dropped_sha256": "sha256:" + digest,
+        body = {"dropped_bytes": len(tail), "dropped_sha256": _SHA256 + digest,
                 "dropped_nonempty_lines": tail_lines, "tail_torn": tail_torn,
                 "head_size": head["size"], "tail_file": str(dest)}
         opened = self._reopen()

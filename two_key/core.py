@@ -43,6 +43,7 @@ from .fields import defaults as field_defaults
 from .gateway import ToolGateway, mark_two_key_ledger
 from . import history as judge_history
 from .history import HistoryIndex, format_time, shown_parties, subject_record
+from .keys import is_hybrid
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, ballot_records, check_judge_set, convene, lone_judge_warning, unmeetable_floor
@@ -61,6 +62,17 @@ def _checked_args_hash(spec, arguments, derived) -> str | None:
     if checked(spec) is None:
         return None
     return tool_args_hash(project_arguments(spec, arguments, dict(derived.fields)))
+
+
+KEYS_UPGRADE_NEEDED = ("keys_upgrade_needed: the principal key is a 0.8.0 Ed25519 key, and 0.9.0 signs with hybrid "
+                       "Ed25519 + ML-DSA-65 keys only; upgrade the deployment first (two-key keys upgrade --key KEY "
+                       "--ledger DIR --constitution FILE, or two_key.upgrade.open_upgraded; docs/UPGRADING.md)")
+
+
+def _require_hybrid(public_key) -> None:
+    """The library route has no first start to upgrade at: a 0.8.0 key is refused, never run on Ed25519 alone."""
+    if not is_hybrid(public_key):
+        raise TwoKeyConfigError(KEYS_UPGRADE_NEEDED)
 
 
 def _pinned_stamp_key(ledger) -> str | None:
@@ -201,6 +213,7 @@ class TwoKey:
                  siem: Any = None, known_agent_ids=()):
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
             raise ValueError("test-double judges refused; pass allow_test_doubles=True only for offline tests")
+        _require_hybrid(public_key)
         if not constitution.specs_enforced:
             raise ConstitutionError("tool_specs required")
         self.ledger = ledger

@@ -24,8 +24,8 @@ from cryptography.hazmat.primitives.asymmetric.mldsa import MLDSA65PrivateKey  #
 from two_key.capability import _b64u  # noqa: E402
 from two_key.canonical import canonical_bytes  # noqa: E402
 from two_key.keys import HybridPrivateKey, public_raw, sign  # noqa: E402
-from two_key.toolcheck import (META_KEY, StampSigner, ToolCheckConfig, ToolChecker, key_fingerprint,  # noqa: E402
-                               result_hash, tool_args_hash, verify_receipt)
+from two_key.toolcheck import (META_KEY, StampSigner, ToolCheckConfig, ToolChecker, ToolCheckError,  # noqa: E402
+                               key_fingerprint, result_hash, tool_args_hash, verify_receipt)
 
 DOC = ROOT / "docs" / "TOOL_CHECK.md"
 START, END = "<!-- vectors -->", "<!-- /vectors -->"
@@ -114,11 +114,12 @@ class Vectors(unittest.TestCase):
 
     def test_a_changed_signature_fails(self):
         doc = published()
-        for name in ("token", "stamp", "receipt"):
+        for name, refusal in (("token", "^token_invalid$"), ("stamp", "^stamp_invalid$"),
+                              ("receipt", "^bad_signature$")):
             signature = doc[name]["signature"]
             other = ("B" if signature[0] == "A" else "A") + signature[1:]
             changed = dict(doc, **{name: dict(doc[name], signature=other)})
-            with self.assertRaises(Exception, msg=name):
+            with self.assertRaisesRegex(ToolCheckError, refusal, msg=name):
                 vectors(changed)
 
 

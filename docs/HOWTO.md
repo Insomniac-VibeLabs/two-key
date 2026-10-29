@@ -2379,7 +2379,7 @@ every key a signed head needs:
 
 | Bundle | Holds | Does not hold |
 | --- | --- | --- |
-| `principal.bundle.json` | `principal.pem`, `capability.pem` | ledger key, witness key |
+| `principal.bundle.json` | `principal.pem`, `capability.pem`, and `stamp.pem` (the tool check's stamp key, from 0.9.0) where there is one | ledger key, witness key |
 | `ledger.bundle.json` | `ledger.key`, `fingerprint.key`, the ledger files, and `head.anchor` from that moment | principal key, witness key |
 | `witness.bundle.json` | `witness.pem` | principal key, ledger key |
 
@@ -2467,6 +2467,7 @@ backup. Move that file aside and run restore again. Do not delete
 | --- | --- | --- |
 | `principal.pem` | the ledger will not open under that key | restore. A newer ledger keeps its other keys, including a witness rotated after the backup |
 | `capability.pem` | `capability_key_missing` or `capability_key_changed` once a token was issued | restore the principal bundle. It holds this key too. Same rule after a witness rotation |
+| `stamp.pem` (0.9.0, the tool check) | `stamp_key_missing`, and every checking tool refuses its stamps | restore the principal bundle. It holds this key and writes `stamp.pub.pem` back beside it. A backup made before 0.9.0 does not hold it |
 | `ledger.key` | `ledger key missing` or `wrong ledger key` | restore the ledger bundle |
 | `fingerprint.key` | a later start creates a new one, and identity digests no longer match | restore the ledger bundle. If a new file was already created, move it aside first. Do not let a new key be created |
 | `witness.pem` | `witness key missing` or `witness_key_changed` | restore the witness bundle. A backup from before a rotation does not hold the new witness. `--replace-ledger` puts the old ledger and the old witness back; it is not how you keep the rotated ledger |

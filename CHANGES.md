@@ -175,6 +175,7 @@ SPDX-License-Identifier: Apache-2.0
 - [A ten-minute quickstart, run in CI — 2026-10-28](#a-ten-minute-quickstart-run-in-ci--2026-10-28)
 - [Tool check CI fixes — 2026-10-28](#tool-check-ci-fixes--2026-10-28)
 - [Hybrid quantum-resistant signatures — 2026-10-29](#hybrid-quantum-resistant-signatures--2026-10-29)
+- [Key upgrade follow-ups: backup, old constitutions, the library route — 2026-10-29](#key-upgrade-follow-ups-backup-old-constitutions-the-library-route--2026-10-29)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5219,5 +5220,39 @@ and a 0.8.0 deployment is upgraded once at its first start.
   encrypted key; the 0.8.0 key refused; the out-of-ledger pin; a stop at each step, including between the entry
   and its head; no ML-DSA; the command).
 - Docs: UPGRADING (the key upgrade), TOOL_CHECK (the wire format and vectors), THREAT_MODEL, ROADMAP, SCOPE, FIT,
-  SIEM, SETUP, HOWTO, PYPI, SECURITY, AGENTS.md. The README's limits and roadmap lines still say Ed25519; they
-  wait for the maintainer.
+  SIEM, SETUP, HOWTO, PYPI, SECURITY, AGENTS.md. The README's limits and roadmap lines were updated on
+  2026-10-29 (next entry).
+
+## Key upgrade follow-ups: backup, old constitutions, the library route — 2026-10-29
+
+From the maintainer's review and a live 0.8.0 to 0.9.0 upgrade run.
+
+- Backup (`two_key/backup.py`): the principal bundle also holds `stamp.pem`, the tool check's stamp key, where the
+  deployment has one; before, a restore lost it and every checking tool refused its stamps. Opening a backup
+  checks it against the stamp key the ledger pins (`stamp_key_missing` or a changed key is `backup_rejected`). A
+  restore writes `capability.pub.pem` and `stamp.pub.pem` back beside their keys when they are missing or hold
+  another key (`tool-key trust` reads them). A key's `alg` in the bundle is now the key's own:
+  `ed25519+ml-dsa-65`, or `ed25519` in a 0.8.0 backup, and `-encrypted` for an encrypted principal key; a label
+  that does not match the key is refused. 0.8.0 refuses a 0.9.0 bundle; 0.9.0 opens a 0.8.0 one.
+- Backup right after `two-key keys upgrade`, before any start: it was refused (`capability key does not match
+  the fingerprint pinned in the ledger`), because the last `constitution_loaded` still named the Ed25519
+  capability key. The capability pin is now the later of `constitution_loaded` and `keys_upgraded`, as
+  `open_capability_key` reads it.
+- A constitution signed by the 0.8.0 key that the upgrade did not sign again (not the one passed to that start)
+  is refused with a message that says so and names the command, instead of `constitution signature failed`
+  alone; `two-key authorize` printed a traceback for it and now prints `refused to start`. A later start never
+  signs it again by itself, so an Ed25519 forger cannot pass one off. `two-key keys upgrade --constitution FILE`
+  signs a file the operator names again once the keys are hybrid.
+- The Python library route: `TwoKey` refuses a 0.8.0 Ed25519 principal key (`keys_upgrade_needed`) instead of
+  running on it with Ed25519 signatures; `two-key keys upgrade` or `two_key.upgrade.open_upgraded` upgrades it.
+- The backup reminder names the command as it is spelt, `two-key backup-export`.
+- README: hybrid Ed25519 + ML-DSA-65 signatures are in 0.9.0 (crypto summary, known limits, roadmap table and
+  chart), with the maintainer's agreement.
+- SonarCloud: the `sha256:` prefix in `ledger.py` is one constant, and the vectors test expects each refusal by
+  name (`token_invalid`, `stamp_invalid`, `bad_signature`) rather than any exception.
+- Tests: a fresh install never runs the upgrade or asks for a backup; the library route refuses a 0.8.0 key; an
+  old constitution is refused, a start does not sign it, the command does; a backup right after the upgrade
+  exports, verifies and restores; the stamp key in the bundle, its pin, and a deployment without one; a
+  mislabelled key alg; `authorize` refusing an old constitution without a traceback.
+- Docs: UPGRADING (fresh installs, other constitutions, the library route, `stamp.pem` in the backup), HOWTO
+  (the backup tables).

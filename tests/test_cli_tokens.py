@@ -17,7 +17,8 @@ from two_key.capability import _b64u_dec
 from two_key.cli import main
 from two_key.constitution import save_envelope, sign_constitution
 from two_key.core import TwoKey, TwoKeyConfigError
-from two_key.keys import generate_private_key, load_private_key_file, save_private_key, save_public_key
+from two_key.keys import (classical_half, generate_private_key, load_private_key_file, save_private_key,
+                          save_public_key)
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
@@ -67,6 +68,17 @@ class CliTokens(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(out, "")
         self.assertIn("refused to start: monitored_agent 'agent': credential_env AGENT_KEY is not set", err)
+        self.assertNotIn("Traceback", err)
+
+    def test_a_constitution_signed_by_the_0_8_0_key_is_a_refusal_that_says_how_to_sign_it_again(self):
+        """After the key upgrade, a constitution the start did not sign again: refused, with the command."""
+        save_envelope(self.dir / "c.json", sign_constitution(PROSE, RULES, classical_half(self.key), SPECS))
+        code, out, err = self.run_cli()
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("refused to start: constitution signature failed: it is signed by this principal's 0.8.0 "
+                      "Ed25519 key", err)
+        self.assertIn("two-key keys upgrade --key KEY --ledger DIR --constitution FILE", err)
         self.assertNotIn("Traceback", err)
 
     def test_token_never_printed_jti_and_digest_are(self):

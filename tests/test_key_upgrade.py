@@ -15,10 +15,12 @@ from unittest import mock
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from two_key import keys, ledger as ledger_mod
+from two_key import core, keys, ledger as ledger_mod
+from two_key.backup import export_backup, restore_backup, verify_backup
 from two_key.cli import main
-from two_key.constitution import load_envelope, save_envelope, sign_constitution, verify_signed
-from two_key.core import TwoKey
+from two_key.constitution import (ConstitutionSignatureError, load_envelope, save_envelope, sign_constitution,
+                                  verify_signed)
+from two_key.core import TwoKey, TwoKeyConfigError
 from two_key.keys import (add_ml_dsa, classical_half, is_hybrid, key_file_is_encrypted, load_private_key_file,
                           load_public_key, public_raw, save_private_key, save_public_key)
 from two_key.ledger import Ledger, LedgerError
@@ -30,6 +32,8 @@ RULES = [{"id": "t", "allow_only_tools": ["search"]}]
 SPECS = {"search": {"irreversible": False, "data_class_floor": "public"}}
 SEARCH = {"tool": "search", "data_class": "public", "irreversible": False}
 PASSPHRASE = b"a long enough passphrase"
+PHRASES = {"principal": "principal-passphrase-one", "ledger": "ledger-passphrase-two-ok",
+           "witness": "witness-passphrase-three"}
 
 
 def start(ledger, key, constitution: Path) -> TwoKey:
@@ -57,7 +61,8 @@ class Deployment08:
                          private_dir=True)
         save_envelope(self.constitution, sign_constitution("c", RULES, self.old, SPECS))
         self.digest = verify_signed(load_envelope(self.constitution), self.old.public_key()).digest
-        with contextlib.redirect_stderr(io.StringIO()):
+        # 0.8.0 ran on these keys; 0.9.0's TwoKey refuses them (keys_upgrade_needed), so the check is off here.
+        with contextlib.redirect_stderr(io.StringIO()), mock.patch.object(core, "is_hybrid", return_value=True):
             tk = start(Ledger(self.ledger_path, self.old), self.old, self.constitution)
         self.decision = tk.authorize(SEARCH, {}, "look something up")
         with mock.patch.object(ledger_mod, "HybridPrivateKey", (keys.HybridPrivateKey, Ed25519PrivateKey)):
@@ -73,6 +78,28 @@ class Deployment08:
             result = open_upgraded(self.principal_path, kw.pop("passphrase", None), self.ledger_path,
                                    constitution=self.constitution, **kw)
         return result, err.getvalue()
+
+
+class FreshInstall(unittest.TestCase):
+    def test_a_fresh_install_never_runs_the_upgrade_or_asks_for_a_backup(self):
+        """A 0.9.0 deployment is hybrid from its first key: no keys_upgraded, no upgrade message, no reminder."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            key = keys.generate_private_key()
+            save_private_key(root / "principal.pem", key)
+            constitution = root / "constitution.signed.json"
+            save_envelope(constitution, sign_constitution("c", RULES, key, SPECS))
+            for _ in range(2):          # the first start makes the ledger; the second opens it
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    result = open_upgraded(root / "principal.pem", None, root / "ledger", constitution=constitution)
+                    start(result.ledger, result.principal, constitution)
+                self.assertFalse(result.upgraded)
+                self.assertEqual(result.replaced, [])
+                self.assertNotIn("keys upgraded", err.getvalue())
+                self.assertNotIn("back up now", err.getvalue())
+            self.assertNotIn("keys_upgraded", [e.kind for e in result.ledger.entries])
+            self.assertFalse((root / "ledger.ledger-key" / BACKUP_DUE).exists())
 
 
 class Upgrade(unittest.TestCase):
@@ -204,6 +231,49 @@ class Upgrade(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "^ml_dsa_unavailable"):
                 self.dep.upgrade()
         self.assertEqual(self.dep.files(), before)
+
+    def test_the_python_library_route_refuses_a_0_8_0_key_instead_of_running_on_it(self):
+        ledger = Ledger(self.dep.ledger_path, self.dep.old)
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(TwoKeyConfigError, "^keys_upgrade_needed: .*two-key keys upgrade"):
+                start(ledger, self.dep.old, self.dep.constitution)
+
+    def test_another_constitution_signed_by_the_0_8_0_key_is_refused_until_signed_again_by_hand(self):
+        other = self.dep.root / "other.signed.json"
+        save_envelope(other, sign_constitution("other", RULES, self.dep.old, SPECS))
+        self.dep.upgrade()
+        public = load_private_key_file(self.dep.principal_path).public_key()
+        envelope = load_envelope(other)
+        with self.assertRaisesRegex(ConstitutionSignatureError, "0.8.0 Ed25519 key.*keys upgrade"):
+            verify_signed(envelope, public)
+        # A start does not sign it again (an Ed25519 forger could pass one off); the operator does, by hand.
+        self.dep.upgrade()
+        envelope = load_envelope(other)
+        with self.assertRaisesRegex(ConstitutionSignatureError, "0.8.0 Ed25519 key"):
+            verify_signed(envelope, public)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            main(["keys", "upgrade", "--key", str(self.dep.principal_path), "--ledger", str(self.dep.ledger_path),
+                  "--constitution", str(other)])
+        self.assertIn(f"signed again with the hybrid key: {other}", json.loads(out.getvalue())["note"])
+        self.assertEqual(verify_signed(load_envelope(other), public).prose, "other")
+
+    def test_a_backup_right_after_the_upgrade_exports_verifies_and_restores(self):
+        """Before the next start writes constitution_loaded, keys_upgraded is what pins the capability key."""
+        self.dep.upgrade()
+        out = self.dep.root / "backups"
+        with contextlib.redirect_stderr(io.StringIO()):
+            exported = export_backup(self.dep.ledger_path, self.dep.principal_path, out, PHRASES, iterations=1000)
+            verified = verify_backup(out, PHRASES)
+        self.assertTrue(exported["fingerprints"]["capability"].startswith("hybrid-sha256:"))
+        self.assertTrue(verified["ok"])
+        self.assertFalse((self.dep.root / "ledger.ledger-key" / BACKUP_DUE).exists())
+        capability = self.dep.root / "ledger.capability" / "capability.pem"
+        capability.unlink()
+        with contextlib.redirect_stderr(io.StringIO()):
+            restored = restore_backup(self.dep.ledger_path, self.dep.principal_path, out, PHRASES)
+        self.assertEqual(restored["actions"]["capability.pem"], "created")
+        self.assertTrue(is_hybrid(load_private_key_file(capability)))
 
     def test_keys_upgrade_on_the_command_line(self):
         out = io.StringIO()

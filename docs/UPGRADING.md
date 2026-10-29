@@ -255,6 +255,31 @@ upgrade still checks. After it, an Ed25519 signature is refused wherever a
 hybrid one is expected, and opening the ledger with the 0.8.0 key fails with
 `keys_upgraded`. There is no way back to Ed25519 alone.
 
+A fresh 0.9.0 install never runs any of this: `two-key setup` makes hybrid
+keys from the start, so there is no `keys_upgraded` entry, no upgrade message
+and no backup reminder.
+
+The upgrade signs again only the constitution that start was given. Any other
+constitution file still signed by the 0.8.0 key is refused when you start
+with it, with a message that says so; a later start never signs it again by
+itself, because then an Ed25519 forger could pass one off. Sign it again
+yourself, once:
+
+```bash
+two-key keys upgrade --key keys/principal.pem --ledger ledger \
+    --constitution other.signed.json
+```
+
+If you run Two-Key from Python (`TwoKey.load`), there is no first start to
+upgrade at: `TwoKey` refuses a 0.8.0 key with `keys_upgrade_needed`. Run
+`two-key keys upgrade` once, or open the deployment with
+`two_key.upgrade.open_upgraded`, which upgrades it as the proxy does.
+
+Take the backup the reminder asks for with `two-key backup-export`. From
+0.9.0 the principal bundle also holds `stamp.pem`, the tool check's stamp key,
+where the deployment has one, and a restore writes `capability.pub.pem` and
+`stamp.pub.pem` back beside their keys.
+
 It refuses, and changes nothing, in two cases:
 
 - **`keys_upgrade_needed`**: the witness public key is also pinned outside the

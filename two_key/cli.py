@@ -409,7 +409,7 @@ def _keys_upgrade(args) -> int:
         return 1
     result = {"ok": True, "upgraded": opened.upgraded, "keys_upgraded": opened.entry, "replaced": opened.replaced}
     if not opened.upgraded:
-        result["note"] = "the keys are already hybrid; nothing to do"
+        result["note"] = "the keys are already hybrid; " + _signed_again(opened.replaced)
     elif pin is not None:
         result["next"] = (f"replace the out-of-ledger witness pin {pin} with "
                           f"{opened.ledger.witness_path.with_suffix('.pub.pem')}, then back up (two-key backup-export)")
@@ -417,6 +417,10 @@ def _keys_upgrade(args) -> int:
         result["next"] = "back up now (two-key backup-export): a backup from before the upgrade holds the old keys"
     print(json.dumps(result, indent=2))
     return 0
+
+
+def _signed_again(replaced: list) -> str:
+    return f"signed again with the hybrid key: {', '.join(replaced)}" if replaced else "nothing to do"
 
 
 def _pin_path(args):
@@ -599,7 +603,7 @@ def _open_upgraded(args, key):
 
 def _open_two_key(args):
     """``authorize``'s TwoKey, or None after printing why it would not start (a refusal, not a traceback)."""
-    from .constitution import load_envelope
+    from .constitution import ConstitutionSignatureError, load_envelope
     from .core import TwoKey, TwoKeyConfigError
     from .identity import load_monitored_agent_file
     from .judges.config import load_config_file
@@ -615,7 +619,7 @@ def _open_two_key(args):
         return TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
                            private_key=key, quorum=policy, monitored_agent=agent,
                            ttl_seconds=args.ttl_seconds)
-    except TwoKeyConfigError as e:
+    except (TwoKeyConfigError, ConstitutionError, ConstitutionSignatureError) as e:
         print(f"two-key: refused to start: {e}", file=sys.stderr)
         return None
 

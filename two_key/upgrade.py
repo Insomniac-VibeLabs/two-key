@@ -18,13 +18,17 @@ The steps, under the ledger's lock, each safe to run again after a stop at any p
 4. Sign the constitution again with the hybrid key; the signed body, so its digest, is unchanged.
 5. Record ``keys_upgraded`` (``Ledger.upgrade_keys``), signed by the old and new principal and witness keys,
    with the new capability and stamp key fingerprints; the head and the anchor are hybrid from then on.
-6. Leave ``backup-due`` beside the ledger key. Every start says to back up until ``two-key backup export``
+6. Leave ``backup-due`` beside the ledger key. Every start says to back up until ``two-key backup-export``
    removes it: a backup from before the upgrade restores the old keys.
 
 The automatic upgrade refuses (``keys_upgrade_needed``) where it cannot do all of it alone: when the witness
 public key is also pinned outside the ledger (``witness_public_key``), which the operator has to replace by hand.
 ``two-key keys upgrade`` does it and says what to replace. Where ML-DSA-65 is missing, both refuse
 (``ml_dsa_unavailable``); Two-Key never falls back to Ed25519 alone.
+
+After the upgrade, a start never signs a constitution again by itself: a file signed by the 0.8.0 key is refused,
+or an Ed25519 forger could pass one off. ``two-key keys upgrade --constitution FILE`` signs a file the operator
+names again, as ``sign-constitution`` would.
 """
 
 from __future__ import annotations
@@ -44,7 +48,7 @@ from .ledger import Ledger, LedgerError
 
 BACKUP_DUE = "backup-due"
 BACKUP_NOTE = ("two-key: back up now: the key upgrade changed every key file, and a backup made before it restores "
-               "the old keys, which this ledger refuses (two-key backup export; docs/UPGRADING.md)")
+               "the old keys, which this ledger refuses (two-key backup-export; docs/UPGRADING.md)")
 
 
 class UpgradeError(ValueError):
@@ -67,7 +71,7 @@ def backup_due_path(ledger: Ledger) -> Path:
 
 
 def backup_made(ledger_key_path: Path | str) -> None:
-    """``two-key backup export`` succeeded: the upgrade's backup reminder stops."""
+    """``two-key backup-export`` succeeded: the upgrade's backup reminder stops."""
     marker = Path(ledger_key_path).parent / BACKUP_DUE
     try:
         if marker.is_file() and not marker.is_symlink():
@@ -165,7 +169,7 @@ def open_upgraded(principal_path: Path | str, passphrase: Passphrase, ledger_pat
     ledger = Ledger(ledger_path, principal, witness_public_key=pin, anchor_path=anchor_path)
     result = Upgrade(principal, ledger)
     if is_hybrid(principal) and not ledger.upgrade_pending:
-        _remind(ledger, out)
+        _already_upgraded(result, None if automatic else constitution, out)
         return result
     require_ml_dsa()
     if automatic and pin is not None:
@@ -184,6 +188,13 @@ def open_upgraded(principal_path: Path | str, passphrase: Passphrase, ledger_pat
               file=out)
     _remind(ledger, out)
     return result
+
+
+def _already_upgraded(result: Upgrade, constitution: Path | str | None, out: TextIO) -> None:
+    """Nothing to upgrade. ``two-key keys upgrade --constitution FILE`` (never a start) signs that file again."""
+    if constitution:
+        _resign_constitution(Path(constitution), result.principal, result.replaced)
+    _remind(result.ledger, out)
 
 
 def _upgrade(result: Upgrade, principal_path: Path, passphrase: Passphrase, constitution: Path | None) -> None:

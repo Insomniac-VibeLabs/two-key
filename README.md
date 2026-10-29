@@ -590,21 +590,21 @@ Not in this repository:
 - enterprise deployment modes and permissioned-chain anchoring
 - X.509 / PKI identities and agent assertions
 - seed-phrase backup
-- hybrid ML-DSA-65
 
 Some of this is planned as optional additions. See the
 [roadmap](#roadmap). DLP and antivirus hooks shipped in 0.6.0 (an interface
 that calls your antivirus or DLP product, not a scanning engine:
 [docs/SCANNERS.md](docs/SCANNERS.md)). The SIEM export, which shipped in
 0.7.0, feeds the collector you run; it does not store, search, or alert
-([docs/SIEM.md](docs/SIEM.md)). After 1.0 come PKI with
-certificate recovery and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
-backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
+([docs/SIEM.md](docs/SIEM.md)). Hybrid Ed25519 plus ML-DSA-65 signatures
+ship in 0.9.0. After 1.0 comes PKI with certificate recovery. Key backup
+shipped in 0.3.0 and is not seed-phrase backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
 phrases are not planned.
 
 The ledger is encrypted at rest.
 
-Crypto here is Ed25519 and SHA-256 via the `cryptography` package. Ledger
+Crypto here is hybrid Ed25519 plus ML-DSA-65 signatures (from 0.9.0) and
+SHA-256 via the `cryptography` package. Ledger
 entries and the signed head are AES-256-GCM at rest. The data key is wrapped
 by a ledger key outside the ledger directory, not by the principal key. The
 head is signed by the principal and by a witness key, also outside the ledger
@@ -643,8 +643,12 @@ audited. It is not a FIPS 140-3 validated module.
   write the anchor file can still do both. It is not an external anchor.
 - Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
   module is on the roadmap. It would not validate this package.
-- Signatures are Ed25519, which is not quantum resistant. Hybrid signatures
-  are on the roadmap.
+- From 0.9.0, signatures are hybrid Ed25519 plus ML-DSA-65 (FIPS 204) and
+  verify only when both halves do, so a quantum computer that breaks Ed25519
+  alone cannot forge one. AES-256-GCM and SHA-256 are not the concern at
+  these sizes. TLS to judges and upstream servers is outside Two-Key. A 0.8.0
+  deployment's keys are upgraded once, at the first start
+  ([docs/UPGRADING.md](docs/UPGRADING.md#the-key-upgrade-090)).
 - Identities are bare keys. There is no certificate chain, expiry, or
   revocation. PKI with certificate recovery is on the roadmap.
 - It is not an antivirus or DLP product. From 0.6.0 it can
@@ -690,7 +694,7 @@ flowchart TD
   end
   subgraph next["Next: one beta, then 1.0.0"]
     direction LR
-    r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+    r09["0.9.0 beta<br/>Token check,<br/>remote agents,<br/>hybrid signatures"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
   end
   done --> next
 ```
@@ -703,9 +707,9 @@ flowchart TD
 | 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and `config set`, `get`, `undo`, `show` and `check`; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13) | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a ledger audit window and a constitution editor | Released, tag `v0.8.0` |
-| 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart, and formats frozen for 1.0 | Planned |
+| 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart, hybrid Ed25519 plus ML-DSA-65 signatures, and formats frozen for 1.0 | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
-| After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
+| After 1.0 | PKI and certificate recovery, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
 
