@@ -13,8 +13,8 @@ this page. Tags and branches are in [AGENTS.md](../AGENTS.md), and the full hist
 
 It is not a penetration test and it is not an independent review. The package is
 beta (pre-1.0): maintainer-reviewed with live LLM testing and automated
-scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
-SHA-256, and AES-256-GCM from the `cryptography` package.
+scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is hybrid
+Ed25519 + ML-DSA-65 signatures (0.9.0), SHA-256, and AES-256-GCM from the `cryptography` package.
 
 How to report a vulnerability is [SECURITY.md](../SECURITY.md). The longer
 narrative is the README. This file is the register. If the two disagree,
@@ -806,13 +806,35 @@ claims to close.
   ledgered deny. Ids written in the prose do reach the agent and its
   host. Two-Key does not map display names to ids and does no fuzzy
   matching.
-- The signatures are not quantum resistant. Ed25519 signs the constitution,
-  the ledger head (principal and witness), and capability tokens. A
-  sufficiently capable quantum computer could forge an Ed25519 signature.
-  The exposure is greatest for long-lived signatures, the constitution and
-  the ledger head. A capability token lives at most 300 seconds, so it is a
-  smaller exposure. AES-256-GCM and SHA-256 are not the concern at these
-  sizes. Hybrid signatures are planned (see [ROADMAP.md](../ROADMAP.md)).
+- Signatures are hybrid from 0.9.0: every key is an Ed25519 key and an
+  ML-DSA-65 (FIPS 204) key, and a signature is both, over the same labelled
+  message (`two-key-hybrid/1`, the suite name, the message), so it verifies
+  only when both halves do. A forger has to break Ed25519 and ML-DSA-65; a
+  quantum computer that breaks Ed25519 alone does not suffice. The
+  constitution, the ledger head and anchor, witness rotations, capability
+  tokens (`tk2`, with `alg` signed in), and the tool check's stamps and
+  receipts are all hybrid. A hybrid key refuses an Ed25519-only signature,
+  and neither half of a hybrid signature is an Ed25519 signature over the
+  plain message, so stripping the ML-DSA half is a refusal, not a downgrade.
+  ML-DSA-65 is OpenSSL's, through `cryptography` 48 or later; where it is
+  missing Two-Key refuses (`ml_dsa_unavailable`) and never signs with
+  Ed25519 alone. AES-256-GCM and SHA-256 are not the concern at these sizes.
+  Residual risks:
+  - Entries are hash-chained, not signed one by one; what a ledger made by
+    0.8.0 held before the upgrade is protected by the chain and by today's
+    hybrid head, not by its old Ed25519 signatures.
+  - The key upgrade (`keys_upgraded`) keeps each Ed25519 key and adds an
+    ML-DSA-65 key. It is signed by the old and new principal and witness
+    keys, and the ledger accepts it once, from the pinned witness, for the
+    principal it is opened with. An anchor signed by the old Ed25519 key is
+    accepted only while the upgrade is pending, or when the upgrade stopped
+    between its head and its anchor and nothing has been written since;
+    otherwise an Ed25519 forger could pass off an old anchor and roll the
+    ledger back.
+  - A backup from before the upgrade holds the 0.8.0 keys. Restoring it
+    restores the old, Ed25519-only deployment; the head anchor refuses it
+    while the anchor is newer. Every start says "back up now" until a new
+    backup is made.
 
 ## Out of scope
 
@@ -835,8 +857,8 @@ claims to close.
   tool-spec floor is not a taint label. Scanning engines, external or
   permissioned-chain anchoring, and seed phrases are not here and are not
   planned. Scanner hooks that call an external product shipped in 0.6.0. PKI with
-  certificate recovery and hybrid signatures are in [ROADMAP.md](../ROADMAP.md). Key backup
-  shipped in 0.3.0. See [SCOPE.md](SCOPE.md).
+  certificate recovery is in [ROADMAP.md](../ROADMAP.md). Key backup
+  shipped in 0.3.0, hybrid signatures in 0.9.0. See [SCOPE.md](SCOPE.md).
 
 ## Planned changes to this model
 
@@ -844,8 +866,9 @@ These come from [ROADMAP.md](../ROADMAP.md), in its order: 1.0, then the
 rest after 1.0. None of what follows is in a release yet. Each item is
 added to the sections above in the release that ships it. Key backup and
 custom Path A fields (0.3.0), the MCP adapter (0.5.0), the DLP and
-antivirus hooks (0.6.0), and the SIEM export with the refused-token count
-(0.7.0) shipped and are described above, not here.
+antivirus hooks (0.6.0), the SIEM export with the refused-token count
+(0.7.0), and hybrid signatures (0.9.0) shipped and are described above, not
+here.
 
 - After 1.0, not scheduled:
   - PKI and certificate recovery. New assets: the certificate
@@ -860,13 +883,6 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
     identity. Recovery is meant to be a ledger event and to end with the old
     certificate revoked. Validity checks depend on a correct clock. Existing
     bare-key setups stay valid.
-  - Post-quantum signatures. New assets: a second signing key per
-    signing role, and larger signatures in the constitution, ledger head, and
-    possibly tokens. A hybrid signature is meant to verify only when both
-    halves verify. New risk to design against: a downgrade, where the
-    post-quantum half is stripped. Every signed format carries an algorithm
-    identifier, and a verifier that expects the hybrid form refuses a
-    classical-only one. Existing 0.2.x ledgers stay readable.
   - FIPS approved mode. New boundary: the cryptographic provider.
     The mode is meant to refuse to start unless the library runs on a FIPS
     140-3 validated module in approved mode, and to refuse algorithms outside
@@ -916,7 +932,7 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
-- `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
+- `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures, or once by the 0.9.0 key upgrade, `keys_upgraded` with four (old and new principal and witness); `append` refuses all three kinds, and a ledger whose key files are hybrid before `keys_upgraded` refuses every write (`keys_upgrade_pending`). The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
 - `two_key/mcp_proxy/`: only `sdk.py` imports the MCP SDK. Each `tools/call` runs `authorize`, then `gateway.invoke` in the same process; the upstream call is the gateway's registered tool, with projected arguments. Only signed tools are shown, under their signed ids; any other name is `tool_not_offered`, ledgered. Caller-supplied paths are removed from the `inputSchema` shown. `mcp_proxy_started` is ledgered before serving; if that fails, the proxy does not start. Fact hooks load at start; one that does not import refuses to start. The schema digest covers exactly the fields shown, as the upstream lists them (before caller paths are removed); a mismatch refuses unless `on_schema_change: warn`. `unresolved_identity` refuses unless `allow_unresolved_identity: true`. The claim is the per-tool policy only (`floor`, a class, or none = classified). The child gets `upstream.env` plus the SDK's minimal set. Nothing but MCP goes to stdout. `draft.py`: placeholders that signing refuses, fact-like properties left out, server text in ASCII comments only. `undescribed_inputs` warns, never refuses, for each input Path A reads that the upstream schema does not describe.
 - `two_key/_platform.py`: POSIX does exactly what it did before 0.6.0 (mode 0600 and 0700, `O_NOFOLLOW`, `flock`, the same messages). On Windows a key is created with a protected access list for the current user only, in `CreateFileW` itself; a key is accepted only when its owner and every allow entry with more than metadata access are the current user, SYSTEM, Administrators, or OWNER RIGHTS; a reparse point as the last part is refused; locks are `LockFileEx`; descriptors are binary. Every key read and write in the package goes through it, and every text file Two-Key writes uses `newline="\n"` and a named encoding (`tests/test_text_io.py`).
 - `two_key/config_set.py`, `two_key/setup_cmd.py`: a change is refused as root, and when a file it writes or its folder can be changed by another account or is a link; the whole changed config passes `config check` before anything is written, so what `high_assurance` forbids stays forbidden; a weaker change needs `--confirm-weaker` and a typed yes on a terminal; a signed change needs the principal key and the exact signed rules file, and the new envelope is verified; `config_changed` (names and digests, never values) is ledgered before the files are renamed in. `config key-passphrase` keeps no plain copy of the key, and removing the passphrase counts as weaker.

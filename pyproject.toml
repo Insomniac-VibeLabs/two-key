@@ -51,7 +51,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 # Consumer ranges. The resolved set CI installs is uv.lock (wheels only).
-dependencies = ["cryptography>=41"]
+dependencies = ["cryptography>=48"]
 
 [project.optional-dependencies]
 yaml = ["pyyaml>=6"]

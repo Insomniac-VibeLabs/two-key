@@ -557,7 +557,8 @@ or your secret store puts in place at start, readable only by Two-Key's account.
 folder as the key protects only against a copy of the key file alone. The ledger key, the witness key, and
 the capability key are not encrypted by this; they live in the ledger's own folders, owner-only, as before.
 
-The format is Two-Key's own: the key, as PKCS8, sealed with AES-256-GCM under a key from PBKDF2-SHA256 at
+The format is Two-Key's own: the key, as PKCS8 (a hybrid key's two PKCS8 PEM blocks, format
+`two-key-encrypted-key/2`), sealed with AES-256-GCM under a key from PBKDF2-SHA256 at
 600,000 iterations with a random 16-byte salt, every header field bound in, the same construction as the key
 backup. A file that asks for fewer iterations is refused before the derivation runs. A key encrypted by
 another tool (`BEGIN ENCRYPTED PRIVATE KEY`) is refused by name; encrypt the unencrypted key with

@@ -30,8 +30,6 @@ import tempfile
 from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -40,7 +38,7 @@ from . import _platform
 from .canonical import EncodingError, canonical_bytes
 from .capability import capability_key_fingerprint
 from .keys import (Passphrase, decrypt_private_key, encrypted_header, is_encrypted, load_private_key_file, passphrase_bytes,
-                   public_raw, remember)
+                   private_key_from_pem, public_raw, remember)
 from .ledger import witness_key_fingerprint
 from .strict import StrictParseError, loads_json
 
@@ -188,14 +186,12 @@ def _read_named(path: Path, name: str) -> bytes:
     return _read_file(path, MAX_BUNDLE_BYTES, secret=name not in _LOOSE_FILES)
 
 
-def _load_pem(data: bytes, what: str) -> Ed25519PrivateKey:
+def _load_pem(data: bytes, what: str):
+    """A Two-Key private key (hybrid, or a 0.8.0 Ed25519 key) from a backup's unencrypted PEM file."""
     try:
-        key = serialization.load_pem_private_key(data, password=None)
-    except Exception:
-        raise BackupError(f"backup_refused: {what} is not an Ed25519 private key") from None
-    if not isinstance(key, Ed25519PrivateKey):
-        raise BackupError(f"backup_refused: {what} is not an Ed25519 private key")
-    return key
+        return private_key_from_pem(data, what)
+    except ValueError:
+        raise BackupError(f"backup_refused: {what} is not a Two-Key private key") from None
 
 
 def _exact_fields(obj, fields: tuple, what: str) -> dict:
@@ -411,7 +407,7 @@ def _materialize(bundles: dict, root: Path) -> dict:
     return layout
 
 
-def _principal_of(data: bytes, key_passphrase: Passphrase) -> Ed25519PrivateKey:
+def _principal_of(data: bytes, key_passphrase: Passphrase):
     if not is_encrypted(data):
         return _load_pem(data, "principal.pem")
     try:
@@ -748,6 +744,8 @@ def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
             except OSError:
                 pass
         raise
+    from .upgrade import backup_made
+    backup_made(ledger.ledger_key_path)      # the key upgrade's reminder to back up stops here
     return {"ok": True, "bundles": written, "fingerprints": fingerprints,
             "ledger_size": ledger.size(), "iterations": iterations,
             "kdf": KDF_NAME, "alg": ALG, "format": FORMAT}

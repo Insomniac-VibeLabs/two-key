@@ -17,7 +17,8 @@ stdio proxy, a spec drafter, caller-supplied facts, and a guard core for any age
 release shipped is under "Shipped" in [ROADMAP.md](../ROADMAP.md), and tags are in
 [AGENTS.md](../AGENTS.md).
 Apache-2.0.
-Crypto is Ed25519, SHA-256, and AES-256-GCM (the ledger's ciphertext).
+Crypto is hybrid Ed25519 + ML-DSA-65 signatures (from 0.9.0), SHA-256, and AES-256-GCM (the ledger's
+ciphertext).
 
 This package has a ledger, Path A, Path B, and judge and
 monitored-agent hooks. It has no scanning engine; from 0.6.0 it can call your antivirus or DLP product for the tools you
@@ -85,7 +86,7 @@ That backup is not a seed phrase.
 - You need a validated cryptographic module, or a control that has had an
   independent review. This release has not.
 - You need Two-Key itself to be the DLP or antivirus product, or the SIEM,
-  or you need PKI, permissioned anchoring, a seed phrase, or hybrid ML-DSA.
+  or you need PKI, permissioned anchoring, or a seed phrase.
   Those are not here. (0.6.0 can call a DLP or antivirus product you run,
   and 0.7.0 can feed a SIEM you run; neither stores, searches, or alerts.)
 

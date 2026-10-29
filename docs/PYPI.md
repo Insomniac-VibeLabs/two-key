@@ -36,7 +36,7 @@ pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.g
 
 | Extra | Pulls in | Needed for |
 | --- | --- | --- |
-| (none) | `cryptography>=41` | The library and the `two-key` command |
+| (none) | `cryptography>=48` (ML-DSA-65) | The library and the `two-key` command |
 | `yaml` | PyYAML | YAML constitutions, rules, and judge files |
 | `mcp` | `mcp>=2.2,<3` and PyYAML | `two-key mcp-proxy` and `two-key mcp-draft-specs` |
 

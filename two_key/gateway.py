@@ -45,13 +45,14 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from . import _platform
-from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
+from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError,
                          capability_key_fingerprint)
 from .agent_meta import cap_ledger_text, type_tag
 from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
 from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, digest_hex, to_plain
 from .derive import (MAX_ARGS_BYTES, DeriveError, args_too_large, blocked_from_rules, caller_fields, canonical_too_large,
                      derive, dropped_keys, form_for, forms_match, project_arguments, size_record)
+from .keys import public_raw
 from .ledger import LedgerError
 from .scan import CALL_VERDICTS, ENCRYPTED
 from .toolcheck import ToolCheckError, checked, text_hash, tool_args_hash, verify_receipt
@@ -146,7 +147,7 @@ class ToolGateway:
         _warn_unbound_ledger(ledger)
         self.issuer = _as_verifier(issuer)
         principal = getattr(ledger, "public_key", None)
-        if principal is not None and _raw(self.issuer.public_key) == _raw(principal):
+        if principal is not None and public_raw(self.issuer.public_key) == public_raw(principal):
             raise TokenError("capability_key_is_principal_key")
         self._fingerprint = capability_key_fingerprint(self.issuer.public_key)
         self.compiled = compiled

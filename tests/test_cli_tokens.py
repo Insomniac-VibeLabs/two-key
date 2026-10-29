@@ -74,7 +74,7 @@ class CliTokens(unittest.TestCase):
         self.assertEqual(code, 0)
         rec = json.loads(out)
         self.assertNotIn("token", rec)
-        self.assertNotIn("tk1.", out)
+        self.assertNotIn("tk2.", out)
         self.assertTrue(rec["token_digest"].startswith("sha256:") or len(rec["token_digest"]) >= 32)
         issued = [e for e in Ledger(self.dir / "ledger", self.key).entries if e.kind == "capability_issued"]
         self.assertEqual(issued[-1].body["jti"], rec["token_jti"])
@@ -86,7 +86,7 @@ class CliTokens(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(private(path))
         token = path.read_text().strip()
-        self.assertTrue(token.startswith("tk1."))
+        self.assertTrue(token.startswith("tk2."))
         self.assertNotIn(token, out)
         self.assertEqual(json.loads(out)["token_file"], str(path))
         code, _, err = self.run_cli("--emit-token", str(path))

@@ -278,7 +278,7 @@ def _ask_tool_check(entry: dict, ask: Ask, profile: str) -> None:
     """The tool check: the fingerprint of the tool's receipt key, ``exempt``, or (not under high_assurance) off."""
     needed = profile == "high_assurance"
     question = (f"Tool {entry['id']}: tool check (docs/TOOL_CHECK.md): the receipt key's fingerprint "
-                "(sha256:..., from two-key tool-key new), or exempt" + ("" if needed else ", or blank for off"))
+                "(hybrid-sha256:..., from two-key tool-key new), or exempt" + ("" if needed else ", or blank for off"))
     while True:
         answer = ask(question + ": ").strip()
         if not answer and not needed:
@@ -287,7 +287,7 @@ def _ask_tool_check(entry: dict, ask: Ask, profile: str) -> None:
         if not tool_check_problems({"route": "proxy", "profile": profile, "tools": [dict(entry, tool_check=value)]}):
             entry["tool_check"] = value
             return
-        print("  give sha256: and 64 hex digits, or exempt" + ("" if needed else ", or leave it blank"))
+        print("  give hybrid-sha256: and 64 hex digits, or exempt" + ("" if needed else ", or leave it blank"))
 
 
 def cloud_judges(judges: Any) -> list[str]:
@@ -372,7 +372,7 @@ def tool_check_problems(answers: Mapping) -> list[str]:
             out.append(f"tool {tool['id']}: the tool check is only for tools behind two-key mcp-proxy")
         elif value != EXEMPT and not (isinstance(value, Mapping) and set(value) == {"key"}
                                       and isinstance(value["key"], str) and TOOL_CHECK_KEY.fullmatch(value["key"])):
-            out.append(f"tool {tool['id']}: tool_check is exempt or {{key: sha256:<64 hex digits>}}")
+            out.append(f"tool {tool['id']}: tool_check is exempt or {{key: hybrid-sha256:<64 hex digits>}}")
     return out
 
 

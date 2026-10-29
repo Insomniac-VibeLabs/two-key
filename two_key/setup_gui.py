@@ -219,7 +219,7 @@ class SetupWindow:
         form.columnconfigure(1, weight=1)
         _row(form, "tool id", self.tool_var["id"], 0)
         _row(form, "lowest data class", self.tool_var["data_class_floor"], 1, choices=DATA_CLASSES)
-        _row(form, "tool check (sha256:..., exempt, or blank: off)", self.tool_var["tool_check"], 2)
+        _row(form, "tool check (hybrid-sha256:..., exempt, or blank: off)", self.tool_var["tool_check"], 2)
         ttk.Checkbutton(form, text="a call cannot be undone", variable=self.tool_irreversible).grid(
             row=3, column=1, sticky="w")
         self._buttons(tab, ("Add", self.add_tool), ("Remove", self.remove_tool))

@@ -64,9 +64,10 @@ def _checked_args_hash(spec, arguments, derived) -> str | None:
 
 
 def _pinned_stamp_key(ledger) -> str | None:
-    """The stamp key fingerprint the last ``constitution_loaded`` entry that records one pins (#28), or None."""
+    """The stamp key fingerprint the last ``constitution_loaded`` or ``keys_upgraded`` entry that records one pins
+    (#28), or None."""
     for entry in reversed(getattr(ledger, "entries", [])):
-        if entry.kind == "constitution_loaded" and entry.body.get("stamp_key_fingerprint"):
+        if entry.kind in ("constitution_loaded", "keys_upgraded") and entry.body.get("stamp_key_fingerprint"):
             return entry.body["stamp_key_fingerprint"]
     return None
 

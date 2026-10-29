@@ -44,7 +44,7 @@ ANSWERS = {
     "upstream": {"command": ["server"], "schema_digest": DIGEST},
 }
 # Under high_assurance every tool behind the proxy has the tool check on (#28).
-CHECKED_TOOLS = [dict(ANSWERS["tools"][0], tool_check={"key": "sha256:" + "1" * 64})]
+CHECKED_TOOLS = [dict(ANSWERS["tools"][0], tool_check={"key": "hybrid-sha256:" + "1" * 64})]
 NO_RUNTIME = mock.patch("two_key.writable.runtime_targets", return_value=[])
 
 

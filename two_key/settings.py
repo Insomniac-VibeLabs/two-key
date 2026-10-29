@@ -379,7 +379,7 @@ RULES = _rows(RULES_YAML, [
     ("tool_specs.<tool>.deny_unmapped", "false", "`true` denies an argument the spec does not name, instead of "
      "dropping it."),
     ("tool_specs.<tool>.tool_check", "none (off)", "The tool check (docs/TOOL_CHECK.md), for a tool behind "
-     "`two-key mcp-proxy`: `{key: sha256:...}` turns it on, `exempt` leaves it off. `high_assurance` refuses to "
+     "`two-key mcp-proxy`: `{key: hybrid-sha256:...}` turns it on, `exempt` leaves it off. `high_assurance` refuses to "
      "start with a tool that has neither; `exempt` and turning it off are weaker."),
     ("tool_specs.<tool>.tool_check.key", "required with a mapping", "The fingerprint of the key that signs the "
      "tool's receipts, as `two-key tool-key new` prints it."),

@@ -139,7 +139,7 @@ digest checks), `two_key/history.py` (the judge history summary), `two_key/backu
 It does not include a scanning, antivirus, or DLP engine (the 0.6.0 hooks
 call the operator's product), a SIEM or log management product (the 0.7.0
 export feeds the operator's collector), PKI, permissioned-chain anchoring,
-seed phrases, or hybrid ML-DSA.
+or seed phrases. Signatures are hybrid Ed25519 + ML-DSA-65 from 0.9.0.
 
 ## Planned additions
 
@@ -176,9 +176,6 @@ After 1.0, not scheduled:
   bundle unlocked by a recovery key for personal use, and a key split k-of-n
   among custodians for enterprise use. This package does not become a
   general-purpose certificate authority.
-- Post-quantum signatures: hybrid Ed25519 plus ML-DSA-65 for the
-  long-lived signatures (the constitution and the ledger head), sized to this
-  repository's scope.
 - FIPS approved mode: an opt-in mode that refuses to start unless
   the cryptography library runs on a FIPS 140-3 validated module in approved
   mode, and that refuses algorithms outside the approved set. This package is

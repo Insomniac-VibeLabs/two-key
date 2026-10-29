@@ -62,15 +62,17 @@ flowchart TD
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
-| 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
-| 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
-| After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
+| 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
+| 1.0.0 | The first stable release, after a public community review of 0.9.0, with a FIPS 140-3 approved mode | Planned |
+| After 1.0 | PKI and certificate recovery, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
 antivirus hooks, then the SIEM export, then 1.0. PKI, post-quantum
 signatures, FIPS approved mode, and the local GUI move after 1.0. Judge
 connection reuse (#6) joins 0.6.0, and the judge history summary (#1) comes
-before the 1.0 review; on 2026-10-25 it became its own release, 0.8.0. Earlier
+before the 1.0 review; on 2026-10-25 it became its own release, 0.8.0. On
+2026-10-28 post-quantum signatures moved into 0.9.0 and FIPS approved mode
+into 1.0.0. Earlier
 versions of this plan numbered the phases 0.4 to 0.11 in another order;
 CHANGES.md keeps that record. Released versions are under "Shipped" below.
 
@@ -145,7 +147,7 @@ in the same release.
   identifier from 0.3 onward. That lets post-quantum keys be added later
   without breaking existing ledgers or backups.
 - Keep the README's "Known limits" section current: no independent review,
-  no external anchor, not FIPS validated, signatures not quantum resistant.
+  no external anchor, not FIPS validated.
 
 ## 0.8.0: Judge history and ballot records
 
@@ -205,9 +207,10 @@ frozen, so the public review looks at the final shape.
 - A setup window, `two-key setup --window`, beside the terminal setup (maintainer's request, 2026-10-28):
   the same answers and the same `build`, a High assurance switch that locks the profile's settings and makes
   its quorum numbers minimums, and a Save answers file for a server with no screen (on `working`).
-- Quantum-resistant signatures (maintainer's decision, 2026-10-28): hybrid Ed25519 plus ML-DSA-65 for the
-  constitution, the ledger head, the witness and tokens, on by default for a new deployment. A design note
-  and the maintainer's security review come before any code. FIPS 140-3 approved mode follows in 1.0.0.
+- Quantum-resistant signatures (maintainer's decision, 2026-10-28; design approved 2026-10-29): every
+  signature is hybrid Ed25519 plus ML-DSA-65, and a 0.8.0 deployment's keys are upgraded once at its first
+  start (`keys_upgraded`) (on `working`; [Post-quantum signatures](#post-quantum-signatures)). FIPS 140-3
+  approved mode follows in 1.0.0.
 - A freeze for 1.0: what 1.0 keeps stable (constitution, rules and judge
   configuration shapes, the ledger and token formats, the SIEM schema, the
   CLI and its exit codes, the public Python API) is written in
@@ -277,25 +280,27 @@ from a lost or compromised certificate. It builds on the key backup from 0.3.
 
 ### Post-quantum signatures
 
-Today every signature is Ed25519, which a large quantum computer could
-forge. AES-256-GCM and SHA-256 are not the concern at these sizes. The
-exposure is long-lived signatures: the constitution and the ledger head.
-Capability tokens live at most 300 seconds, so they come last.
+Moved into 0.9.0 (maintainer's decision, 2026-10-28) and built on `working`.
+Until then every signature was Ed25519, which a large quantum computer could
+forge. AES-256-GCM and SHA-256 are not the concern at these sizes.
 
-- Hybrid signatures for the constitution and the ledger head: Ed25519 plus
-  ML-DSA-65 (FIPS 204). The signature verifies only if both halves verify.
-- Use a vetted library for ML-DSA instead of writing it, and keep the work
-  sized to this repository's scope.
-- A verifier that expects the hybrid form refuses a classical-only one, so
-  stripping the post-quantum half is a deny, not a downgrade.
-- Key backup and SIEM export carry the new keys and fields, using the
-  versioned formats from 0.3.
-- Decide separately whether tokens go hybrid, since they add size on every
-  call.
+- Every signature is hybrid: Ed25519 plus ML-DSA-65 (FIPS 204), both over the
+  same labelled message, verifying only if both halves verify. That covers
+  the constitution, the ledger head and anchor, witness rotations, capability
+  tokens (`tk2`), and the tool check's stamps and receipts.
+- ML-DSA-65 comes from OpenSSL through `cryptography` 48 or later, not code
+  of our own. Where it is missing Two-Key refuses (`ml_dsa_unavailable`).
+- A hybrid key refuses a classical-only signature, so stripping the
+  post-quantum half is a deny, not a downgrade. There is no way back to
+  Ed25519 alone.
+- A 0.8.0 deployment's keys are upgraded once, at the first start: each key
+  keeps its Ed25519 key and gains an ML-DSA-65 key, and the ledger records
+  `keys_upgraded`, signed by the old and new keys
+  ([UPGRADING](docs/UPGRADING.md#the-key-upgrade-090)). Key backup and the
+  SIEM export carry the new keys and the new entry.
 - Certificates (PKI, above) follow the same rule. Whether to issue hybrid or
   post-quantum certificates depends on the standards and library support at
   the time, and is decided then.
-- Existing 0.2.x ledgers stay readable, with a documented migration.
 
 ### FIPS approved mode
 
@@ -317,7 +322,10 @@ module in approved mode", never "FIPS compliant" or "FIPS validated".
   `constitution_loaded`.
 - Open question, decided when the mode is built: how hybrid signatures are
   treated in approved mode, since it depends on what the validated module
-  supports.
+  supports. All signing goes through `two_key/keys.py`, and `keys_upgraded`
+  records a move between named suites, so a FIPS suite changes one module and
+  reuses that entry. As of 2026-10-29 no validated OpenSSL module includes
+  ML-DSA; this is checked again at the 1.0 freeze.
 - Tests run in CI against a container that ships a validated provider.
 - A document on how to deploy it and what the claim does and does not
   cover.

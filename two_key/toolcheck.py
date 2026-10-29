@@ -5,11 +5,12 @@
 spent, and signs a receipt that Two-Key checks and ledgers. docs/TOOL_CHECK.md is the wire description, for a tool
 written in any language; this module is both sides of it in Python.
 
-Three signed objects, each canonical JSON (``canonical_bytes``) in base64url, signed with Ed25519 over a purpose
-label, a zero byte and that text, so a signature made for one purpose fails for any other:
+Three signed objects, each canonical JSON (``canonical_bytes``) in base64url, signed with a hybrid Ed25519 +
+ML-DSA-65 key (:func:`two_key.keys.sign`) over a purpose label, a zero byte and that text, so a signature made for
+one purpose fails for any other. The check is hybrid only: a classical key or signature is refused.
 
 - the token field ``tool_args_hash``: the hash of the arguments as the tool receives them (after projection),
-  inside the ``tk1`` token the issuer signs. Present only for a tool whose signed spec turns the check on.
+  inside the ``tk2`` token the issuer signs. Present only for a tool whose signed spec turns the check on.
 - the redeem stamp ``tks1.<body>.<sig>``, label ``two-key-redeem-stamp/1``, signed by the gateway's stamp key once
   ``redemption_started`` is on the ledger: this token, for this tool and these arguments, was spent at ``seq``.
 - the tool receipt ``tkr1.<body>.<sig>``, label ``two-key-tool-receipt/1``, signed by the tool's own key over the
@@ -34,8 +35,8 @@ from typing import Any, Awaitable, Callable, Mapping
 from . import _platform
 from .canonical import canonical_bytes, canonical_hash
 from .capability import MAX_TTL_SECONDS, _b64u, _b64u_dec, capability_key_fingerprint
-from .keys import (generate_private_key, load_private_key_file, load_public_key, public_from_raw, public_raw,
-                   save_private_key, save_public_key, sign, verify)
+from .keys import (HYBRID_ALG, generate_private_key, is_hybrid, load_private_key_file, load_public_key,
+                   public_from_raw, public_raw, save_private_key, save_public_key, sign, verify)
 from .strict import loads_json
 
 STAMP_PREFIX = "tks1"
@@ -44,11 +45,13 @@ STAMP_LABEL = b"two-key-redeem-stamp/1"
 RECEIPT_LABEL = b"two-key-tool-receipt/1"
 # The key the proxy and the tool use in MCP ``_meta``, on the request and on the result.
 META_KEY = "io.github.insomniac-vibelabs/two-key"
-ALG = "ed25519"
+# Hybrid only: the stamp, the receipt and the token each carry Ed25519 + ML-DSA-65 signatures.
+ALG = HYBRID_ALG
 # Fixed and not configurable (risk R9): how far the tool's clock may be behind or ahead of Two-Key's.
 CLOCK_ALLOWANCE_SECONDS = 5
-# A stamp or receipt is a few hundred characters; anything far longer is refused unread.
-MAX_OBJECT_CHARS = 4096
+# A hybrid stamp or receipt is under 10,000 characters (most of it the ML-DSA-65 signature and public key);
+# anything far longer is refused unread.
+MAX_OBJECT_CHARS = 16384
 EXEMPT = "exempt"
 SHA256 = "sha256:"
 # A tool's own refusal, as the result tells it: ``refused:<reason>``.
@@ -67,8 +70,15 @@ class ToolCheckError(ValueError):
 
 
 def key_fingerprint(public) -> str:
-    """``sha256:`` of the raw public key: the same form as the capability key's fingerprint."""
+    """The key's fingerprint, ``hybrid-sha256:`` of both public halves: the same form as the capability key's."""
     return capability_key_fingerprint(public)
+
+
+def _hybrid(key, what: str):
+    """``key`` when it is hybrid. The tool check is hybrid only: a 0.8.0 Ed25519 key is refused."""
+    if not is_hybrid(key):
+        raise ToolCheckError(f"{what}: the tool check takes hybrid Ed25519 + ML-DSA-65 keys only")
+    return key
 
 
 def text_hash(text: str) -> str:
@@ -152,7 +162,7 @@ def open_stamp_key(ledger, pinned: str | None = None):
         save_public_key(path.with_name("stamp.pub.pem"), key.public_key())
     if pinned and pinned != key_fingerprint(key.public_key()):
         raise ToolCheckError("stamp_key_changed: the stamp key does not match the fingerprint pinned in the ledger")
-    return key
+    return _hybrid(key, "stamp_key")
 
 
 class StampSigner:
@@ -285,12 +295,12 @@ class ToolCheckConfig:
             return p if p.is_absolute() else path.parent / p
         pinned = []
         for name in ("capability", "stamp"):
-            public = load_public_key(where(f"{name}_public_key"))
+            public = _hybrid(load_public_key(where(f"{name}_public_key")), f"{path}: {name}_public_key")
             if key_fingerprint(public) != data[f"{name}_key_fingerprint"]:
                 raise ToolCheckError(f"{path}: {name}_public_key does not have the pinned fingerprint")
             pinned.append(public)
-        return cls(data["tool"], pinned[0], pinned[1], load_private_key_file(where("tool_private_key")),
-                   where("seen_record"))
+        tool_key = _hybrid(load_private_key_file(where("tool_private_key")), f"{path}: tool_private_key")
+        return cls(data["tool"], pinned[0], pinned[1], tool_key, where("seen_record"))
 
 
 @dataclass(frozen=True)
@@ -309,8 +319,9 @@ def _mine(meta: Any) -> Mapping | None:
 
 
 def _token_payload(public, token: str) -> dict:
-    """The payload of a ``tk1`` token signed by ``public``; the times are checked by the caller."""
-    if not isinstance(token, str) or len(token) > MAX_OBJECT_CHARS * 4 or token.count(".") != 2 or not token.startswith("tk1."):
+    """The payload of a ``tk2`` (hybrid) token signed by ``public``; the times are checked by the caller."""
+    if not isinstance(token, str) or len(token) > MAX_OBJECT_CHARS * 4 or token.count(".") != 2 \
+            or not token.startswith("tk2."):
         raise ToolCheckError("token_invalid")
     _, body, signature = token.split(".")
     if not verify(public, body.encode("ascii"), signature):
@@ -319,7 +330,7 @@ def _token_payload(public, token: str) -> dict:
         payload = loads_json(_b64u_dec(body))
     except ValueError:
         raise ToolCheckError("token_invalid") from None
-    if not isinstance(payload, dict) or payload.get("v") != 1:
+    if not isinstance(payload, dict) or payload.get("v") != 2 or payload.get("alg") != ALG:
         raise ToolCheckError("token_invalid")
     return payload
 

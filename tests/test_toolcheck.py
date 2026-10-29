@@ -126,7 +126,7 @@ class Formats(Deployment):
 
     def test_a_label_keeps_a_stamp_from_passing_as_anything_else(self):
         key = generate_private_key()
-        stamp = seal(STAMP_PREFIX, STAMP_LABEL, key, {"v": 1, "alg": "ed25519", "jti": "a"})
+        stamp = seal(STAMP_PREFIX, STAMP_LABEL, key, {"v": 1, "alg": "ed25519+ml-dsa-65", "jti": "a"})
         self.assertEqual(peek(STAMP_PREFIX, stamp, "stamp")[0]["jti"], "a")
         public, as_receipt = key.public_key(), RECEIPT_PREFIX + stamp[len(STAMP_PREFIX):]
         with self.assertRaisesRegex(ToolCheckError, "receipt_invalid"):
@@ -136,7 +136,8 @@ class Formats(Deployment):
             peek(STAMP_PREFIX, token, "stamp")
 
     def test_spec_tool_check_must_be_a_fingerprint_or_exempt(self):
-        for bad in ({"key": "md5:1"}, {"key": "sha256:" + "0" * 64, "x": 1}, "yes", True):
+        for bad in ({"key": "md5:1"}, {"key": "hybrid-sha256:" + "0" * 64, "x": 1}, {"key": "sha256:" + "0" * 64},
+                    "yes", True):
             spec = specs(bad)
             with self.subTest(bad=bad), self.assertRaisesRegex(ConstitutionError, "tool_check"):
                 sign_constitution(PROSE, RULES, self.key, spec)
@@ -246,7 +247,7 @@ class ToolChecks(Deployment):
         wrong_stamp_key = seal(STAMP_PREFIX, STAMP_LABEL, generate_private_key(),
                                loads_json(_b64u_dec(stamp.split(".")[1])))
         body, sig = token.split(".")[1:]
-        forged_token = "tk1." + _b64u(canonical_bytes(dict(loads_json(_b64u_dec(body)), tool="plain"))) + "." + sig
+        forged_token = "tk2." + _b64u(canonical_bytes(dict(loads_json(_b64u_dec(body)), tool="plain"))) + "." + sig
         cases = [({}, PROJECTED, "check_missing"),
                  ({META_KEY: {"token": token}}, PROJECTED, "check_missing"),
                  ({META_KEY: {"token": token, "stamp": wrong_stamp_key}}, PROJECTED, "stamp_invalid"),
@@ -357,7 +358,7 @@ class Config(Deployment):
         import json
         path.write_text(json.dumps(data))
         self.assertEqual(ToolCheckConfig.load(path).tool, "send")
-        path.write_text(json.dumps(dict(data, stamp_key_fingerprint="sha256:" + "0" * 64)))
+        path.write_text(json.dumps(dict(data, stamp_key_fingerprint="hybrid-sha256:" + "0" * 64)))
         with self.assertRaisesRegex(ToolCheckError, "pinned fingerprint"):
             ToolCheckConfig.load(path)
 

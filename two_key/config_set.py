@@ -901,17 +901,24 @@ def ledger_body(change: Change, reasons: list[str], *, confirmed: bool) -> dict:
 
 def open_principal(config, passphrase=None):
     """The principal key this proxy uses (``keys.principal``), which signs the ledger. Encrypted, it opens
-    with ``passphrase``, else ``keys.passphrase_file``, else a prompt on the terminal."""
-    from .keys import load_private_key_file, passphrase_source
+    with ``passphrase``, else ``keys.passphrase_file``, else a prompt on the terminal. A 0.8.0 deployment's keys
+    are upgraded to hybrid first, as the proxy's first start would (``two_key/upgrade.py``)."""
+    from .keys import passphrase_source
+    from .ledger import LedgerError
+    from .upgrade import open_upgraded
     if not (Path(config.ledger) / "entries.jsonl").is_file():
         raise ConfigChangeError(f"ledger_missing: no ledger at {config.ledger}; every change is recorded there, "
                                 f"so start the proxy once (or run two-key setup) first")
     if passphrase is None:
         passphrase = passphrase_source(config.principal_passphrase_file)
     try:
-        return load_private_key_file(config.principal_key, passphrase)
+        return open_upgraded(config.principal_key, passphrase, config.ledger, constitution=config.constitution,
+                             witness_public_key=config.witness_public_key,
+                             anchor_path=config.head_anchor).principal
     except ValueError as e:
         raise ConfigChangeError(f"principal_key: {e}") from None
+    except LedgerError as e:
+        raise ConfigChangeError(f"ledger_refused: {e}") from None
 
 
 def _staged_constitution(staged: Mapping[str, Path], key):
@@ -1119,8 +1126,7 @@ def _passphrase(config, passphrase_file: str | None):
 
 def _principal(config, key_path: str | None, passphrase=None):
     """The principal key given with ``--key``; it must be the key the constitution and the proxy use."""
-    from cryptography.hazmat.primitives import serialization
-    from .keys import load_private_key_file
+    from .keys import load_private_key_file, public_raw
     if not key_path:
         raise ConfigChangeError("principal_key_needed: a signed setting is signed again; give the principal "
                                 "private key with --key FILE")
@@ -1131,8 +1137,7 @@ def _principal(config, key_path: str | None, passphrase=None):
         key = load_private_key_file(key_path, passphrase)
     except ValueError as e:
         raise ConfigChangeError(str(e)) from None
-    raw = serialization.Encoding.Raw, serialization.PublicFormat.Raw
-    if key.public_key().public_bytes(*raw) != proxy_key.public_key().public_bytes(*raw):
+    if public_raw(key.public_key()) != public_raw(proxy_key.public_key()):
         raise ConfigChangeError("principal_key_mismatch: --key is not the principal key this proxy uses "
                                 "(keys.principal)")
     return key

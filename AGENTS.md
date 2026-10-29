@@ -34,9 +34,8 @@ Do **not** add a scanning or antivirus engine, a SIEM or log storage, chain
 anchoring, or seed phrases here. The items in [ROADMAP.md](ROADMAP.md) are in
 scope: key backup (shipped in 0.3.0), an MCP adapter (0.5.0), DLP and
 antivirus hooks that call external scanners (0.6.0), ledger export for a SIEM
-(0.7.0), and, after 1.0, PKI with
-certificate recovery, hybrid ML-DSA signatures, a FIPS approved mode, and a
-local GUI. Build them in the order and with the limits stated
+(0.7.0), hybrid ML-DSA signatures (0.9.0), a FIPS approved mode (1.0.0), and,
+after 1.0, PKI with certificate recovery and a local GUI. Build them in the order and with the limits stated
 there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
@@ -81,7 +80,7 @@ there), not in `pyproject.toml`. CI installs them with `--require-hashes`.
 
 | Extra | Provides | When needed |
 | --- | --- | --- |
-| (none) | `cryptography>=41` | Ed25519, SHA-256, AES-256-GCM ledger |
+| (none) | `cryptography>=48` | Hybrid Ed25519 + ML-DSA-65 signatures, SHA-256, AES-256-GCM ledger |
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0); `two-key config show`, `get`, `check`, `set`, and `undo`, and `two-key setup`, read and write the proxy config without the SDK (`setup` needs it only to read a schema digest from the server) |
 
@@ -127,10 +126,13 @@ From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-Vib
 
 ## Crypto and security changes
 
-Crypto here is Ed25519 and SHA-256 via `cryptography`, plus AES-256-GCM for
-ledger ciphertext. The ledger key, witness key, and capability private key
-live outside the ledger directory. The gateway must verify only; it must not
-mint.
+Crypto here is hybrid Ed25519 + ML-DSA-65 signatures (0.9.0) and SHA-256 via
+`cryptography`, plus AES-256-GCM for ledger ciphertext. Every signature is made
+and checked in `two_key/keys.py` (`sign`, `verify`); do not call a key's own
+`sign` or `verify` elsewhere, and never add a path that accepts an Ed25519-only
+signature where a hybrid one is expected. The ledger key, witness key, and
+capability private key live outside the ledger directory. The gateway must
+verify only; it must not mint.
 
 Before changing authorization, tokens, the gateway, the ledger, or judge ≠
 agent identity checks: get a security review from the maintainer. Report

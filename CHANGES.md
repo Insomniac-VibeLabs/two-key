@@ -174,6 +174,7 @@ SPDX-License-Identifier: Apache-2.0
 - [The tool check: a tool behind the proxy checks its own calls (#28) — 2026-10-28](#the-tool-check-a-tool-behind-the-proxy-checks-its-own-calls-28--2026-10-28)
 - [A ten-minute quickstart, run in CI — 2026-10-28](#a-ten-minute-quickstart-run-in-ci--2026-10-28)
 - [Tool check CI fixes — 2026-10-28](#tool-check-ci-fixes--2026-10-28)
+- [Hybrid quantum-resistant signatures — 2026-10-29](#hybrid-quantum-resistant-signatures--2026-10-29)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5181,3 +5182,42 @@ MCP proxy only, Q6 above). docs/TOOL_CHECK.md describes it for operators and for
   `UnicodeError` are all `ValueError`s); `sha256:` and `refused:` are constants in toolcheck.py; the witness
   half of `Ledger._track` is its own method, so neither is over Sonar's complexity limit; and an unused
   test helper is gone. No behavior changed.
+
+## Hybrid quantum-resistant signatures — 2026-10-29
+
+The maintainer's decisions of 2026-10-28 and 2026-10-29: every signature is hybrid Ed25519 + ML-DSA-65 in 0.9.0,
+and a 0.8.0 deployment is upgraded once at its first start.
+
+- Keys and signatures (`two_key/keys.py`): every new key is an Ed25519 key and an ML-DSA-65 (FIPS 204) key that
+  sign together. A signature is both, over `two-key-hybrid/1`, a zero byte, `ed25519+ml-dsa-65`, a zero byte, and
+  the message (ML-DSA-65 with the context `two-key`), and it verifies only when both do. A hybrid key refuses an
+  Ed25519-only signature, so stripping a half is a refusal, not a downgrade. A key file holds two standard PKCS8
+  PEM blocks, Ed25519 first; encrypted, it is `two-key-encrypted-key/2`. Fingerprints of hybrid keys start
+  `hybrid-sha256:`. All signing and verifying goes through `keys.sign` and `keys.verify`; backup and
+  `config set` no longer read keys with their own code.
+- Where ML-DSA-65 is missing, Two-Key refuses (`ml_dsa_unavailable`) and never signs with Ed25519 alone. It needs
+  `cryptography` 48 or later (the PyPI wheels); `pyproject.toml` and `uv.lock` say so.
+- Capability tokens are `tk2`, with `"v": 2` and `"alg": "ed25519+ml-dsa-65"` signed in. The tool check is hybrid
+  only: its stamps, receipts and token, and its keys (`tool_check.key` is now `hybrid-sha256:...`). The test
+  vectors in TOOL_CHECK.md are hybrid; ML-DSA-65 signs with fresh randomness, so the test checks that the
+  published signatures verify, and that the keys, hashes and bodies match byte for byte.
+- The key upgrade (`two_key/upgrade.py`): the first start of `two-key mcp-proxy` or `two-key authorize`, or a
+  `two-key config` change that opens the principal key, finds 0.8.0 keys and, under the ledger's lock, rewrites
+  each key file with its Ed25519 key kept and an ML-DSA-65 key added (the principal first, encrypted again under
+  its passphrase), signs the constitution again with the same body, and records `keys_upgraded`: the old and new
+  principal and witness keys, signed by all four, and the new capability and stamp key fingerprints. Every step
+  is safe to run again after a stop; until the entry is written the ledger refuses writes
+  (`keys_upgrade_pending`). It prints what it did, and `back up now` at each start until `backup-export`
+  succeeds. A 0.8.0 key is refused afterwards (`keys_upgraded`). With an out-of-ledger witness pin it refuses
+  (`keys_upgrade_needed`) and `two-key keys upgrade` does it by hand. `config check` warns about a 0.8.0 key.
+- The ledger checks `keys_upgraded` when it opens (once, from the pinned witness, each new key the old one plus
+  an ML-DSA-65 half, all four signatures), checks witness rotations from before it with the old Ed25519
+  principal, and accepts an anchor signed by the old key only while the upgrade is pending or right after it.
+  `audit` lists it with the witness pins; the SIEM export sends it as notice, with fingerprints only.
+- Tests: `tests/test_hybrid_keys.py` (both halves needed, a half or an Ed25519 signature refused, key files,
+  tokens, no ML-DSA) and `tests/test_key_upgrade.py` (a 0.8.0 deployment upgraded and running, once; an
+  encrypted key; the 0.8.0 key refused; the out-of-ledger pin; a stop at each step, including between the entry
+  and its head; no ML-DSA; the command).
+- Docs: UPGRADING (the key upgrade), TOOL_CHECK (the wire format and vectors), THREAT_MODEL, ROADMAP, SCOPE, FIT,
+  SIEM, SETUP, HOWTO, PYPI, SECURITY, AGENTS.md. The README's limits and roadmap lines still say Ed25519; they
+  wait for the maintainer.

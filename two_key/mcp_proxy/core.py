@@ -458,12 +458,13 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
     from ..core import TwoKey, TwoKeyConfigError
     from ..identity import IdentityError, load_monitored_agent_file
     from ..judges.config import JudgeConfigError, load_config_file
-    from ..keys import load_public_key
-    from ..ledger import Ledger, LedgerError
+    from ..keys import passphrase_source
+    from ..ledger import LedgerError
     from ..scan import ScanConfigError
     from ..scanners import scanner_from_config
     from ..siem import SiemConfigError
     from ..siem_sinks import siem_from_config
+    from ..upgrade import open_upgraded
     try:
         scanner = None
         if config.scan is not None:
@@ -481,9 +482,13 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
                            why="high_assurance" if high else
                            f"on_agent_access: {config.on_agent_access or 'refuse (the default)'}")
         agent = load_monitored_agent_file(config.judges)
-        witness = load_public_key(config.witness_public_key) if config.witness_public_key else None
         siem = siem_from_config(config.siem, config.path.parent) if config.siem is not None else None
-        ledger = Ledger(config.ledger, key, witness_public_key=witness, anchor_path=config.head_anchor)
+        # The first start of 0.9.0 upgrades a 0.8.0 deployment's keys to hybrid, once (two_key/upgrade.py).
+        opened = open_upgraded(config.principal_key, passphrase_source(config.principal_passphrase_file, prompt=False),
+                               config.ledger, constitution=config.constitution,
+                               witness_public_key=config.witness_public_key, anchor_path=config.head_anchor,
+                               principal=key)
+        key, ledger = opened.principal, opened.ledger
         tk = TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
                          private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
                          scanner=scanner, on_writable_paths=config.on_writable_paths,

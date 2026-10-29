@@ -168,13 +168,18 @@ def _form_fields(body: Mapping[str, Any]) -> dict:
     return out
 
 
-def _witness_fields(body: Mapping[str, Any]) -> dict:
-    """Witness key fingerprints. Never a key."""
+_WITNESS_KEYS = (("witness_public_key", "witness_fingerprint"),
+                 ("old_witness_public_key", "old_witness_fingerprint"),
+                 ("new_witness_public_key", "new_witness_fingerprint"))
+_PRINCIPAL_KEYS = (("old_principal_public_key", "old_principal_fingerprint"),
+                   ("new_principal_public_key", "new_principal_fingerprint"))
+
+
+def _witness_fields(body: Mapping[str, Any], keys=_WITNESS_KEYS) -> dict:
+    """Witness key fingerprints (and, given ``keys``, others). Never a key."""
     from .ledger import witness_key_fingerprint
     out = {}
-    for key, name in (("witness_public_key", "witness_fingerprint"),
-                      ("old_witness_public_key", "old_witness_fingerprint"),
-                      ("new_witness_public_key", "new_witness_fingerprint")):
+    for key, name in keys:
         raw = body.get(key)
         if isinstance(raw, str):
             try:
@@ -182,6 +187,11 @@ def _witness_fields(body: Mapping[str, Any]) -> dict:
             except Exception:       # a body this ledger would not have written: no fingerprint, no key
                 continue
     return out
+
+
+def _upgrade_fields(body: Mapping[str, Any]) -> dict:
+    """The key upgrade's old and new principal and witness key fingerprints. Never a key or a signature."""
+    return _witness_fields(body, _WITNESS_KEYS + _PRINCIPAL_KEYS)
 
 
 def _constitution_fields(body: Mapping[str, Any]) -> dict:
@@ -277,6 +287,13 @@ KINDS: dict[str, KindSpec] = {
         excluded=("format", "seq", "prev", "old_witness_public_key", "new_witness_public_key",
                   "principal_signature", "old_witness_signature", "new_witness_signature"),
         extract=_witness_fields, severity=NOTICE),
+    # The key upgrade (0.9.0): Ed25519 keys made hybrid, once. Its statement repeats format, seq and prev too.
+    "keys_upgraded": KindSpec(
+        sent=("from_alg", "to_alg", "capability_key_fingerprint", "stamp_key_fingerprint"),
+        excluded=("format", "seq", "prev", "old_principal_public_key", "new_principal_public_key",
+                  "old_witness_public_key", "new_witness_public_key", "old_principal_signature",
+                  "new_principal_signature", "old_witness_signature", "new_witness_signature"),
+        extract=_upgrade_fields, severity=NOTICE),
     "ledger_recovered": KindSpec(
         sent=("dropped_bytes", "dropped_sha256", "dropped_nonempty_lines", "tail_torn", "head_size"),
         excluded=("tail_file",), severity=NOTICE),

@@ -165,7 +165,10 @@ python -m two_key sign-constitution \
 ```
 
 `init-key` writes `principal.pem` with mode 0600 (created that way, never
-chmodded afterwards) and refuses to overwrite an existing key. Commands that
+chmodded afterwards) and refuses to overwrite an existing key. From 0.9.0 the
+key is hybrid: an Ed25519 key and an ML-DSA-65 key, two PEM blocks in the one
+file, that always sign together; a 0.8.0 key is upgraded at the first start
+([UPGRADING](UPGRADING.md#the-key-upgrade-090)). Commands that
 take `--key` refuse a key file that the group or others can read
 (`key_file_insecure`) or that is a symlink. `--key` takes the private key,
 `principal.pem`; given `principal.pub.pem`, they say `--key:

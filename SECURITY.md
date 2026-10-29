@@ -111,7 +111,7 @@ security fixes. Upgrade to it before reporting, if you can.
   it can send each ledger entry to the collector you run
   (docs/SIEM.md). What that collector stores, who may read it, how long it
   keeps it, and what it alerts on are yours to decide.
-- FIPS validation. Algorithms are Ed25519 and SHA-256 from `cryptography`.
+- FIPS validation. Algorithms are hybrid Ed25519 + ML-DSA-65 and SHA-256 from `cryptography`.
 - An agent that reaches an MCP server directly, around the proxy, and an
   upstream server run as the proxy's OS user. Both are deployment
   choices (HOWTO "Key custody").

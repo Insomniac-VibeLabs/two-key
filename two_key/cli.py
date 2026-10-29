@@ -9,6 +9,8 @@
                     [--facts FILE] [--agent-session-env NAME] [--ttl-seconds N] [--emit-token PATH]
                     [--witness-public-key PEM]
   two-key rotate-witness --key KEY --ledger DIR [--witness-public-key PEM] [--reason TEXT]
+  two-key keys upgrade (--config FILE | --key KEY --ledger DIR [--constitution FILE]
+                    [--witness-public-key PEM] [--head-anchor PATH])
   two-key recover --key KEY --ledger DIR [--witness-public-key PEM] [--head-anchor PATH]
   two-key backup-export --key KEY --ledger DIR --out DIR \
                     --principal-passphrase-env NAME --ledger-passphrase-env NAME \
@@ -52,7 +54,9 @@ taken on argv, where other local users and shell history can see it.
 ``--witness-public-key PEM`` is the witness pin outside the ledger: a copy of the
 witness public key kept where whoever writes the ledger directory cannot change it.
 ``rotate-witness`` changes the witness key as a ledgered ``witness_rotated`` entry;
-update that copy afterwards. ``recover`` drops only an uncheckpointed tail
+update that copy afterwards. ``keys upgrade`` makes a 0.8.0 deployment's Ed25519 keys hybrid
+Ed25519 + ML-DSA-65 and records ``keys_upgraded``; the first start of 0.9.0 does it by itself, except where
+the witness key is also pinned outside the ledger (docs/UPGRADING.md). ``recover`` drops only an uncheckpointed tail
 (a crash between append and checkpoint) and records it. It does not roll a
 signed head backwards, and it does not run on open. ``audit`` verifies the
 ledger and the decision digests and prints both witness pins as JSON. The
@@ -377,6 +381,49 @@ def _rotate_witness(args) -> int:
     return 0
 
 
+def _keys_upgrade(args) -> int:
+    """``two-key keys upgrade``: the key upgrade by hand (``two_key/upgrade.py``), for a deployment the first start
+    will not upgrade by itself (an out-of-ledger witness pin), or to do it before that start."""
+    from .ledger import LedgerError
+    from .upgrade import open_upgraded
+    if args.config:
+        from .mcp_proxy.config import ProxyConfigError, load_proxy_config
+        try:
+            config = load_proxy_config(args.config)
+        except ProxyConfigError as e:
+            print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+            return 1
+        where = (config.principal_key, passphrase_source(config.principal_passphrase_file), config.ledger,
+                 config.constitution, config.witness_public_key, config.head_anchor)
+    elif args.key and args.ledger:
+        where = (args.key, _key_passphrase(args), args.ledger, args.constitution, _pin_path(args), _anchor_arg(args))
+    else:
+        print(json.dumps({"ok": False, "error": "give --config FILE, or --key KEY and --ledger DIR"}, indent=2))
+        return 1
+    key_path, passphrase, ledger, constitution, pin, anchor = where
+    try:
+        opened = open_upgraded(key_path, passphrase, ledger, constitution=constitution, witness_public_key=pin,
+                               anchor_path=anchor, automatic=False)
+    except (LedgerError, ValueError, OSError) as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+        return 1
+    result = {"ok": True, "upgraded": opened.upgraded, "keys_upgraded": opened.entry, "replaced": opened.replaced}
+    if not opened.upgraded:
+        result["note"] = "the keys are already hybrid; nothing to do"
+    elif pin is not None:
+        result["next"] = (f"replace the out-of-ledger witness pin {pin} with "
+                          f"{opened.ledger.witness_path.with_suffix('.pub.pem')}, then back up (two-key backup-export)")
+    else:
+        result["next"] = "back up now (two-key backup-export): a backup from before the upgrade holds the old keys"
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def _pin_path(args):
+    """``--witness-public-key`` as a path, checked as ``_witness_pin`` checks it, or None."""
+    return None if _witness_pin(args) is None else args.witness_public_key
+
+
 def _audit(args) -> int:
     from .audit import check_decision_digests
     key = _principal_key(args)
@@ -534,22 +581,36 @@ def _write_token(path: Path, token: str) -> None:
         fh.write(token + "\n")
 
 
+def _open_upgraded(args, key):
+    """The principal key and the ledger, the key upgrade done first when the deployment needs it
+    (``two_key/upgrade.py``), or None after printing why not."""
+    from .ledger import LedgerError
+    from .upgrade import open_upgraded
+    pin = _pin_path(args)
+    try:
+        opened = open_upgraded(args.key, _key_passphrase(args), args.ledger,
+                               constitution=getattr(args, "constitution", None), witness_public_key=pin,
+                               anchor_path=_anchor_arg(args), principal=key)
+    except (LedgerError, ValueError, OSError) as e:
+        print(f"ledger refused: {e}", file=sys.stderr)
+        return None
+    return opened.principal, opened.ledger
+
+
 def _open_two_key(args):
     """``authorize``'s TwoKey, or None after printing why it would not start (a refusal, not a traceback)."""
     from .constitution import load_envelope
     from .core import TwoKey, TwoKeyConfigError
     from .identity import load_monitored_agent_file
     from .judges.config import load_config_file
-    from .ledger import Ledger, LedgerError
     key = _principal_key(args)
     judges, policy = load_config_file(Path(args.judges))
     # The monitored agent is declared by the operator in the judges file, never by the agent.
     agent = load_monitored_agent_file(Path(args.judges))
-    try:
-        ledger = Ledger(args.ledger, key, witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args))
-    except LedgerError as e:
-        print(f"ledger refused: {e}", file=sys.stderr)
+    opened = _open_upgraded(args, key)
+    if opened is None:
         return None
+    key, ledger = opened
     try:
         return TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
                            private_key=key, quorum=policy, monitored_agent=agent,
@@ -847,6 +908,7 @@ def _backup_restore(args) -> int:
     return 0
 
 
+_CONSTITUTION_FLAG = "--constitution"
 _PROXY_CONFIG_HELP = "the proxy config file (YAML or JSON)"
 _KEY_HELP = "the principal private key (principal.pem from init-key, mode 0600); not principal.pub.pem"
 _KEY_UNLOCK_HELP = ("for an encrypted --key: a file only you can read holding its passphrase; without it, "
@@ -892,7 +954,7 @@ def main(argv: list[str] | None = None) -> int:
     auth = sub.add_parser("authorize", help="run Path A and Path B; do not execute the tool")
     _add_key(auth)
     auth.add_argument("--ledger", required=True)
-    auth.add_argument("--constitution", required=True)
+    auth.add_argument(_CONSTITUTION_FLAG, required=True)
     auth.add_argument("--judges", required=True)
     auth.add_argument("--tool", required=True)
     auth.add_argument("--args", default="{}")
@@ -925,6 +987,18 @@ def main(argv: list[str] | None = None) -> int:
     rotate.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     rotate.add_argument("--reason", default="", help="recorded in the witness_rotated entry (at most 200 characters)")
     rotate.set_defaults(func=_rotate_witness)
+    keys = sub.add_parser("keys", help="the key upgrade to hybrid Ed25519 + ML-DSA-65 (docs/UPGRADING.md)")
+    keys_sub = keys.add_subparsers(dest="keys_cmd", required=True)
+    upgrader = keys_sub.add_parser("upgrade", help="make a 0.8.0 deployment's keys hybrid and record keys_upgraded")
+    upgrader.add_argument("--config", default=None, metavar="FILE", help=_PROXY_CONFIG_HELP)
+    upgrader.add_argument("--key", default=None, help=_KEY_HELP)
+    upgrader.add_argument("--key-passphrase-file", default=None, metavar="FILE", help=_KEY_UNLOCK_HELP)
+    upgrader.add_argument("--ledger", default=None)
+    upgrader.add_argument(_CONSTITUTION_FLAG, default=None, metavar="FILE",
+                          help="the signed constitution, signed again with the hybrid key")
+    upgrader.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    upgrader.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    upgrader.set_defaults(func=_keys_upgrade)
     audit = sub.add_parser("audit", help="verify the ledger and print its witness pins and digest checks")
     _add_key(audit)
     audit.add_argument("--ledger", required=True)
@@ -1133,7 +1207,7 @@ def main(argv: list[str] | None = None) -> int:
                                                      "server, for the principal to review and sign (needs the mcp extra)")
     drafter.add_argument("--out", default=None, metavar="DIR",
                          help="write rules.draft.yaml, proxy-tools.draft.yaml, and schemas.json here (never overwritten)")
-    drafter.add_argument("--constitution", default=None, metavar="FILE",
+    drafter.add_argument(_CONSTITUTION_FLAG, default=None, metavar="FILE",
                          help="instead, print the schema_digest of this signed constitution's tools")
     drafter.add_argument("--tool", action="append", default=None, metavar="NAME",
                          help="draft only this upstream tool (repeatable); default: all")

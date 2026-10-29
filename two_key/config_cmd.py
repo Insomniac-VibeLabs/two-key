@@ -92,9 +92,19 @@ def _tool_checks(signed, high: bool) -> list[tuple[str, str]]:
     return out
 
 
+def _upgrade_line(config) -> tuple[str, str]:
+    """A 0.8.0 principal key: the proxy's first start upgrades the keys, unless the witness is pinned outside."""
+    if config.witness_public_key is not None:
+        return (FAIL, "principal_key: a 0.8.0 Ed25519 key, and witness_public_key pins the witness outside the "
+                      "ledger, so the proxy will not upgrade the keys by itself; run two-key keys upgrade --config "
+                      "FILE (docs/UPGRADING.md)")
+    return (WARN, "principal_key: a 0.8.0 Ed25519 key; the proxy's first start upgrades every key to hybrid "
+                  "Ed25519 + ML-DSA-65 and signs the constitution again (docs/UPGRADING.md)")
+
+
 def _constitution(config) -> tuple[list[tuple[str, str]], Any]:
     from .constitution import load_envelope, verify_signed
-    from .keys import key_file_is_encrypted
+    from .keys import is_hybrid, key_file_is_encrypted
     try:
         # As the proxy opens it: with keys.passphrase_file when it is encrypted, never a prompt.
         public = config.load_principal_key(prompt=False).public_key()
@@ -114,6 +124,8 @@ def _constitution(config) -> tuple[list[tuple[str, str]], Any]:
     except (OSError, ValueError) as e:
         return [(FAIL, f"constitution: {config.constitution}: {e}")], None
     out = [key_line, (OK, f"constitution: signed by the principal key, digest {signed.digest}")]
+    if not is_hybrid(public):
+        out.insert(1, _upgrade_line(config))
     unknown = sorted(set(config.tools) - set(signed.tool_specs))
     if unknown:
         out.append((FAIL, f"tools: {unknown} are not tools in the signed constitution"))

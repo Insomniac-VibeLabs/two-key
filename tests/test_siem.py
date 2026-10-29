@@ -61,6 +61,12 @@ SAMPLE_BODIES = {
                         "old_witness_public_key": "AAAA", "new_witness_public_key": "BBBB",
                         "reason": REVOKE_SECRET, "principal_signature": "s1",
                         "old_witness_signature": "s2", "new_witness_signature": "s3"},
+    "keys_upgraded": {"format": "two-key-keys-upgraded/1", "seq": 3, "prev": "0" * 64, "from_alg": "ed25519",
+                      "to_alg": "ed25519+ml-dsa-65", "old_principal_public_key": "AAAA",
+                      "new_principal_public_key": "BBBB", "old_witness_public_key": "CCCC",
+                      "new_witness_public_key": "DDDD", "capability_key_fingerprint": "hybrid-sha256:" + "0" * 64,
+                      "stamp_key_fingerprint": None, "old_principal_signature": "s1",
+                      "new_principal_signature": "s2", "old_witness_signature": "s3", "new_witness_signature": "s4"},
     "ledger_recovered": {"dropped_bytes": 10, "dropped_sha256": "sha256:" + "0" * 64,
                          "dropped_nonempty_lines": 1, "tail_torn": False, "head_size": 4,
                          "tail_file": "/tmp/" + SECRET},
@@ -686,7 +692,7 @@ class RefusedThroughTheGateway(Fixture):
         before = tk.ledger.size()
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            for token in ("garbage", "tk1.e30.AAAA", None):
+            for token in ("garbage", "tk2.e30.AAAA", None):
                 self.assertFalse(gateway.invoke(token, "search", {"q": SECRET}).allowed)
         self.assertEqual(tk.ledger.size(), before, "an unverified token must not write to the ledger")
         counts = gateway.refused_token_counts()
@@ -701,7 +707,7 @@ class RefusedThroughTheGateway(Fixture):
         self.assertFalse(reported["ledgered"])
         self.assertEqual(reported["seq"], -1)
         self.assertNotIn(SECRET, sink.text)
-        self.assertNotIn("tk1.e30.AAAA", sink.text)
+        self.assertNotIn("tk2.e30.AAAA", sink.text)
 
     def test_close_waits_for_the_sender_s_last_pass(self):
         """A collector that takes a moment must not lose the tail: close waits for one pass over every sink,

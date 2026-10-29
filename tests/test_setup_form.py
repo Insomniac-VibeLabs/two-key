@@ -36,7 +36,7 @@ ANSWERS = {"route": "proxy", "profile": "default", "judges": [JUDGE],
            "judge_history": {"enabled": True, "on_failure": "deny", "burst_denies": 5, "burst_minutes": 10},
            "tools": [{"id": "tool_a", "irreversible": False, "data_class_floor": "personal"}],
            "upstream": {"command": ["server"], "schema_digest": DIGEST}, "one_proxy_per_agent": True}
-CHECK = {"key": "sha256:" + "1" * 64}
+CHECK = {"key": "hybrid-sha256:" + "1" * 64}
 NO_RUNTIME = mock.patch("two_key.writable.runtime_targets", return_value=[])
 
 

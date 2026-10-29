@@ -147,7 +147,7 @@ class Window(unittest.TestCase):
 
     def test_high_assurance_switch_raises_the_numbers_and_locks_them_as_minimums(self):
         window = self.window()
-        self.fill(window, judges=(LOCAL, dict(JUDGE, id="j2")), check="sha256:" + "1" * 64)
+        self.fill(window, judges=(LOCAL, dict(JUDGE, id="j2")), check="hybrid-sha256:" + "1" * 64)
         window.high.set(True)
         self.top.update()
         lowest = setup_form.quorum_minimums("high_assurance", 2)
