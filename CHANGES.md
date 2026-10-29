@@ -183,6 +183,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Live run 12 findings — 2026-10-29](#live-run-12-findings--2026-10-29)
 - [Setup window keys and an owner-only signed constitution — 2026-10-29](#setup-window-keys-and-an-owner-only-signed-constitution--2026-10-29)
 - [Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29](#release-v090-hybrid-signatures-the-tool-check-a-setup-window--2026-10-29)
+- [A first-time demo walkthrough — 2026-10-29](#a-first-time-demo-walkthrough--2026-10-29)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5407,3 +5408,17 @@ detail.
 See "Upgrading from 0.8.0" under "Docs: upgrading from 0.8.0 to 0.9.0" above, and docs/UPGRADING.md, "From 0.8.0
 to 0.9.0, step by step". In short: stop and back up, install 0.9.0, start once (which upgrades the keys, once and
 for good), and back up again at once.
+
+## A first-time demo walkthrough — 2026-10-29
+
+- **docs/DEMO.md**: a step-by-step demo for someone new to local AI, in plain language, with screenshots of
+  Two-Key taken from a live run. One judge, Qwen3 4B Instruct 2507 in LM Studio on Windows, reached through an
+  SSH tunnel; the monitored agent, ollmcp with Llama 3.2 3B in Ollama, on Ubuntu behind `two-key mcp-proxy`.
+  Both models run on a CPU. The agent makes three payments: one is allowed, one is refused by a rule
+  (`rule_denied:cap`), and one by the judge (`insufficient_yes:0<1`), and the ledger view shows all three. Places
+  for screenshots of LM Studio, Windows and the agent are marked in the page.
+- **examples/demo/**: the files the page downloads: `demo_shop.py`, a small MCP server with a pretend
+  `pay_vendor` and a `delete_all_records` the rules leave out; the signed prose and rules; and the setup answers.
+  The judge's answers ask for `response_format: json_schema`, since LM Studio's server documents only that JSON
+  format.
+- README links the page from its documentation table.
