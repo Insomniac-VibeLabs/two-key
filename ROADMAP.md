@@ -47,7 +47,7 @@ flowchart TD
   end
   subgraph next["Next: one beta, then 1.0.0"]
     direction LR
-    r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+    r09["0.9.0 beta<br/>Token check,<br/>remote agents,<br/>hybrid signatures"] --> r10["1.0.0<br/>Stable release,<br/>FIPS approved<br/>mode"] -.-> after["After 1.0<br/>PKI, the rest<br/>of the GUI, more"]
   end
   done --> next
 ```
@@ -64,7 +64,7 @@ flowchart TD
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0, with a FIPS 140-3 approved mode | Planned |
-| After 1.0 | PKI and certificate recovery, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
+| After 1.0 | PKI and certificate recovery, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
 antivirus hooks, then the SIEM export, then 1.0. PKI, post-quantum
@@ -223,6 +223,9 @@ frozen, so the public review looks at the final shape.
 - A time-boxed, public community review with a stated scope. 0.9.0 is what
   is reviewed; fixes ship as 0.9.x.
 - Release only with no unresolved Medium or higher findings from that review.
+- A FIPS 140-3 approved mode (maintainer's decision, 2026-10-28): opt-in, and
+  running on a system-validated OpenSSL. The design is
+  [FIPS approved mode](#fips-approved-mode) below.
 - The first index upload is 0.7.0, from the `PyPI` branch, and it is not
   this review. Later releases use the same workflow (docs/PYPI.md):
   trusted publishing, signed tags, and an SBOM. That is `pyproject.toml`
@@ -237,7 +240,9 @@ frozen, so the public review looks at the final shape.
 
 Planned, in this order unless the maintainer changes it, with no target
 version. Each was a numbered phase before 2026-10-15; the design notes
-are unchanged except for cross-references.
+are unchanged except for cross-references. Two of them have since been
+given a version and keep their design notes here: post-quantum signatures
+are in 0.9.0 and FIPS approved mode in 1.0.0.
 
 ### PKI and certificate recovery
 
@@ -320,9 +325,10 @@ module in approved mode", never "FIPS compliant" or "FIPS validated".
   module. The startup check confirms it before allowing the mode.
 - The module's certificate number and version are recorded in
   `constitution_loaded`.
-- Open question, decided when the mode is built: how hybrid signatures are
-  treated in approved mode, since it depends on what the validated module
-  supports. All signing goes through `two_key/keys.py`, and `keys_upgraded`
+- Approved mode never drops ML-DSA-65 (maintainer's decision, 2026-10-29):
+  it signs hybrid like every other mode. How the module is chosen depends on
+  what is validated; if no validated module covers ML-DSA-65 by then, the
+  options are to wait or to support a validated HSM. All signing goes through `two_key/keys.py`, and `keys_upgraded`
   records a move between named suites, so a FIPS suite changes one module and
   reuses that entry. As of 2026-10-29 no validated OpenSSL module includes
   ML-DSA; this is checked again at the 1.0 freeze.
@@ -351,10 +357,12 @@ The bullets below are still the plan for the rest.
   specs, with validation that uses the same strict loaders as the core. It
   shows the effect of a change, such as `high_assurance`, before it is
   saved.
-- The GUI never holds the principal key. It prepares a constitution and
-  hands it to the existing signing command. Signing stays outside the GUI.
+- Signing uses the same code as the terminal commands. The constitution
+  editor signs in its window with the principal key, and the setup window
+  creates it, as `sign-constitution` and `setup` do (maintainer's decision,
+  2026-10-28: no added risk over the terminal).
 - Changes go through the engine `two-key config set` already uses
-  (docs/SETUP.md, on `working` since 2026-10-20): Two-Key's own account
+  (docs/SETUP.md, since 0.7.3): Two-Key's own account
   only, the whole config checked before anything is written,
   `--confirm-weaker` and a typed yes for a weaker setting, and a
   `config_changed` ledger entry for each change. The GUI adds no rule of
@@ -362,9 +370,9 @@ The bullets below are still the plan for the rest.
 - Ledger auditing: browse decisions, filter by tool, reason, judge, and
   time, and show both paths' results for each call. It runs the Merkle and
   digest checks (`check_decision_digests`) and shows failures plainly.
-- Filtering by judge uses the per-judge ballot records planned for 1.0
-  (above): judge id, vote, confidence, error class, and a rationale digest,
-  never the rationale text.
+- Filtering by judge uses the per-judge ballot records the ledger holds
+  since 0.8.0 (above): judge id, vote, confidence, error class, and a
+  rationale digest, never the rationale text.
 - Export from the audit view reuses the SIEM export (0.7.0), so digests and reason
   codes leave the screen, not argument values.
 - Key and backup status: fingerprints, backup age, and a prompt to run the

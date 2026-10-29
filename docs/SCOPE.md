@@ -6,7 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # Scope
 
-`two-key` is beta (pre-1.0). Package version 0.8.0, tag `v0.8.0` on `main`. What each release
+`two-key` is beta (pre-1.0). Package version 0.8.0, tag `v0.8.0` on `main`, is the latest release; the 0.9.0
+work on `working` is described here too and marked 0.9.0. What each release
 shipped is under "Shipped" in [ROADMAP.md](../ROADMAP.md); tags and branches are in
 [AGENTS.md](../AGENTS.md).
 
@@ -125,12 +126,19 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   ledger to show Path A's decision and a judge's prompt; it signs with the
   same code as `sign-constitution` ([CONSTITUTION_EDITOR.md](CONSTITUTION_EDITOR.md))
   The MCP proxy allows one proxy per agent by default
-  (`one_proxy_per_agent`). From 0.9.0 a tool behind the proxy can check
-  each call itself and sign a receipt (the tool check,
-  [TOOL_CHECK.md](TOOL_CHECK.md)); a tool error spends the token
+  (`one_proxy_per_agent`)
+- in 0.9.0 (on `working`, not released yet): every signature is hybrid
+  Ed25519 + ML-DSA-65, and a 0.8.0 deployment's keys are upgraded once at
+  the first start (`keys_upgraded`, [UPGRADING.md](UPGRADING.md#the-key-upgrade-090));
+  a tool behind the proxy can check each call itself and sign a receipt
+  (the tool check, [TOOL_CHECK.md](TOOL_CHECK.md)), required under
+  `high_assurance`; a tool error spends the token; `two-key setup --window`
+  asks setup's questions in a window ([SETUP.md](SETUP.md#the-setup-window-two-key-setup---window));
+  `config set 'tools[*].claim'` changes one setting on every tool as one
+  change; and a ten-minute [quickstart](QUICKSTART.md)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
-Modules that carry these rules include `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
+Modules that carry these rules include `two_key/keys.py` and `two_key/upgrade.py` (hybrid keys and the key upgrade), `two_key/toolcheck.py` (the tool check), `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
 `two_key/strict.py` (duplicate-key JSON/YAML), `two_key/audit.py` (decision
 digest checks), `two_key/history.py` (the judge history summary), `two_key/backup.py` (key backup), `two_key/siem.py` and
 `two_key/siem_sinks.py` (the SIEM field allowlist and sinks), and the per-install fingerprint key beside the ledger
@@ -144,8 +152,10 @@ or seed phrases. Signatures are hybrid Ed25519 + ML-DSA-65 from 0.9.0.
 ## Planned additions
 
 [ROADMAP.md](../ROADMAP.md) lists optional additions to this repository, in
-this order: the MCP adapter (0.5.0), DLP and antivirus hooks (0.6.0), and
-the SIEM export (0.7.0), then 1.0. Nothing below exists in a release yet.
+this order: the MCP adapter (0.5.0), DLP and antivirus hooks (0.6.0), the
+SIEM export (0.7.0), the judge history (0.8.0), the tool check and hybrid
+signatures (0.9.0), then 1.0. An item marked shipped or built is described
+above; the rest is not in a release yet.
 When an item ships, this file and [THREAT_MODEL.md](THREAT_MODEL.md) change
 in the same release.
 
@@ -167,6 +177,15 @@ in the same release.
   default, with per-judge ballot records and one proxy per agent
   ([JUDGES_AND_QUORUM.md](JUDGES_AND_QUORUM.md#judge-history)).
 
+- Hybrid post-quantum signatures (0.9.0): built (above).
+- FIPS approved mode (1.0.0): an opt-in mode that refuses to start unless
+  the cryptography library runs on a FIPS 140-3 validated module in approved
+  mode, and that refuses algorithms outside the approved set. It never drops
+  ML-DSA-65. This package is not FIPS validated today, and that mode would
+  not make it validated. Running on a validated module is not the same as
+  this package being validated or compliant, and the docs will not describe
+  it that way.
+
 After 1.0, not scheduled:
 
 - PKI and certificate recovery: X.509 identities for the
@@ -176,20 +195,15 @@ After 1.0, not scheduled:
   bundle unlocked by a recovery key for personal use, and a key split k-of-n
   among custodians for enterprise use. This package does not become a
   general-purpose certificate authority.
-- FIPS approved mode: an opt-in mode that refuses to start unless
-  the cryptography library runs on a FIPS 140-3 validated module in approved
-  mode, and that refuses algorithms outside the approved set. This package is
-  not FIPS validated today, and that mode would not make it validated.
-  Running on a validated module is not the same as this package being
-  validated or compliant, and the docs will not describe it that way.
 - Local GUI: a loopback-only interface for configuration and
   ledger auditing, built on the CLI and the existing file formats. The
   read-only audit view shipped early as `two-key ledger-view` (0.8.0, above), and the
-  constitution part as `two-key constitution-editor` (0.8.0, above); both are tkinter windows and hold the
+  constitution part as `two-key constitution-editor` (0.8.0, above), and setup as
+  `two-key setup --window` (0.9.0); all are tkinter windows and hold the
   principal key while they use it. It is not a hosted or multi-user service.
-  Filtering by judge uses the per-judge ballot records planned for 1.0
-  (judge id, vote, confidence, error class, and a rationale digest, never
-  the rationale text); the ledger does not hold them today.
+  Filtering by judge uses the per-judge ballot records the ledger holds since
+  0.8.0 (judge id, vote, confidence, error class, and a rationale digest,
+  never the rationale text).
 - More spec field types: decimal, URL, path,
   email, and opaque bytes. `amount` and `counterparty` become ordinary typed
   fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped

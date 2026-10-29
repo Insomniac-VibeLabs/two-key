@@ -6,7 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # Threat model
 
-This is the design model for `two-key` 0.8.0 (tag `v0.8.0` on `main`). What each
+This is the design model for `two-key` 0.8.0 (tag `v0.8.0` on `main`), the latest release, and for the
+0.9.0 work on `working`, marked 0.9.0 where it applies. What each
 release added to the model is under [Changes by release](#changes-by-release) at the end of
 this page. Tags and branches are in [AGENTS.md](../AGENTS.md), and the full history is
 [CHANGES.md](../CHANGES.md).
@@ -863,13 +864,22 @@ claims to close.
 ## Planned changes to this model
 
 These come from [ROADMAP.md](../ROADMAP.md), in its order: 1.0, then the
-rest after 1.0. None of what follows is in a release yet. Each item is
+rest after 1.0. None of what follows is built yet. Each item is
 added to the sections above in the release that ships it. Key backup and
 custom Path A fields (0.3.0), the MCP adapter (0.5.0), the DLP and
 antivirus hooks (0.6.0), the SIEM export with the refused-token count
 (0.7.0), and hybrid signatures (0.9.0) shipped and are described above, not
 here.
 
+- 1.0.0:
+  - FIPS approved mode. New boundary: the cryptographic provider.
+    The mode is meant to refuse to start unless the library runs on a FIPS
+    140-3 validated module in approved mode, and to refuse algorithms outside
+    the approved set. The module's certificate and version are meant to be
+    recorded in `constitution_loaded`. The claim is limited to "runs on a
+    validated module". This package stays unvalidated, and the mode does not
+    cover the rest of the host. It never drops ML-DSA-65: signatures stay
+    hybrid, so it needs a validated module that covers ML-DSA-65.
 - After 1.0, not scheduled:
   - PKI and certificate recovery. New assets: the certificate
     authority key (a personal local CA or an enterprise CA), issued
@@ -883,18 +893,11 @@ here.
     identity. Recovery is meant to be a ledger event and to end with the old
     certificate revoked. Validity checks depend on a correct clock. Existing
     bare-key setups stay valid.
-  - FIPS approved mode. New boundary: the cryptographic provider.
-    The mode is meant to refuse to start unless the library runs on a FIPS
-    140-3 validated module in approved mode, and to refuse algorithms outside
-    the approved set. The module's certificate and version are meant to be
-    recorded in `constitution_loaded`. The claim is limited to "runs on a
-    validated module". This package stays unvalidated, and the mode does not
-    cover the rest of the host. How a hybrid signature is treated in approved
-    mode depends on what the validated module supports, and is decided when
-    the mode is built.
   - Local GUI. The read-only audit view shipped in 0.8.0 as a tkinter
     window instead (`two-key ledger-view`, under "Residual risks"), with no
-    local server; what follows is the plan for the configuration part. New
+    local server, and so did the constitution editor (0.8.0) and the setup
+    window (0.9.0); what follows is the plan for the rest of the
+    configuration part. New
     boundary: browser to a local server. It is
     meant to bind to loopback only and to require a per-session token, which
     is meant to address other local pages, cross-site requests, and DNS
@@ -905,10 +908,11 @@ here.
     since 0.8.0: judge id, vote, confidence, error class, and a keyed
     rationale digest, never the rationale text, which is model output and
     may quote arguments.
-    Configuration edits change policy, so the GUI is meant never to hold the
-    principal key. It prepares a constitution and hands it to the existing
-    signing command. A GUI that is reachable from another machine is out of
-    scope.
+    Configuration edits change policy, so they go through the same checks
+    and signing code as the terminal commands; the constitution editor
+    already signs with the principal key in its window, as
+    `sign-constitution` does. A GUI that is reachable from another machine
+    is out of scope.
   - More spec field types. Custom `boolean`,
     `integer`, `enum`, and `string` fields shipped in 0.3.0 and are described
     above. Decimal, URL, path, email, and opaque-bytes kinds are not built,
@@ -943,6 +947,11 @@ here.
 
 What each release added to the model, newest first. Each is described where it applies below.
 
+- 0.9.0 (on `working`, not released yet): hybrid Ed25519 + ML-DSA-65 signatures for every key
+  (`two_key/keys.py`) and the one-time key upgrade of a 0.8.0 deployment (`two_key/upgrade.py`,
+  `keys_upgraded`); the tool check (`two_key/toolcheck.py`): redeem stamps signed by a stamp-only key,
+  tool receipts ledgered, and a held tool under `high_assurance`; a tool error spends the token; the
+  setup window (`two-key setup --window`), which runs the same `build` as the terminal setup.
 - 0.8.0: the judge history summary (`two_key/history.py`), bound to each ballot and rebuilt by
   `two-key audit --check-history`; per-judge ballot records with an HMAC digest of the rationale, never
   its text; attempt episodes; one proxy per agent on a ledger (`agent_already_connected`); the proxy's

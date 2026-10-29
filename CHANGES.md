@@ -177,6 +177,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Hybrid quantum-resistant signatures — 2026-10-29](#hybrid-quantum-resistant-signatures--2026-10-29)
 - [Key upgrade follow-ups: backup, old constitutions, the library route — 2026-10-29](#key-upgrade-follow-ups-backup-old-constitutions-the-library-route--2026-10-29)
 - [Docs: upgrading from 0.8.0 to 0.9.0 — 2026-10-29](#docs-upgrading-from-080-to-090--2026-10-29)
+- [Docs checked against the 0.9.0 code — 2026-10-29](#docs-checked-against-the-090-code--2026-10-29)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5285,3 +5286,23 @@ directly, and a deployment with the witness pinned outside the ledger, run `two-
 up again at once: the earlier backup holds the old keys. Under `high_assurance` the proxy also needs the tool
 check or `exempt` on every tool. A tool error now spends its token. The steps are in docs/UPGRADING.md, "From
 0.8.0 to 0.9.0, step by step".
+
+## Docs checked against the 0.9.0 code — 2026-10-29
+
+The maintainer asked whether every document matches what the code does. Every `two-key` command and flag the
+docs name was checked against the parser, every reason code and entry kind in backticks against the source, and
+every Mermaid diagram drawn and read. What was wrong:
+
+- QUICKSTART: a judge's no is `insufficient_yes:0<1`, not `quorum_denied` (no such reason).
+- SETUP and llms.txt: a tool check key is `hybrid-sha256:...`, not `sha256:...`; setup refuses the latter.
+- HOWTO: `two-key audit` prints `hybrid-sha256:` fingerprints after the key upgrade; an unclosed code span in
+  "Install"; the "Authorize from the command line" diagram said the ledger keeps the token, where it keeps
+  `capability_issued` (the token's id) and then the decision.
+- ROADMAP: the diagram and the "After 1.0" row still put FIPS approved mode after 1.0 (it is in 1.0.0) and left
+  hybrid signatures out of 0.9.0; the 1.0.0 section gains the FIPS bullet; approved mode never drops ML-DSA-65
+  (maintainer, 2026-10-29) instead of an open question; the GUI plan no longer says the GUI never holds the
+  principal key (the constitution editor signs, as decided 2026-10-28), and the ballot records shipped in 0.8.0.
+- SCOPE and THREAT_MODEL: a 0.9.0 entry (hybrid signatures and the key upgrade, the tool check, the setup
+  window); FIPS approved mode moved under 1.0.0; the per-judge ballot records are no longer "planned"; the
+  header says the pages cover the 0.9.0 work on `working`.
+- llms.txt: hybrid signatures and the key upgrade, and `cryptography>=48`.

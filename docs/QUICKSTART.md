@@ -122,8 +122,8 @@ It prints the decision: `"allowed": true`, `"reason": "both_paths_allow"`, the j
 and digest. The token itself is never printed (`--emit-token FILE` writes it to a file only you can read), and
 nothing is paid: `authorize` decides, and a tool runs only when the gateway redeems the token.
 
-A real model reads the call and may vote no. Then the decision is `quorum_denied` instead, which is Two-Key
-working as meant: both keys must turn.
+A real model reads the call and may vote no. Then the decision is `"allowed": false` with the reason
+`insufficient_yes:0<1` (no yes vote, one needed) instead, which is Two-Key working as meant: both keys must turn.
 
 ## 5. A call Two-Key refuses
 

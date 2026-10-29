@@ -115,7 +115,7 @@ with that same uv and commit it. The lock is not a consumer pin: a git
 install still uses the ranges.
 
 Version 0.8.0 is on PyPI, and is tag `v0.8.0` on `main`. Install with
-`pip install "two-key[yaml]==0.8.0" (the `mcp` extra for the proxy).
+`pip install "two-key[yaml]==0.8.0"` (the `mcp` extra for the proxy).
 The release steps are [PYPI.md](PYPI.md). A checkout install, above, is
 for working in this repository.
 
@@ -1465,7 +1465,7 @@ sequenceDiagram
   TwoKey->>PathB: prose and the action record
   PathB-->>TwoKey: quorum pass or deny
   alt both paths allow
-    TwoKey->>Ledger: decision and capability token
+    TwoKey->>Ledger: capability_issued (the token's id), then decision
     TwoKey-->>Caller: single-use token for the gateway
   else a guessed or wrong value
     TwoKey->>Ledger: deny, for example counterparty_not_allowed
@@ -2541,7 +2541,8 @@ two-key audit --key keys/principal.pem --ledger ledger --witness-public-key /etc
 
 It prints `witness.head` (the key that signed the head), `witness.in_ledger`
 (the pinned key, the entry that pinned it, and how), `witness.configured`,
-and `witness.history`, as `sha256:` fingerprints, plus the
+and `witness.history`, as fingerprints (`hybrid-sha256:` for a hybrid key,
+`sha256:` for a key from before the 0.9.0 key upgrade), plus the
 `check_decision_digests` result. It exits 1 on a refusal or a digest
 problem. `Ledger.verify()` returns the same `witness` report.
 
