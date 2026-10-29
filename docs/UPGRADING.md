@@ -9,7 +9,8 @@ SPDX-License-Identifier: Apache-2.0
 Upgrading means installing the new package over the old one and keeping your
 keys, ledger, and configuration where they are. Two-Key has no `migrate`
 command; its one upgrade step of its own is 0.9.0's key upgrade, which runs by
-itself at the first start ([The key upgrade (0.9.0)](#the-key-upgrade-090)). Whether your data opens under the new version is decided by
+itself at the first start ([The key upgrade (0.9.0)](#the-key-upgrade-090)). Coming from 0.8.0, follow
+[From 0.8.0 to 0.9.0, step by step](#from-080-to-090-step-by-step). Whether your data opens under the new version is decided by
 the version's own notes, not by a converter. This page is the procedure. The
 per-version facts are in [CHANGES.md](../CHANGES.md), under "Upgrading from
 X.Y.Z".
@@ -208,7 +209,7 @@ README summary and CHANGES.md have the rest.
 
 | Moving to | What to do |
 | --- | --- |
-| 0.9.0 from 0.8.0 | Needs `cryptography` 48 or later (the PyPI wheels have ML-DSA-65). The first start upgrades the keys to hybrid Ed25519 + ML-DSA-65, once: it rewrites each key file with its Ed25519 key kept, signs the constitution again with the same body, and records `keys_upgraded` in the ledger. There is no way back: 0.8.0 keys are refused afterwards, and 0.8.0 does not open the upgraded ledger. Stop every process on the ledger first, back up before and after, and with an out-of-ledger witness pin run `two-key keys upgrade` yourself ([The key upgrade (0.9.0)](#the-key-upgrade-090)). Tokens are now `tk2`. A tool that raises now spends its token: a second redemption of the same token is refused `already_attempted`, and the agent asks again. A caller that retried the same token after `tool_error:<type>` must ask for a new one. A `high_assurance` proxy refuses to start until every tool it offers has the tool check on or is marked `exempt` (`tool_check_required`; [TOOL_CHECK](TOOL_CHECK.md)): run `two-key config check` first. Other deployments need nothing for the tool check; it stays off until a tool's signed spec turns it on. A constitution with `tool_check` in a spec does not load on 0.8.0. |
+| 0.9.0 from 0.8.0 | Step by step: [From 0.8.0 to 0.9.0](#from-080-to-090-step-by-step). Needs `cryptography` 48 or later (the PyPI wheels have ML-DSA-65). The first start upgrades the keys to hybrid Ed25519 + ML-DSA-65, once: it rewrites each key file with its Ed25519 key kept, signs the constitution again with the same body, and records `keys_upgraded` in the ledger. There is no way back: 0.8.0 keys are refused afterwards, and 0.8.0 does not open the upgraded ledger. Stop every process on the ledger first, back up before and after, and with an out-of-ledger witness pin run `two-key keys upgrade` yourself ([The key upgrade (0.9.0)](#the-key-upgrade-090)). Tokens are now `tk2`. A tool that raises now spends its token: a second redemption of the same token is refused `already_attempted`, and the agent asks again. A caller that retried the same token after `tool_error:<type>` must ask for a new one. A `high_assurance` proxy refuses to start until every tool it offers has the tool check on or is marked `exempt` (`tool_check_required`; [TOOL_CHECK](TOOL_CHECK.md)): run `two-key config check` first. Other deployments need nothing for the tool check; it stays off until a tool's signed spec turns it on. A constitution with `tool_check` in a spec does not load on 0.8.0. |
 | 0.8.0 from 0.7.3 | Constitutions, keys and ledgers load unchanged; nothing is re-signed. Judge history is on by default, so each judge's prompt now carries a `<decision_history>` section: tune or turn it off under `quorum.judge_history` ([JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md#judge-history)). The policy digest changes, because the quorum policy now records `judge_history`. Decisions made before the upgrade appear to the judges with `"age": "before_upgrade"`. New decisions gain `at`, `subject`, `history_digest` and `history_basis`, and Path B entries gain per-judge `ballots`. The MCP proxy now refuses a second proxy for an agent already connected to the same ledger (`agent_already_connected`), and a proxy with no `agent_id` counts as one agent: give each its own `agent_id`, or set `one_proxy_per_agent: false` in `proxy.yaml` where two are intended. The MCP proxy also refuses to start when a judge is not on this machine and `proxy.yaml` has no `agent_session_env` (`cloud_judge_session_required`); such a proxy denied every call before, so add `agent_session_env` ([SETUP](SETUP.md#a-cloud-judge-needs-the-agents-session)). A ledger written by 0.8.0 is not meant to be opened by 0.7.3 again: keep a backup from before the upgrade. |
 | 0.7.3 from 0.7.0 (or 0.7.1, 0.7.2) | Everything loads unchanged; nothing is re-signed. The proxy now checks the upstream server's files in `upstream.command`, and warns `upstream_paths_unchecked` (under `high_assurance`, refuses) when a launcher such as `sudo`, `env` or `npx` names none: give the program as an absolute path or list its folder in `upstream.check_paths`. On Windows a `check_paths` entry needs its drive. Once a ledger has run a constitution with a `serial`, it refuses an older one, the same serial with other rules, or none. `config check` now fails on an unset agent credential variable. A tool spec may leave out `irreversible` and `data_class_floor`; left out, they are `true` and `classified`. |
 | 0.7.0 from 0.6.0 | Everything loads unchanged; nothing is re-signed. Under `high_assurance`, change a plaintext syslog sink (`udp`, `tcp`) to `transport: tls`. The proxy refuses to start if the monitored agent runs as Two-Key's own account, as root, or can change Two-Key's files: give the agent its own account ([CONNECTING](CONNECTING.md)), or set `on_agent_access: warn` in `proxy.yaml` where that is the deployment (not under `high_assurance`). Nothing is sent to a SIEM until you configure one. |
@@ -223,6 +224,99 @@ README summary and CHANGES.md have the rest.
 If your table row says "loads unchanged", that is the project's statement for
 that release, not something this page checks. When in doubt, the `audit` in
 step 5 is the test: it either opens your ledger or it says why not.
+
+## From 0.8.0 to 0.9.0, step by step
+
+This is the general procedure above, filled in for 0.9.0. Most of 0.9.0 needs nothing from you: the setup window,
+`tools[*].claim` and the tool check are new and optional. One change is not optional and cannot be undone: the
+keys become hybrid Ed25519 + ML-DSA-65 at the first start ([The key upgrade (0.9.0)](#the-key-upgrade-090) says
+exactly what it does). A new deployment made by 0.9.0 is hybrid from the start, and none of this applies to it.
+
+1. **Stop and back up**, as in steps 2 and 3 above: stop the proxy and everything else on the ledger, run
+   `two-key audit`, export and verify the three bundles into `backups-pre-upgrade`, and copy the folders. Keep
+   the bundles with that copy. They hold the 0.8.0 keys, which only the 0.8.0 ledger copy accepts.
+
+2. **Install 0.9.0.** It needs `cryptography` 48 or later, which pip installs with it:
+
+   ```bash
+   pip install -U "two-key[yaml,mcp]==0.9.0"     # leave out mcp if you don't run the proxy
+   python -c "import cryptography; print(cryptography.__version__)"   # 48 or later
+   ```
+
+   Use the PyPI wheel of `cryptography` (a virtual environment is the simple way). A copy built against an
+   OpenSSL older than 3.5, such as some Linux distributions' own package, cannot sign with ML-DSA-65, and Two-Key
+   refuses to start with `ml_dsa_unavailable` rather than sign with Ed25519 alone.
+
+3. **Check before the first start.** `audit` opens the ledger with the 0.8.0 key and changes nothing:
+
+   ```bash
+   two-key audit --key keys/principal.pem --ledger ledger
+   two-key config check --config proxy.yaml       # proxy deployments
+   ```
+
+   `config check` warns `principal_key: a 0.8.0 Ed25519 key`, which is expected. It fails in two cases you
+   fix now:
+
+   - `witness_public_key pins the witness outside the ledger`: the proxy will not upgrade by itself. Do step 4
+     by hand with `two-key keys upgrade --config proxy.yaml`, then copy `<ledger>.witness/witness.pub.pem` over
+     your pin file.
+   - `tool_check_required` (`high_assurance` only): give each tool the tool check or mark it `exempt`
+     ([TOOL_CHECK](TOOL_CHECK.md)). Under other profiles the check stays off and nothing changes.
+
+4. **Start once, which upgrades the keys.** Which start does it depends on how you run Two-Key:
+
+   | You run | What upgrades the keys |
+   | --- | --- |
+   | `two-key mcp-proxy --config proxy.yaml` | Its first start |
+   | `two-key authorize` | Its next run |
+   | `two-key config set`, `config undo` or `config key-passphrase` | That command |
+   | `TwoKey` from your own Python code | Nothing: it refuses with `keys_upgrade_needed`, so run `two-key keys upgrade` once, below |
+   | A witness pin outside the ledger | Nothing by itself: run `two-key keys upgrade` once, below |
+
+   ```bash
+   two-key keys upgrade --config proxy.yaml
+   # or, without a proxy:
+   two-key keys upgrade --key keys/principal.pem --ledger ledger \
+       --constitution constitution.signed.json        # add --key-passphrase-file FILE for an encrypted key
+   ```
+
+   Pass the constitution you run with: the upgrade signs that file again with the hybrid key, and the signed
+   rules stay the same. `keys upgrade` is safe to run twice; the second run says `"upgraded": false`. The
+   first start prints two lines like these:
+
+   ```text
+   two-key: keys upgraded to hybrid ed25519+ml-dsa-65 (keys_upgraded at seq 16): principal hybrid-sha256:10cc...,
+     witness hybrid-sha256:3cce...; files replaced: principal.pem, principal.pub.pem, ledger.witness/witness.pem, ...
+   two-key: back up now: the key upgrade changed every key file, and a backup made before it restores the old keys,
+     which this ledger refuses (...)
+   ```
+
+5. **Back up again, at once.** Export and verify into a new folder, as in step 6 above. The `back up now` line
+   comes back at every start until `two-key backup-export` succeeds.
+
+6. **Check the result.** `two-key audit` lists `keys_upgraded` among the witness pins, with the old `sha256:`
+   and new `hybrid-sha256:` fingerprints. To see the whole entry:
+
+   ```bash
+   two-key ledger-view --key keys/principal.pem --ledger ledger --where kind = keys_upgraded --print
+   ```
+
+   Or open `two-key ledger-view` and search for `keys_upgraded`. Decisions go on as before.
+
+7. **Sign other copies again.** The upgrade signs one constitution file, the one that start used. Any other
+   signed copy you keep, such as a staged next version, still carries the 0.8.0 signature, and Two-Key refuses
+   it. Sign it again with `two-key keys upgrade --constitution FILE` (as in the key upgrade section below),
+   `two-key sign-constitution` or the [constitution editor](CONSTITUTION_EDITOR.md). The unsigned files
+   (`constitution.md`, `hard_rules.yaml`) do not change. Make rule changes after the upgrade, not before it.
+
+Two behavior changes reach callers rather than files. Tokens are `tk2`; code that only passes them on to the
+gateway does not notice. A tool that raises now spends its token, so a caller that retried the same token after
+`tool_error:<type>` must ask for a new one.
+
+**Going back to 0.8.0** means going back to the copy from step 1. 0.8.0 refuses the upgraded ledger
+(`head anchor was signed by a different principal key`), and 0.9.0 refuses the 0.8.0 keys once the upgrade is
+recorded. Reinstall 0.8.0 and restore `pre-upgrade-copy` as a set. Decisions made since the upgrade are only in
+the upgraded ledger, so keep that folder for audit.
 
 ## The key upgrade (0.9.0)
 

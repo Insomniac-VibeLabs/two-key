@@ -20,6 +20,9 @@ You need Linux or macOS, Python 3.10 or later, and [Ollama](https://ollama.com) 
 
 You can set up, and look at the ledger, on the command line or in a window; the page shows both ways.
 
+Already running 0.8.0? This page makes a new deployment. To keep yours, follow
+[UPGRADING](UPGRADING.md#from-080-to-090-step-by-step) instead.
+
 Every terminal command on this page runs in CI on each change
 ([tests/quickstart_run.py](../tests/quickstart_run.py)), except the ones marked below: CI installs from the
 checkout, it has no display for the windows, and it answers for the judge with a stand-in that always votes yes,

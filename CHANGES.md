@@ -176,6 +176,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Tool check CI fixes — 2026-10-28](#tool-check-ci-fixes--2026-10-28)
 - [Hybrid quantum-resistant signatures — 2026-10-29](#hybrid-quantum-resistant-signatures--2026-10-29)
 - [Key upgrade follow-ups: backup, old constitutions, the library route — 2026-10-29](#key-upgrade-follow-ups-backup-old-constitutions-the-library-route--2026-10-29)
+- [Docs: upgrading from 0.8.0 to 0.9.0 — 2026-10-29](#docs-upgrading-from-080-to-090--2026-10-29)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5256,3 +5257,30 @@ From the maintainer's review and a live 0.8.0 to 0.9.0 upgrade run.
   mislabelled key alg; `authorize` refusing an old constitution without a traceback.
 - Docs: UPGRADING (fresh installs, other constitutions, the library route, `stamp.pem` in the backup), HOWTO
   (the backup tables).
+  SIEM, SETUP, HOWTO, PYPI, SECURITY, AGENTS.md. The README's limits and roadmap lines still say Ed25519; they
+  wait for the maintainer.
+
+## Docs: upgrading from 0.8.0 to 0.9.0 — 2026-10-29
+
+The maintainer asked for the upgrade from 0.8.0 to be written down wherever a reader would look. It was walked
+through for real first: 0.8.0 from PyPI, set up and run, then this branch installed over it.
+
+- UPGRADING.md: "From 0.8.0 to 0.9.0, step by step": back up, install (`cryptography` 48 or later from the PyPI
+  wheel), `audit` and `config check` before the first start, which start upgrades the keys, the two lines it
+  prints, back up again, check `keys_upgraded`, sign other constitution copies again, and how to go back.
+- The walkthrough's three findings were fixed in the previous entry; the steps describe the fixed behavior:
+  `TwoKey` refuses a 0.8.0 key, so library users run `two-key keys upgrade` once, and another signed
+  constitution copy is signed again with `keys upgrade --constitution FILE` or `sign-constitution`.
+- HOWTO (Install, Authorize from Python), SETUP and QUICKSTART point a 0.8.0 user to it instead of a new setup.
+- README: 0.9.0 joins the "Upgrading from an older version" list.
+
+### Upgrading from 0.8.0
+
+Stop everything on the ledger and back up, then install 0.9.0 (it needs `cryptography` 48 or later). The first
+start of `two-key mcp-proxy`, the next `two-key authorize`, or the next `two-key config` change upgrades every
+key to hybrid Ed25519 + ML-DSA-65, once, signs the constitution again with the same body, and records
+`keys_upgraded`; it cannot be undone, and 0.8.0 does not open the ledger afterwards. Code that calls `TwoKey`
+directly, and a deployment with the witness pinned outside the ledger, run `two-key keys upgrade` instead. Back
+up again at once: the earlier backup holds the old keys. Under `high_assurance` the proxy also needs the tool
+check or `exempt` on every tool. A tool error now spends its token. The steps are in docs/UPGRADING.md, "From
+0.8.0 to 0.9.0, step by step".

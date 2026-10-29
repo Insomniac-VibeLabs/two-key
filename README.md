@@ -787,6 +787,13 @@ Upgrading from an older version: read the "Upgrading" notes in
   and a proxy with a cloud judge needs `agent_session_env`. Keep a backup of
   the ledger from before the upgrade. "Release v0.8.0" > "Upgrading from
   0.7.3" in CHANGES.md.
+- 0.9.0 upgrades a 0.8.0 deployment's keys to hybrid Ed25519 + ML-DSA-65 at
+  its first start, once, and there is no way back: 0.8.0 does not open the
+  ledger afterwards. It needs `cryptography` 48 or later. Back up before and
+  again right after. Code that calls `TwoKey` directly refuses a 0.8.0 key
+  until `two-key keys upgrade` has run once. [UPGRADING "From 0.8.0 to 0.9.0, step by
+  step"](docs/UPGRADING.md#from-080-to-090-step-by-step) and "Upgrading from
+  0.8.0" in CHANGES.md.
 
 A clone installed with `pip install -e` follows the ranges in
 `pyproject.toml`. CI does not: it installs the versions in `uv.lock`

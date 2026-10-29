@@ -119,6 +119,11 @@ Version 0.8.0 is on PyPI, and is tag `v0.8.0` on `main`. Install with
 The release steps are [PYPI.md](PYPI.md). A checkout install, above, is
 for working in this repository.
 
+Already running an older version? Install over it and keep your keys and
+ledger: [UPGRADING](UPGRADING.md). From 0.8.0 to 0.9.0 the keys are upgraded
+once, and there is no way back, so read
+[its steps](UPGRADING.md#from-080-to-090-step-by-step) first.
+
 ### Platforms
 
 Two-Key runs on Linux, macOS, and Windows, with Python 3.10 to 3.14; CI
@@ -1374,6 +1379,12 @@ decision = tk.authorize(
     agent_session=os.environ["OPENAI_AGENT_API_KEY"],
 )
 ```
+
+`TwoKey` does not upgrade a 0.8.0 deployment's keys; it refuses a 0.8.0
+key with `keys_upgrade_needed`. Run `two-key keys upgrade --key
+keys/principal.pem --ledger ledger --constitution constitution.signed.json`
+once, then load the upgraded files
+([UPGRADING](UPGRADING.md#from-080-to-090-step-by-step)).
 
 At start, `TwoKey` names each file or folder of the running Python, and
 each path in `check_paths=` (your integration's own settings, as paths or

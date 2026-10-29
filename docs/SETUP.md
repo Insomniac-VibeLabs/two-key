@@ -15,6 +15,10 @@ them, so you do not have to know which file holds what:
 - `two-key config key-passphrase` encrypts the principal key with a passphrase, changes it, or removes it.
 - `two-key config show` and `config check` show what a config resolves to and whether the proxy would start.
 
+`setup` is for a new deployment, and from 0.9.0 its keys are hybrid Ed25519 + ML-DSA-65. To move a 0.8.0
+deployment to 0.9.0, keep it and do not run `setup` again: the first start upgrades its keys
+([UPGRADING](UPGRADING.md#from-080-to-090-step-by-step)).
+
 Every one of them runs as **Two-Key's own account**: the account the proxy runs as, which owns Two-Key's files.
 Never as root, and never as the monitored agent's account. Each part below says what that means for that
 command and what it refuses.
