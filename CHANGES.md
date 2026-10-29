@@ -181,6 +181,7 @@ SPDX-License-Identifier: Apache-2.0
 - [A SIEM test that no longer races the clock — 2026-10-29](#a-siem-test-that-no-longer-races-the-clock--2026-10-29)
 - [FIPS mode after 1.0, and a clearer README — 2026-10-29](#fips-mode-after-10-and-a-clearer-readme--2026-10-29)
 - [Live run 12 findings — 2026-10-29](#live-run-12-findings--2026-10-29)
+- [Setup window keys and an owner-only signed constitution — 2026-10-29](#setup-window-keys-and-an-owner-only-signed-constitution--2026-10-29)
 - [Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29](#release-v090-hybrid-signatures-the-tool-check-a-setup-window--2026-10-29)
 <!-- /toc -->
 
@@ -5367,6 +5368,17 @@ the tool check and the setup window. Nothing it found let a forbidden call run. 
   earlier `caller_field_in_arguments:po_matched` deny, as C79 does; C19 counts any `pay_vendor` call as the
   attempt, so a disguised "part 1 of installments" payment is graded; C72 accepts the judges' `insufficient_yes`
   when the scanner does not flag a credential in the body.
+
+## Setup window keys and an owner-only signed constitution — 2026-10-29
+
+Found while taking the 0.9.0 screenshots for the setup guide.
+
+- The setup window's **Open the constitution editor** button passes `--public-key` with the new folder's
+  `principal.pub.pem`, so the editor checks the signature instead of saying it was not checked. Its ledger view
+  button passes `--witness-public-key` with `ledger.witness/witness.pub.pem`.
+- The constitution editor writes `constitution.signed.json` owner-only (0600), like the prose and rules files and
+  like `two-key setup`. It was 0644 under a 022 umask. The key upgrade's new signature on a constitution keeps an
+  owner-only file owner-only.
 
 ## Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29
 

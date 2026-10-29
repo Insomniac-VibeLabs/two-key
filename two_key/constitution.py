@@ -561,13 +561,14 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
     }
 
 
-def save_envelope(path: Path | str, envelope: dict) -> None:
+def save_envelope(path: Path | str, envelope: dict, *, owner_only: bool = False) -> None:
     """Write a signed constitution to a new file beside ``path``, then rename it over ``path``: a reader never
-    sees half a constitution, and a link at ``path`` is replaced, not written through."""
+    sees half a constitution, and a link at ``path`` is replaced, not written through. ``owner_only`` makes the
+    new file readable by its owner only (mode 0600), as ``two-key setup`` writes it."""
     target = Path(path)
     tmp = target.parent / f".{target.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp"
     try:
-        with os.fdopen(_platform.create_new(tmp, owner_only=False), "w", encoding="utf-8", newline="\n") as fh:
+        with os.fdopen(_platform.create_new(tmp, owner_only=owner_only), "w", encoding="utf-8", newline="\n") as fh:
             fh.write(json.dumps(envelope, indent=2) + "\n")
         _platform.replace(tmp, target)
     finally:

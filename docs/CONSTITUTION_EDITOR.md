@@ -111,7 +111,8 @@ file only you can read), and the folder. **Sign and save** then:
    each owner-only, beside its target and then renamed into place,
 4. reads those two files back the way `two-key sign-constitution` reads them, and refuses if they would not
    sign to the same body,
-5. writes the signed constitution (`constitution.signed.json`) last.
+5. writes the signed constitution (`constitution.signed.json`) last, owner-only like the other two (mode 0600,
+   as `two-key setup` writes it, whatever the shell's umask).
 
 It refuses, with nothing written, when a file is already there and **Replace files that are there** is not
 ticked (`sign-constitution`'s `--force`). A folder or file it cannot write is reported under the buttons, as

@@ -170,7 +170,8 @@ def _resign_constitution(path: Path | None, principal, replaced: list[str]) -> N
     if not verify(classical_half(principal.public_key()), message, signature):
         return
     save_envelope(path, {**envelope, "signature": sign(principal, message),
-                         "fingerprint": fingerprint(principal.public_key())})
+                         "fingerprint": fingerprint(principal.public_key())},
+                  owner_only=not Path(path).stat().st_mode & 0o077)
     replaced.append(str(path))
 
 

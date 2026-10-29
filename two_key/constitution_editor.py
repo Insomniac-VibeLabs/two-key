@@ -473,7 +473,7 @@ def sign_and_save(draft: Draft, private_key, folder: Path | str, names: Mapping[
     _write_sources(paths, draft, "not signed")
     same_from_files(paths, envelope["signed"])
     try:
-        save_envelope(paths["signed"], envelope)
+        save_envelope(paths["signed"], envelope, owner_only=True)
     except OSError as e:
         raise EditorError(f"not signed: {write_refusal(paths['signed'], e)}") from None
     return Saved(str(paths["prose"]), str(paths["rules"]), str(paths["signed"]), canonical_hash(envelope["signed"]),

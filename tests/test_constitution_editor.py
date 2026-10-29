@@ -274,6 +274,17 @@ class Signing(unittest.TestCase):
         if os.name == "posix":
             self.assertEqual(os.stat(saved.rules).st_mode & 0o077, 0)
 
+    @unittest.skipIf(os.name != "posix", "POSIX modes")
+    def test_the_signed_constitution_is_owner_only_whatever_the_umask(self):
+        """GUI guide run: constitution.signed.json came out 0644 under umask 022, beside setup's 0600 files."""
+        old = os.umask(0o022)
+        try:
+            saved = ce.sign_and_save(draft_with_tools(), self.key, self.dir)
+        finally:
+            os.umask(old)
+        for path in (saved.prose, saved.rules, saved.signed):
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600, path)
+
     def test_a_json_rules_file(self):
         saved = ce.sign_and_save(draft_with_tools(), self.key, self.dir, {"rules": "rules.json"})
         self.assertEqual(json.loads(Path(saved.rules).read_text(encoding="utf-8"))["serial"], 1)

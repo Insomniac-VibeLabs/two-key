@@ -244,6 +244,13 @@ class Upgrade(unittest.TestCase):
         self.dep.upgrade()
         self.assertEqual(stat.S_IMODE(os.stat(public).st_mode), 0o600)
 
+    @unittest.skipIf(os.name == "nt", "POSIX modes")
+    def test_the_constitution_signed_again_keeps_its_mode(self):
+        """Setup writes constitution.signed.json 0600; signing it again must not leave it 0644."""
+        os.chmod(self.dep.constitution, 0o600)
+        self.dep.upgrade()
+        self.assertEqual(stat.S_IMODE(os.stat(self.dep.constitution).st_mode), 0o600)
+
     def test_a_folder_it_cannot_write_is_named_not_a_raw_error(self):
         """Run 12, X5: a read-only deployment folder gave a raw PermissionError naming a temporary file."""
         denied = PermissionError(13, "Permission denied")

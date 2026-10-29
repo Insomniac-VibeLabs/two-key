@@ -144,6 +144,11 @@ class Window(unittest.TestCase):
         args = window.launch_arguments("constitution-editor")
         self.assertEqual(args[1:4], ["-m", "two_key", "constitution-editor"])
         self.assertIn(str(self.base / "deployment" / "constitution.signed.json"), args)
+        # GUI guide run: without the public key the editor said the signature was not checked.
+        self.assertEqual(args[args.index("--public-key") + 1], str(self.base / "deployment" / "principal.pub.pem"))
+        args = window.launch_arguments("ledger-view")
+        witness = self.base / "deployment" / "ledger.witness" / "witness.pub.pem"
+        self.assertEqual(args[args.index("--witness-public-key") + 1], str(witness))
         # Run 12, E3c: answers changed after the setup say what is wrong now, beside the result.
         window.high.set(True)
         window.refresh()

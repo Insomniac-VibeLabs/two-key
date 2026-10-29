@@ -584,12 +584,18 @@ class SetupWindow:
         folder = Path(self.result["dir"]) if self.result else Path(self.var["dir"].get())
         if command == "constitution-editor":
             return [sys.executable, "-m", "two_key", command, "--signed", str(folder / FILES["constitution"]),
-                    "--key", str(folder / FILES["key"])]
+                    "--key", str(folder / FILES["key"]), *_pinned("--public-key", folder / FILES["public"])]
+        witness = folder / f"{FILES['ledger']}.witness" / "witness.pub.pem"
         return [sys.executable, "-m", "two_key", command, "--key", str(folder / FILES["key"]),
-                "--ledger", str(folder / FILES["ledger"])]
+                "--ledger", str(folder / FILES["ledger"]), *_pinned("--witness-public-key", witness)]
 
     def _launch(self, command: str) -> None:
         subprocess.Popen(self.launch_arguments(command))  # nosec B603 - this Python, two-key's own command
+
+
+def _pinned(option: str, path: Path) -> list[str]:
+    """``option path`` when setup left the public key there, so the window checks signatures against it."""
+    return [option, str(path)] if path.is_file() else []
 
 
 def show(answers: dict | None = None, *, folder: str = "") -> int:

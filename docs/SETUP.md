@@ -269,7 +269,8 @@ what is wrong with them now. **Set
 up** stays off until nothing stops it. A weaker setting (a quorum number below the profile's own, the summary
 turned off, one proxy per agent turned off) needs `yes` typed in the box beside it, as the terminal asks. When
 setup finishes, the Review page shows the next steps, and two buttons open `constitution-editor` and
-`ledger-view` on the new folder.
+`ledger-view` on the new folder. The editor is given `--public-key principal.pub.pem`, so it checks the signed
+constitution's signature, and the ledger view is given `--witness-public-key ledger.witness/witness.pub.pem`.
 
 **The High assurance switch** sets `quorum.profile: high_assurance`, fills in the profile's quorum numbers, and
 makes them minimums: each number can be raised (with three judges you can require three yes votes) but never
