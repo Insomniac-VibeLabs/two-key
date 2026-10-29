@@ -5400,7 +5400,7 @@ detail.
 - **Live testing**: GrokBot's run 12 tested the key upgrade on copies of a 0.8.0 deployment, hybrid signatures,
   the tool check and the setup window. Nothing it found let a forbidden call run; its live cases that did not
   pass were stale or too narrow, and its findings are fixed ("Live run 12 findings").
-- 1481 tests.
+- 1483 tests.
 
 ### Upgrading from 0.8.0
 
