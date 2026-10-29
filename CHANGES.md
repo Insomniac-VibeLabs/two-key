@@ -5250,7 +5250,8 @@ From the maintainer's review and a live 0.8.0 to 0.9.0 upgrade run.
 - README: hybrid Ed25519 + ML-DSA-65 signatures are in 0.9.0 (crypto summary, known limits, roadmap table and
   chart), with the maintainer's agreement.
 - SonarCloud: the `sha256:` prefix in `ledger.py` is one constant, and the vectors test expects each refusal by
-  name (`token_invalid`, `stamp_invalid`, `bad_signature`) rather than any exception.
+  name (`token_invalid`, `stamp_invalid`, `bad_signature`) rather than any exception. `backup.py` names its key
+  files once (`_PRINCIPAL`, `_CAPABILITY`, `_STAMP`, `_WITNESS`).
 - Tests: a fresh install never runs the upgrade or asks for a backup; the library route refuses a 0.8.0 key; an
   old constitution is refused, a start does not sign it, the command does; a backup right after the upgrade
   exports, verifies and restores; the stamp key in the bundle, its pin, and a deployment without one; a

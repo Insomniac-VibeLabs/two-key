@@ -76,10 +76,13 @@ BUNDLE_NAMES = {
 # What each role may carry. A file outside its role is a refusal, not an extra. A private key's alg is the key's
 # own: ``ed25519+ml-dsa-65`` from 0.9.0, ``ed25519`` in a 0.8.0 backup (the key upgrade runs after its restore).
 _KEY = "key"
+_PRINCIPAL = "principal.pem"
+_CAPABILITY = "capability.pem"
 _STAMP = "stamp.pem"
+_WITNESS = "witness.pem"
 _ROLE_FILES = {
-    "principal": {"principal.pem": ("pem", _KEY), "capability.pem": ("pem", _KEY), _STAMP: ("pem", _KEY)},
-    "witness": {"witness.pem": ("pem", _KEY)},
+    "principal": {_PRINCIPAL: ("pem", _KEY), _CAPABILITY: ("pem", _KEY), _STAMP: ("pem", _KEY)},
+    "witness": {_WITNESS: ("pem", _KEY)},
     "ledger": {
         "ledger.key": ("raw", "raw-32"),
         "fingerprint.key": ("raw", "raw-32"),
@@ -95,7 +98,7 @@ _OPTIONAL_FILES = frozenset({_STAMP})
 # and opening the bundle then needs the key's own passphrase as well as the bundle's.
 ENCRYPTED_KEY_ALG = "ed25519-encrypted"
 HYBRID_ENCRYPTED_KEY_ALG = f"{HYBRID_ALG}-encrypted"
-_ENCRYPTABLE = frozenset({"principal.pem"})
+_ENCRYPTABLE = frozenset({_PRINCIPAL})
 _HEADER_FIELDS = ("format", "version", "role", "alg", "kdf", "enc", "ciphertext")
 _KDF_FIELDS = ("name", "iterations", "salt", "length")
 _ENC_FIELDS = ("name", "nonce")
@@ -411,10 +414,10 @@ def _ledger_layout(root: Path):
     ledger = root / "ledger"
     return {
         "ledger": ledger,
-        "principal.pem": root / "principal.pem",
-        "capability.pem": ledger.parent / f"{ledger.name}.capability" / "capability.pem",
+        _PRINCIPAL: root / _PRINCIPAL,
+        _CAPABILITY: ledger.parent / f"{ledger.name}.capability" / _CAPABILITY,
         _STAMP: ledger.parent / f"{ledger.name}.capability" / _STAMP,
-        "witness.pem": ledger.parent / f"{ledger.name}.witness" / "witness.pem",
+        _WITNESS: ledger.parent / f"{ledger.name}.witness" / _WITNESS,
         "ledger.key": ledger.parent / f"{ledger.name}.ledger-key" / "ledger.key",
         "fingerprint.key": ledger.parent / f"{ledger.name}.ledger-key" / "fingerprint.key",
         "entries.jsonl": ledger / "entries.jsonl",
@@ -438,7 +441,7 @@ def _materialize(bundles: dict, root: Path) -> dict:
 
 def _principal_of(data: bytes, key_passphrase: Passphrase):
     if not is_encrypted(data):
-        return _load_pem(data, "principal.pem")
+        return _load_pem(data, _PRINCIPAL)
     try:
         secret = passphrase_bytes(key_passphrase, "principal.pem (in the backup)")
         if secret is None:
@@ -451,9 +454,9 @@ def _principal_of(data: bytes, key_passphrase: Passphrase):
 
 def _fingerprints_of(bundles: dict, key_passphrase: Passphrase = None) -> dict:
     """Public-style fingerprints an operator can compare. Raw key bytes are not returned."""
-    principal = _principal_of(bundles["principal"]["files"]["principal.pem"], key_passphrase)
-    capability = _load_pem(bundles["principal"]["files"]["capability.pem"], "capability.pem")
-    witness = _load_pem(bundles["witness"]["files"]["witness.pem"], "witness.pem")
+    principal = _principal_of(bundles["principal"]["files"][_PRINCIPAL], key_passphrase)
+    capability = _load_pem(bundles["principal"]["files"][_CAPABILITY], _CAPABILITY)
+    witness = _load_pem(bundles["witness"]["files"][_WITNESS], _WITNESS)
     if public_raw(principal.public_key()) == public_raw(capability.public_key()):
         raise BackupError("backup_rejected: the capability key is the principal key")
     stamp = bundles["principal"]["files"].get(_STAMP)
@@ -480,7 +483,7 @@ def _open_staged(root: Path, *, witness_public_key=None, anchor_name: str = "hea
     layout = _ledger_layout(root)
     anchor_before = layout["head.anchor"].read_bytes() if require_anchor else None
     try:
-        principal = load_private_key_file(layout["principal.pem"], key_passphrase)
+        principal = load_private_key_file(layout[_PRINCIPAL], key_passphrase)
     except ValueError as e:
         raise BackupError(f"backup_rejected: {e}") from None
     try:
@@ -548,10 +551,10 @@ def _destination_paths(ledger_path, principal_path, anchor_path) -> dict:
     if anchor_abs == ledger_abs or ledger_abs in anchor_abs.parents:
         raise BackupError("backup_refused: head anchor must live outside the ledger directory")
     return {
-        "principal.pem": Path(principal_path),
-        "capability.pem": ledger_path.parent / f"{ledger_path.name}.capability" / "capability.pem",
+        _PRINCIPAL: Path(principal_path),
+        _CAPABILITY: ledger_path.parent / f"{ledger_path.name}.capability" / _CAPABILITY,
         _STAMP: ledger_path.parent / f"{ledger_path.name}.capability" / _STAMP,
-        "witness.pem": ledger_path.parent / f"{ledger_path.name}.witness" / "witness.pem",
+        _WITNESS: ledger_path.parent / f"{ledger_path.name}.witness" / _WITNESS,
         "ledger.key": ledger_path.parent / f"{ledger_path.name}.ledger-key" / "ledger.key",
         "fingerprint.key": ledger_path.parent / f"{ledger_path.name}.ledger-key" / "fingerprint.key",
         "entries.jsonl": ledger_path / "entries.jsonl",
@@ -591,9 +594,9 @@ def _install(path: Path, data: bytes, *, overwrite: bool, name: str) -> str:
 
 
 _LEDGER_BODY = ("entries.jsonl", "head.json", "keywrap.json")
-_KEY_FILES = ("principal.pem", "capability.pem", _STAMP, "witness.pem", "ledger.key", "fingerprint.key")
+_KEY_FILES = (_PRINCIPAL, _CAPABILITY, _STAMP, _WITNESS, "ledger.key", "fingerprint.key")
 # Public halves restored beside their keys when missing: tool-key trust reads them for a checking tool.
-_PUBLIC_FILES = {"capability.pem": "capability.pub.pem", _STAMP: "stamp.pub.pem"}
+_PUBLIC_FILES = {_CAPABILITY: "capability.pub.pem", _STAMP: "stamp.pub.pem"}
 
 
 def _exists_differs(path: Path, data: bytes, name: str) -> bool:
@@ -867,11 +870,11 @@ def _snapshot_files(ledger, principal_path) -> dict:
     stamp = {_STAMP: _read_file(stamp_path, MAX_BUNDLE_BYTES)} if os.path.lexists(stamp_path) else {}
     return {
         "principal": {
-            "principal.pem": _read_file(Path(principal_path), MAX_BUNDLE_BYTES),
-            "capability.pem": _read_file(cap_path, MAX_BUNDLE_BYTES),
+            _PRINCIPAL: _read_file(Path(principal_path), MAX_BUNDLE_BYTES),
+            _CAPABILITY: _read_file(cap_path, MAX_BUNDLE_BYTES),
             **stamp,
         },
-        "witness": {"witness.pem": _read_file(ledger.witness_path, MAX_BUNDLE_BYTES)},
+        "witness": {_WITNESS: _read_file(ledger.witness_path, MAX_BUNDLE_BYTES)},
         "ledger": {
             "ledger.key": _read_file(ledger.ledger_key_path, MAX_BUNDLE_BYTES),
             "fingerprint.key": _read_file(fp_path, MAX_BUNDLE_BYTES),

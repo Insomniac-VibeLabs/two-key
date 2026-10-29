@@ -41,6 +41,7 @@ PHRASES = {
     "witness": "witness-passphrase-three",
 }
 FAST = 1000
+PINNED_STAMP = "two_key.core._pinned_stamp_key"
 
 
 def _engine(path, key):
@@ -453,9 +454,9 @@ class StampKey(BackupFixture):
 
     def test_a_stamp_key_that_is_not_the_pinned_one_or_is_missing_is_rejected(self):
         self.export()
-        with patch("two_key.core._pinned_stamp_key", return_value=self.fingerprint), redirect_stderr(io.StringIO()):
+        with patch(PINNED_STAMP, return_value=self.fingerprint), redirect_stderr(io.StringIO()):
             self.assertTrue(verify_backup(self.out, PHRASES)["ok"])
-        with patch("two_key.core._pinned_stamp_key", return_value="hybrid-sha256:" + "0" * 64), \
+        with patch(PINNED_STAMP, return_value="hybrid-sha256:" + "0" * 64), \
                 redirect_stderr(io.StringIO()):
             with self.assertRaisesRegex(BackupError, "stamp key does not match the fingerprint pinned"):
                 verify_backup(self.out, PHRASES)
@@ -463,7 +464,7 @@ class StampKey(BackupFixture):
         other = self.root / "nostamp"
         with redirect_stderr(io.StringIO()):
             export_backup(self.ledger, self.key_path, other, PHRASES, iterations=FAST)
-        with patch("two_key.core._pinned_stamp_key", return_value=self.fingerprint), redirect_stderr(io.StringIO()):
+        with patch(PINNED_STAMP, return_value=self.fingerprint), redirect_stderr(io.StringIO()):
             with self.assertRaisesRegex(BackupError, "pins a stamp key .* stamp.pem is missing"):
                 verify_backup(other, PHRASES)
 
