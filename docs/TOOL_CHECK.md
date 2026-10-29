@@ -74,8 +74,14 @@ itself, and the ledger shows which result the server actually returned.
 
    `two-key setup` asks for it too (a tool's "tool check" question, or the
    column of that name in the setup window). Turning the check on is
-   stronger, so it needs no typed yes. `exempt`, removing it, or a different
-   key is weaker.
+   stronger, so it needs no `--confirm-weaker`; like every signed change,
+   `config set` shows the new constitution and asks you to type `yes` before
+   it signs. `exempt`, removing it, or a different key is weaker: it also
+   needs `--confirm-weaker`, and the refusal without it says which
+   (`tool_check: exempt (the check is turned off)`, `turned off`, or
+   `another receipt key`). `--rules` is the source the constitution was
+   signed from, `hard_rules.yaml` in a folder `two-key setup` made, not the
+   rules file setup read.
 
 3. Start Two-Key once (`two-key mcp-proxy`). Its first start with a checked
    tool makes the gateway's **stamp key**, beside the capability key, and
@@ -111,7 +117,15 @@ itself, and the ledger shows which result the server actually returned.
 
 6. Wrap the tool (next section), restart the server, and run
    `two-key config check --config proxy.yaml`. It lists each tool's check:
-   on, exempt, or off.
+   on, exempt, or off. If the server finds its check config through a
+   variable, pass it in `upstream.env` as a name read from the proxy's own
+   environment, `{"env": "NAME"}`, or from a file with `--value-file`: a
+   literal `upstream.env` value on the command line is refused
+   (`secret_on_command_line`), since such a value can be a secret.
+
+   ```sh
+   two-key config set --config proxy.yaml upstream.env.BILLING_CHECK_CONFIG '{"env": "BILLING_CHECK_CONFIG"}'
+   ```
 
 ## The Python helper
 

@@ -605,7 +605,11 @@ claims to close.
   form. The gateway recomputes the form from the same bytes and refuses a
   mismatch. Changing a spec changes `spec_hash`, so outstanding tokens fail
   at the gateway. This package does not classify free text and does not
-  track per-value information flow. A counterparty the spec copies must be
+  track per-value information flow. A credential or an outside address
+  written into a message body to an allowed recipient passes Path A unless
+  the scanner flags it; then only the judges stop it (live run 12, C72,
+  where both judges did). A deployment that cares gives its scanner a
+  credential pattern. A counterparty the spec copies must be
   on that path's `allow` list. The tool receives the canonical value
   (`strip`, casefold), not the raw spelling. A party that is not listed is
   `counterparty_not_allowed`, unless a blocked party is also present, in

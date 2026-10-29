@@ -624,9 +624,19 @@ def _weaker_specs(a: Mapping, b: Mapping) -> list[str]:
         if tool not in a or tool not in b:
             out.append(f"tool_specs.{tool}: " + ("added" if tool not in a else "removed"))
         else:
-            out += [f"tool_specs.{tool}.{key}: changed" for key in sorted(set(a[tool]) | set(b[tool]))
+            out += [f"tool_specs.{tool}.{key}: {_how_changed(key, b[tool].get(key))}"
+                    for key in sorted(set(a[tool]) | set(b[tool]))
                     if not _same_or_tighter(key, a[tool].get(key), b[tool].get(key))]
     return out
+
+
+def _how_changed(key: str, new) -> str:
+    """What a weaker spec change did, in words; the tool check says which way it went (run 12)."""
+    if key != "tool_check":
+        return "changed"
+    if new == "exempt":
+        return "exempt (the check is turned off)"
+    return "turned off" if new is None else "another receipt key"
 
 
 def _same_or_tighter(key: str, old, new) -> bool:
@@ -1180,12 +1190,24 @@ def _signed_of(rules_doc: Mapping, prose: str, key) -> dict:
         raise ConfigChangeError(f"rules_invalid: {e}") from None
 
 
+SETUP_RULES_FILE = "hard_rules.yaml"         # setup_cmd.FILES["rules"], beside the signed constitution
+
+
+def _rules_hint(config, given: Path | None) -> str:
+    """Where setup keeps the signed rules source, when it is not the file given (run 12: rules.yaml, the setup
+    input, was given in place of hard_rules.yaml)."""
+    kept = Path(config.constitution).resolve().with_name(SETUP_RULES_FILE)
+    if not kept.is_file() or kept == given:
+        return ""
+    return f" (setup keeps the signed source as {kept})"
+
+
 def _signed_change(config, tokens, value, unset, key_path, rules_path, passphrase) -> Change:
     from .constitution import load_envelope, verify_signed
     key = _principal(config, key_path, passphrase)
     if not rules_path:
         raise ConfigChangeError("rules_file_needed: a signed setting is changed in the rules file the constitution "
-                                "was signed from; give it with --rules FILE")
+                                f"was signed from; give it with --rules FILE{_rules_hint(config, None)}")
     try:
         envelope = load_envelope(config.constitution)
         current = verify_signed(envelope, key.public_key())
@@ -1199,7 +1221,7 @@ def _signed_change(config, tokens, value, unset, key_path, rules_path, passphras
     if _plain(_signed_of(rules_doc, current.prose, key)) != _plain(signed_before):
         raise ConfigChangeError(f"rules_source_differs: {rules_file} does not say what the constitution signs; "
                                 "sign it with two-key sign-constitution (or put back what was signed) first, so "
-                                "this change signs only itself")
+                                f"this change signs only itself{_rules_hint(config, rules_file)}")
     new_doc, names, shown = _set_each(RULES, rules_doc, expand(RULES, tokens, rules_doc), value, unset,
                                       " (signed)")
     if isinstance(new_doc.get("serial"), int) and not isinstance(new_doc.get("serial"), bool):

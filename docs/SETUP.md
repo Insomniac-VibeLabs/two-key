@@ -240,7 +240,9 @@ a proxy config; on those routes, edit the files and sign again with `sign-consti
 The same questions on one screen, for those who prefer a window to a terminal. It is a choice beside the
 terminal interview, not a replacement: both collect the same answers and hand them to the same code, so the
 files, what is refused, and the ledger entry are the same (`tests/test_setup_form.py` checks that the same
-answers write the same files both ways). It runs as Two-Key's own account, like the terminal setup, and it
+answers write the same files both ways). The window always fills in the quorum numbers, so its `judges.yaml`
+and `proxy.yaml` spell out values the terminal route leaves at their defaults, in another key order; the
+settings are the same, and `two-key config show` prints the same for both. It runs as Two-Key's own account, like the terminal setup, and it
 uses tkinter, so it adds no dependency and opens no network port. Without tkinter (on Debian and Ubuntu:
 `apt install python3-tk`) or without a display, it says so and points to the terminal or `--answers`.
 
@@ -261,7 +263,9 @@ With `--answers`, the window opens filled in from that file. Its pages follow th
 | Proxy | The upstream command, its schema digest (blank: read from the server), the agent session's variable, and one proxy per agent. Turned off for the guard and library routes |
 | Review and set up | Every answer, every problem, warning and weaker setting, the typed `yes`, **Save answers file**, and **Set up** |
 
-The status line under the pages always says whether setup would go ahead, and if not, the first reason. **Set
+The status line under the pages always says whether setup would go ahead, and if not, the first reason. The
+window sets up once: after that the status line keeps `Set up in ...`, and if you change the answers it adds
+what is wrong with them now. **Set
 up** stays off until nothing stops it. A weaker setting (a quorum number below the profile's own, the summary
 turned off, one proxy per agent turned off) needs `yes` typed in the box beside it, as the terminal asks. When
 setup finishes, the Review page shows the next steps, and two buttons open `constitution-editor` and

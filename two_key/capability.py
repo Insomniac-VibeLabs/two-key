@@ -142,6 +142,17 @@ class IssuedCapability:
         return canonical_hash(self.token)
 
 
+def _check_prefix(token: Any, prefix: str) -> None:
+    """A token in this key's format, or a TokenError. A 0.8.0 ``tk1`` token after the key upgrade is named, so
+    the caller knows to ask for a new one (live run 12, X6)."""
+    if not isinstance(token, str):
+        raise TokenError("malformed_token")
+    if prefix == "tk2" and token.startswith("tk1."):
+        raise TokenError("token_before_upgrade")
+    if token.count(".") != 2 or not token.startswith(prefix + "."):
+        raise TokenError("malformed_token")
+
+
 class CapabilityVerifier:
     """Checks a token. It cannot mint."""
 
@@ -154,8 +165,7 @@ class CapabilityVerifier:
     def verify(self, token: Any) -> dict:
         """Check format, signature, lifetime, issue time, and expiry. Return the payload or raise TokenError."""
         prefix, version, alg = token_format(self.public_key)
-        if not isinstance(token, str) or token.count(".") != 2 or not token.startswith(prefix + "."):
-            raise TokenError("malformed_token")
+        _check_prefix(token, prefix)
         _, body, signature = token.split(".")
         if not verify(self.public_key, body.encode("ascii"), signature):
             raise TokenError("bad_signature")

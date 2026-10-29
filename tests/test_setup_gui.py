@@ -144,6 +144,10 @@ class Window(unittest.TestCase):
         args = window.launch_arguments("constitution-editor")
         self.assertEqual(args[1:4], ["-m", "two_key", "constitution-editor"])
         self.assertIn(str(self.base / "deployment" / "constitution.signed.json"), args)
+        # Run 12, E3c: answers changed after the setup say what is wrong now, beside the result.
+        window.high.set(True)
+        window.refresh()
+        self.assertRegex(window.status.cget("text"), r"^Set up in .*The answers changed since, and now: ")
 
     def test_high_assurance_switch_raises_the_numbers_and_locks_them_as_minimums(self):
         window = self.window()

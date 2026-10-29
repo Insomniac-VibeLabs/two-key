@@ -8,9 +8,12 @@ on a ledger), or by hand with ``two-key keys upgrade``. Each key keeps its Ed255
 key (``keys.add_ml_dsa``), so everything signed before the upgrade still checks against the old halves. There is
 no way back: once the ledger records ``keys_upgraded``, a 0.8.0 key is refused.
 
-The steps, under the ledger's lock, each safe to run again after a stop at any point:
+The steps, under the ledger's lock. A stop before step 5 is taken up by the next start; a stop inside step 5,
+after ``keys_upgraded`` is written and before the head that covers it, leaves a ledger that needs
+``two-key recover`` first, as any interrupted write does (docs/UPGRADING.md):
 
-1. Open the ledger with the key on disk; it must open and verify as it is.
+1. Open the ledger with the key on disk; it must open and verify as it is. Under the lock, remove the temporary
+   key files a stopped upgrade left (``.principal.pem.<pid>.<hex>.tmp``).
 2. Replace the principal key file with the hybrid key, encrypted again with its passphrase if it was encrypted.
    The principal goes first: a ledger opened with a hybrid principal accepts the old witness key until step 5.
 3. Replace ``witness.pem``, ``capability.pem`` and ``stamp.pem`` (each where it exists) and their public files,
@@ -34,6 +37,8 @@ names again, as ``sign-constitution`` would.
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,6 +52,7 @@ from .keys import (HYBRID_ALG, Passphrase, add_ml_dsa, classical_half, fingerpri
 from .ledger import Ledger, LedgerError
 
 BACKUP_DUE = "backup-due"
+PUBLIC_SUFFIX = ".pub.pem"
 BACKUP_NOTE = ("two-key: back up now: the key upgrade changed every key file, and a backup made before it restores "
                "the old keys, which this ledger refuses (two-key backup-export; docs/UPGRADING.md)")
 
@@ -80,10 +86,29 @@ def backup_made(ledger_key_path: Path | str) -> None:
         pass
 
 
+def _temp_name(path: Path) -> Path:
+    return path.with_name(f".{path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
+
+
+def _sweep_temps(paths) -> None:
+    """Remove the temporary files a stopped upgrade left beside ``paths`` (run 12, B7b: half a private key, owner
+    only, that nothing else would ever remove). Called under the ledger's lock, where no other upgrade writes."""
+    for path in paths:
+        leftover = re.compile(rf"\.{re.escape(path.name)}\.\d+\.[0-9a-f]{{8}}\.tmp")
+        try:
+            names = os.listdir(path.parent)
+        except OSError:
+            continue
+        for name in names:
+            stale = path.parent / name
+            if leftover.fullmatch(name) and stale.is_file() and not stale.is_symlink():
+                stale.unlink()
+
+
 def _replace_key(path: Path, key, passphrase: bytes | None = None) -> None:
     """Write ``key`` over ``path`` as a new owner-only file renamed into place: a reader sees the old key or the
     new one, never half of either."""
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
+    tmp = _temp_name(path)
     data = private_key_bytes(key, passphrase)
     try:
         fd = _platform.create_new(tmp)
@@ -99,9 +124,12 @@ def _replace_key(path: Path, key, passphrase: bytes | None = None) -> None:
 
 
 def _replace_public(path: Path, public) -> None:
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
+    """Write ``public`` over ``path``, keeping the mode the operator gave the old file (run 12: 0600 became 0644)."""
+    tmp = _temp_name(path)
     try:
         save_public_key(tmp, public)
+        if path.exists():
+            shutil.copymode(path, tmp)
         _platform.replace(tmp, path)
     finally:
         if os.path.lexists(tmp):
@@ -118,7 +146,7 @@ def _upgrade_file(path: Path, replaced: list[str]):
         key = add_ml_dsa(key)
         _replace_key(path, key)
         replaced.append(str(path))
-    public = path.with_name(path.name.removesuffix(".pem") + ".pub.pem")
+    public = path.with_name(path.name.removesuffix(".pem") + PUBLIC_SUFFIX)
     if public.exists() and public_raw(load_public_key(public)) != public_raw(key.public_key()):
         _replace_public(public, key.public_key())
         replaced.append(str(public))
@@ -176,18 +204,42 @@ def open_upgraded(principal_path: Path | str, passphrase: Passphrase, ledger_pat
         raise UpgradeError("keys_upgrade_needed: 0.9.0 upgrades the keys to hybrid Ed25519 + ML-DSA-65, and the "
                            "witness public key is also pinned outside the ledger (witness_public_key), which has "
                            "to be replaced by hand; run two-key keys upgrade (docs/UPGRADING.md)")
-    with ledger.exclusive():
-        _upgrade(result, principal_path, passphrase, Path(constitution) if constitution else None)
+    print(f"two-key: upgrading the keys to hybrid {HYBRID_ALG}, once; let it finish", file=out)
+    _upgrade_locked(result, principal_path, passphrase, Path(constitution) if constitution else None)
     result.upgraded = True
     print(f"two-key: keys upgraded to hybrid {HYBRID_ALG} (keys_upgraded at seq {result.entry['seq']}): "
           f"principal {result.entry['principal_key_fingerprint']}, witness {result.entry['witness_key_fingerprint']}; "
           f"files replaced: {', '.join(result.replaced) or 'none'}", file=out)
     if pin is not None:
         print(f"two-key: replace the out-of-ledger witness pin {witness_public_key} with "
-              f"{ledger.witness_path.with_suffix('.pub.pem')}; until then the ledger refuses to open with it",
+              f"{ledger.witness_path.with_suffix(PUBLIC_SUFFIX)}; until then the ledger refuses to open with it",
               file=out)
     _remind(ledger, out)
     return result
+
+
+def _upgrade_locked(result: Upgrade, principal_path: Path, passphrase: Passphrase, constitution: Path | None) -> None:
+    """``_upgrade`` under the ledger's lock, with the two stops an operator can act on named (live run 12)."""
+    try:
+        with result.ledger.exclusive():
+            _upgrade(result, principal_path, passphrase, constitution)
+    except PermissionError as e:
+        raise UpgradeError(f"keys_upgrade_stopped: this account cannot write {e.filename}; the key upgrade "
+                           "replaces the key files, so their folders must be writable by Two-Key's account. What "
+                           "was written is safe: make them writable and start again (docs/UPGRADING.md)") from None
+    except LedgerError:
+        if not is_hybrid(result.principal) and _upgraded_elsewhere(principal_path, passphrase):
+            raise UpgradeError("keys_upgraded_elsewhere: another process upgraded the keys while this one waited "
+                               "for the ledger; start again, which opens the upgraded keys") from None
+        raise
+
+
+def _upgraded_elsewhere(principal_path: Path, passphrase: Passphrase) -> bool:
+    """The principal key file on disk is hybrid now: a second first start lost the race (run 12, X3)."""
+    try:
+        return is_hybrid(load_private_key_file(principal_path, passphrase))
+    except (OSError, ValueError):
+        return False
 
 
 def _already_upgraded(result: Upgrade, constitution: Path | str | None, out: TextIO) -> None:
@@ -200,10 +252,13 @@ def _already_upgraded(result: Upgrade, constitution: Path | str | None, out: Tex
 def _upgrade(result: Upgrade, principal_path: Path, passphrase: Passphrase, constitution: Path | None) -> None:
     """Steps 2 to 6, under the ledger's lock."""
     ledger = result.ledger
+    capability_path = ledger.capability_key_path()
+    keys = [principal_path, ledger.witness_path, capability_path, capability_path.with_name("stamp.pem")]
+    _sweep_temps(keys + [path.with_suffix(PUBLIC_SUFFIX) for path in keys])
     result.principal = _upgrade_principal(principal_path, result.principal, passphrase, result.replaced)
     _upgrade_file(ledger.witness_path, result.replaced)
-    capability = _upgrade_file(ledger.capability_key_path(), result.replaced)
-    stamp = _upgrade_file(ledger.capability_key_path().with_name("stamp.pem"), result.replaced)
+    capability = _upgrade_file(capability_path, result.replaced)
+    stamp = _upgrade_file(capability_path.with_name("stamp.pem"), result.replaced)
     _resign_constitution(constitution, result.principal, result.replaced)
     try:
         result.entry = ledger.upgrade_keys(None if ledger.upgrade_pending else result.principal,

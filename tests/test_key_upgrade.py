@@ -8,6 +8,8 @@ afterwards; where it cannot do it all alone, or ML-DSA-65 is missing, it refuses
 import contextlib
 import io
 import json
+import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -218,6 +220,48 @@ class Upgrade(unittest.TestCase):
         self.assertTrue(result.upgraded)
         kinds = [e.kind for e in result.ledger.entries[self.dep.size:]]
         self.assertEqual(kinds, ["ledger_recovered", "keys_upgraded"])
+
+    def test_it_says_it_is_upgrading_before_it_starts(self):
+        """Run 12: the only line came after the work, so a slow upgrade looked like a hang."""
+        _, said = self.dep.upgrade()
+        self.assertLess(said.index("upgrading the keys"), said.index("keys upgraded"))
+
+    def test_a_temporary_key_file_a_stop_left_is_removed(self):
+        """Run 12, B7b: a kill during the principal write left half a private key beside it, for good."""
+        stale = self.dep.root / ".principal.pem.4242.0a1b2c3d.tmp"
+        stale.write_bytes(b"-----BEGIN PRIVATE KEY-----\nhalf")
+        other = self.dep.root / ".notes.txt.4242.0a1b2c3d.tmp"
+        other.write_bytes(b"not ours")
+        self.dep.upgrade()
+        self.assertFalse(stale.exists())
+        self.assertTrue(other.exists())
+
+    @unittest.skipIf(os.name == "nt", "POSIX modes")
+    def test_a_public_key_file_keeps_its_mode(self):
+        """Run 12: the operator's 0600 principal.pub.pem came back 0644."""
+        public = self.dep.root / "principal.pub.pem"
+        os.chmod(public, 0o600)
+        self.dep.upgrade()
+        self.assertEqual(stat.S_IMODE(os.stat(public).st_mode), 0o600)
+
+    def test_a_folder_it_cannot_write_is_named_not_a_raw_error(self):
+        """Run 12, X5: a read-only deployment folder gave a raw PermissionError naming a temporary file."""
+        denied = PermissionError(13, "Permission denied")
+        denied.filename = str(self.dep.root / ".principal.pem.1.0a1b2c3d.tmp")
+        before = self.dep.files()
+        with mock.patch("two_key.upgrade._platform.create_new", side_effect=denied):
+            with self.assertRaisesRegex(UpgradeError, "^keys_upgrade_stopped: this account cannot write .*writable"):
+                self.dep.upgrade()
+        self.assertEqual(self.dep.files(), before)
+
+    def test_a_second_first_start_that_lost_the_race_says_so(self):
+        """Run 12, X3: the start that waited for the lock said keys_upgraded "names a principal key other than this
+        ledger's". Safe, but it read like damage."""
+        old_ledger = Ledger(self.dep.ledger_path, self.dep.old)
+        self.dep.upgrade()                              # the other process wins while this one has the ledger open
+        late, said = mock.patch("two_key.upgrade.Ledger", return_value=old_ledger), io.StringIO()
+        with late, self.assertRaisesRegex(UpgradeError, "^keys_upgraded_elsewhere: .*start again"):
+            open_upgraded(self.dep.principal_path, None, self.dep.ledger_path, principal=self.dep.old, out=said)
 
     def test_a_new_principal_that_is_not_the_old_one_made_hybrid_is_refused(self):
         led, stranger = Ledger(self.dep.ledger_path, self.dep.old), keys.generate_private_key()

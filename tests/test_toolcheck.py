@@ -202,12 +202,19 @@ class Gateway(Deployment):
         def dropped(out):
             return {k: v for k, v in out.items() if k != "_meta"}
         gw = self.gateway(self.upstream(self.checker(), tamper=dropped), high_assurance=True)
+        earlier = self.token()                 # issued before the hold
         got = gw.invoke(self.token(), "send", ARGS)
         self.assertFalse(got.allowed)
         self.assertEqual(got.reason, "tool_receipt_invalid:missing")
         self.assertIsNone(got.output)
         self.assertTrue(self.tk.ledger.tool_held("send"))
-        self.assertEqual(gw.invoke(self.token(), "send", ARGS).reason, "tool_held")
+        self.assertEqual(gw.invoke(earlier, "send", ARGS).reason, "tool_held")
+        # Run 12, D6c: a new call to the held tool is denied before the judges, and gets no token.
+        decision = self.tk.authorize(CLAIM, ARGS, "send a note")
+        self.assertEqual((decision.allowed, decision.reason, decision.token), (False, "tool_held", None))
+        self.assertEqual(self.tk.ledger.entries[-1].kind, "decision")
+        self.assertEqual(self.tk.ledger.entries[-1].body["reason"], "tool_held")
+        self.assertEqual(decision.path_b, {})           # the judges were not asked
         reopened = Ledger(self.base / "ledger", self.key)       # a restart does not release it
         self.assertTrue(reopened.tool_held("send"))
         reopened.record("tool_released", {"tool": "send", "reason": "key fixed"})

@@ -661,6 +661,9 @@ class TwoKey:
         spec = None
         if self.compiled.specs_enforced:
             spec = self.compiled.tool_specs.get(normalized.tool)
+        held = self._held_deny(spec, normalized.tool, origin, agent)
+        if held:
+            return held
         form = None
         claimed_data_class = normalized.data_class
         deny_reason = None
@@ -1004,6 +1007,18 @@ class TwoKey:
         with self.ledger.exclusive():
             self.ledger.append("revocation", {"reason": reason})
             self.ledger.checkpoint()
+
+    def _held_deny(self, spec, tool: str, origin: str | None, agent) -> Decision | None:
+        """A checked tool held after a bad receipt (#28) is denied before either path: the gateway refuses it anyway,
+        so the judges are not asked and no token is issued (run 12, D6c). The hold is read under the ledger's lock,
+        which catches up on a ``tool release`` another process wrote."""
+        if spec is None or checked(spec) is None:
+            return None
+        with self.ledger.exclusive():
+            held = self.ledger.tool_held(tool)
+        if not held:
+            return None
+        return self._deny(origin, "tool_held", agent, None, None, {"tool": tool}, subject_tool=tool)
 
     def _deny(self, origin: str | None, reason: str, agent, path_a, path_b, extra: dict | None = None, *,
               subject_tool: str | None = None) -> Decision:

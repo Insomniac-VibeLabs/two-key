@@ -1200,6 +1200,25 @@ HTTP to a host other than `localhost`, `127.0.0.1`, or `::1` is refused
 unless the judge sets `allow_insecure_http`. A judge on a LAN address is local for the quorum
 floors but not loopback, so it still needs the agent session at call time.
 
+`local_weights: true` says where the weights run; it does not say who serves the model. An Ollama judge
+on its own host resolves both. An OpenAI-compatible server on your machine (llama.cpp, vLLM, LM Studio, or
+a local relay) with a model id that names no maker does not, so `config check` warns `unresolved_identity`
+and the proxy refuses to start. Declare where it is served instead of setting
+`allow_unresolved_identity: true`, which is weaker and allows every unresolved judge:
+
+```yaml
+- id: local-judge
+  type: openai_compatible
+  base_url: http://127.0.0.1:8080/v1
+  model: qwen2.5-7b-instruct
+  maker: alibaba
+  local_weights: true
+  upstream: localhost:8080      # served here, by this machine
+```
+
+Under `high_assurance` this is the usual shape of the local judge the profile requires
+(`min_local_judges: 1`).
+
 ## Parsing and limits
 
 Every JSON and YAML document is parsed strictly: the signed constitution,
@@ -1594,7 +1613,9 @@ intent, including after the tool has returned, does not run the token again.
 A tool exception appends an abort, and from 0.9.0 the token stays spent
 (`already_attempted`), so a tool that did part of its work and then failed
 does not run again on the same token. The agent asks again, and the judges
-decide again. A crash before the tool runs also blocks a retry.
+decide again. A crash before the tool runs also blocks a retry. After a
+restart the same token is refused `revoked_or_reloaded` instead: the
+restart records `constitution_loaded`, and that check comes first.
 
 ### Deployment boundary: the gateway runs in the TwoKey process
 

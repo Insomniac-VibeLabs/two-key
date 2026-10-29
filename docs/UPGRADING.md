@@ -233,8 +233,9 @@ keys become hybrid Ed25519 + ML-DSA-65 at the first start ([The key upgrade (0.9
 exactly what it does). A new deployment made by 0.9.0 is hybrid from the start, and none of this applies to it.
 
 1. **Stop and back up**, as in steps 2 and 3 above: stop the proxy and everything else on the ledger, run
-   `two-key audit`, export and verify the three bundles into `backups-pre-upgrade`, and copy the folders. Keep
-   the bundles with that copy. They hold the 0.8.0 keys, which only the 0.8.0 ledger copy accepts.
+   `two-key audit`, export and verify the three bundles into `backups-pre-upgrade`, and copy the folders into
+   `pre-upgrade-copy`. Keep the bundles with that copy. They hold the 0.8.0 keys, which only the 0.8.0 ledger
+   copy accepts. "Going back to 0.8.0" below restores `pre-upgrade-copy`.
 
 2. **Install 0.9.0.** It needs `cryptography` 48 or later, which pip installs with it:
 
@@ -257,9 +258,10 @@ exactly what it does). A new deployment made by 0.9.0 is hybrid from the start, 
    `config check` warns `principal_key: a 0.8.0 Ed25519 key`, which is expected. It fails in two cases you
    fix now:
 
-   - `witness_public_key pins the witness outside the ledger`: the proxy will not upgrade by itself. Do step 4
-     by hand with `two-key keys upgrade --config proxy.yaml`, then copy `<ledger>.witness/witness.pub.pem` over
-     your pin file.
+   - `principal_key: a 0.8.0 Ed25519 key, and witness_public_key pins the witness outside the ledger`: the
+     proxy will not upgrade by itself, and a start refuses with `keys_upgrade_needed`. Do step 4 by hand with
+     `two-key keys upgrade --config proxy.yaml`, then copy `<ledger>.witness/witness.pub.pem` over your pin
+     file.
    - `tool_check_required` (`high_assurance` only): give each tool the tool check or mark it `exempt`
      ([TOOL_CHECK](TOOL_CHECK.md)). Under other profiles the check stays off and nothing changes.
 
@@ -282,17 +284,30 @@ exactly what it does). A new deployment made by 0.9.0 is hybrid from the start, 
 
    Pass the constitution you run with: the upgrade signs that file again with the hybrid key, and the signed
    rules stay the same. `keys upgrade` is safe to run twice; the second run says `"upgraded": false`. The
-   first start prints two lines like these:
+   first start prints a line before it starts and two when it is done, like these:
 
    ```text
+   two-key: upgrading the keys to hybrid ed25519+ml-dsa-65, once; let it finish
    two-key: keys upgraded to hybrid ed25519+ml-dsa-65 (keys_upgraded at seq 16): principal hybrid-sha256:10cc...,
      witness hybrid-sha256:3cce...; files replaced: principal.pem, principal.pub.pem, ledger.witness/witness.pem, ...
    two-key: back up now: the key upgrade changed every key file, and a backup made before it restores the old keys,
      which this ledger refuses (...)
    ```
 
+   Let it finish. The account that runs it must be able to write the key folders (it replaces each key file);
+   otherwise it stops with `keys_upgrade_stopped: this account cannot write ...`. What it wrote is safe: fix
+   the modes and start again. Each `.pub.pem` file keeps its mode. If two first starts race, the
+   one that waited says `keys_upgraded_elsewhere` and the next start opens the upgraded keys. If the start is
+   killed part way, the next start goes on from there, with one exception: killed after `keys_upgraded` is
+   written and before the head that covers it, the next start refuses with `signed head does not match the
+   chain`. Run `two-key recover` (HOWTO, "If the ledger will not open after a crash"), then start again; it
+   records `ledger_recovered` and finishes the upgrade. A temporary key file a kill left beside a key
+   (`.principal.pem.<pid>.<hex>.tmp`) is removed by the next upgrade.
 5. **Back up again, at once.** Export and verify into a new folder, as in step 6 above. The `back up now` line
-   comes back at every start until `two-key backup-export` succeeds.
+   comes back at every start until `two-key backup-export` succeeds. `backup-verify` checks a bundle set by
+   itself, so the old bundles from step 1 still verify `ok`. Pass `--witness-public-key
+   <ledger>.witness/witness.pub.pem` to check a set against the upgraded ledger: the old set is then refused
+   (`witness_key_changed`), the new one passes.
 
 6. **Check the result.** `two-key audit` lists `keys_upgraded` among the witness pins, with the old `sha256:`
    and new `hybrid-sha256:` fingerprints. To see the whole entry:
@@ -301,7 +316,9 @@ exactly what it does). A new deployment made by 0.9.0 is hybrid from the start, 
    two-key ledger-view --key keys/principal.pem --ledger ledger --where kind = keys_upgraded --print
    ```
 
-   Or open `two-key ledger-view` and search for `keys_upgraded`. Decisions go on as before.
+   Or open `two-key ledger-view` and search for `keys_upgraded`. Decisions go on as before. The SIEM copy of
+   the entry has `stamp_key_fingerprint: null` when the deployment had no stamp key yet (no tool had the tool
+   check on), which is the usual case for a 0.8.0 deployment.
 
 7. **Sign other copies again.** The upgrade signs one constitution file, the one that start used. Any other
    signed copy you keep, such as a staged next version, still carries the 0.8.0 signature, and Two-Key refuses
@@ -310,8 +327,10 @@ exactly what it does). A new deployment made by 0.9.0 is hybrid from the start, 
    (`constitution.md`, `hard_rules.yaml`) do not change. Make rule changes after the upgrade, not before it.
 
 Two behavior changes reach callers rather than files. Tokens are `tk2`; code that only passes them on to the
-gateway does not notice. A tool that raises now spends its token, so a caller that retried the same token after
-`tool_error:<type>` must ask for a new one.
+gateway does not notice, and a `tk1` token minted before the upgrade is refused `token_before_upgrade`. A tool
+that raises now spends its token, so a caller that retried the same token after `tool_error:<type>` must ask for
+a new one: the same process refuses it `already_attempted`, and after a restart it is `revoked_or_reloaded`
+(the restart's `constitution_loaded` is checked first).
 
 **Going back to 0.8.0** means going back to the copy from step 1. 0.8.0 refuses the upgraded ledger
 (`head anchor was signed by a different principal key`), and 0.9.0 refuses the 0.8.0 keys once the upgrade is
@@ -326,7 +345,9 @@ deployment made by 0.8.0 has Ed25519 keys. The first start of 0.9.0 upgrades
 them by itself, once: `two-key mcp-proxy`, `two-key authorize`, and a
 `two-key config` change that opens the principal key each do it when they find
 0.8.0 keys. It runs under the
-ledger's lock, and each step is safe to run again after a stop at any point:
+ledger's lock. A stop at any step before the entry is written is taken up by
+the next start; a stop between the entry and its head needs `two-key recover`
+first (see the end of this section):
 
 1. It opens the ledger with the 0.8.0 key; the ledger must open and verify as
    it is.

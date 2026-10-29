@@ -106,6 +106,22 @@ def write_answers(ctx, name, **over) -> Path:
     return path
 
 
+def checked_rules(ctx, work: Path) -> Path:
+    """The pass's rules with the tool check on for every tool (#28): high_assurance refuses to set up without it.
+    One receipt key serves them all; deployment C never starts its proxy, so no tool has to hold it."""
+    import yaml
+    res = run_cli(ctx, ["tool-key", "new", "--out", work / "tool_c.pem"])
+    if res["rc"]:
+        raise RuntimeError("tool-key new failed: " + res["stderr"][-300:])
+    check = {"key": json.loads(res["stdout"])["fingerprint"]}
+    doc = yaml.safe_load(Path(ctx["rules"]).read_text(encoding="utf-8"))
+    for spec in doc["tool_specs"].values():
+        spec["tool_check"] = check
+    path = work / "rules_c.yaml"
+    path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    return path
+
+
 def private_file(path: Path, text: str, mode=0o600) -> Path:
     """A test file with its mode set when it is created. `mode` 0o644 makes the one a refusal case must reject."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
@@ -276,7 +292,14 @@ def run(ctx) -> dict:
                                                     for f in ledger_bodies(ctx, b, passphrase_file=pf)[-1]["files"])))
     step("check_encrypted_key", ["config", "check", "--config", pb], facts=key_state)
 
-    # ---- deployment C: high_assurance keeps what it forbids forbidden
+    high_assurance_steps(ctx, out, step)
+    grok_steps(ctx, out, step, b=b, pb=pb, pf=pf)
+    return out
+
+
+def high_assurance_steps(ctx, out, step):
+    """Deployment C: high_assurance keeps what it forbids forbidden."""
+    work: Path = ctx["work"]
     c = work / "deploy_c"
     pc = c / "proxy.yaml"
     judges = answers(ctx)["judges"]
@@ -285,7 +308,7 @@ def run(ctx) -> dict:
     agent = dict(answers(ctx)["monitored_agent"])
     step("setup_high_assurance", ["setup", "--dir", c, "--answers",
                                   write_answers(ctx, "c", profile="high_assurance", judges=judges,
-                                                monitored_agent=agent)],
+                                                monitored_agent=agent, rules_file=str(checked_rules(ctx, work)))],
          facts=lambda: {"proxy_written": pc.is_file()})
     if pc.is_file():
         base_c = (sha_file(pc), len(ledger_bodies(ctx, c)))
@@ -293,8 +316,8 @@ def run(ctx) -> dict:
                                                  "--confirm-weaker"], answer="yes",
              facts=lambda: {"proxy_unchanged": sha_file(pc) == base_c[0],
                             "ledger_unchanged": len(ledger_bodies(ctx, c)) == base_c[1]})
-    grok_steps(ctx, out, step, b=b, pb=pb, pf=pf)
-    return out
+    else:
+        out["high_assurance_weaker_typed_yes"] = {"skipped": "prerequisite step setup_high_assurance failed"}
 
 
 def grok_steps(ctx, out, step, *, b, pb, pf):

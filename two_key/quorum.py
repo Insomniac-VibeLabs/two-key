@@ -333,8 +333,9 @@ def lenient_warnings(judges: Sequence, policy: QuorumPolicy) -> list[str]:
          f"quorum: required_yes {policy.required_yes} of {n} judges: half of them or fewer approve a call. Set "
          f"required_yes: {n // 2 + 1} for a majority"),
         (n >= 2 and len(providers) == 1,
-         "quorum: every judge comes from one provider, so an outage or a change on its side reaches every ballot. "
-         "Add a judge from another provider and set min_distinct_providers: 2"),
+         f"quorum: every judge comes from one provider ({next(iter(providers), '?')}: who serves the calls, whatever "
+         "maker trained the model), so an outage or a change on its side reaches every ballot. Add a judge from "
+         "another provider and set min_distinct_providers: 2"),
         (n >= 2 and len(makers) == 1,
          "quorum: every judge's model comes from one maker, so they share its blind spots. Add a judge from "
          "another maker and set min_makers: 2"),

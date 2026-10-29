@@ -702,7 +702,8 @@ class HighAssurance(Deployment):
 
     def test_turning_the_tool_check_off_is_weaker(self):
         kw = {"key_path": str(self.key), "rules_path": str(self.rules)}
-        self.refused("weaker: tool_specs.tool_a.tool_check: changed", "tool_specs.tool_a.tool_check", "exempt", **kw)
+        self.refused(r"weaker: tool_specs.tool_a.tool_check: exempt \(the check is turned off\)",
+                     "tool_specs.tool_a.tool_check", "exempt", **kw)
         self.refused("tool_check_required", "tool_specs.tool_a.tool_check", unset=True, confirm_weaker=True, **kw)
 
     def test_turning_it_off_is_weaker(self):
@@ -733,6 +734,14 @@ class Signed(Deployment):
         self.rules.write_bytes(text.encode("utf-8"))
         self.refused("rules_source_differs", "tool_specs.tool_a.irreversible", True, key_path=str(self.key),
                      rules_path=str(self.rules))
+
+    def test_another_rules_file_is_refused_naming_the_one_setup_kept(self):
+        """Run 12: rules.yaml, the setup input, was given in place of hard_rules.yaml, and nothing said which."""
+        other = self.base / "rules.yaml"
+        other.write_text(self.rules.read_text(encoding="utf-8").replace("data_class_floor: personal",
+                                                                         "data_class_floor: public"), encoding="utf-8")
+        self.refused(f"rules_source_differs: .*setup keeps the signed source as .*{self.rules.name}",
+                     "tool_specs.tool_a.irreversible", True, key_path=str(self.key), rules_path=str(other))
 
     def test_a_signed_change_is_shown_confirmed_signed_and_verified(self):
         result, out, _ = self.signed("tool_specs.tool_a.irreversible", True)

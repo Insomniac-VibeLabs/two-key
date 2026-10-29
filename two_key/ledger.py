@@ -1061,7 +1061,8 @@ class Ledger:
         the key upgrade, the Ed25519 key it was upgraded from (``_checked_anchor`` says when that is accepted)."""
         if not self._is_ledger_principal(raw):
             self._refuse_upgraded_from(raw)
-            raise LedgerError("head anchor was signed by a different principal key")
+            raise LedgerError("head anchor was signed by a different principal key (the key given is not this "
+                              "ledger's principal key; check --key or principal_key)")
         return self.public_key if raw == public_raw(self.public_key) else self._classical_principal()
 
     def _checked_anchor(self) -> dict | None:
@@ -1434,7 +1435,9 @@ class Ledger:
             raise LedgerError("witness head signature failed")
         self._check_head_principal(body["public_key"], body["size"])
         if body["size"] != len(self.entries) or body["tip"] != self.entries[-1].entry_hash:
-            raise LedgerError("signed head does not match the chain")
+            raise LedgerError("signed head does not match the chain (a write stopped before its head, or the files "
+                              "were changed; after a crash see HOWTO \"If the ledger will not open after a crash\": "
+                              "two-key recover)")
         if body["merkle_root"] != self.merkle_root():
             raise LedgerError("signed head merkle root mismatch")
         # After the chain checks, so an entry the head does not cover (a crash before a checkpoint, including

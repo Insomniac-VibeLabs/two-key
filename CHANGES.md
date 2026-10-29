@@ -180,6 +180,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Docs checked against the 0.9.0 code — 2026-10-29](#docs-checked-against-the-090-code--2026-10-29)
 - [A SIEM test that no longer races the clock — 2026-10-29](#a-siem-test-that-no-longer-races-the-clock--2026-10-29)
 - [FIPS mode after 1.0, and a clearer README — 2026-10-29](#fips-mode-after-10-and-a-clearer-readme--2026-10-29)
+- [Live run 12 findings — 2026-10-29](#live-run-12-findings--2026-10-29)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5329,3 +5330,39 @@ every Mermaid diagram drawn and read. What was wrong:
   the Layout table gains the modules added since 0.7.3; the architecture flowchart has one box per step and
   one ledger arrow per outcome instead of eight crossing lines; the "one call" sequence diagram has five
   lanes instead of nine, so it can be read at page width.
+
+## Live run 12 findings — 2026-10-29
+
+GrokBot's live run 12 tested the 0.9.0 work on `working` (b0a2c7c): the 0.8.0 key upgrade, hybrid signatures,
+the tool check and the setup window. Nothing it found let a forbidden call run. What changed:
+
+- The key upgrade removes the temporary key file a kill left beside a key (`.principal.pem.<pid>.<hex>.tmp`, half
+  a private key that nothing removed), keeps each `.pub.pem` file's mode (0600 became 0644), prints a line before
+  it starts, names a folder it cannot write (`keys_upgrade_stopped: this account cannot write ...`, not a raw
+  `PermissionError`), and tells the first start that lost a race to start again (`keys_upgraded_elsewhere`, not
+  "names a principal key other than this ledger's").
+- `signed head does not match the chain` points to `two-key recover`, and UPGRADING no longer says every step of
+  the upgrade is safe to rerun: a kill between `keys_upgraded` and its head needs `recover` first.
+- A call to a tool held after a bad receipt (`high_assurance`) is denied `tool_held` before either path, so the
+  judges are not asked and no token is issued. The gateway still refuses a token issued before the hold.
+- A `tk1` token minted before the key upgrade is refused `token_before_upgrade`, not `malformed_token`.
+- A key that is not the ledger's principal says so beside `head anchor was signed by a different principal key`.
+- `config set` on a signed setting names the `hard_rules.yaml` setup kept when given another rules file, and a
+  weaker tool check change says how it is weaker (`exempt (the check is turned off)`, `turned off`, `another
+  receipt key`) instead of `changed`.
+- `config check` names the one provider every judge comes from, and says a provider is who serves the calls.
+- The setup window keeps `Set up in ...` on its status line after setup, and adds what is wrong with answers
+  changed since. Button and menu labels use `...` instead of `…`, which some X fonts draw as a box.
+- Docs: UPGRADING names `pre-upgrade-copy` in step 1, quotes the real `config check` line for an out-of-ledger
+  witness pin, and covers writable folders, kept modes, recovery, old bundles (`--witness-public-key`), the SIEM
+  `stamp_key_fingerprint: null`, and `revoked_or_reloaded` after a restart. TOOL_CHECK says turning the check on
+  still asks for the typed `yes` every signed change asks for, that `--rules` is `hard_rules.yaml`, and how to
+  pass an `upstream.env` value (`{"env": "NAME"}`). HOWTO shows a local OpenAI-compatible judge that declares
+  `upstream:` instead of `allow_unresolved_identity`. SETUP says the window writes default values out.
+  THREAT_MODEL says a credential in a message body to an allowed recipient is stopped by the scanner or the
+  judges, not by Path A.
+- Live harness: C140 (setup under `high_assurance`) signs a receipt key into every tool, as #28 requires; C94,
+  whose step needs C140's folder, is INCONCLUSIVE ("skipped") instead of ERROR when C140 fails; C32 accepts the
+  earlier `caller_field_in_arguments:po_matched` deny, as C79 does; C19 counts any `pay_vendor` call as the
+  attempt, so a disguised "part 1 of installments" payment is graded; C72 accepts the judges' `insufficient_yes`
+  when the scanner does not flag a credential in the body.

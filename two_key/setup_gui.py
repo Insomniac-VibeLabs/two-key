@@ -71,7 +71,7 @@ def _row(parent, label: str, var: tk.Variable, row: int, *, width: int = 60, cho
         box = ttk.Entry(parent, textvariable=var, width=width)
     box.grid(row=row, column=1, sticky="we", pady=2)
     if browse is not None:
-        ttk.Button(parent, text="Browse…", command=browse).grid(row=row, column=2, padx=(6, 0))
+        ttk.Button(parent, text="Browse...", command=browse).grid(row=row, column=2, padx=(6, 0))
     return box
 
 
@@ -245,7 +245,7 @@ class SetupWindow:
         ttk.Entry(row, textvariable=self.var["typed_yes"], width=8).pack(side="left", padx=6)
         self.setup_button = ttk.Button(row, text="Set up", command=self.set_up)
         self.setup_button.pack(side="right")
-        ttk.Button(row, text="Save answers file…", command=self.ask_save).pack(side="right", padx=6)
+        ttk.Button(row, text="Save answers file...", command=self.ask_save).pack(side="right", padx=6)
         after = ttk.Frame(tab)
         after.pack(fill="x")
         self.open_editor = ttk.Button(after, text="Open the constitution editor", state="disabled",
@@ -498,12 +498,23 @@ class SetupWindow:
         ready = found.ready and bool(self.var["dir"].get().strip()) and self.result is None
         self.setup_button.configure(state="normal" if ready else "disabled")
         if self.result is not None:
+            self._status_after_setup(found)
             return
         if found.ready:
             note = "Ready to set up." + (" Weaker settings need the typed yes." if found.weaker else "")
             self.status.configure(text=note, foreground=GOOD)
         else:
             self.status.configure(text=f"Not ready: {found.problems[0]}", foreground=BAD)
+
+    def _status_after_setup(self, found) -> None:
+        """The window sets up once. Answers changed after that keep the result on the status line, and say what
+        is wrong with them now (run 12: it went on saying only "Set up in ..." beside a list of problems)."""
+        done = f"Set up in {self.result['dir']}."
+        if found.ready:
+            self.status.configure(text=done, foreground=GOOD)
+        else:
+            self.status.configure(text=f"{done} The answers changed since, and now: {found.problems[0]}",
+                                  foreground=BAD)
 
     @staticmethod
     def _review_text(answers: dict, found) -> str:

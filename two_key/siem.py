@@ -1034,7 +1034,7 @@ def start_delivery(config: SiemConfig, ledger: Any, **kw) -> Delivery:
 
 
 _REFUSAL_CLASSES = {"bad_signature": "bad_signature", "expired": "expired", "issued_in_future": "expired",
-                    "malformed_token": "malformed"}
+                    **dict.fromkeys(("malformed_token", "token_before_upgrade"), "malformed")}
 REFUSAL_COUNTS = ("bad_signature", "expired", "malformed", "other")
 
 

@@ -136,7 +136,8 @@ class Tokens(unittest.TestCase):
         body = _b64u(canonical_bytes(payload))
         downgraded = f"tk1.{body}.{sign(classical_half(key), body.encode('ascii'))}"
         verifier = CapabilityVerifier(key.public_key())
-        with self.assertRaisesRegex(TokenError, "malformed_token|bad_signature"):
+        # Run 12, X6: named, so an operator knows to ask for a new token rather than look for a corrupt one.
+        with self.assertRaisesRegex(TokenError, "^token_before_upgrade$"):
             verifier.verify(downgraded)
 
 
