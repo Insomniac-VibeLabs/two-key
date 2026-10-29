@@ -178,6 +178,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Key upgrade follow-ups: backup, old constitutions, the library route — 2026-10-29](#key-upgrade-follow-ups-backup-old-constitutions-the-library-route--2026-10-29)
 - [Docs: upgrading from 0.8.0 to 0.9.0 — 2026-10-29](#docs-upgrading-from-080-to-090--2026-10-29)
 - [Docs checked against the 0.9.0 code — 2026-10-29](#docs-checked-against-the-090-code--2026-10-29)
+- [A SIEM test that no longer races the clock — 2026-10-29](#a-siem-test-that-no-longer-races-the-clock--2026-10-29)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5306,3 +5307,10 @@ every Mermaid diagram drawn and read. What was wrong:
   window); FIPS approved mode moved under 1.0.0; the per-judge ballot records are no longer "planned"; the
   header says the pages cover the 0.9.0 work on `working`.
 - llms.txt: hybrid signatures and the key upgrade, and `cryptography>=48`.
+
+## A SIEM test that no longer races the clock — 2026-10-29
+
+- `test_a_stuck_sink_does_not_delay_a_decision` timed three decisions against a 4-second limit next to a sink
+  that slept 5 seconds. With hybrid signatures each decision signs more, and Windows on Python 3.10 took 4.1
+  seconds (CI on 7c5b4db). The sink now stays stuck until the test releases it, and the test checks that the
+  three decisions returned while the sender was still inside `send`. No clock, and the same claim.

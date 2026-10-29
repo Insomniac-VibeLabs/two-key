@@ -483,12 +483,27 @@ class Delivering(Fixture):
         self.assertEqual(sink.seqs(), list(range(size)))
 
     def test_a_stuck_sink_does_not_delay_a_decision(self):
-        sink = ListSink(delay=5.0)
+        # The sink stays stuck until the test lets it go, so no clock is involved: three decisions return while
+        # the sender is still inside send(). Had a decision waited for the sink, it would only return after the
+        # sink gave up (``returned``), and the last assertion fails.
+        class StuckSink(ListSink):
+            def __init__(self):
+                super().__init__()
+                self.entered, self.release, self.returned = threading.Event(), threading.Event(), False
+
+            def send(self, messages):
+                self.entered.set()
+                self.release.wait(30)
+                self.returned = True
+                super().send(messages)
+
+        sink = StuckSink()
         tk = self.start(siem_config=self.config(sink, replay_from="start"))
-        started = time.monotonic()
+        self.addCleanup(sink.release.set)       # runs before start()'s tk.close
+        self.assertTrue(sink.entered.wait(10))
         for _ in range(3):
             self.assertTrue(tk.authorize(SEARCH, {"q": "weather"}, "look").allowed)
-        self.assertLess(time.monotonic() - started, 4.0)
+        self.assertFalse(sink.returned)
 
     def test_a_sink_that_cannot_be_reached_at_start_is_a_warning_not_a_refusal(self):
         class Unreachable(ListSink):
