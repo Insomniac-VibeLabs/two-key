@@ -179,6 +179,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Docs: upgrading from 0.8.0 to 0.9.0 — 2026-10-29](#docs-upgrading-from-080-to-090--2026-10-29)
 - [Docs checked against the 0.9.0 code — 2026-10-29](#docs-checked-against-the-090-code--2026-10-29)
 - [A SIEM test that no longer races the clock — 2026-10-29](#a-siem-test-that-no-longer-races-the-clock--2026-10-29)
+- [FIPS mode after 1.0, and a clearer README — 2026-10-29](#fips-mode-after-10-and-a-clearer-readme--2026-10-29)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5314,3 +5315,17 @@ every Mermaid diagram drawn and read. What was wrong:
   that slept 5 seconds. With hybrid signatures each decision signs more, and Windows on Python 3.10 took 4.1
   seconds (CI on 7c5b4db). The sink now stays stuck until the test releases it, and the test checks that the
   three decisions returned while the sender was still inside `send`. No clock, and the same claim.
+
+## FIPS mode after 1.0, and a clearer README — 2026-10-29
+
+- FIPS 140-3 approved mode moves from 1.0.0 to after 1.0 (maintainer, 2026-10-29). Every algorithm Two-Key
+  uses is already FIPS-approved, but approved mode needs a validated module that offers ML-DSA-65, and none
+  does yet: OpenSSL 3.5 is the first OpenSSL with ML-DSA, and its FIPS provider has been in NIST's validation
+  queue since October 2025; the validated OpenSSL 3.1.2 (certificate #4985) has no ML-DSA. Two-Key will not
+  drop ML-DSA-65 to get there sooner. README, ROADMAP, SCOPE, THREAT_MODEL, SECURITY, AGENTS, COMPARISON, FIT
+  and JUDGES_AND_QUORUM say so, worded as what is in place and what comes next.
+- README (maintainer's choice of facts, tables and diagrams): the roadmap says "the rest of the local GUI"
+  after 1.0, since three windows exist; the docs table gains QUICKSTART, LEDGER_VIEW and CONSTITUTION_EDITOR;
+  the Layout table gains the modules added since 0.7.3; the architecture flowchart has one box per step and
+  one ledger arrow per outcome instead of eight crossing lines; the "one call" sequence diagram has five
+  lanes instead of nine, so it can be read at page width.

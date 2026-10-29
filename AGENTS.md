@@ -34,8 +34,8 @@ Do **not** add a scanning or antivirus engine, a SIEM or log storage, chain
 anchoring, or seed phrases here. The items in [ROADMAP.md](ROADMAP.md) are in
 scope: key backup (shipped in 0.3.0), an MCP adapter (0.5.0), DLP and
 antivirus hooks that call external scanners (0.6.0), ledger export for a SIEM
-(0.7.0), hybrid ML-DSA signatures (0.9.0), a FIPS approved mode (1.0.0), and,
-after 1.0, PKI with certificate recovery and a local GUI. Build them in the order and with the limits stated
+(0.7.0), hybrid ML-DSA signatures (0.9.0), and, after 1.0, PKI with certificate recovery, a FIPS approved
+mode once a validated module offers ML-DSA-65, and a local GUI. Build them in the order and with the limits stated
 there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules

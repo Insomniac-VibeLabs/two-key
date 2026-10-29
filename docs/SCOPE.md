@@ -178,16 +178,18 @@ in the same release.
   ([JUDGES_AND_QUORUM.md](JUDGES_AND_QUORUM.md#judge-history)).
 
 - Hybrid post-quantum signatures (0.9.0): built (above).
-- FIPS approved mode (1.0.0): an opt-in mode that refuses to start unless
-  the cryptography library runs on a FIPS 140-3 validated module in approved
-  mode, and that refuses algorithms outside the approved set. It never drops
-  ML-DSA-65. This package is not FIPS validated today, and that mode would
-  not make it validated. Running on a validated module is not the same as
-  this package being validated or compliant, and the docs will not describe
-  it that way.
 
 After 1.0, not scheduled:
 
+- FIPS approved mode, once a validated module offers ML-DSA-65: an opt-in
+  mode that refuses to start unless the cryptography library runs on a FIPS
+  140-3 validated module in approved mode, and that refuses algorithms
+  outside the approved set. Every algorithm Two-Key uses is FIPS-approved
+  already, and the mode never drops ML-DSA-65. OpenSSL 3.5, the first
+  OpenSSL with ML-DSA, is in NIST's validation queue (submitted October 2025,
+  no certificate as of 2026-10-29). Running on a validated module is not the
+  same as this package being validated, and the docs will not describe it
+  that way.
 - PKI and certificate recovery: X.509 identities for the
   principal, witness, capability issuer, and optionally agents, for personal
   use (a small local CA) and enterprise use (an existing CA and trust

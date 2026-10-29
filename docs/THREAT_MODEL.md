@@ -14,7 +14,8 @@ this page. Tags and branches are in [AGENTS.md](../AGENTS.md), and the full hist
 
 It is not a penetration test and it is not an independent review. The package is
 beta (pre-1.0): maintainer-reviewed with live LLM testing and automated
-scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is hybrid
+scanners, not yet independently audited. Every algorithm it uses is FIPS-approved; a FIPS 140-3 approved mode
+follows once a validated module offers ML-DSA-65. Crypto is hybrid
 Ed25519 + ML-DSA-65 signatures (0.9.0), SHA-256, and AES-256-GCM from the `cryptography` package.
 
 How to report a vulnerability is [SECURITY.md](../SECURITY.md). The longer
@@ -839,9 +840,10 @@ claims to close.
 
 ## Out of scope
 
-- The lack of an independent audit, and missing FIPS validation. A planned
-  approved mode (see [ROADMAP.md](../ROADMAP.md)) would run on a validated
-  module. It would not validate this package.
+- An independent audit, and FIPS 140-3 validation. The algorithms are
+  FIPS-approved; a planned approved mode (see [ROADMAP.md](../ROADMAP.md))
+  will run on a validated module once one offers ML-DSA-65. It would not
+  validate this package itself.
 - Prompt injection that Path A denies because the structured record tripped
   a rule.
 - A vulnerability in a judge vendor's API.
@@ -863,16 +865,16 @@ claims to close.
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md), in its order: 1.0, then the
-rest after 1.0. None of what follows is built yet. Each item is
+These come from [ROADMAP.md](../ROADMAP.md), in its order, all after 1.0. None of what follows is built yet. Each item is
 added to the sections above in the release that ships it. Key backup and
 custom Path A fields (0.3.0), the MCP adapter (0.5.0), the DLP and
 antivirus hooks (0.6.0), the SIEM export with the refused-token count
 (0.7.0), and hybrid signatures (0.9.0) shipped and are described above, not
 here.
 
-- 1.0.0:
-  - FIPS approved mode. New boundary: the cryptographic provider.
+- After 1.0, not scheduled:
+  - FIPS approved mode, once a validated module offers ML-DSA-65 (OpenSSL
+    3.5's FIPS provider is in NIST's queue). New boundary: the cryptographic provider.
     The mode is meant to refuse to start unless the library runs on a FIPS
     140-3 validated module in approved mode, and to refuse algorithms outside
     the approved set. The module's certificate and version are meant to be
@@ -880,7 +882,6 @@ here.
     validated module". This package stays unvalidated, and the mode does not
     cover the rest of the host. It never drops ML-DSA-65: signatures stay
     hybrid, so it needs a validated module that covers ML-DSA-65.
-- After 1.0, not scheduled:
   - PKI and certificate recovery. New assets: the certificate
     authority key (a personal local CA or an enterprise CA), issued
     certificates, the revocation list, and recovery material (a backup bundle,

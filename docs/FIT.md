@@ -6,7 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # Is this for you?
 
-Beta (pre-1.0), maintainer-reviewed, not independently audited. Not a FIPS 140-3 validated module.
+Beta (pre-1.0), maintainer-reviewed, not yet independently audited. Every algorithm it uses is FIPS-approved; a FIPS
+140-3 approved mode follows once a validated module offers ML-DSA-65 ([ROADMAP](../ROADMAP.md#fips-approved-mode)).
 This page describes `two-key` 0.8.0, which is on PyPI (`pip install "two-key"`); the release steps are
 [PYPI.md](PYPI.md). 0.8.0 gives the judges a summary of recent decisions, records each judge's ballot, and
 adds a ledger audit window and a constitution editor; 0.7.3 added `two-key setup` and the `config` commands, a passphrase on the principal key,

@@ -177,6 +177,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 | Read | For |
 | --- | --- |
 | [docs/FIT.md](docs/FIT.md) | Whether Two-Key is the right control for you |
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Ten minutes from install to an allowed and a refused call, on the command line or in the windows |
 | [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
 | [docs/CONNECTING.md](docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
 | [docs/SETTINGS.md](docs/SETTINGS.md) | Every setting: its file, default, what `high_assurance` does to it, and who may change it |
@@ -184,6 +185,8 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
 | [docs/SIEM.md](docs/SIEM.md) | Sending the ledger to a SIEM, and checking a copy against it (0.7.0) |
 | [docs/TOOL_CHECK.md](docs/TOOL_CHECK.md) | The tool check: a tool behind the proxy refuses a call that did not come through both keys, and signs a receipt (0.9.0) |
+| [docs/LEDGER_VIEW.md](docs/LEDGER_VIEW.md) | `two-key ledger-view`: search, filter and sort the ledger in a read-only window for an audit (0.8.0) |
+| [docs/CONSTITUTION_EDITOR.md](docs/CONSTITUTION_EDITOR.md) | `two-key constitution-editor`: write, try and sign a constitution in a window (0.8.0) |
 | [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Trust boundaries and residual risk |
 | [docs/SCOPE.md](docs/SCOPE.md) | What is included, left out, and planned |
@@ -337,44 +340,21 @@ Only the gateway runs a tool.
 
 ```mermaid
 flowchart TD
-  constitution["Signed<br/>Constitution"] --> compile["Compile"]
-  compile --> bytecode["Path A<br/>Policy"]
-  compile --> judgeText["Path B<br/>Judges"]
-
-  instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
-  agent -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>Authorize"]
-
-  authorize --> early{"Early deny?<br/>malformed / size<br/>agent declined<br/>file limits"}
-  early -->|yes| ledger["Encrypted<br/>Ledger"]
-  early -->|no| derive["Derive fields"]
-
-  derive -.->|"optional"| hook["AV/DLP<br/>Hook"]
-  hook -.-> derive
-
-  derive --> pathA["Path A<br/>Policy VM"]
-  bytecode --> pathA
-
-  derive --> pbCheck{"Unreadable call:<br/>do judges get the<br/>raw arguments?"}
-  pbCheck -->|"no"| skipped["Path B skipped<br/>= deny, no token"]
-  pbCheck -->|"yes, or the call<br/>was readable"| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
-  judgeText --> pathB
-
+  agent["Monitored agent<br/>untrusted"] -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>authorize"]
+  authorize --> early{"Declined, malformed<br/>or too big?"}
+  early -->|"yes"| denied["Denied<br/>no token"]
+  early -->|"no"| derive["Read the fields<br/>from the arguments"]
+  derive -. "optional scan,<br/>verdict back" .- hook["AV or DLP<br/>scanner"]
+  derive --> pathA["Path A: signed<br/>rules, policy VM"]
+  derive --> pathB["Path B: judges<br/>read the prose"]
   pathA --> gate{"Both paths<br/>allow?"}
   pathB --> gate
-  skipped --> gate
-
-  pathA --> ledger
-  pathB --> ledger
-  skipped --> ledger
-
-  gate -->|no| ledger
-  gate -->|yes| token["Single-Use<br/>Capability<br/>Token"]
-
-  token --> gateway["Tool<br/>Gateway"]
-  gateway -->|"verify"| tool["Registered<br/>Tool"]
-  gateway --> ledger
-
-  ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
+  gate -->|"no"| denied
+  gate -->|"yes"| token["Single-use<br/>token"]
+  token --> gateway["Gateway<br/>runs the tool"]
+  denied -.-> ledger[("Encrypted ledger<br/>every step")]
+  gateway -.-> ledger
+  ledger -.->|"optional"| siem["SIEM"]
 ```
 
 A call that could not be read under its signed spec (`derive_failed:`) is already
@@ -491,54 +471,32 @@ One call, in code order:
 
 ```mermaid
 sequenceDiagram
-  participant Caller
-  participant Agent as Monitored agent
-  participant TwoKey
-  participant PathA as Path A VM
-  participant PathB as Path B quorum
-  participant Judge as Judges
+  participant Caller as Caller and its agent
+  participant TwoKey as Two-Key and Path A
+  participant Judges as Path B judges
   participant Ledger
-  participant Gateway
-  participant Tool
-
-  Caller->>Agent: instruction, constitution prose, opt-in vocabulary (syntax only)
-  Agent-->>Caller: JSON proposal or decline, no tool call
-  Caller->>TwoKey: proposal and agent_session
-  alt agent declined
-    TwoKey->>Ledger: decision agent_declined, with the decline reason
-    TwoKey-->>Caller: deny, neither path runs, no token
-  end
-  alt malformed or over a size limit
-    Note over TwoKey: malformed_proposal, proposal_too_large,<br/>action_too_large, malformed_action,<br/>args_too_large, invalid_call, file limits
-    TwoKey->>Ledger: decision with size and digest only
+  participant Gateway as Gateway and tool
+  Caller->>TwoKey: the agent's proposal, and its session
+  alt declined, malformed or too big
+    TwoKey->>Ledger: decision, with size and digest only
     TwoKey-->>Caller: deny, neither path runs
   end
-  TwoKey->>PathA: structured fields (after optional scan / derive)
-  PathA-->>TwoKey: allow or deny
-  alt unreadable call, judges get no arguments
-    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed), so the call is denied
-    TwoKey->>Ledger: proposal, path_a, path_b skipped
+  TwoKey->>TwoKey: Path A checks the fields read from the arguments
+  alt the call cannot be read under its spec
+    Note over TwoKey,Judges: judges not asked, Path B skipped, call denied
   else
-    TwoKey->>PathB: action record and binding hashes
-    Note over PathB: args omitted on derive deny unless tool_args_on_derive_deny
-    Note over PathB: scan flag can also withhold args/proposal
-    PathB->>Judge: score in parallel, own credentials
-    Judge-->>PathB: yes, no, or abstain
-    PathB-->>TwoKey: quorum pass or deny
-    TwoKey->>Ledger: proposal, path_a, path_b
+    TwoKey->>Judges: action record, in parallel, own credentials
+    Judges-->>TwoKey: yes, no, or abstain
   end
-  alt both allow
+  TwoKey->>Ledger: proposal, Path A, Path B
+  alt both paths allow
     TwoKey->>Ledger: capability_issued, then decision
     TwoKey-->>Caller: single-use token
     Caller->>Gateway: token, tool, arguments
-    Note over Gateway: same process as TwoKey,<br/>verifies with capability public key only
-    opt authenticated token refused
-      Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
-    end
     Gateway->>Ledger: redemption_started
-    Gateway->>Tool: registered function
-    Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
-  else either path denies or skipped
+    Gateway->>Gateway: runs the tool, in the Two-Key process
+    Gateway->>Ledger: redemption, or redemption_aborted
+  else either path denies
     TwoKey->>Ledger: decision, no token
     TwoKey-->>Caller: deny
   end
@@ -619,8 +577,9 @@ where whoever writes the ledger directory cannot change it. With that pin,
 forging a head needs the principal, witness, and ledger keys together. The
 witness key changes only by a ledgered rotation (`two-key rotate-witness`).
 Status: beta (pre-1.0). It is maintainer-reviewed with live LLM testing and
-automated scanners (Semgrep, DeepSource, Bandit, CodeQL), not independently
-audited. It is not a FIPS 140-3 validated module.
+automated scanners (Semgrep, DeepSource, Bandit, CodeQL), not yet independently
+audited. Every algorithm it uses is FIPS-approved; a FIPS 140-3 approved mode
+follows once a validated module offers ML-DSA-65 (see Known limits).
 
 ## Known limits
 
@@ -641,8 +600,11 @@ audited. It is not a FIPS 140-3 validated module.
   or a wipe of the ledger directory alone (#62). It does not refuse them if
   that anchor is deleted or rolled back with the ledger. Someone who can
   write the anchor file can still do both. It is not an external anchor.
-- Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
-  module is on the roadmap. It would not validate this package.
+- FIPS 140-3: every algorithm is FIPS-approved (ML-DSA-65 under FIPS 204,
+  Ed25519 under FIPS 186-5, AES-256-GCM, SHA-256, HMAC, HKDF, PBKDF2), but
+  the `cryptography` wheels from PyPI are not a validated module. An approved
+  mode that runs on a validated module comes once one offers ML-DSA-65:
+  OpenSSL 3.5 is the first OpenSSL with ML-DSA; its FIPS provider is in NIST's validation queue (submitted October 2025, no certificate as of 2026-10-29), and the validated OpenSSL 3.1.2 (certificate #4985) has no ML-DSA. Two-Key will not drop ML-DSA-65 to get there sooner.
 - From 0.9.0, signatures are hybrid Ed25519 plus ML-DSA-65 (FIPS 204) and
   verify only when both halves do, so a quantum computer that breaks Ed25519
   alone cannot forge one. AES-256-GCM and SHA-256 are not the concern at
@@ -694,7 +656,7 @@ flowchart TD
   end
   subgraph next["Next: one beta, then 1.0.0"]
     direction LR
-    r09["0.9.0 beta<br/>Token check,<br/>remote agents,<br/>hybrid signatures"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+    r09["0.9.0 beta<br/>Token check,<br/>remote agents,<br/>hybrid signatures"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
   end
   done --> next
 ```
@@ -709,7 +671,7 @@ flowchart TD
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a ledger audit window and a constitution editor | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart, hybrid Ed25519 plus ML-DSA-65 signatures, and formats frozen for 1.0 | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
-| After 1.0 | PKI and certificate recovery, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
+| After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window come before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
 
@@ -815,6 +777,7 @@ that file, not a description of the file. This table is the description.
 | Path | What |
 | --- | --- |
 | `two_key/core.py` | `TwoKey.authorize` and `authorize_from_agent` |
+| `two_key/history.py` | The judge history summary built from the ledger (0.8.0) |
 | `two_key/audit.py` | `check_decision_digests`: recompute each decision's `identities_digest` and `policy_digest` |
 | `two_key/policy_vm.py`, `compiler.py` | Path A |
 | `two_key/derive.py` | Tool-spec derivation for Path A's form |
@@ -825,12 +788,18 @@ that file, not a description of the file. This table is the description.
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
+| `two_key/toolcheck.py` | The tool check: redeem stamps, the tool-side check and its receipts (0.9.0) |
 | `two_key/guard.py` | One guarded call through both keys, with caller-supplied fact hooks (any agent loop; the MCP proxy uses it) |
 | `two_key/siem.py`, `siem_sinks.py`, `siem_export.py` | SIEM export: the per-kind field allowlist and schemas, the syslog and webhook sinks, and the file export and its offline check |
 | `two_key/scan.py`, `scanners.py` | Content scanning: the core, and adapters for ClamAV, ICAP, a command, and Python |
 | `two_key/_platform.py`, `writable.py` | Owner-only files, locks, and no-follow opens on POSIX and Windows; the start-up check for paths another account could change |
 | `two_key/mcp_proxy/` | MCP proxy and spec drafter (`mcp` extra). `config.py` and `core.py` decide; `sdk.py` is the only module that imports the MCP SDK; `draft.py` drafts specs |
-| `two_key/keys.py`, `cli.py`, `backup.py` | Key files; `two-key` command line; passphrase backup of the package's own keys |
+| `two_key/keys.py`, `cli.py`, `backup.py` | Key files (hybrid Ed25519 + ML-DSA-65 from 0.9.0); `two-key` command line; passphrase backup of the package's own keys |
+| `two_key/upgrade.py` | The one-time key upgrade of a 0.8.0 deployment (`keys_upgraded`, 0.9.0) |
+| `two_key/setup_cmd.py`, `setup_form.py`, `setup_gui.py` | `two-key setup`: the questions, the checks both front ends share, and the setup window (0.9.0) |
+| `two_key/config_cmd.py`, `config_set.py`, `settings.py` | `two-key config check`, `show`, `get`, `set`, `undo` and `key-passphrase`, and the registry of every setting |
+| `two_key/ledger_view.py`, `ledger_gui.py` | `two-key ledger-view`: the search and the read-only window |
+| `two_key/constitution_editor.py`, `constitution_gui.py` | `two-key constitution-editor`: the checks, the trial call, signing, and the window |
 | `two_key/action.py` | Normalized action record and its validation |
 | `two_key/agent_meta.py` | Bounds on operator- or library-supplied agent identity metadata written to the ledger |
 | `two_key/canonical.py` | Canonical encoding for the ledger, tokens, and judge bindings |

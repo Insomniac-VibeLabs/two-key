@@ -47,7 +47,7 @@ flowchart TD
   end
   subgraph next["Next: one beta, then 1.0.0"]
     direction LR
-    r09["0.9.0 beta<br/>Token check,<br/>remote agents,<br/>hybrid signatures"] --> r10["1.0.0<br/>Stable release,<br/>FIPS approved<br/>mode"] -.-> after["After 1.0<br/>PKI, the rest<br/>of the GUI, more"]
+    r09["0.9.0 beta<br/>Token check,<br/>remote agents,<br/>hybrid signatures"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
   end
   done --> next
 ```
@@ -63,8 +63,8 @@ flowchart TD
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
-| 1.0.0 | The first stable release, after a public community review of 0.9.0, with a FIPS 140-3 approved mode | Planned |
-| After 1.0 | PKI and certificate recovery, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
+| 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
+| After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
 antivirus hooks, then the SIEM export, then 1.0. PKI, post-quantum
@@ -72,7 +72,8 @@ signatures, FIPS approved mode, and the local GUI move after 1.0. Judge
 connection reuse (#6) joins 0.6.0, and the judge history summary (#1) comes
 before the 1.0 review; on 2026-10-25 it became its own release, 0.8.0. On
 2026-10-28 post-quantum signatures moved into 0.9.0 and FIPS approved mode
-into 1.0.0. Earlier
+into 1.0.0; on 2026-10-29 FIPS approved mode moved back after 1.0, to start
+once a validated module offers ML-DSA-65. Earlier
 versions of this plan numbered the phases 0.4 to 0.11 in another order;
 CHANGES.md keeps that record. Released versions are under "Shipped" below.
 
@@ -147,7 +148,7 @@ in the same release.
   identifier from 0.3 onward. That lets post-quantum keys be added later
   without breaking existing ledgers or backups.
 - Keep the README's "Known limits" section current: no independent review,
-  no external anchor, not FIPS validated.
+  no external anchor yet, and where FIPS 140-3 stands.
 
 ## 0.8.0: Judge history and ballot records
 
@@ -210,7 +211,7 @@ frozen, so the public review looks at the final shape.
 - Quantum-resistant signatures (maintainer's decision, 2026-10-28; design approved 2026-10-29): every
   signature is hybrid Ed25519 plus ML-DSA-65, and a 0.8.0 deployment's keys are upgraded once at its first
   start (`keys_upgraded`) (on `working`; [Post-quantum signatures](#post-quantum-signatures)). FIPS 140-3
-  approved mode follows in 1.0.0.
+  approved mode follows once a validated module offers ML-DSA-65 ([FIPS approved mode](#fips-approved-mode)).
 - A freeze for 1.0: what 1.0 keeps stable (constitution, rules and judge
   configuration shapes, the ledger and token formats, the SIEM schema, the
   CLI and its exit codes, the public Python API) is written in
@@ -223,26 +224,22 @@ frozen, so the public review looks at the final shape.
 - A time-boxed, public community review with a stated scope. 0.9.0 is what
   is reviewed; fixes ship as 0.9.x.
 - Release only with no unresolved Medium or higher findings from that review.
-- A FIPS 140-3 approved mode (maintainer's decision, 2026-10-28): opt-in, and
-  running on a system-validated OpenSSL. The design is
-  [FIPS approved mode](#fips-approved-mode) below.
 - The first index upload is 0.7.0, from the `PyPI` branch, and it is not
   this review. Later releases use the same workflow (docs/PYPI.md):
   trusted publishing, signed tags, and an SBOM. That is `pyproject.toml`
   metadata, `MANIFEST.in`, and `.github/workflows/pypi-publish.yml`
   (OpenID Connect, no token in the repository, PEP 740 attestations, and
   a CycloneDX SBOM kept as a workflow artifact).
-- 1.0 is described as community-reviewed, not audited, and as not FIPS
-  validated itself. A paid audit and any validation of this package are
-  later goals.
+- 1.0 is described as community-reviewed, using FIPS-approved algorithms.
+  A paid audit, the FIPS approved mode, and any validation of this package
+  are later goals.
 
 ## After 1.0 (not scheduled)
 
 Planned, in this order unless the maintainer changes it, with no target
 version. Each was a numbered phase before 2026-10-15; the design notes
-are unchanged except for cross-references. Two of them have since been
-given a version and keep their design notes here: post-quantum signatures
-are in 0.9.0 and FIPS approved mode in 1.0.0.
+are unchanged except for cross-references. Post-quantum signatures have
+since moved into 0.9.0 and keep their design note here.
 
 ### PKI and certificate recovery
 
@@ -310,7 +307,11 @@ forge. AES-256-GCM and SHA-256 are not the concern at these sizes.
 ### FIPS approved mode
 
 The goal is to run on a validated cryptographic module, not to claim that
-this package is validated. The docs say "runs on a FIPS 140-3 validated
+this package is validated. Every algorithm Two-Key uses is already
+FIPS-approved; what is missing is a validated module with ML-DSA-65.
+OpenSSL 3.5 is the first OpenSSL with ML-DSA; its FIPS provider is in NIST's validation queue (submitted October 2025, no certificate as of 2026-10-29), and the validated OpenSSL 3.1.2 (certificate #4985) has no ML-DSA. Validation is NIST's queue, outside this project, so the
+mode has no target version: it starts when such a module exists (maintainer's
+decision, 2026-10-29). It was planned for 1.0.0 from 2026-10-28 to 2026-10-29. The docs say "runs on a FIPS 140-3 validated
 module in approved mode", never "FIPS compliant" or "FIPS validated".
 
 - An opt-in mode that refuses to start unless the `cryptography` library
@@ -330,8 +331,8 @@ module in approved mode", never "FIPS compliant" or "FIPS validated".
   what is validated; if no validated module covers ML-DSA-65 by then, the
   options are to wait or to support a validated HSM. All signing goes through `two_key/keys.py`, and `keys_upgraded`
   records a move between named suites, so a FIPS suite changes one module and
-  reuses that entry. As of 2026-10-29 no validated OpenSSL module includes
-  ML-DSA; this is checked again at the 1.0 freeze.
+  reuses that entry. Whether a validated module includes ML-DSA-65 is
+  checked again at the 1.0 freeze and at each release after it.
 - Tests run in CI against a container that ships a validated provider.
 - A document on how to deploy it and what the claim does and does not
   cover.

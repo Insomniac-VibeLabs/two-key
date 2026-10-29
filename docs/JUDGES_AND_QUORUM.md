@@ -297,7 +297,7 @@ A quorum pass means the configured Path B requirements were met for that authori
 - The proposal or action is safe in every relevant context.
 - The payload has been scanned for malware, data loss, or sensitive information. That holds only for a tool the signed constitution marks for scanning with a content scanner configured (0.6.0), and then the judges were told the verdict, not shown the content; see [SCANNERS.md](SCANNERS.md).
 - The deployment has been independently audited or formally verified.
-- The package is a FIPS 140-3 validated cryptographic module.
+- The package runs on a FIPS 140-3 validated cryptographic module (its algorithms are FIPS-approved; the approved mode comes later).
 
 The capability and gateway controls add restrictions but do not eliminate these limitations. The capability private key is separate from the gateway verifier's key, but the gateway shares the Two-Key process and ledger object; a gateway in another process or host is not supported, by design ([why](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)). There is no process-level isolation between them; see [THREAT_MODEL.md](THREAT_MODEL.md).
 
