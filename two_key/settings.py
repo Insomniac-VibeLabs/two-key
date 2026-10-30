@@ -378,12 +378,17 @@ RULES = _rows(RULES_YAML, [
     ("tool_specs.<tool>.payload[].max_length", "none", "A positive integer, for a `string` or `list`."),
     ("tool_specs.<tool>.deny_unmapped", "false", "`true` denies an argument the spec does not name, instead of "
      "dropping it."),
+    ("tool_specs.<tool>.tool_check", "none (off)", "The tool check (docs/TOOL_CHECK.md), for a tool behind "
+     "`two-key mcp-proxy`: `{key: hybrid-sha256:...}` turns it on, `exempt` leaves it off. `high_assurance` refuses to "
+     "start with a tool that has neither; `exempt` and turning it off are weaker."),
+    ("tool_specs.<tool>.tool_check.key", "required with a mapping", "The fingerprint of the key that signs the "
+     "tool's receipts, as `two-key tool-key new` prints it."),
     ("tool_specs.<tool>.fields", "none", "Maps each custom field to an argument, or marks it `not_applicable`."),
     ("tool_specs.<tool>.fields.<name>.json_path", "none", "The argument that holds the field's value."),
     ("tool_specs.<tool>.fields.<name>.source", "the arguments", "`caller` for a fact the proxy's hook supplies."),
     ("tool_specs.<tool>.fields.<name>.encrypted", "none", "`pass`, only on the `scan` field: an encrypted file "
      "reaches the tool without a look inside."),
-    ("fields.<name>.type", "required", "`boolean`, `integer`, `enum`, or `string`."),
+    ("fields.<name>.type", "required", "`boolean`, `integer`, `enum`, `string`, or `path`."),
     ("fields.<name>.default", "required", "The value a tool that does not map the field gets."),
     ("fields.<name>.description", "none", "Text for the signer and the judges. Never an authorization rule."),
     ("fields.<name>.source", "the arguments", "`caller`: the value comes from the caller (the proxy's fact hook, or `facts=` in code), never "
@@ -394,7 +399,8 @@ RULES = _rows(RULES_YAML, [
     ("fields.<name>.charset", "ascii", "`ascii` or `unicode`, for `enum` and `string`."),
     ("fields.<name>.scripts", "required with `charset: unicode`", "The one writing system allowed, such as `latin`, `cyrillic` or `arabic`. Not valid with `ascii`."),
     ("fields.<name>.max_length", "required for `string`", "Longest value."),
-    ("fields.<name>.case", "case-insensitive", "`exact`, for `string`."),
+    ("fields.<name>.case", "case-insensitive for `string`, exact for `path`", "`exact`, for `string`; `insensitive`, for `path`."),
+    ("fields.<name>.under", "required for `path`", "The folders a path must be inside, absolute and in clean form; not `/`, and none inside another."),
 ])
 
 CATALOGUE: tuple[Setting, ...] = tuple(PROXY + JUDGES + AGENTS + CONSTITUTION + RULES)
@@ -476,6 +482,7 @@ constitution does not yet state a minimum profile.
 | `on_writable_paths` | `warn` | always refuses; `warn` is refused |
 | `on_agent_access` | `refuse` | always refuses; `warn` is refused |
 | a plaintext SIEM sink (`udp`, `tcp`, `http://`) | allowed, with a start-up warning | refused (`siem_plaintext_refused`) |
+| a tool behind the proxy with no `tool_check` | allowed: the tool check is off | refused (`tool_check_required`); `exempt` is allowed and weaker |
 | a scan stance other than `strict` (set by the signed `scan` rule) | allowed | allowed, with a start-up warning |
 | one judge with `required_yes: 1` | `lone_judge_warning` | not reachable: two makers are needed |
 | a quorum that could be too lenient (one judge, a minority approving, one provider or maker) | a `WARN` in `config check` and `setup` | the same, where it can still apply |

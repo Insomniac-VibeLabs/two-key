@@ -81,7 +81,8 @@ def _decision_digest_problems(body: Mapping[str, Any], current) -> list[str]:
 
 
 def witness_pins(ledger) -> list[dict]:
-    """The ``witness_pinned`` and ``witness_rotated`` entries, oldest first, with key fingerprints.
+    """The ``witness_pinned``, ``witness_rotated`` and ``keys_upgraded`` entries, oldest first, with key
+    fingerprints.
 
     Read from the entries as loaded. ``Ledger`` checks them when it opens: one ``witness_pinned``, and each
     rotation starts from the pinned key and carries the principal, old witness, and new witness signatures.
@@ -96,8 +97,9 @@ def witness_pins(ledger) -> list[dict]:
             if "head_size" in body:
                 pin["head_size"] = body["head_size"]
             pins.append(pin)
-        elif entry.kind == "witness_rotated":
-            pins.append({"seq": entry.seq, "kind": entry.kind, "reason": body.get("reason"),
+        elif entry.kind in ("witness_rotated", "keys_upgraded"):
+            pins.append({"seq": entry.seq, "kind": entry.kind,
+                         "reason": body.get("reason") if entry.kind == "witness_rotated" else "key upgrade",
                          "old_fingerprint": witness_key_fingerprint(body["old_witness_public_key"]),
                          "fingerprint": witness_key_fingerprint(body["new_witness_public_key"])})
     return pins

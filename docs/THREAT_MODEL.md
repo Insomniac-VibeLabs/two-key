@@ -6,15 +6,17 @@ SPDX-License-Identifier: Apache-2.0
 
 # Threat model
 
-This is the design model for `two-key` 0.8.0 (tag `v0.8.0` on `main`). What each
+This is the design model for `two-key` 0.9.0 (tag `v0.9.0` on `main`), the latest release; what 0.9.0
+added is marked 0.9.0 where it applies. What each
 release added to the model is under [Changes by release](#changes-by-release) at the end of
 this page. Tags and branches are in [AGENTS.md](../AGENTS.md), and the full history is
 [CHANGES.md](../CHANGES.md).
 
 It is not a penetration test and it is not an independent review. The package is
 beta (pre-1.0): maintainer-reviewed with live LLM testing and automated
-scanners, not independently audited. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
-SHA-256, and AES-256-GCM from the `cryptography` package.
+scanners, not yet independently audited. Every algorithm it uses is FIPS-approved; a FIPS 140-3 approved mode
+follows once a validated module offers ML-DSA-65. Crypto is hybrid
+Ed25519 + ML-DSA-65 signatures (0.9.0), SHA-256, and AES-256-GCM from the `cryptography` package.
 
 How to report a vulnerability is [SECURITY.md](../SECURITY.md). The longer
 narrative is the README. This file is the register. If the two disagree,
@@ -189,7 +191,8 @@ flowchart TD
   in. A counterparty path is the canonical party, not the raw spelling.
   The gateway never scans: with a content scanner configured, it takes the
   verdict from the token and hashes each file sent by path again
-  (`file_changed`).
+  (`file_changed`). For a `path` field (0.9.0) it checks that no part of
+  the path below its signed folder is a link (`path_symlink:<field>`).
 - Two-Key to the content scanner (0.6.0; docs/SCANNERS.md).
   Optional. For each call to a tool the signed constitution marks (it maps
   the `scan` field), Two-Key sends the scanner every argument (keys the
@@ -325,7 +328,9 @@ flowchart TD
   it. `revoke` ends earlier tokens only: it does not stop new approvals and it
   does not survive a restart (see HOWTO, "Revoke outstanding tokens").
 - A second run of a token after `redemption_started` has been checkpointed.
-  A tool exception writes `redemption_aborted` and leaves the token usable.
+  A tool exception writes `redemption_aborted`, and from 0.9.0 the token
+  stays spent (`already_attempted`): a tool that acted and then failed does
+  not run twice on one token. The agent asks again.
 - A silent edit of a ledger record that still verifies, and opening the log
   with only the principal key. The head needs a witness signature as well.
 - A replaced `witness.pem`, or a head signed by another witness key, on a
@@ -353,7 +358,8 @@ flowchart TD
   environment, or `proxy.yaml`, and the upstream server runs as an OS user
   that cannot read them either (HOWTO "Key custody").
 - The gateway is the only holder of tool credentials. This package cannot
-  stop an agent that can call the tool by another path.
+  stop an agent that can call the tool by another path, unless the tool
+  checks each call itself (docs/TOOL_CHECK.md, MCP proxy only).
 - The principal key and the ledger key are not both in the attacker's
   hands, unless the witness public key is configured outside the ledger.
   With that pin, the assumption is that the principal, witness, and ledger
@@ -442,7 +448,11 @@ claims to close.
 - MCP proxy (0.5.0):
   - An agent that can reach the upstream server directly, or holds its
     credential, bypasses the proxy entirely. The proxy cannot see or stop
-    that.
+    that. From 0.9.0 a tool with the tool check on (docs/TOOL_CHECK.md)
+    refuses such a call itself: it runs only with a spent token and a redeem
+    stamp, and signs a receipt the gateway checks and ledgers. A tool
+    without the check, or a server that runs the tool after the check
+    refuses, is still bypassed.
   - An upstream server run as the proxy's OS user can read every key the
     proxy holds (principal, ledger, witness, capability), the judge keys,
     and the proxy's environment through `/proc`. The proxy does not change
@@ -518,6 +528,18 @@ claims to close.
   constitution into a deployment folder is not a `config_changed` entry,
   exactly as with `sign-constitution --force` (the next start records
   `constitution_loaded`, and the serial still refuses an older one).
+- Setup window (0.9.0, `two-key setup --window`, `two_key/setup_form.py`,
+  `two_key/setup_gui.py`). No new boundary: a tkinter window of the
+  operator's own process, with no network port, that collects the same
+  answers as the terminal interview and calls the same `setup_cmd.build`,
+  so it refuses what `setup --answers` refuses (root, an existing folder, an
+  unsafe parent, a failing `config check`) and writes the same files. It
+  creates the principal key in that call, as the terminal setup does, and
+  never shows it; it never asks for a secret or a typed passphrase (the
+  passphrase is a file path). A weaker answer needs the typed `yes`. Under
+  `high_assurance` the window lets the quorum numbers go up only. Save
+  answers file writes owner-only JSON with variable names and paths, no
+  values. Residual: whoever can see the screen sees the answers.
 - One proxy per agent (0.8.0, `one_proxy_per_agent`, on by default). A
   second proxy for an agent already connected to the ledger refuses
   (`agent_already_connected`). A proxy whose client died but whose process
@@ -584,7 +606,11 @@ claims to close.
   form. The gateway recomputes the form from the same bytes and refuses a
   mismatch. Changing a spec changes `spec_hash`, so outstanding tokens fail
   at the gateway. This package does not classify free text and does not
-  track per-value information flow. A counterparty the spec copies must be
+  track per-value information flow. A credential or an outside address
+  written into a message body to an allowed recipient passes Path A unless
+  the scanner flags it; then only the judges stop it (live run 12, C72,
+  where both judges did). A deployment that cares gives its scanner a
+  credential pattern. A counterparty the spec copies must be
   on that path's `allow` list. The tool receives the canonical value
   (`strip`, casefold), not the raw spelling. A party that is not listed is
   `counterparty_not_allowed`, unless a blocked party is also present, in
@@ -712,6 +738,27 @@ claims to close.
   `FILE_FLAG_OPEN_REPARSE_POINT`, so a symlink or junction as the last part
   of the path is refused, as `O_NOFOLLOW` does on POSIX; a link earlier in
   the path is followed on every platform.
+- **Path fields** (`type: path`, 0.9.0) are a signed check on the path
+  the agent asked for, not a sandbox. Path A cleans the path as text and
+  never reads the disk, so authorization and the gateway agree; it refuses
+  `..`, relative paths, a backslash, and non-ASCII, and the tool receives
+  the cleaned path. Two-Key never opens the file; the tool does, later.
+  Four gaps follow. A symlink or junction planted below the signed folder
+  passes Path A; the gateway refuses one that exists just before the tool
+  runs (`path_symlink:<field>`), but anything that can write in the folder
+  can swap a part for a link after that check. A hard link inside the
+  folder to a file elsewhere on the same filesystem looks like an ordinary
+  file (Linux's `protected_hardlinks`, on by default, stops links to files
+  the account does not own). A tool in a container or on another mount can
+  see another file at the same path. And a tool that decodes the path
+  itself (`%2e`, `file://` URIs, its own `~`) reads it differently. What
+  covers them is the tool's own folder limit (set the MCP filesystem
+  server's allowed folder to the signed one) and an account for the tool
+  that can write only that folder, with nothing else on the host that can
+  make links there. On a filesystem that ignores letter case, an exact
+  path field misses case variants in a deny rule; signing warns, and
+  `case: insensitive` folds them. Path values (file names) are in the
+  ledger like other field values; the SIEM copy leaves them out.
 - **Content scanning** (0.6.0) is only as good as the
   operator's product and its signatures. Under the default stance a
   scanner that is down lets calls through to the two keys (ledgered once,
@@ -787,19 +834,42 @@ claims to close.
   ledgered deny. Ids written in the prose do reach the agent and its
   host. Two-Key does not map display names to ids and does no fuzzy
   matching.
-- The signatures are not quantum resistant. Ed25519 signs the constitution,
-  the ledger head (principal and witness), and capability tokens. A
-  sufficiently capable quantum computer could forge an Ed25519 signature.
-  The exposure is greatest for long-lived signatures, the constitution and
-  the ledger head. A capability token lives at most 300 seconds, so it is a
-  smaller exposure. AES-256-GCM and SHA-256 are not the concern at these
-  sizes. Hybrid signatures are planned (see [ROADMAP.md](../ROADMAP.md)).
+- Signatures are hybrid from 0.9.0: every key is an Ed25519 key and an
+  ML-DSA-65 (FIPS 204) key, and a signature is both, over the same labelled
+  message (`two-key-hybrid/1`, the suite name, the message), so it verifies
+  only when both halves do. A forger has to break Ed25519 and ML-DSA-65; a
+  quantum computer that breaks Ed25519 alone does not suffice. The
+  constitution, the ledger head and anchor, witness rotations, capability
+  tokens (`tk2`, with `alg` signed in), and the tool check's stamps and
+  receipts are all hybrid. A hybrid key refuses an Ed25519-only signature,
+  and neither half of a hybrid signature is an Ed25519 signature over the
+  plain message, so stripping the ML-DSA half is a refusal, not a downgrade.
+  ML-DSA-65 is OpenSSL's, through `cryptography` 48 or later; where it is
+  missing Two-Key refuses (`ml_dsa_unavailable`) and never signs with
+  Ed25519 alone. AES-256-GCM and SHA-256 are not the concern at these sizes.
+  Residual risks:
+  - Entries are hash-chained, not signed one by one; what a ledger made by
+    0.8.0 held before the upgrade is protected by the chain and by today's
+    hybrid head, not by its old Ed25519 signatures.
+  - The key upgrade (`keys_upgraded`) keeps each Ed25519 key and adds an
+    ML-DSA-65 key. It is signed by the old and new principal and witness
+    keys, and the ledger accepts it once, from the pinned witness, for the
+    principal it is opened with. An anchor signed by the old Ed25519 key is
+    accepted only while the upgrade is pending, or when the upgrade stopped
+    between its head and its anchor and nothing has been written since;
+    otherwise an Ed25519 forger could pass off an old anchor and roll the
+    ledger back.
+  - A backup from before the upgrade holds the 0.8.0 keys. Restoring it
+    restores the old, Ed25519-only deployment; the head anchor refuses it
+    while the anchor is newer. Every start says "back up now" until a new
+    backup is made.
 
 ## Out of scope
 
-- The lack of an independent audit, and missing FIPS validation. A planned
-  approved mode (see [ROADMAP.md](../ROADMAP.md)) would run on a validated
-  module. It would not validate this package.
+- An independent audit, and FIPS 140-3 validation. The algorithms are
+  FIPS-approved; a planned approved mode (see [ROADMAP.md](../ROADMAP.md))
+  will run on a validated module once one offers ML-DSA-65. It would not
+  validate this package itself.
 - Prompt injection that Path A denies because the structured record tripped
   a rule.
 - A vulnerability in a judge vendor's API.
@@ -816,19 +886,28 @@ claims to close.
   tool-spec floor is not a taint label. Scanning engines, external or
   permissioned-chain anchoring, and seed phrases are not here and are not
   planned. Scanner hooks that call an external product shipped in 0.6.0. PKI with
-  certificate recovery and hybrid signatures are in [ROADMAP.md](../ROADMAP.md). Key backup
-  shipped in 0.3.0. See [SCOPE.md](SCOPE.md).
+  certificate recovery is in [ROADMAP.md](../ROADMAP.md). Key backup
+  shipped in 0.3.0, hybrid signatures in 0.9.0. See [SCOPE.md](SCOPE.md).
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md), in its order: 1.0, then the
-rest after 1.0. None of what follows is in a release yet. Each item is
+These come from [ROADMAP.md](../ROADMAP.md), in its order, all after 1.0. None of what follows is built yet. Each item is
 added to the sections above in the release that ships it. Key backup and
 custom Path A fields (0.3.0), the MCP adapter (0.5.0), the DLP and
-antivirus hooks (0.6.0), and the SIEM export with the refused-token count
-(0.7.0) shipped and are described above, not here.
+antivirus hooks (0.6.0), the SIEM export with the refused-token count
+(0.7.0), and hybrid signatures (0.9.0) shipped and are described above, not
+here.
 
 - After 1.0, not scheduled:
+  - FIPS approved mode, once a validated module offers ML-DSA-65 (OpenSSL
+    3.5's FIPS provider is in NIST's queue). New boundary: the cryptographic provider.
+    The mode is meant to refuse to start unless the library runs on a FIPS
+    140-3 validated module in approved mode, and to refuse algorithms outside
+    the approved set. The module's certificate and version are meant to be
+    recorded in `constitution_loaded`. The claim is limited to "runs on a
+    validated module". This package stays unvalidated, and the mode does not
+    cover the rest of the host. It never drops ML-DSA-65: signatures stay
+    hybrid, so it needs a validated module that covers ML-DSA-65.
   - PKI and certificate recovery. New assets: the certificate
     authority key (a personal local CA or an enterprise CA), issued
     certificates, the revocation list, and recovery material (a backup bundle,
@@ -841,25 +920,11 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
     identity. Recovery is meant to be a ledger event and to end with the old
     certificate revoked. Validity checks depend on a correct clock. Existing
     bare-key setups stay valid.
-  - Post-quantum signatures. New assets: a second signing key per
-    signing role, and larger signatures in the constitution, ledger head, and
-    possibly tokens. A hybrid signature is meant to verify only when both
-    halves verify. New risk to design against: a downgrade, where the
-    post-quantum half is stripped. Every signed format carries an algorithm
-    identifier, and a verifier that expects the hybrid form refuses a
-    classical-only one. Existing 0.2.x ledgers stay readable.
-  - FIPS approved mode. New boundary: the cryptographic provider.
-    The mode is meant to refuse to start unless the library runs on a FIPS
-    140-3 validated module in approved mode, and to refuse algorithms outside
-    the approved set. The module's certificate and version are meant to be
-    recorded in `constitution_loaded`. The claim is limited to "runs on a
-    validated module". This package stays unvalidated, and the mode does not
-    cover the rest of the host. How a hybrid signature is treated in approved
-    mode depends on what the validated module supports, and is decided when
-    the mode is built.
   - Local GUI. The read-only audit view shipped in 0.8.0 as a tkinter
     window instead (`two-key ledger-view`, under "Residual risks"), with no
-    local server; what follows is the plan for the configuration part. New
+    local server, and so did the constitution editor (0.8.0) and the setup
+    window (0.9.0); what follows is the plan for the rest of the
+    configuration part. New
     boundary: browser to a local server. It is
     meant to bind to loopback only and to require a per-session token, which
     is meant to address other local pages, cross-site requests, and DNS
@@ -870,10 +935,11 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
     since 0.8.0: judge id, vote, confidence, error class, and a keyed
     rationale digest, never the rationale text, which is model output and
     may quote arguments.
-    Configuration edits change policy, so the GUI is meant never to hold the
-    principal key. It prepares a constitution and hands it to the existing
-    signing command. A GUI that is reachable from another machine is out of
-    scope.
+    Configuration edits change policy, so they go through the same checks
+    and signing code as the terminal commands; the constitution editor
+    already signs with the principal key in its window, as
+    `sign-constitution` does. A GUI that is reachable from another machine
+    is out of scope.
   - More spec field types. Custom `boolean`,
     `integer`, `enum`, and `string` fields shipped in 0.3.0 and are described
     above. Decimal, URL, path, email, and opaque-bytes kinds are not built,
@@ -882,13 +948,13 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
 ## What to re-check when the code changes
 
 - `two_key/core.py`: both paths run once the call is well-formed and within limits, except that a `derive_failed:` call skips the judges unless `tool_args_on_derive_deny` is set (ledgered `skipped:derive_failed`), and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
-- `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies; a `case: exact` ASCII string is compared and passed on as written, and signs only as v3. A description is never compiled, sent to a judge, or used in a reason.
+- `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies; a `case: exact` ASCII string is compared and passed on as written, and signs only as v3. A `path` value is cleaned as text only (`clean_path`: absolute, printable ASCII, no backslash, no `..`, repeated slashes and `.` dropped), must be inside a signed `under` folder segment by segment (`path_inside`), reaches the tool cleaned, and signs only as v3; `UNDER` compares whole segments. A description is never compiled, sent to a judge, or used in a reason.
 - `two_key/derive.py`: JSON paths only. `party_allowed`: an exact entry, or an `@domain` entry for an address whose domain equals it (ASCII host name, no subdomain) and whose local part is plain (atext and dots); `@domain` itself is not a party. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
 - `two_key/constitution.py`: a caller field, a `case: exact` field, a `not_applicable` mark, or an `@domain` allow entry signs only as v3; a v1 or v2 envelope with one is refused. A constitution without them keeps its v1 or v2 bytes. Every tool maps each field a `deny_if_fields` rule reads or marks it `not_applicable`, at signing and on load. An allow entry with `*`, or a domain entry that is not an ASCII host name, does not sign; `deny_counterparties` refuses domain entries.
 - `two_key/history.py`: every string in a summary is a signed tool id, an exact signed allow entry or the `@domain` entry an address matched (never one on `deny_counterparties`), a reason code from `REASON_CODES` (detail dropped; `rule_denied:<id>` keeps the signed id), an operator-configured agent id or `unnamed`, a scan verdict, or a time Two-Key formatted. It is written with `untrusted_json`, and with `enabled: false` no section and no system-prompt sentence are added (`tests/test_judge_history.py`). Approved totals count calls whose token ran (D6).
 - `two_key/core.py` (0.8.0): the summary is built under the ledger lock after catch-up; a failure is `internal_error:history` without judges unless `on_failure: judge_without_history`, and `judge_history_failed` is written in the decision's hold. Just before a token is minted, an approved decision for the same signed tool and party written after the summary was built is `history_changed`, no token. Every decision carries `at`, `subject`, `history_digest`, and `history_basis`; every `path_b` carries `ballots` with an error class and a keyed rationale digest, never text.
 - `two_key/quorum.py`: `lone_judge_warning` warns, never refuses, when one judge can approve alone (required_yes 1, min_responding 1, two or more judges). An abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
-- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner. A token that does not verify is still not ledgered; it only increments a class counter (`refused_tokens`), which keeps no token text.
+- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), the last checks just before the tool (`file_changed`, and `path_symlink:<field>` when a part of a path field below its folder is a link), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner. A token that does not verify is still not ledgered; it only increments a class counter (`refused_tokens`), which keeps no token text.
 - `two_key/siem.py`: every ledger kind has a `KindSpec`, and every body key of every kind is `sent`, `hashed`, `excluded`, or extracted; a key nobody decided fails the tests. The excluded set keeps argument values, proposal and decline text, derived amounts, counterparties, custom field values, scanner threat names, and credentials out, and canary values in the tests prove it. The ledger observer only enqueues a sequence number; projecting, formatting, and sending happen on the sender thread, a full queue drops rather than blocks, and nothing a sink returns reaches the caller. An unledgered event (the refused-token count) carries `ledgered: false` and `seq: -1`.
 - `two_key/siem_sinks.py`: TLS sets `minimum_version` to TLS 1.2, verifies the certificate, and checks the host name, with no option to disable either; a webhook never follows a redirect and reads its authorization header and HMAC key from owner-only files; a plaintext sink warns at start and is refused under `high_assurance`.
 - `two_key/siem_export.py`: the export verifies the ledger first, writes a new owner-only file and refuses to overwrite, marks every event a `replay`, and ends with a signed summary. `verify` re-derives each event from the ledger and reports changed fields, gaps, repeats, and events from another ledger.
@@ -897,7 +963,7 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
-- `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds. The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
+- `two_key/ledger.py`: the ledger key, the witness key, the capability key, the head anchor, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures, or once by the 0.9.0 key upgrade, `keys_upgraded` with four (old and new principal and witness); `append` refuses all three kinds, and a ledger whose key files are hybrid before `keys_upgraded` refuses every write (`keys_upgrade_pending`). The head anchor moves only forward; a missing file is adopted; `recover_tail` drops only an uncheckpointed tail and does not run on open.
 - `two_key/mcp_proxy/`: only `sdk.py` imports the MCP SDK. Each `tools/call` runs `authorize`, then `gateway.invoke` in the same process; the upstream call is the gateway's registered tool, with projected arguments. Only signed tools are shown, under their signed ids; any other name is `tool_not_offered`, ledgered. Caller-supplied paths are removed from the `inputSchema` shown. `mcp_proxy_started` is ledgered before serving; if that fails, the proxy does not start. Fact hooks load at start; one that does not import refuses to start. The schema digest covers exactly the fields shown, as the upstream lists them (before caller paths are removed); a mismatch refuses unless `on_schema_change: warn`. `unresolved_identity` refuses unless `allow_unresolved_identity: true`. The claim is the per-tool policy only (`floor`, a class, or none = classified). The child gets `upstream.env` plus the SDK's minimal set. Nothing but MCP goes to stdout. `draft.py`: placeholders that signing refuses, fact-like properties left out, server text in ASCII comments only. `undescribed_inputs` warns, never refuses, for each input Path A reads that the upstream schema does not describe.
 - `two_key/_platform.py`: POSIX does exactly what it did before 0.6.0 (mode 0600 and 0700, `O_NOFOLLOW`, `flock`, the same messages). On Windows a key is created with a protected access list for the current user only, in `CreateFileW` itself; a key is accepted only when its owner and every allow entry with more than metadata access are the current user, SYSTEM, Administrators, or OWNER RIGHTS; a reparse point as the last part is refused; locks are `LockFileEx`; descriptors are binary. Every key read and write in the package goes through it, and every text file Two-Key writes uses `newline="\n"` and a named encoding (`tests/test_text_io.py`).
 - `two_key/config_set.py`, `two_key/setup_cmd.py`: a change is refused as root, and when a file it writes or its folder can be changed by another account or is a link; the whole changed config passes `config check` before anything is written, so what `high_assurance` forbids stays forbidden; a weaker change needs `--confirm-weaker` and a typed yes on a terminal; a signed change needs the principal key and the exact signed rules file, and the new envelope is verified; `config_changed` (names and digests, never values) is ledgered before the files are renamed in. `config key-passphrase` keeps no plain copy of the key, and removing the passphrase counts as weaker.
@@ -908,6 +974,12 @@ antivirus hooks (0.6.0), and the SIEM export with the refused-token count
 
 What each release added to the model, newest first. Each is described where it applies below.
 
+- 0.9.0: hybrid Ed25519 + ML-DSA-65 signatures for every key
+  (`two_key/keys.py`) and the one-time key upgrade of a 0.8.0 deployment (`two_key/upgrade.py`,
+  `keys_upgraded`); the tool check (`two_key/toolcheck.py`): redeem stamps signed by a stamp-only key,
+  tool receipts ledgered, and a held tool under `high_assurance`; a tool error spends the token; the
+  setup window (`two-key setup --window`), which runs the same `build` as the terminal setup; `path`
+  fields (`two_key/fields.py`, the `UNDER` opcode) and the gateway's link check (`path_symlink`).
 - 0.8.0: the judge history summary (`two_key/history.py`), bound to each ballot and rebuilt by
   `two-key audit --check-history`; per-judge ballot records with an HMAC digest of the rationale, never
   its text; attempt episodes; one proxy per agent on a ledger (`agent_already_connected`); the proxy's

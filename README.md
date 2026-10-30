@@ -70,11 +70,14 @@ What you get:
 - **Small on purpose.** Python 3.10 to 3.14, one required dependency
   (`cryptography`), Apache-2.0.
 
-**Status:** beta. 0.8.0 is the current release: judges see a summary of
-recent decisions (a repeated bill, a split payment, a burst of denied
-attempts), the ledger keeps each judge's ballot, one proxy serves each agent,
-and two windows arrive: a read-only ledger audit (`two-key ledger-view`) and
-a constitution editor. 0.7.3 added `two-key setup` and
+**Status:** beta. 0.9.0 is the current release, the last beta before 1.0:
+every signature is hybrid Ed25519 + ML-DSA-65 (quantum-resistant), a 0.8.0
+deployment's keys are upgraded once at the first start, a tool behind the
+proxy can check its own calls (the tool check), a tool error spends its
+token, and `two-key setup --window` sets up in a window. 0.8.0 added a
+summary of recent decisions for the judges, each judge's ballot in the
+ledger, one proxy per agent, a read-only ledger audit window
+(`two-key ledger-view`) and a constitution editor. 0.7.3 added `two-key setup` and
 `two-key config set`, `get`, `undo` and `check` for setting up and changing a
 deployment, a signed serial so a ledger never goes back to older rules, and
 start-up checks for the upstream server's files behind a launcher. 0.7.0
@@ -104,10 +107,10 @@ on it.
 
 ## Quick start
 
-Install 0.8.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
+Install 0.9.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 
 ```bash
-pip install "two-key[yaml]==0.8.0"
+pip install "two-key[yaml]==0.9.0"
 ```
 
 Tag `v0.8.0` on `main` is the same code.
@@ -123,6 +126,9 @@ python -m two_key demo
 python -m two_key authorize --help
 ```
 
+For a ten-minute walkthrough from install to an allowed and a refused call with a local judge, on the command
+line or in the setup and ledger windows, see [docs/QUICKSTART.md](docs/QUICKSTART.md).
+
 Real judges are configured in `examples/judges.yaml`. The operator guide is
 [docs/HOWTO.md](docs/HOWTO.md). Before a real agent runs, close every way
 around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
@@ -132,7 +138,7 @@ around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp]==0.8.0"
+pip install "two-key[mcp]==0.9.0"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -174,12 +180,18 @@ root, or can change Two-Key's files (`on_agent_access`).
 | Read | For |
 | --- | --- |
 | [docs/FIT.md](docs/FIT.md) | Whether Two-Key is the right control for you |
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Ten minutes from install to an allowed and a refused call, on the command line or in the windows |
+| [docs/DEMO.md](docs/DEMO.md) | A first-time demo, step by step with screenshots: the MCP filesystem server behind Two-Key, a local LM Studio judge on Windows, and an agent on Ubuntu |
+| [docs/GUI_WALKTHROUGH.md](docs/GUI_WALKTHROUGH.md) | Every window step by step, in screenshots from one live run: setup, the constitution editor, the ledger view, and the 0.8.0 key upgrade (0.9.0) |
 | [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
 | [docs/CONNECTING.md](docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
 | [docs/SETTINGS.md](docs/SETTINGS.md) | Every setting: its file, default, what `high_assurance` does to it, and who may change it |
 | [docs/SETUP.md](docs/SETUP.md) | `two-key setup` for a first deployment, `config set`, `get`, and `undo` to change one setting, and `config key-passphrase` to encrypt the principal key: who may run them, what they check, and what they refuse |
 | [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
 | [docs/SIEM.md](docs/SIEM.md) | Sending the ledger to a SIEM, and checking a copy against it (0.7.0) |
+| [docs/TOOL_CHECK.md](docs/TOOL_CHECK.md) | The tool check: a tool behind the proxy refuses a call that did not come through both keys, and signs a receipt (0.9.0) |
+| [docs/LEDGER_VIEW.md](docs/LEDGER_VIEW.md) | `two-key ledger-view`: search, filter and sort the ledger in a read-only window for an audit (0.8.0) |
+| [docs/CONSTITUTION_EDITOR.md](docs/CONSTITUTION_EDITOR.md) | `two-key constitution-editor`: write, try and sign a constitution in a window (0.8.0) |
 | [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Trust boundaries and residual risk |
 | [docs/SCOPE.md](docs/SCOPE.md) | What is included, left out, and planned |
@@ -219,7 +231,7 @@ use that pass to run the tool.
      machine. It does not read English. It only reads structured fields.
    - It reads five built-in fields (`tool`, `amount_usd`, `data_class`,
      `counterparty`, and `irreversible`) plus any custom fields the
-     principal declares under `fields:` (boolean, integer, enum, or string;
+     principal declares under `fields:` (boolean, integer, enum, string, or path;
      up to 64; see [examples/custom_fields.yaml](examples/custom_fields.yaml)
      and HOWTO "Custom Path A fields"). A field's description is a signed
      note for people, never a rule.
@@ -333,44 +345,21 @@ Only the gateway runs a tool.
 
 ```mermaid
 flowchart TD
-  constitution["Signed<br/>Constitution"] --> compile["Compile"]
-  compile --> bytecode["Path A<br/>Policy"]
-  compile --> judgeText["Path B<br/>Judges"]
-
-  instruction["Untrusted<br/>Instruction"] --> agent["Monitored<br/>Agent"]
-  agent -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>Authorize"]
-
-  authorize --> early{"Early deny?<br/>malformed / size<br/>agent declined<br/>file limits"}
-  early -->|yes| ledger["Encrypted<br/>Ledger"]
-  early -->|no| derive["Derive fields"]
-
-  derive -.->|"optional"| hook["AV/DLP<br/>Hook"]
-  hook -.-> derive
-
-  derive --> pathA["Path A<br/>Policy VM"]
-  bytecode --> pathA
-
-  derive --> pbCheck{"Unreadable call:<br/>do judges get the<br/>raw arguments?"}
-  pbCheck -->|"no"| skipped["Path B skipped<br/>= deny, no token"]
-  pbCheck -->|"yes, or the call<br/>was readable"| pathB["Path B — Judges<br/>≥1; configurable<br/>quorum"]
-  judgeText --> pathB
-
+  agent["Monitored agent<br/>untrusted"] -->|"JSON proposal<br/>or decline"| authorize["Two-Key<br/>authorize"]
+  authorize --> early{"Declined, malformed<br/>or too big?"}
+  early -->|"yes"| denied["Denied<br/>no token"]
+  early -->|"no"| derive["Read the fields<br/>from the arguments"]
+  derive -. "optional scan,<br/>verdict back" .- hook["AV or DLP<br/>scanner"]
+  derive --> pathA["Path A: signed<br/>rules, policy VM"]
+  derive --> pathB["Path B: judges<br/>read the prose"]
   pathA --> gate{"Both paths<br/>allow?"}
   pathB --> gate
-  skipped --> gate
-
-  pathA --> ledger
-  pathB --> ledger
-  skipped --> ledger
-
-  gate -->|no| ledger
-  gate -->|yes| token["Single-Use<br/>Capability<br/>Token"]
-
-  token --> gateway["Tool<br/>Gateway"]
-  gateway -->|"verify"| tool["Registered<br/>Tool"]
-  gateway --> ledger
-
-  ledger -.->|"optional"| siem["SIEM<br/>syslog / HTTPS"]
+  gate -->|"no"| denied
+  gate -->|"yes"| token["Single-use<br/>token"]
+  token --> gateway["Gateway<br/>runs the tool"]
+  denied -.-> ledger[("Encrypted ledger<br/>every step")]
+  gateway -.-> ledger
+  ledger -.->|"optional"| siem["SIEM"]
 ```
 
 A call that could not be read under its signed spec (`derive_failed:`) is already
@@ -487,54 +476,32 @@ One call, in code order:
 
 ```mermaid
 sequenceDiagram
-  participant Caller
-  participant Agent as Monitored agent
-  participant TwoKey
-  participant PathA as Path A VM
-  participant PathB as Path B quorum
-  participant Judge as Judges
+  participant Caller as Caller and its agent
+  participant TwoKey as Two-Key and Path A
+  participant Judges as Path B judges
   participant Ledger
-  participant Gateway
-  participant Tool
-
-  Caller->>Agent: instruction, constitution prose, opt-in vocabulary (syntax only)
-  Agent-->>Caller: JSON proposal or decline, no tool call
-  Caller->>TwoKey: proposal and agent_session
-  alt agent declined
-    TwoKey->>Ledger: decision agent_declined, with the decline reason
-    TwoKey-->>Caller: deny, neither path runs, no token
-  end
-  alt malformed or over a size limit
-    Note over TwoKey: malformed_proposal, proposal_too_large,<br/>action_too_large, malformed_action,<br/>args_too_large, invalid_call, file limits
-    TwoKey->>Ledger: decision with size and digest only
+  participant Gateway as Gateway and tool
+  Caller->>TwoKey: the agent's proposal, and its session
+  alt declined, malformed or too big
+    TwoKey->>Ledger: decision, with size and digest only
     TwoKey-->>Caller: deny, neither path runs
   end
-  TwoKey->>PathA: structured fields (after optional scan / derive)
-  PathA-->>TwoKey: allow or deny
-  alt unreadable call, judges get no arguments
-    Note over TwoKey,PathB: Path B skipped (ledgered skipped:derive_failed), so the call is denied
-    TwoKey->>Ledger: proposal, path_a, path_b skipped
+  TwoKey->>TwoKey: Path A checks the fields read from the arguments
+  alt the call cannot be read under its spec
+    Note over TwoKey,Judges: judges not asked, Path B skipped, call denied
   else
-    TwoKey->>PathB: action record and binding hashes
-    Note over PathB: args omitted on derive deny unless tool_args_on_derive_deny
-    Note over PathB: scan flag can also withhold args/proposal
-    PathB->>Judge: score in parallel, own credentials
-    Judge-->>PathB: yes, no, or abstain
-    PathB-->>TwoKey: quorum pass or deny
-    TwoKey->>Ledger: proposal, path_a, path_b
+    TwoKey->>Judges: action record, in parallel, own credentials
+    Judges-->>TwoKey: yes, no, or abstain
   end
-  alt both allow
+  TwoKey->>Ledger: proposal, Path A, Path B
+  alt both paths allow
     TwoKey->>Ledger: capability_issued, then decision
     TwoKey-->>Caller: single-use token
     Caller->>Gateway: token, tool, arguments
-    Note over Gateway: same process as TwoKey,<br/>verifies with capability public key only
-    opt authenticated token refused
-      Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
-    end
     Gateway->>Ledger: redemption_started
-    Gateway->>Tool: registered function
-    Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
-  else either path denies or skipped
+    Gateway->>Gateway: runs the tool, in the Two-Key process
+    Gateway->>Ledger: redemption, or redemption_aborted
+  else either path denies
     TwoKey->>Ledger: decision, no token
     TwoKey-->>Caller: deny
   end
@@ -586,21 +553,21 @@ Not in this repository:
 - enterprise deployment modes and permissioned-chain anchoring
 - X.509 / PKI identities and agent assertions
 - seed-phrase backup
-- hybrid ML-DSA-65
 
 Some of this is planned as optional additions. See the
 [roadmap](#roadmap). DLP and antivirus hooks shipped in 0.6.0 (an interface
 that calls your antivirus or DLP product, not a scanning engine:
 [docs/SCANNERS.md](docs/SCANNERS.md)). The SIEM export, which shipped in
 0.7.0, feeds the collector you run; it does not store, search, or alert
-([docs/SIEM.md](docs/SIEM.md)). After 1.0 come PKI with
-certificate recovery and hybrid ML-DSA-65. Key backup shipped in 0.3.0 and is not seed-phrase
-backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
+([docs/SIEM.md](docs/SIEM.md)). Hybrid Ed25519 plus ML-DSA-65 signatures
+ship in 0.9.0. After 1.0 comes PKI with certificate recovery. Key backup
+shipped in 0.3.0 and is not seed-phrase backup. Enterprise deployment modes, permissioned-chain anchoring, and seed
 phrases are not planned.
 
 The ledger is encrypted at rest.
 
-Crypto here is Ed25519 and SHA-256 via the `cryptography` package. Ledger
+Crypto here is hybrid Ed25519 plus ML-DSA-65 signatures (from 0.9.0) and
+SHA-256 via the `cryptography` package. Ledger
 entries and the signed head are AES-256-GCM at rest. The data key is wrapped
 by a ledger key outside the ledger directory, not by the principal key. The
 head is signed by the principal and by a witness key, also outside the ledger
@@ -615,8 +582,9 @@ where whoever writes the ledger directory cannot change it. With that pin,
 forging a head needs the principal, witness, and ledger keys together. The
 witness key changes only by a ledgered rotation (`two-key rotate-witness`).
 Status: beta (pre-1.0). It is maintainer-reviewed with live LLM testing and
-automated scanners (Semgrep, DeepSource, Bandit, CodeQL), not independently
-audited. It is not a FIPS 140-3 validated module.
+automated scanners (Semgrep, DeepSource, Bandit, CodeQL), not yet independently
+audited. Every algorithm it uses is FIPS-approved; a FIPS 140-3 approved mode
+follows once a validated module offers ML-DSA-65 (see Known limits).
 
 ## Known limits
 
@@ -637,10 +605,17 @@ audited. It is not a FIPS 140-3 validated module.
   or a wipe of the ledger directory alone (#62). It does not refuse them if
   that anchor is deleted or rolled back with the ledger. Someone who can
   write the anchor file can still do both. It is not an external anchor.
-- Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
-  module is on the roadmap. It would not validate this package.
-- Signatures are Ed25519, which is not quantum resistant. Hybrid signatures
-  are on the roadmap.
+- FIPS 140-3: every algorithm is FIPS-approved (ML-DSA-65 under FIPS 204,
+  Ed25519 under FIPS 186-5, AES-256-GCM, SHA-256, HMAC, HKDF, PBKDF2), but
+  the `cryptography` wheels from PyPI are not a validated module. An approved
+  mode that runs on a validated module comes once one offers ML-DSA-65:
+  OpenSSL 3.5 is the first OpenSSL with ML-DSA; its FIPS provider is in NIST's validation queue (submitted October 2025, no certificate as of 2026-10-29), and the validated OpenSSL 3.1.2 (certificate #4985) has no ML-DSA. Two-Key will not drop ML-DSA-65 to get there sooner.
+- From 0.9.0, signatures are hybrid Ed25519 plus ML-DSA-65 (FIPS 204) and
+  verify only when both halves do, so a quantum computer that breaks Ed25519
+  alone cannot forge one. AES-256-GCM and SHA-256 are not the concern at
+  these sizes. TLS to judges and upstream servers is outside Two-Key. A 0.8.0
+  deployment's keys are upgraded once, at the first start
+  ([docs/UPGRADING.md](docs/UPGRADING.md#the-key-upgrade-090)).
 - Identities are bare keys. There is no certificate chain, expiry, or
   revocation. PKI with certificate recovery is on the roadmap.
 - It is not an antivirus or DLP product. From 0.6.0 it can
@@ -654,8 +629,10 @@ audited. It is not a FIPS 140-3 validated module.
   behind until it returns, and what the collector keeps or alerts on is
   yours, not Two-Key's ([docs/SIEM.md](docs/SIEM.md)).
 - Behind the MCP proxy, an agent that can reach the upstream server directly
-  bypasses it, and an upstream server running as the proxy's OS user can
-  read the proxy's keys. Run each as its own user (HOWTO "Key custody").
+  bypasses it, unless the tool checks each call itself
+  ([docs/TOOL_CHECK.md](docs/TOOL_CHECK.md), 0.9.0), and an upstream server
+  running as the proxy's OS user can read the proxy's keys. Run each as its
+  own user (HOWTO "Key custody").
 - A key backup is only as strong as its passphrase. The bundle is the keys.
   PBKDF2 slows guessing and is not memory-hard. It is not a seed phrase and
   not an external anchor. A restore onto a newer ledger fills missing key
@@ -684,7 +661,7 @@ flowchart TD
   end
   subgraph next["Next: one beta, then 1.0.0"]
     direction LR
-    r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+    r09["0.9.0 beta<br/>Token check,<br/>remote agents,<br/>hybrid signatures"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
   end
   done --> next
 ```
@@ -697,21 +674,23 @@ flowchart TD
 | 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and `config set`, `get`, `undo`, `show` and `check`; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13) | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a ledger audit window and a constitution editor | Released, tag `v0.8.0` |
-| 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart, and formats frozen for 1.0 | Planned |
+| 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart, hybrid Ed25519 plus ML-DSA-65 signatures, and formats frozen for 1.0 | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
-| After 1.0 | PKI and certificate recovery, hybrid Ed25519 plus ML-DSA-65 signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
+| After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window come before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). Version 0.8.0 is on PyPI. It is this beta, not
+three (HOWTO "Platforms"). Version 0.9.0 is on PyPI. It is this beta, not
 the 1.0 community review. Tags are not moved.
 
 ```bash
-pip install "two-key[yaml]==0.8.0"
+pip install "two-key[yaml]==0.9.0"
 ```
 
-`v0.8.0` gives the judges a summary of recent decisions, keeps each judge's
+`v0.9.0` signs everything with hybrid Ed25519 + ML-DSA-65 keys and upgrades a
+0.8.0 deployment's keys once, adds the tool check, spends a token on a tool
+error, and adds the setup window. `@v0.8.0` gives the judges a summary of recent decisions, keeps each judge's
 ballot in the ledger, lets one proxy serve each agent, and adds the ledger
 audit window and the constitution editor. `@v0.7.3` adds `two-key setup` and the `config` commands, a principal key
 encrypted with a passphrase, a signed serial so a ledger never goes back to
@@ -777,6 +756,13 @@ Upgrading from an older version: read the "Upgrading" notes in
   and a proxy with a cloud judge needs `agent_session_env`. Keep a backup of
   the ledger from before the upgrade. "Release v0.8.0" > "Upgrading from
   0.7.3" in CHANGES.md.
+- 0.9.0 upgrades a 0.8.0 deployment's keys to hybrid Ed25519 + ML-DSA-65 at
+  its first start, once, and there is no way back: 0.8.0 does not open the
+  ledger afterwards. It needs `cryptography` 48 or later. Back up before and
+  again right after. Code that calls `TwoKey` directly refuses a 0.8.0 key
+  until `two-key keys upgrade` has run once. [UPGRADING "From 0.8.0 to 0.9.0, step by
+  step"](docs/UPGRADING.md#from-080-to-090-step-by-step) and "Upgrading from
+  0.8.0" in CHANGES.md.
 
 A clone installed with `pip install -e` follows the ranges in
 `pyproject.toml`. CI does not: it installs the versions in `uv.lock`
@@ -798,6 +784,7 @@ that file, not a description of the file. This table is the description.
 | Path | What |
 | --- | --- |
 | `two_key/core.py` | `TwoKey.authorize` and `authorize_from_agent` |
+| `two_key/history.py` | The judge history summary built from the ledger (0.8.0) |
 | `two_key/audit.py` | `check_decision_digests`: recompute each decision's `identities_digest` and `policy_digest` |
 | `two_key/policy_vm.py`, `compiler.py` | Path A |
 | `two_key/derive.py` | Tool-spec derivation for Path A's form |
@@ -808,12 +795,18 @@ that file, not a description of the file. This table is the description.
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
+| `two_key/toolcheck.py` | The tool check: redeem stamps, the tool-side check and its receipts (0.9.0) |
 | `two_key/guard.py` | One guarded call through both keys, with caller-supplied fact hooks (any agent loop; the MCP proxy uses it) |
 | `two_key/siem.py`, `siem_sinks.py`, `siem_export.py` | SIEM export: the per-kind field allowlist and schemas, the syslog and webhook sinks, and the file export and its offline check |
 | `two_key/scan.py`, `scanners.py` | Content scanning: the core, and adapters for ClamAV, ICAP, a command, and Python |
 | `two_key/_platform.py`, `writable.py` | Owner-only files, locks, and no-follow opens on POSIX and Windows; the start-up check for paths another account could change |
 | `two_key/mcp_proxy/` | MCP proxy and spec drafter (`mcp` extra). `config.py` and `core.py` decide; `sdk.py` is the only module that imports the MCP SDK; `draft.py` drafts specs |
-| `two_key/keys.py`, `cli.py`, `backup.py` | Key files; `two-key` command line; passphrase backup of the package's own keys |
+| `two_key/keys.py`, `cli.py`, `backup.py` | Key files (hybrid Ed25519 + ML-DSA-65 from 0.9.0); `two-key` command line; passphrase backup of the package's own keys |
+| `two_key/upgrade.py` | The one-time key upgrade of a 0.8.0 deployment (`keys_upgraded`, 0.9.0) |
+| `two_key/setup_cmd.py`, `setup_form.py`, `setup_gui.py` | `two-key setup`: the questions, the checks both front ends share, and the setup window (0.9.0) |
+| `two_key/config_cmd.py`, `config_set.py`, `settings.py` | `two-key config check`, `show`, `get`, `set`, `undo` and `key-passphrase`, and the registry of every setting |
+| `two_key/ledger_view.py`, `ledger_gui.py` | `two-key ledger-view`: the search and the read-only window |
+| `two_key/constitution_editor.py`, `constitution_gui.py` | `two-key constitution-editor`: the checks, the trial call, signing, and the window |
 | `two_key/action.py` | Normalized action record and its validation |
 | `two_key/agent_meta.py` | Bounds on operator- or library-supplied agent identity metadata written to the ledger |
 | `two_key/canonical.py` | Canonical encoding for the ledger, tokens, and judge bindings |
@@ -823,7 +816,8 @@ that file, not a description of the file. This table is the description.
 | `pyproject.toml` | Package name `two-key`, version, dependencies, extras, and the `two-key` command |
 | `MANIFEST.in` | Docs and examples included in the source distribution. The wheel is only `two_key` |
 | `docs/PYPI.md` | How to register the name and publish with trusted publishing, without a token in the repo |
-| `.github/workflows/pypi-publish.yml` | Build, metadata check, SBOM, and the tokenless upload. The file is on `main`; a run publishes only from branch `PyPI` or a matching version tag |
+| `.github/workflows/pypi-publish.yml` | Build, metadata check, SBOM, and the tokenless upload. The file is on `main`; a run publishes only when started by hand on branch `PyPI` |
+| `.github/workflows/mcp-registry.yml` | Lists the release on the official MCP Registry from `server.json`, signed in with GitHub Actions OIDC. Started by hand on branch `PyPI`, after the PyPI upload |
 
 ## History and license
 

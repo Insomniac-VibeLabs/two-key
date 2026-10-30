@@ -15,6 +15,10 @@ them, so you do not have to know which file holds what:
 - `two-key config key-passphrase` encrypts the principal key with a passphrase, changes it, or removes it.
 - `two-key config show` and `config check` show what a config resolves to and whether the proxy would start.
 
+`setup` is for a new deployment, and from 0.9.0 its keys are hybrid Ed25519 + ML-DSA-65. To move a 0.8.0
+deployment to 0.9.0, keep it and do not run `setup` again: the first start upgrades its keys
+([UPGRADING](UPGRADING.md#from-080-to-090-step-by-step)).
+
 Every one of them runs as **Two-Key's own account**: the account the proxy runs as, which owns Two-Key's files.
 Never as root, and never as the monitored agent's account. Each part below says what that means for that
 command and what it refuses.
@@ -30,6 +34,7 @@ command and what it refuses.
   - [What it writes, and where](#what-it-writes-and-where)
   - [What it refuses](#what-it-refuses)
   - [After it finishes](#after-it-finishes)
+  - [The setup window: `two-key setup --window`](#the-setup-window-two-key-setup---window)
 - [Changing one setting: `config set`, `get`, `undo`](#changing-one-setting-config-set-get-undo)
   - [Finding a setting's name](#finding-a-settings-name)
   - [Giving a value](#giving-a-value)
@@ -70,6 +75,7 @@ that, as before.
 two-key setup --dir /srv/two-key/billing
 two-key setup --dir /srv/two-key/billing --answers answers.yaml
 two-key setup --dir /srv/two-key/billing --answers answers.yaml --confirm-weaker
+two-key setup --dir /srv/two-key/billing --window
 ```
 
 Without `--answers`, it asks its questions on a terminal; without a terminal it refuses and asks for
@@ -88,7 +94,7 @@ The same keys go in an `--answers` file (YAML or JSON). An unknown key is refuse
 | `quorum` | The quorum's numbers: `required_yes`, `min_responding`, `min_distinct_providers`, `min_makers` and `min_local_judges` ([below](#the-quorum-numbers)). Any you leave out keep the profile's own | the profile's own |
 | `monitored_agent` | `id`, `model`, `provider`, `base_url`, `upstream` (asked as for a judge), and `credential_env` (or `credential: none`) | (asked) |
 | `rules_file` | A rules file you reviewed. For the proxy, the `rules.draft.yaml` that `two-key mcp-draft-specs` drafted from the server | none |
-| `tools` | Without `rules_file`: the tools a starter allows, each with `id` and, optionally, `irreversible` (default `true`) and `data_class_floor` (default `classified`) | (asked) |
+| `tools` | Without `rules_file`: the tools a starter allows, each with `id` and, optionally, `irreversible` (default `true`), `data_class_floor` (default `classified`) and, for the proxy route only, `tool_check`: `{key: hybrid-sha256:...}` (the fingerprint `two-key tool-key new` prints) or `exempt` ([TOOL_CHECK](TOOL_CHECK.md)). Under `high_assurance` every tool needs one or the other, and `exempt` is weaker | (asked) |
 | `prose_file` | The prose the judges read. Without it, a short starter you edit later | the starter |
 | `upstream` | Proxy only: `command` (a list; the wizard splits a line as a shell would, and the proxy runs it without a shell) and `schema_digest` | (asked) |
 | `agent_session_env` | Proxy only: the name of the variable that holds the agent's session. Needed when a judge runs in the cloud ([below](#a-cloud-judge-needs-the-agents-session)) | none |
@@ -199,6 +205,9 @@ SHA-256 digest of each file it wrote except the private key, and the digest of t
   (`not_confirmed`), and a `quorum` answer with a key other than the five numbers.
 - A proxy with a cloud judge and no `agent_session_env` (`cloud_judge_session_required`, through
   `config check`).
+- A starter tool with no tool check under `high_assurance`, a `tool_check` that is neither `exempt` nor a
+  fingerprint, and a `tool_check` on the guard or library route (`tools: ...`). With a rules file, `config
+  check` fails a `high_assurance` proxy whose tools have neither (`tool_check_required`).
 - An answer the loaders refuse (an unknown judge type, a tool with no spec, a malformed digest), and anything
   `config check` fails (`config_check_failed`). `high_assurance` with fewer judges than it needs is one such
   failure. A variable the config names that is not set in your shell does not count
@@ -226,6 +235,66 @@ For the guard and library routes there is no `proxy.yaml`: load the files from P
 [HOWTO "Authorize from Python"](HOWTO.md#authorize-from-python) shows. `config set`, `get`, and `undo` work on
 a proxy config; on those routes, edit the files and sign again with `sign-constitution`.
 
+### The setup window: `two-key setup --window`
+
+The same questions on one screen, for those who prefer a window to a terminal. It is a choice beside the
+terminal interview, not a replacement: both collect the same answers and hand them to the same code, so the
+files, what is refused, and the ledger entry are the same (`tests/test_setup_form.py` checks that the same
+answers write the same files both ways). The window always fills in the quorum numbers, so its `judges.yaml`
+and `proxy.yaml` spell out values the terminal route leaves at their defaults, in another key order; the
+settings are the same, and `two-key config show` prints the same for both. It runs as Two-Key's own account, like the terminal setup, and it
+uses tkinter, so it adds no dependency and opens no network port. Without tkinter (on Debian and Ubuntu:
+`apt install python3-tk`) or without a display, it says so and points to the terminal or `--answers`.
+
+```
+two-key setup --dir /srv/two-key/billing --window
+two-key setup --dir /srv/two-key/billing --window --answers answers.json
+```
+
+With `--answers`, the window opens filled in from that file. Its pages follow the interview:
+
+| Page | What it asks |
+| --- | --- |
+| Deployment | The new folder, the route, the key's passphrase file, and the **High assurance** switch |
+| Judges | Each judge: id, type, model, base URL, maker, upstream (only needed when the address does not say who serves the model), and the name of its API key's variable |
+| Quorum | The five numbers, filled in with the profile's own for these judges; **Use the profile's numbers** puts them back |
+| Agent and history | The monitored agent, and the judge history summary |
+| Rules and prose | A reviewed rules file, or the starter tools (with each tool's check, for the proxy); the prose file, or the starter |
+| Proxy | The upstream command, its schema digest (blank: read from the server), the agent session's variable, and one proxy per agent. Turned off for the guard and library routes |
+| Review and set up | Every answer, every problem, warning and weaker setting, the typed `yes`, **Save answers file**, and **Set up** |
+
+The status line under the pages always says whether setup would go ahead, and if not, the first reason. The
+window sets up once: after that the status line keeps `Set up in ...`, and if you change the answers it adds
+what is wrong with them now. **Set
+up** stays off until nothing stops it. A weaker setting (a quorum number below the profile's own, the summary
+turned off, one proxy per agent turned off) needs `yes` typed in the box beside it, as the terminal asks. When
+setup finishes, the Review page shows setup's log and the next steps, and keeps them there even if you change
+the answers afterwards. Two buttons open `constitution-editor` and `ledger-view` on the new folder. The editor is given `--public-key principal.pub.pem`, so it checks the signed
+constitution's signature, and the ledger view is given `--witness-public-key ledger.witness/witness.pub.pem`.
+[GUI_WALKTHROUGH](GUI_WALKTHROUGH.md) shows every page of the window, then the editor and the ledger view, in
+screenshots from one live run.
+
+**The High assurance switch** sets `quorum.profile: high_assurance`, fills in the profile's quorum numbers, and
+makes them minimums: each number can be raised (with three judges you can require three yes votes) but never
+lowered below the profile's. It also shows, grayed out, what the profile sets that the window does not let you
+change:
+
+| Setting | Under high assurance |
+| --- | --- |
+| `quorum.required_yes`, `min_responding` | at least 2 |
+| `quorum.min_makers` | at least 2: judges from two different model makers |
+| `quorum.min_local_judges` | at least 1: a judge on this machine |
+| `quorum.require_local_yes` | true: a judge on this machine must vote yes |
+| `on_writable_paths` | refuse: the proxy does not start when another account can change a file it runs or reads |
+| `on_agent_access` | refuse: the proxy does not start when the agent's account could reach Two-Key's files |
+| `tool_specs.<tool>.tool_check` | required behind the proxy: a receipt key, or `exempt` (weaker, typed yes) ([TOOL_CHECK](TOOL_CHECK.md)) |
+| a plaintext SIEM sink | refused |
+| `upstream.check_paths` | required: the upstream server's files are checked, or the proxy does not start |
+
+**Save answers file** writes the answers as JSON, owner-only, for a machine with no screen: fill them in on a
+desktop, copy the file to the server, and run `two-key setup --dir DIR --answers FILE` there. The file holds
+no secret, only the names of environment variables and the paths of files.
+
 ## Changing one setting: `config set`, `get`, `undo`
 
 ```
@@ -251,6 +320,18 @@ has a dot in it in brackets:
 | `ttl_seconds`, `on_agent_access`, `upstream.call_timeout_seconds`, `siem.sinks[0].port`, `tools[fs.read].claim` | `proxy.yaml` |
 | `quorum.profile`, `judges[1].timeout`, `monitored_agent.model` | `judges.yaml` (the `judges:` path in `proxy.yaml`) |
 | `hard_rules[2].deny_if.amount_usd_gt`, `tool_specs.pay.data_class_floor`, `fields.region.default` | the signed rules |
+
+**Every tool at once:** `[*]` in place of a tool's id changes that setting on every tool, as one change with one
+confirmation, one `config_changed` entry that names each tool, and one `config undo`. In `proxy.yaml`,
+`tools[*].claim` reaches every tool the constitution signs, whether `proxy.yaml` sets it yet or not. In the
+signed rules, `tool_specs[*].irreversible` reaches every signed tool and signs one new constitution. With
+`--unset`, a tool that does not set it is skipped. `[*]` stands only for the tool in `tools[*].<setting>` and
+`tool_specs[*].<setting>`; anywhere else it is refused (`every_tool`). `config get tools[*].claim` prints the
+value for each tool.
+
+```
+two-key config set --config proxy.yaml 'tools[*].claim' floor --confirm-weaker
+```
 
 The first part picks the file, so you never name one. A name that is not a setting is refused
 (`unknown_setting`), and so is a typo. `config get NAME` prints the value, the file, the tier, and the default.
@@ -340,7 +421,8 @@ loaded the way the proxy loads them, not from the key you typed. Each of these i
 | `quorum.ballot_binding`, `heterogeneity_scope` | `echo` becomes `stamp`, `responding` becomes `selection` |
 | `judges` | A judge is added or removed, or any of its keys changes but `timeout`, `json_mode`, `max_tokens`, `response_format`, and `reasoning_effort` |
 | `monitored_agent` | It is removed or changed (judges are checked against it) |
-| Signed rules | Anything but adding a rule, turning `irreversible` or `deny_unmapped` on, or raising a `data_class_floor`: whether an edit to a rule allows more cannot be told in general |
+| `tool_specs.<tool>.tool_check` | It is set to `exempt`, removed, or given another key (turning it on is stronger) |
+| Signed rules | Anything but adding a rule, turning `irreversible` or `deny_unmapped` on, raising a `data_class_floor`, or turning the tool check on: whether an edit to a rule allows more cannot be told in general |
 
 An `undo` that weakens needs `--confirm-weaker` too: undoing a stricter setting is weaker. `setup` reads
 its quorum numbers the same way, against the profile's own ([above](#the-quorum-numbers)).
@@ -486,7 +568,8 @@ or your secret store puts in place at start, readable only by Two-Key's account.
 folder as the key protects only against a copy of the key file alone. The ledger key, the witness key, and
 the capability key are not encrypted by this; they live in the ledger's own folders, owner-only, as before.
 
-The format is Two-Key's own: the key, as PKCS8, sealed with AES-256-GCM under a key from PBKDF2-SHA256 at
+The format is Two-Key's own: the key, as PKCS8 (a hybrid key's two PKCS8 PEM blocks, format
+`two-key-encrypted-key/2`), sealed with AES-256-GCM under a key from PBKDF2-SHA256 at
 600,000 iterations with a random 16-byte salt, every header field bound in, the same construction as the key
 backup. A file that asks for fewer iterations is refused before the derivation runs. A key encrypted by
 another tool (`BEGIN ENCRYPTED PRIVATE KEY`) is refused by name; encrypt the unencrypted key with

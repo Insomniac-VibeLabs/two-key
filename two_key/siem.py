@@ -168,13 +168,18 @@ def _form_fields(body: Mapping[str, Any]) -> dict:
     return out
 
 
-def _witness_fields(body: Mapping[str, Any]) -> dict:
-    """Witness key fingerprints. Never a key."""
+_WITNESS_KEYS = (("witness_public_key", "witness_fingerprint"),
+                 ("old_witness_public_key", "old_witness_fingerprint"),
+                 ("new_witness_public_key", "new_witness_fingerprint"))
+_PRINCIPAL_KEYS = (("old_principal_public_key", "old_principal_fingerprint"),
+                   ("new_principal_public_key", "new_principal_fingerprint"))
+
+
+def _witness_fields(body: Mapping[str, Any], keys=_WITNESS_KEYS) -> dict:
+    """Witness key fingerprints (and, given ``keys``, others). Never a key."""
     from .ledger import witness_key_fingerprint
     out = {}
-    for key, name in (("witness_public_key", "witness_fingerprint"),
-                      ("old_witness_public_key", "old_witness_fingerprint"),
-                      ("new_witness_public_key", "new_witness_fingerprint")):
+    for key, name in keys:
         raw = body.get(key)
         if isinstance(raw, str):
             try:
@@ -182,6 +187,11 @@ def _witness_fields(body: Mapping[str, Any]) -> dict:
             except Exception:       # a body this ledger would not have written: no fingerprint, no key
                 continue
     return out
+
+
+def _upgrade_fields(body: Mapping[str, Any]) -> dict:
+    """The key upgrade's old and new principal and witness key fingerprints. Never a key or a signature."""
+    return _witness_fields(body, _WITNESS_KEYS + _PRINCIPAL_KEYS)
 
 
 def _constitution_fields(body: Mapping[str, Any]) -> dict:
@@ -277,12 +287,20 @@ KINDS: dict[str, KindSpec] = {
         excluded=("format", "seq", "prev", "old_witness_public_key", "new_witness_public_key",
                   "principal_signature", "old_witness_signature", "new_witness_signature"),
         extract=_witness_fields, severity=NOTICE),
+    # The key upgrade (0.9.0): Ed25519 keys made hybrid, once. Its statement repeats format, seq and prev too.
+    "keys_upgraded": KindSpec(
+        sent=("from_alg", "to_alg", "capability_key_fingerprint", "stamp_key_fingerprint"),
+        excluded=("format", "seq", "prev", "old_principal_public_key", "new_principal_public_key",
+                  "old_witness_public_key", "new_witness_public_key", "old_principal_signature",
+                  "new_principal_signature", "old_witness_signature", "new_witness_signature"),
+        extract=_upgrade_fields, severity=NOTICE),
     "ledger_recovered": KindSpec(
         sent=("dropped_bytes", "dropped_sha256", "dropped_nonempty_lines", "tail_torn", "head_size"),
         excluded=("tail_file",), severity=NOTICE),
     "constitution_loaded": KindSpec(
         sent=("digest", "bytecode_hash", "nl_hash", "spec_hash", "policy_digest",
-              "capability_key_fingerprint", "serial", "previous_digest"),
+              "capability_key_fingerprint", "serial", "previous_digest", "stamp_key_fingerprint",
+              "tool_check_keys"),
         excluded=("quorum_policy", "judge_agent_separation", "scanner", "same_model_tenant_optin",
                   "same_model_tenant_optin_pairs", "history_agent_ids"),
         extract=_constitution_fields),
@@ -316,7 +334,12 @@ KINDS: dict[str, KindSpec] = {
     "agent_already_connected": KindSpec(sent=("agent_id", "origin"), severity=WARNING),
     "gateway_denied": KindSpec(sent=("reason", "jti", "tool"), severity=WARNING),
     "redemption_started": KindSpec(sent=("jti", "tool"), excluded=("dropped_keys",)),
-    "redemption": KindSpec(sent=("jti", "tool")),
+    "redemption": KindSpec(sent=("jti", "tool", "stamp_hash", "receipt_hash", "receipt_outcome")),
+    # The tool check (#28): a checked tool's receipt was missing or bad; under high_assurance the tool is then held
+    # until the operator releases it (two-key tool release).
+    "tool_receipt_invalid": KindSpec(sent=("jti", "tool", "why"), severity=WARNING),
+    "tool_held": KindSpec(sent=("tool", "jti", "why"), severity=WARNING),
+    "tool_released": KindSpec(sent=("tool",), hashed=("reason",), severity=NOTICE),
     "redemption_aborted": KindSpec(sent=("jti", "tool"), severity=WARNING),
     "revocation": KindSpec(hashed=("reason",), severity=NOTICE),
     "mcp_proxy_started": KindSpec(
@@ -342,7 +365,7 @@ UNLEDGERED = {
 
 _DENY_KINDS = frozenset({"gateway_denied", "tool_not_offered", "redemption_aborted", "gateway_token_refused",
                          "scanner_unavailable", "judge_history_failed", "attempt_episode",
-                         "agent_already_connected"})
+                         "agent_already_connected", "tool_receipt_invalid", "tool_held"})
 
 
 def spec_for(kind: str) -> KindSpec:
@@ -1011,7 +1034,7 @@ def start_delivery(config: SiemConfig, ledger: Any, **kw) -> Delivery:
 
 
 _REFUSAL_CLASSES = {"bad_signature": "bad_signature", "expired": "expired", "issued_in_future": "expired",
-                    "malformed_token": "malformed"}
+                    **dict.fromkeys(("malformed_token", "token_before_upgrade"), "malformed")}
 REFUSAL_COUNTS = ("bad_signature", "expired", "malformed", "other")
 
 

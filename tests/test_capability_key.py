@@ -12,7 +12,7 @@ from two_key.capability import CapabilityIssuer, CapabilityVerifier, TokenError,
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey, TwoKeyConfigError
 from two_key.gateway import ToolGateway
-from two_key.keys import generate_private_key, load_private_key, save_private_key
+from two_key.keys import generate_private_key, load_private_key, public_raw, save_private_key
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
@@ -157,8 +157,8 @@ class PinAndPrincipalSplit(unittest.TestCase):
             save_private_key(ledger.capability_key_path(), key)  # an operator copied principal.pem here
             with self.assertRaisesRegex(TwoKeyConfigError, "^capability_key_is_principal_key"):
                 engine(path, key)
-            self.assertEqual(load_private_key(ledger.capability_key_path()).public_key().public_bytes_raw(),
-                             key.public_key().public_bytes_raw())
+            self.assertEqual(public_raw(load_private_key(ledger.capability_key_path()).public_key()),
+                             public_raw(key.public_key()))
 
 
 if __name__ == "__main__":

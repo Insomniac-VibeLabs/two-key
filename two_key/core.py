@@ -38,21 +38,50 @@ from .constitution import Constitution, ConstitutionError, verify_signed
 from .identity import (AgentDeclaration, IdentityError, PASSWORD_FINGERPRINT_ALG, SeparationReport, check_separation,
                        configured_agent_identity, configured_agent_secrets, fingerprint_key_id, judge_identity)
 from .derive import (MAX_ACTION_BYTES, MAX_ARGS_BYTES, DeriveError, args_size, args_too_large, blocked_from_rules, canonical_too_large,
-                     derive, disagreement, disallowed_party, dropped_keys, form_for, size_record)
+                     derive, disagreement, disallowed_party, dropped_keys, form_for, project_arguments, size_record)
 from .fields import defaults as field_defaults
 from .gateway import ToolGateway, mark_two_key_ledger
 from . import history as judge_history
 from .history import HistoryIndex, format_time, shown_parties, subject_record
+from .keys import is_hybrid
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, ballot_records, check_judge_set, convene, lone_judge_warning, unmeetable_floor
 from .scan import CLIENT_BUDGET_SECONDS, FileDeniedError, Outcome, ScanConfigError, Scanner
 from .siem import RefusedTokens, SiemConfig, start_delivery as start_siem
+from .toolcheck import StampSigner, ToolCheckError, checked, open_stamp_key, tool_args_hash
 from .writable import WritablePathsError, check as check_writable, report as report_writable, resolve_mode
 
 
 class TwoKeyConfigError(ValueError):
     """Two-Key refuses to start with this configuration."""
+
+
+def _checked_args_hash(spec, arguments, derived) -> str | None:
+    """For a tool with the tool check on (#28), the hash of the arguments as the tool will receive them."""
+    if checked(spec) is None:
+        return None
+    return tool_args_hash(project_arguments(spec, arguments, dict(derived.fields)))
+
+
+KEYS_UPGRADE_NEEDED = ("keys_upgrade_needed: the principal key is a 0.8.0 Ed25519 key, and 0.9.0 signs with hybrid "
+                       "Ed25519 + ML-DSA-65 keys only; upgrade the deployment first (two-key keys upgrade --key KEY "
+                       "--ledger DIR --constitution FILE, or two_key.upgrade.open_upgraded; docs/UPGRADING.md)")
+
+
+def _require_hybrid(public_key) -> None:
+    """The library route has no first start to upgrade at: a 0.8.0 key is refused, never run on Ed25519 alone."""
+    if not is_hybrid(public_key):
+        raise TwoKeyConfigError(KEYS_UPGRADE_NEEDED)
+
+
+def _pinned_stamp_key(ledger) -> str | None:
+    """The stamp key fingerprint the last ``constitution_loaded`` or ``keys_upgraded`` entry that records one pins
+    (#28), or None."""
+    for entry in reversed(getattr(ledger, "entries", [])):
+        if entry.kind in ("constitution_loaded", "keys_upgraded") and entry.body.get("stamp_key_fingerprint"):
+            return entry.body["stamp_key_fingerprint"]
+    return None
 
 
 # The start-up note that no content scanner is configured is said once per process, not once per TwoKey.
@@ -184,6 +213,7 @@ class TwoKey:
                  siem: Any = None, known_agent_ids=()):
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
             raise ValueError("test-double judges refused; pass allow_test_doubles=True only for offline tests")
+        _require_hybrid(public_key)
         if not constitution.specs_enforced:
             raise ConstitutionError("tool_specs required")
         self.ledger = ledger
@@ -267,6 +297,9 @@ class TwoKey:
             except CapabilityKeyError as e:
                 raise TwoKeyConfigError(str(e)) from e
             self.issuer = CapabilityIssuer(cap_key, clock=clock, max_ttl_seconds=ttl_seconds)
+        # The tool check (#28): a stamp key only when a signed tool pins a receipt key, so a setup without one
+        # makes no key and records exactly what it did before.
+        self.stamp_signer = self._stamp_signer(ledger, private_key, clock)
         self._clock = clock
         self._now = clock or time.time
         # The supported deployment: the gateway runs in this process on this ledger object (#45).
@@ -287,6 +320,15 @@ class TwoKey:
         self._in_flight_lock = threading.Lock()
         self._flight = threading.local()
         self._start_siem()
+
+    def _stamp_signer(self, ledger, private_key, clock) -> StampSigner | None:
+        """The gateway's stamp signer when a signed tool turns the tool check on (#28), else None."""
+        if not private_key or not any(checked(spec) for spec in self.compiled.tool_specs.values()):
+            return None
+        try:
+            return StampSigner(open_stamp_key(ledger, _pinned_stamp_key(ledger)), clock=clock)
+        except ToolCheckError as e:
+            raise TwoKeyConfigError(str(e)) from e
 
     def _record_loaded(self, constitution: Constitution, sep: dict) -> None:
         """Write ``constitution_loaded`` and its checkpoint. The caller holds the ledger's write lock, which read
@@ -312,6 +354,11 @@ class TwoKey:
             "history_agent_ids": self._history_agent_ids,
             # Present only with a content scanner, so a setup without one records exactly what it did before.
             **({"scanner": self.scanner.to_record()} if self.scanner is not None else {}),
+            # Present only when a signed tool pins a receipt key (#28): what the checking tools and the gateway pin.
+            **({"stamp_key_fingerprint": self.stamp_signer.fingerprint,
+                "tool_check_keys": {tool: checked(spec) for tool, spec in sorted(self.compiled.tool_specs.items())
+                                    if checked(spec)}}
+               if self.stamp_signer is not None else {}),
             # Present only for a constitution with a serial, for the same reason (live run 9x, C44).
             **({"serial": constitution.serial, "previous_digest": self._previous_digest}
                if constitution.serial is not None else {}),
@@ -336,6 +383,8 @@ class TwoKey:
             raise TwoKeyConfigError("no_issuer_key: a TwoKey started without private_key= issues no tokens, "
                                     "so it has no gateway")
         kw.setdefault("refused_tokens", self.refused_tokens)
+        kw.setdefault("stamp_signer", self.stamp_signer)
+        kw.setdefault("high_assurance", self.quorum.is_high_assurance)
         return ToolGateway(self.ledger, self.issuer.verifier(), self.compiled, tools=tools, scanner=self.scanner,
                            **kw)
 
@@ -612,11 +661,15 @@ class TwoKey:
         spec = None
         if self.compiled.specs_enforced:
             spec = self.compiled.tool_specs.get(normalized.tool)
+        held = self._held_deny(spec, normalized.tool, origin, agent)
+        if held:
+            return held
         form = None
         claimed_data_class = normalized.data_class
         deny_reason = None
         scanned: Outcome | None = None
         scanner_change: tuple[str, dict] | None = None
+        tool_args_digest: str | None = None       # a checked tool's token binds what the tool receives (#28)
         # What the judge history and the decision's subject may show of this call (history.py): signed values only.
         shown: list[str] = []
         amount_seen: float | None = None
@@ -658,6 +711,7 @@ class TwoKey:
                     deny_reason = mismatch
                 form = form_for(derived, claimed_data_class, blocked)
                 shown = shown_parties(spec, derived.counterparties, blocked)
+                tool_args_digest = _checked_args_hash(spec, arguments, derived)
                 if spec.get("amount"):
                     amount_seen = derived.amount_usd
                 party = form["counterparty"] if derived.counterparties else normalized.counterparty
@@ -814,7 +868,8 @@ class TwoKey:
                             spec_hash=self.compiled.spec_hash,
                             form=form, claimed_data_class=claimed_data_class if form is not None else None,
                             ttl_seconds=self.ttl_seconds,
-                            scan=scanned.token_claim() if scanned is not None else None)
+                            scan=scanned.token_claim() if scanned is not None else None,
+                            tool_args_digest=tool_args_digest)
                         token = issued.token
                         _bounded("capability_issued", {"jti": issued.payload["jti"],
                                                        "token_hash": issued.token_hash,
@@ -952,6 +1007,18 @@ class TwoKey:
         with self.ledger.exclusive():
             self.ledger.append("revocation", {"reason": reason})
             self.ledger.checkpoint()
+
+    def _held_deny(self, spec, tool: str, origin: str | None, agent) -> Decision | None:
+        """A checked tool held after a bad receipt (#28) is denied before either path: the gateway refuses it anyway,
+        so the judges are not asked and no token is issued (run 12, D6c). The hold is read under the ledger's lock,
+        which catches up on a ``tool release`` another process wrote."""
+        if spec is None or checked(spec) is None:
+            return None
+        with self.ledger.exclusive():
+            held = self.ledger.tool_held(tool)
+        if not held:
+            return None
+        return self._deny(origin, "tool_held", agent, None, None, {"tool": tool}, subject_tool=tool)
 
     def _deny(self, origin: str | None, reason: str, agent, path_a, path_b, extra: dict | None = None, *,
               subject_tool: str | None = None) -> Decision:

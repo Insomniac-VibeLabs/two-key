@@ -38,7 +38,7 @@ from .canonical import canonical_hash
 from .constitution import (ENVELOPE_FORMATS, RULES_FILE_KEYS, domain_allow_notes, encrypted_pass_notes,
                            load_envelope, load_serial, load_unsigned_with_fields, save_envelope, sign_constitution,
                            signed_body, verify_signed)
-from .fields import case_warnings, not_applicable_notes
+from .fields import case_warnings, not_applicable_notes, path_notes
 from .policy_vm import ConstitutionError, RULE_TYPES
 from .strict import StrictParseError, load_file_strict, load_yaml, loads_json
 
@@ -359,6 +359,7 @@ def _signed_notes(signed: Mapping) -> list[tuple[str, str]]:
     out += [(WARNING, line) for line in case_warnings(rules, specs, registry)]
     out += [(WARNING if warn else NOTE, line) for warn, line in domain_allow_notes(specs)]
     out += [(WARNING, line) for line in encrypted_pass_notes(specs)]
+    out += [(NOTE, line) for line in path_notes(specs, registry)]
     return out
 
 
@@ -473,7 +474,7 @@ def sign_and_save(draft: Draft, private_key, folder: Path | str, names: Mapping[
     _write_sources(paths, draft, "not signed")
     same_from_files(paths, envelope["signed"])
     try:
-        save_envelope(paths["signed"], envelope)
+        save_envelope(paths["signed"], envelope, owner_only=True)
     except OSError as e:
         raise EditorError(f"not signed: {write_refusal(paths['signed'], e)}") from None
     return Saved(str(paths["prose"]), str(paths["rules"]), str(paths["signed"]), canonical_hash(envelope["signed"]),

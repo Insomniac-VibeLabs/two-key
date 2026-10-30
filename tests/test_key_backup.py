@@ -15,6 +15,7 @@ import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 from two_key.backup import (
     ALG, BUNDLE_NAMES, FORMAT, KDF_NAME, MAX_ITERATIONS, MIN_ITERATIONS, PBKDF2_ITERATIONS,
@@ -24,10 +25,12 @@ from two_key.capability import capability_key_fingerprint, open_capability_key
 from two_key.cli import main
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey
-from two_key.keys import generate_private_key, load_private_key_file, save_private_key
+from two_key.keys import (generate_private_key, key_fingerprint, load_private_key_file, load_public_key,
+                          save_private_key)
 from two_key.ledger import Ledger, LedgerError
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
+from two_key.toolcheck import open_stamp_key, stamp_key_path
 from perm import chmod, private
 
 RULES = [{"id": "t", "allow_only_tools": ["search"]}]
@@ -38,6 +41,7 @@ PHRASES = {
     "witness": "witness-passphrase-three",
 }
 FAST = 1000
+PINNED_STAMP = "two_key.core._pinned_stamp_key"
 
 
 def _engine(path, key):
@@ -232,10 +236,14 @@ class VerifyAndPassphrase(BackupFixture):
             "format": PAYLOAD_FORMAT,
             "version": BACKUP_VERSION,
             "role": "witness",
-            "files": {"witness.pem": {"encoding": "pem", "alg": "ed25519", "data": pem.decode("ascii")}},
+            "files": {"witness.pem": {"encoding": "pem", "alg": "ed25519+ml-dsa-65", "data": pem.decode("ascii")}},
             "fingerprints": {"witness.pem": opened["fingerprints"]["witness.pem"]},
         }
         self.assertEqual(_check_payload(payload, "witness")["files"]["witness.pem"], pem)
+        # The alg is the key's own: a hybrid key named as an Ed25519 key is refused.
+        mislabelled = dict(payload, files={"witness.pem": dict(payload["files"]["witness.pem"], alg="ed25519")})
+        with self.assertRaisesRegex(BackupError, "witness.pem is not a witness backup field"):
+            _check_payload(mislabelled, "witness")
         extra = dict(payload, note="x")
         with self.assertRaisesRegex(BackupError, "payload"):
             _check_payload(extra, "witness")
@@ -413,6 +421,52 @@ class Restore(BackupFixture):
         opened = Ledger(self.ledger, load_private_key_file(self.key_path))
         self.assertEqual(opened.size(), newer)
         self.assertTrue(cap.is_file())
+
+
+class StampKey(BackupFixture):
+    """The tool check's stamp key (0.9.0) is in the principal bundle where the deployment has one: the checking
+    tools pin its public key, so a restore that lost it would leave every checked tool refusing."""
+
+    def setUp(self):
+        super().setUp()
+        self.stamp = stamp_key_path(self.tk.ledger)
+        self.fingerprint = key_fingerprint(open_stamp_key(self.tk.ledger).public_key())
+
+    def test_export_carries_it_and_restore_puts_it_and_its_public_file_back(self):
+        result, _ = self.export()
+        self.assertEqual(result["fingerprints"]["stamp"], self.fingerprint)
+        principal = self.bundles()["principal"]["files"]
+        self.assertEqual(principal["stamp.pem"], self.stamp.read_bytes())
+        public = self.stamp.with_name("stamp.pub.pem")
+        self.stamp.unlink()
+        public.unlink()
+        with redirect_stderr(io.StringIO()):
+            restored = restore_backup(self.ledger, self.key_path, self.out, PHRASES)
+        self.assertEqual((restored["actions"]["stamp.pem"], restored["actions"]["stamp.pub.pem"]),
+                         ("created", "created"))
+        self.assertEqual(key_fingerprint(load_private_key_file(self.stamp).public_key()), self.fingerprint)
+        self.assertEqual(key_fingerprint(load_public_key(public)), self.fingerprint)
+
+    def test_a_deployment_without_one_backs_up_as_before(self):
+        self.stamp.unlink()
+        self.export()
+        self.assertNotIn("stamp.pem", self.bundles()["principal"]["files"])
+
+    def test_a_stamp_key_that_is_not_the_pinned_one_or_is_missing_is_rejected(self):
+        self.export()
+        with patch(PINNED_STAMP, return_value=self.fingerprint), redirect_stderr(io.StringIO()):
+            self.assertTrue(verify_backup(self.out, PHRASES)["ok"])
+        with patch(PINNED_STAMP, return_value="hybrid-sha256:" + "0" * 64), \
+                redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(BackupError, "stamp key does not match the fingerprint pinned"):
+                verify_backup(self.out, PHRASES)
+        self.stamp.unlink()
+        other = self.root / "nostamp"
+        with redirect_stderr(io.StringIO()):
+            export_backup(self.ledger, self.key_path, other, PHRASES, iterations=FAST)
+        with patch(PINNED_STAMP, return_value=self.fingerprint), redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(BackupError, "pins a stamp key .* stamp.pem is missing"):
+                verify_backup(other, PHRASES)
 
 
 class CommandLine(BackupFixture):

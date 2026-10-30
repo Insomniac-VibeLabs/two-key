@@ -18,9 +18,9 @@ from . import _platform
 from .action import DATA_CLASSES, DEFAULT_DATA_CLASS, DEFAULT_IRREVERSIBLE
 from .canonical import canonical_bytes, canonical_hash
 from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path, has_caller_fields,
-                     has_exact_fields, is_caller, rule_fields, validate_fields)
+                     has_exact_fields, has_path_fields, is_caller, rule_fields, validate_fields)
 from .derive import DOMAIN, is_domain_entry
-from .keys import fingerprint, sign, verify
+from .keys import classical_half, fingerprint, is_hybrid, sign, verify
 from .policy_vm import ConstitutionError, validate_rules
 
 FORMAT_V1 = "two-key-constitution-v1"
@@ -40,11 +40,30 @@ _V3_SIGNED_KEYS = _V2_SIGNED_KEYS | {"serial"}
 # (two_key/settings.py) read the same sets the validators use.
 RULES_FILE_KEYS = ("hard_rules", "tool_specs", "fields", "serial")
 TOOL_SPEC_KEYS = ("irreversible", "data_class_floor", "amount", "counterparties", "payload", "deny_unmapped",
-                  "fields")
+                  "fields", "tool_check")
+# A tool's check (#28, docs/TOOL_CHECK.md): the fingerprint of the tool's receipt key, or "exempt".
+# Hybrid only (0.9.0): the tool check has no classical keys to stay compatible with.
+TOOL_CHECK_KEY = re.compile(r"hybrid-sha256:[0-9a-f]{64}")
+TOOL_CHECK_KEYS = ("key",)
 AMOUNT_KEYS = ("json_path", "unit", "currency_path")
 COUNTERPARTY_KEYS = ("json_path", "allow")
 PAYLOAD_KEYS = ("json_path", "shape", "max_length")
 FIELD_MAPPING_KEYS = ("json_path", "source", "encrypted")
+
+
+def _tool_check(tool: str, spec: Mapping) -> dict:
+    """``{"tool_check": ...}`` when the spec sets it, else ``{}``. The value is ``exempt``, or
+    ``{key: "hybrid-sha256:<64 hex>"}``: the fingerprint of the hybrid key that signs the tool's receipts."""
+    if "tool_check" not in spec:
+        return {}
+    value = spec["tool_check"]
+    if value == "exempt":
+        return {"tool_check": value}
+    if isinstance(value, Mapping) and set(value) == set(TOOL_CHECK_KEYS) and isinstance(value["key"], str) \
+            and TOOL_CHECK_KEY.fullmatch(value["key"]):
+        return {"tool_check": {"key": value["key"]}}
+    raise ConstitutionError(f"tool_specs.{tool}.tool_check: expected exempt or {{key: hybrid-sha256:<64 hex digits>}} "
+                            "(two-key tool-key new prints the fingerprint)")
 
 
 class ConstitutionSignatureError(ValueError):
@@ -139,8 +158,8 @@ def _check_caller_mapping(where: str, defn: Mapping, entry: Any) -> None:
                                 "whose values include encrypted")
 
 
-V3_FEATURES = ("caller-supplied fields (source: caller), case: exact fields, not_applicable marks, and @domain "
-               "allow entries")
+V3_FEATURES = ("caller-supplied fields (source: caller), case: exact fields, path fields, not_applicable marks, "
+               "and @domain allow entries")
 
 
 def validate_serial(value: Any) -> int | None:
@@ -153,9 +172,9 @@ def validate_serial(value: Any) -> int | None:
 
 
 def uses_v3(registry: Mapping, specs: Mapping) -> bool:
-    """True when the signed bytes need a 0.5.0 reader: a caller-supplied or ``case: exact`` field, or a
-    ``not_applicable`` mark."""
-    return has_caller_fields(registry) or has_exact_fields(registry) or any(
+    """True when the signed bytes need a 0.5.0 reader: a caller-supplied, ``case: exact`` or path field, a
+    ``not_applicable`` mark, or an @domain entry. (A path field needs 0.9.0; earlier v3 readers refuse its type.)"""
+    return has_caller_fields(registry) or has_exact_fields(registry) or has_path_fields(registry) or any(
         entry == NOT_APPLICABLE for spec in specs.values() for entry in (spec.get("fields") or {}).values()) or any(
         is_domain_entry(item) for spec in specs.values() for party in spec.get("counterparties") or []
         for item in party.get("allow") or [])
@@ -412,6 +431,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
         }
         if fields_out:      # absent for a tool with no custom fields, so its spec hashes as before
             out[tool]["fields"] = fields_out
+        out[tool].update(_tool_check(tool, spec))      # absent unless set, for the same reason
     allow = _allow_listed(rules)
     missing = [tool for tool in allow if tool not in out]
     if missing:
@@ -541,13 +561,14 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
     }
 
 
-def save_envelope(path: Path | str, envelope: dict) -> None:
+def save_envelope(path: Path | str, envelope: dict, *, owner_only: bool = False) -> None:
     """Write a signed constitution to a new file beside ``path``, then rename it over ``path``: a reader never
-    sees half a constitution, and a link at ``path`` is replaced, not written through."""
+    sees half a constitution, and a link at ``path`` is replaced, not written through. ``owner_only`` makes the
+    new file readable by its owner only (mode 0600), as ``two-key setup`` writes it."""
     target = Path(path)
     tmp = target.parent / f".{target.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp"
     try:
-        with os.fdopen(_platform.create_new(tmp, owner_only=False), "w", encoding="utf-8", newline="\n") as fh:
+        with os.fdopen(_platform.create_new(tmp, owner_only=owner_only), "w", encoding="utf-8", newline="\n") as fh:
             fh.write(json.dumps(envelope, indent=2) + "\n")
         _platform.replace(tmp, target)
     finally:
@@ -563,6 +584,16 @@ def load_envelope(path: Path | str) -> dict:
         raise ConstitutionError(f"constitution {path}: {e}") from None
 
 
+def _signature_failed(public_key, message: bytes, signature) -> str:
+    """Why a constitution's signature failed. One by the hybrid principal's own Ed25519 half is the 0.8.0 key's,
+    from before the key upgrade: refused, not signed again, since an Ed25519-only signature is not enough."""
+    if is_hybrid(public_key) and verify(classical_half(public_key), message, signature):
+        return ("constitution signature failed: it is signed by this principal's 0.8.0 Ed25519 key, from before "
+                "the key upgrade; sign it again (two-key keys upgrade --key KEY --ledger DIR --constitution FILE, "
+                "or two-key sign-constitution; docs/UPGRADING.md)")
+    return "constitution signature failed"
+
+
 def verify_signed(envelope: dict, public_key) -> Constitution:
     fmt = envelope.get("format") if isinstance(envelope, dict) else None
     if fmt not in (FORMAT_V1, FORMAT_V2, FORMAT_V3):
@@ -574,8 +605,9 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
     signed = envelope.get("signed")
     if not isinstance(signed, dict):
         raise ConstitutionSignatureError("missing signed body")
-    if not verify(public_key, canonical_bytes(signed), envelope.get("signature") or ""):
-        raise ConstitutionSignatureError("constitution signature failed")
+    signature = envelope.get("signature") or ""
+    if not verify(public_key, canonical_bytes(signed), signature):
+        raise ConstitutionSignatureError(_signature_failed(public_key, canonical_bytes(signed), signature))
     if fmt in (FORMAT_V2, FORMAT_V3):
         extra = set(signed) - (_V3_SIGNED_KEYS if fmt == FORMAT_V3 else _V2_SIGNED_KEYS)
         if extra:

@@ -13,7 +13,6 @@ ledger head. It is not the minting key.
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import math
 import secrets
@@ -24,10 +23,9 @@ from typing import Any
 from . import _platform
 from .canonical import canonical_bytes, canonical_hash
 from .strict import loads_json
-from cryptography.hazmat.primitives import serialization
 
-from .keys import (generate_private_key, load_private_key_file, public_key, save_private_key, save_public_key, sign,
-                   verify)
+from .keys import (CLASSICAL_ALG, HYBRID_ALG, generate_private_key, is_hybrid, key_fingerprint, load_private_key_file,
+                   public_key, public_raw, save_private_key, save_public_key, sign, verify)
 
 
 class TokenError(ValueError):
@@ -71,18 +69,23 @@ class CapabilityKeyError(ValueError):
     """The capability key is missing, changed, or is the principal key. Two-Key refuses to start."""
 
 
-def _raw(public) -> bytes:
-    return public.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+def token_format(public) -> tuple[str, int, str]:
+    """The token prefix, payload version and ``alg`` for a key: ``tk2``, 2 and the hybrid suite for a hybrid key;
+    ``tk1``, 1 and Ed25519 for a 0.8.0 key (read only while a deployment upgrades)."""
+    return ("tk2", 2, HYBRID_ALG) if is_hybrid(public) else ("tk1", 1, CLASSICAL_ALG)
 
 
 def capability_key_fingerprint(public) -> str:
-    """Full SHA-256 of the raw public key. Recorded in ``constitution_loaded`` and pinned by the gateway."""
-    return "sha256:" + hashlib.sha256(_raw(public)).hexdigest()
+    """The key's fingerprint (``keys.key_fingerprint``: ``hybrid-sha256:`` for a hybrid key). Recorded in
+    ``constitution_loaded`` and pinned by the gateway."""
+    return key_fingerprint(public)
 
 
 def _pinned(ledger) -> str | None:
+    """The capability key fingerprint the last ``constitution_loaded`` entry pins, or the ``keys_upgraded`` entry
+    when that is later (the key upgrade gives the key an ML-DSA-65 half, so a new fingerprint)."""
     for entry in reversed(getattr(ledger, "entries", [])):
-        if entry.kind == "constitution_loaded":
+        if entry.kind in ("constitution_loaded", "keys_upgraded"):
             return entry.body.get("capability_key_fingerprint")
     return None
 
@@ -124,7 +127,7 @@ def open_capability_key(ledger, principal_public=None):
             "private_key= before 0.2.3); refusing to mint with a key the ledger cannot vouch for")
     if issued and pinned != capability_key_fingerprint(key.public_key()):
         raise CapabilityKeyError("capability_key_changed: the key does not match the fingerprint pinned in the ledger")
-    if principal_public is not None and _raw(key.public_key()) == _raw(principal_public):
+    if principal_public is not None and public_raw(key.public_key()) == public_raw(principal_public):
         raise CapabilityKeyError("capability_key_is_principal_key: the token key must not be the principal key")
     return key
 
@@ -139,6 +142,17 @@ class IssuedCapability:
         return canonical_hash(self.token)
 
 
+def _check_prefix(token: Any, prefix: str) -> None:
+    """A token in this key's format, or a TokenError. A 0.8.0 ``tk1`` token after the key upgrade is named, so
+    the caller knows to ask for a new one (live run 12, X6)."""
+    if not isinstance(token, str):
+        raise TokenError("malformed_token")
+    if prefix == "tk2" and token.startswith("tk1."):
+        raise TokenError("token_before_upgrade")
+    if token.count(".") != 2 or not token.startswith(prefix + "."):
+        raise TokenError("malformed_token")
+
+
 class CapabilityVerifier:
     """Checks a token. It cannot mint."""
 
@@ -150,8 +164,8 @@ class CapabilityVerifier:
 
     def verify(self, token: Any) -> dict:
         """Check format, signature, lifetime, issue time, and expiry. Return the payload or raise TokenError."""
-        if not isinstance(token, str) or token.count(".") != 2 or not token.startswith("tk1."):
-            raise TokenError("malformed_token")
+        prefix, version, alg = token_format(self.public_key)
+        _check_prefix(token, prefix)
         _, body, signature = token.split(".")
         if not verify(self.public_key, body.encode("ascii"), signature):
             raise TokenError("bad_signature")
@@ -159,7 +173,7 @@ class CapabilityVerifier:
             payload = loads_json(_b64u_dec(body))
         except ValueError:  # StrictParseError is a ValueError
             raise TokenError("malformed_token") from None
-        if not isinstance(payload, dict) or payload.get("v") != 1:
+        if not isinstance(payload, dict) or payload.get("v") != version or payload.get("alg", CLASSICAL_ALG) != alg:
             raise TokenError("malformed_token")
         try:
             issued_at, expires_at = float(payload["iat"]), float(payload["exp"])
@@ -193,17 +207,19 @@ class CapabilityIssuer(CapabilityVerifier):
               bytecode_hash: str, nl_hash: str, ttl_seconds: int = 120,
               spec_hash: str = "", form: dict | None = None,
               claimed_data_class: str | None = None, args_digest: str | None = None,
-              scan: dict | None = None) -> IssuedCapability:
+              scan: dict | None = None, tool_args_digest: str | None = None) -> IssuedCapability:
         """Mint a token. ``args_digest`` is ``args_hash(arguments)`` when the caller already encoded them.
-        ``scan`` (a scanned tool only) binds the verdict and each file's digest; the gateway checks them."""
+        ``scan`` (a scanned tool only) binds the verdict and each file's digest; the gateway checks them.
+        ``tool_args_digest`` (a tool with the tool check on, #28) is the hash of the arguments the tool receives."""
         if self.private_key is None:
             raise TokenError("verifier_cannot_mint")
         valid_ttl(ttl_seconds)
         if ttl_seconds > self.max_ttl_seconds:
             raise ValueError(f"ttl_seconds exceeds this issuer's max_ttl_seconds ({self.max_ttl_seconds})")
         now = int(self.clock())
+        prefix, version, alg = token_format(self.public_key)
         payload = {
-            "v": 1,
+            "v": version,
             "jti": secrets.token_hex(16),
             "tool": tool,
             "args_hash": args_digest if args_digest is not None else args_hash(arguments),
@@ -215,11 +231,15 @@ class CapabilityIssuer(CapabilityVerifier):
             "iat": now,
             "exp": now + ttl_seconds,
         }
+        if version > 1:
+            payload["alg"] = alg
         if form is not None:
             payload["form"] = form
             payload["claimed_data_class"] = claimed_data_class
         if scan is not None:      # absent otherwise, so a token for an unscanned tool keeps its 0.5.0 shape
             payload["scan"] = scan
+        if tool_args_digest is not None:      # absent otherwise, so other tokens keep their 0.8.0 shape
+            payload["tool_args_hash"] = tool_args_digest
         body = _b64u(canonical_bytes(payload))
         signature = sign(self.private_key, body.encode("ascii"))
-        return IssuedCapability(f"tk1.{body}.{signature}", payload)
+        return IssuedCapability(f"{prefix}.{body}.{signature}", payload)

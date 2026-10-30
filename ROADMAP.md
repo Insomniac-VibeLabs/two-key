@@ -47,7 +47,7 @@ flowchart TD
   end
   subgraph next["Next: one beta, then 1.0.0"]
     direction LR
-    r09["0.9.0 beta<br/>Token check,<br/>remote agents"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS,<br/>GUI and more"]
+    r09["0.9.0 beta<br/>Token check,<br/>remote agents,<br/>hybrid signatures"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
   end
   done --> next
 ```
@@ -62,15 +62,18 @@ flowchart TD
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
-| 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
+| 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, folder-path rules for key one, and formats frozen for 1.0 | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
-| After 1.0 | PKI and certificate recovery, post-quantum signatures, FIPS approved mode, a local GUI, an optional reputation halt, more spec field types | Not scheduled |
+| After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
 antivirus hooks, then the SIEM export, then 1.0. PKI, post-quantum
 signatures, FIPS approved mode, and the local GUI move after 1.0. Judge
 connection reuse (#6) joins 0.6.0, and the judge history summary (#1) comes
-before the 1.0 review; on 2026-10-25 it became its own release, 0.8.0. Earlier
+before the 1.0 review; on 2026-10-25 it became its own release, 0.8.0. On
+2026-10-28 post-quantum signatures moved into 0.9.0 and FIPS approved mode
+into 1.0.0; on 2026-10-29 FIPS approved mode moved back after 1.0, to start
+once a validated module offers ML-DSA-65. Earlier
 versions of this plan numbered the phases 0.4 to 0.11 in another order;
 CHANGES.md keeps that record. Released versions are under "Shipped" below.
 
@@ -145,7 +148,7 @@ in the same release.
   identifier from 0.3 onward. That lets post-quantum keys be added later
   without breaking existing ledgers or backups.
 - Keep the README's "Known limits" section current: no independent review,
-  no external anchor, not FIPS validated, signatures not quantum resistant.
+  no external anchor yet, and where FIPS 140-3 stands.
 
 ## 0.8.0: Judge history and ballot records
 
@@ -186,19 +189,33 @@ CHANGES.md "Release v0.8.0" lists what shipped.
 
 ## 0.9.0: Tool-side token check and remote agents
 
-Planned, the last beta. Everything 1.0 will contain is in, tested on real deployments, and
+Version 0.9.0, the last beta: to be tagged `v0.9.0` on `main` and published after the merge. CHANGES.md
+"Release v0.9.0" lists what ships. Everything 1.0 will contain is in, tested on real deployments, and
 frozen, so the public review looks at the final shape.
 
 - An optional tool-side token check (#28): a way for a tool, or a thin
   wrapper in front of it, to check that a call was authorized. Off by
   default; the gateway stays in the `TwoKey` process and still verifies
-  only. It touches tokens and the gateway, so a design note and the
-  maintainer's security review come before any code.
+  only. Design note approved by the maintainer (2026-10-28); built for tools
+  behind `two-key mcp-proxy`, required under `high_assurance`
+  (docs/TOOL_CHECK.md). A tool error now spends the token for every tool.
 - A live run with the agent on another machine over SSH ("Where we are"
   above), on machines the maintainer sets up. The network transport
   question is answered with the standing decision: stdio only, remote
   agents over SSH.
 - A ten-minute quickstart and a demo with a real MCP server.
+- `two-key config set 'tools[*].claim'`: one setting on every tool as one change, one confirmation and one
+  ledger entry (live run 11).
+- Folder-path rules for key one (maintainer's request and design review, 2026-10-30): a `path` field type that
+  admits any file inside signed folders, cleaned as text with `..` and relative paths refused, and a link check
+  just before the tool runs (HOWTO "File paths inside a folder").
+- A setup window, `two-key setup --window`, beside the terminal setup (maintainer's request, 2026-10-28):
+  the same answers and the same `build`, a High assurance switch that locks the profile's settings and makes
+  its quorum numbers minimums, and a Save answers file for a server with no screen.
+- Quantum-resistant signatures (maintainer's decision, 2026-10-28; design approved 2026-10-29): every
+  signature is hybrid Ed25519 plus ML-DSA-65, and a 0.8.0 deployment's keys are upgraded once at its first
+  start (`keys_upgraded`) ([Post-quantum signatures](#post-quantum-signatures)). FIPS 140-3
+  approved mode follows once a validated module offers ML-DSA-65 ([FIPS approved mode](#fips-approved-mode)).
 - A freeze for 1.0: what 1.0 keeps stable (constitution, rules and judge
   configuration shapes, the ledger and token formats, the SIEM schema, the
   CLI and its exit codes, the public Python API) is written in
@@ -217,15 +234,16 @@ frozen, so the public review looks at the final shape.
   metadata, `MANIFEST.in`, and `.github/workflows/pypi-publish.yml`
   (OpenID Connect, no token in the repository, PEP 740 attestations, and
   a CycloneDX SBOM kept as a workflow artifact).
-- 1.0 is described as community-reviewed, not audited, and as not FIPS
-  validated itself. A paid audit and any validation of this package are
-  later goals.
+- 1.0 is described as community-reviewed, using FIPS-approved algorithms.
+  A paid audit, the FIPS approved mode, and any validation of this package
+  are later goals.
 
 ## After 1.0 (not scheduled)
 
 Planned, in this order unless the maintainer changes it, with no target
 version. Each was a numbered phase before 2026-10-15; the design notes
-are unchanged except for cross-references.
+are unchanged except for cross-references. Post-quantum signatures have
+since moved into 0.9.0 and keep their design note here.
 
 ### PKI and certificate recovery
 
@@ -268,30 +286,36 @@ from a lost or compromised certificate. It builds on the key backup from 0.3.
 
 ### Post-quantum signatures
 
-Today every signature is Ed25519, which a large quantum computer could
-forge. AES-256-GCM and SHA-256 are not the concern at these sizes. The
-exposure is long-lived signatures: the constitution and the ledger head.
-Capability tokens live at most 300 seconds, so they come last.
+Moved into 0.9.0 (maintainer's decision, 2026-10-28) and built for it.
+Until then every signature was Ed25519, which a large quantum computer could
+forge. AES-256-GCM and SHA-256 are not the concern at these sizes.
 
-- Hybrid signatures for the constitution and the ledger head: Ed25519 plus
-  ML-DSA-65 (FIPS 204). The signature verifies only if both halves verify.
-- Use a vetted library for ML-DSA instead of writing it, and keep the work
-  sized to this repository's scope.
-- A verifier that expects the hybrid form refuses a classical-only one, so
-  stripping the post-quantum half is a deny, not a downgrade.
-- Key backup and SIEM export carry the new keys and fields, using the
-  versioned formats from 0.3.
-- Decide separately whether tokens go hybrid, since they add size on every
-  call.
+- Every signature is hybrid: Ed25519 plus ML-DSA-65 (FIPS 204), both over the
+  same labelled message, verifying only if both halves verify. That covers
+  the constitution, the ledger head and anchor, witness rotations, capability
+  tokens (`tk2`), and the tool check's stamps and receipts.
+- ML-DSA-65 comes from OpenSSL through `cryptography` 48 or later, not code
+  of our own. Where it is missing Two-Key refuses (`ml_dsa_unavailable`).
+- A hybrid key refuses a classical-only signature, so stripping the
+  post-quantum half is a deny, not a downgrade. There is no way back to
+  Ed25519 alone.
+- A 0.8.0 deployment's keys are upgraded once, at the first start: each key
+  keeps its Ed25519 key and gains an ML-DSA-65 key, and the ledger records
+  `keys_upgraded`, signed by the old and new keys
+  ([UPGRADING](docs/UPGRADING.md#the-key-upgrade-090)). Key backup and the
+  SIEM export carry the new keys and the new entry.
 - Certificates (PKI, above) follow the same rule. Whether to issue hybrid or
   post-quantum certificates depends on the standards and library support at
   the time, and is decided then.
-- Existing 0.2.x ledgers stay readable, with a documented migration.
 
 ### FIPS approved mode
 
 The goal is to run on a validated cryptographic module, not to claim that
-this package is validated. The docs say "runs on a FIPS 140-3 validated
+this package is validated. Every algorithm Two-Key uses is already
+FIPS-approved; what is missing is a validated module with ML-DSA-65.
+OpenSSL 3.5 is the first OpenSSL with ML-DSA; its FIPS provider is in NIST's validation queue (submitted October 2025, no certificate as of 2026-10-29), and the validated OpenSSL 3.1.2 (certificate #4985) has no ML-DSA. Validation is NIST's queue, outside this project, so the
+mode has no target version: it starts when such a module exists (maintainer's
+decision, 2026-10-29). It was planned for 1.0.0 from 2026-10-28 to 2026-10-29. The docs say "runs on a FIPS 140-3 validated
 module in approved mode", never "FIPS compliant" or "FIPS validated".
 
 - An opt-in mode that refuses to start unless the `cryptography` library
@@ -306,9 +330,13 @@ module in approved mode", never "FIPS compliant" or "FIPS validated".
   module. The startup check confirms it before allowing the mode.
 - The module's certificate number and version are recorded in
   `constitution_loaded`.
-- Open question, decided when the mode is built: how hybrid signatures are
-  treated in approved mode, since it depends on what the validated module
-  supports.
+- Approved mode never drops ML-DSA-65 (maintainer's decision, 2026-10-29):
+  it signs hybrid like every other mode. How the module is chosen depends on
+  what is validated; if no validated module covers ML-DSA-65 by then, the
+  options are to wait or to support a validated HSM. All signing goes through `two_key/keys.py`, and `keys_upgraded`
+  records a move between named suites, so a FIPS suite changes one module and
+  reuses that entry. Whether a validated module includes ML-DSA-65 is
+  checked again at the 1.0 freeze and at each release after it.
 - Tests run in CI against a container that ships a validated provider.
 - A document on how to deploy it and what the claim does and does not
   cover.
@@ -325,6 +353,7 @@ guard with a token, and it shows every field decrypted, because the
 maintainer asked for every field to be searchable. It holds the principal
 key while open, as `two-key audit` does, because opening the ledger needs it.
 The constitution part came next, also in 0.8.0, as `two-key constitution-editor`, a tkinter window too.
+Setup follows in 0.9.0 as `two-key setup --window`, beside the terminal interview.
 The bullets below are still the plan for the rest.
 
 - Runs locally only. It binds to loopback, requires a per-session token, and
@@ -333,10 +362,12 @@ The bullets below are still the plan for the rest.
   specs, with validation that uses the same strict loaders as the core. It
   shows the effect of a change, such as `high_assurance`, before it is
   saved.
-- The GUI never holds the principal key. It prepares a constitution and
-  hands it to the existing signing command. Signing stays outside the GUI.
+- Signing uses the same code as the terminal commands. The constitution
+  editor signs in its window with the principal key, and the setup window
+  creates it, as `sign-constitution` and `setup` do (maintainer's decision,
+  2026-10-28: no added risk over the terminal).
 - Changes go through the engine `two-key config set` already uses
-  (docs/SETUP.md, on `working` since 2026-10-20): Two-Key's own account
+  (docs/SETUP.md, since 0.7.3): Two-Key's own account
   only, the whole config checked before anything is written,
   `--confirm-weaker` and a typed yes for a weaker setting, and a
   `config_changed` ledger entry for each change. The GUI adds no rule of
@@ -344,9 +375,9 @@ The bullets below are still the plan for the rest.
 - Ledger auditing: browse decisions, filter by tool, reason, judge, and
   time, and show both paths' results for each call. It runs the Merkle and
   digest checks (`check_decision_digests`) and shows failures plainly.
-- Filtering by judge uses the per-judge ballot records planned for 1.0
-  (above): judge id, vote, confidence, error class, and a rationale digest,
-  never the rationale text.
+- Filtering by judge uses the per-judge ballot records the ledger holds
+  since 0.8.0 (above): judge id, vote, confidence, error class, and a
+  rationale digest, never the rationale text.
 - Export from the audit view reuses the SIEM export (0.7.0), so digests and reason
   codes leave the screen, not argument values.
 - Key and backup status: fingerprints, backup age, and a prompt to run the
@@ -395,7 +426,9 @@ neither.
 - A gateway in its own process or on its own host, or a gateway-only
   ledger role. This is a decision, not a gap: the gateway runs in the
   `TwoKey` process ([why](docs/HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
-- A hosted, remote, or multi-user GUI, and a GUI that holds the signing key.
+- A hosted, remote, or multi-user GUI. (Until 2026-10-28 this line also excluded a GUI that holds the signing
+  key; the constitution editor signs in its window and the setup window creates the key, as the terminal
+  commands do, so the maintainer reworded it.)
 - A CMVP validation of this package, and any claim that it is "FIPS
   compliant" or "FIPS validated".
 - Permissioned-chain anchoring and seed phrases.

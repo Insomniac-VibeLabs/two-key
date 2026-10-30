@@ -29,7 +29,7 @@ sure which route fits.
 To write a first deployment in one go, run `two-key setup --dir DIR`: it asks for the route, the
 profile, the judges and the quorum's numbers, the monitored agent, the rules to sign and, for the proxy, the
 upstream server, then writes every file owner-only, signs the constitution, creates the ledger, and checks the
-result.
+result. `two-key setup --dir DIR --window` asks the same questions in a window instead.
 Later, `two-key config set` changes one setting without opening the files, and `config undo` puts it
 back. [SETUP.md](SETUP.md) says who may run them and what they refuse. They write the files for you;
 they do not decide the rules or the judges, so read the sections above for your route either way.
@@ -114,10 +114,15 @@ version pinned in `.github/requirements/uv.in`, run `uv sync --locked
 with that same uv and commit it. The lock is not a consumer pin: a git
 install still uses the ranges.
 
-Version 0.8.0 is on PyPI, and is tag `v0.8.0` on `main`. Install with
-`pip install "two-key[yaml]==0.8.0" (the `mcp` extra for the proxy).
+Version 0.9.0 is on PyPI, and is tag `v0.9.0` on `main`. Install with
+`pip install "two-key[yaml]==0.9.0"` (the `mcp` extra for the proxy).
 The release steps are [PYPI.md](PYPI.md). A checkout install, above, is
 for working in this repository.
+
+Already running an older version? Install over it and keep your keys and
+ledger: [UPGRADING](UPGRADING.md). From 0.8.0 to 0.9.0 the keys are upgraded
+once, and there is no way back, so read
+[its steps](UPGRADING.md#from-080-to-090-step-by-step) first.
 
 ### Platforms
 
@@ -165,7 +170,10 @@ python -m two_key sign-constitution \
 ```
 
 `init-key` writes `principal.pem` with mode 0600 (created that way, never
-chmodded afterwards) and refuses to overwrite an existing key. Commands that
+chmodded afterwards) and refuses to overwrite an existing key. From 0.9.0 the
+key is hybrid: an Ed25519 key and an ML-DSA-65 key, two PEM blocks in the one
+file, that always sign together; a 0.8.0 key is upgraded at the first start
+([UPGRADING](UPGRADING.md#the-key-upgrade-090)). Commands that
 take `--key` refuse a key file that the group or others can read
 (`key_file_insecure`) or that is a symlink. `--key` takes the private key,
 `principal.pem`; given `principal.pub.pem`, they say `--key:
@@ -443,6 +451,7 @@ Types and the operators each allows:
 | `integer` | `min`, `max`, `default` | a JSON integer only (not `5.0`, `"5"`, `true`, or `null`), within `min`..`max` | `eq`, `neq`, `gt`, `gte`, `lt`, `lte` |
 | `enum` | `values`, `default`, optional `charset`/`scripts` | text equal, after normalization, to one declared value | `eq`, `neq`, `in`, `not_in` |
 | `string` | `max_length`, `default`, optional `charset`/`scripts`, or `case: exact` | text of at most `max_length` characters | `eq`, `neq`, `in`, `not_in` |
+| `path` | `under` (signed folders), `default`, optional `case: insensitive` | an absolute file path inside one of the `under` folders, cleaned up first ([below](#file-paths-inside-a-folder-type-path)) | `eq`, `neq`, `in`, `not_in`, `under`, `not_under` |
 
 Every value in a rule is checked against the field when the constitution
 is signed and loaded. An enum value that is not declared (`prdo`), an
@@ -471,7 +480,7 @@ not allow is refused, so a typo cannot become a rule that never fires.
 | --- | --- |
 | mapped path missing | `derive_failed:field_missing:<field>` |
 | wrong JSON type, or a character outside the field's character set | `derive_failed:field_unreadable:<field>` |
-| integer outside `min`..`max`, enum value not declared, string longer than `max_length` | `derive_failed:field_not_allowed:<field>` |
+| integer outside `min`..`max`, enum value not declared, string longer than `max_length`, path outside every `under` folder | `derive_failed:field_not_allowed:<field>` |
 
 Each is a derive deny, and no token is issued. The call cannot be read, so
 it is not sent to the judges, and Path B is ledgered as
@@ -549,6 +558,103 @@ hard_rules:
   its format guide; `agent_vocabulary()` says "letter case matters" for
   such a field, and never lists a value.
 
+#### File paths inside a folder (`type: path`)
+
+For a file tool, such as the MCP filesystem server, list the folders it may
+use instead of every file. A `path` value inside one of the `under` folders
+passes; anything else is `field_not_allowed`. Rules can deny a subfolder
+(`under`), allow only one (`not_under`), or name single files (`eq`, `in`):
+
+```yaml
+fields:
+  note_path:
+    type: path
+    under: [/home/agent/notes]
+    default: /home/agent/notes
+tool_specs:
+  write_file:
+    fields: {note_path: {json_path: path}}
+    payload: [{json_path: content}]
+  read_file:
+    fields: {note_path: {json_path: path}}
+hard_rules:
+  - id: tools
+    allow_only_tools: [write_file, read_file]
+  - id: no-private
+    deny_if_fields: {note_path: {under: /home/agent/notes/private}}
+```
+
+- "Inside" is the folder itself or anything below it, compared whole
+  segment by segment: `/home/agent/notes2/x` is not inside
+  `/home/agent/notes`.
+- Path A cleans the path up as text and never reads the disk: repeated and
+  trailing slashes collapse and `.` segments drop. It refuses
+  (`field_unreadable`), rather than guesses at, anything else: a relative
+  path (`todo.txt`, `./todo.txt`, `~/todo.txt`), a `..` segment, a
+  backslash, a character outside printable ASCII, and a path over 4,096
+  characters, 64 segments, or 255 characters in one segment. `..` is
+  refused because on a disk `a/link/../b` follows `link` first, so the
+  text answer could name another file than the tool opens. Relative paths
+  are refused because they depend on the tool's working folder, which
+  Two-Key does not know. Name the full path in the agent's instruction.
+- The tool receives the cleaned path Path A checked, not the agent's
+  spelling.
+- Just before the tool runs, the gateway checks that no part of the path
+  below its folder is a link or junction (`path_symlink:<field>`; the
+  tool does not run). The folder itself and the folders above it may be
+  links. This is best effort: anything that can write in the folder can
+  still swap a part for a link after the check. The tool's own folder
+  limit and the account it runs as close that (see [THREAT_MODEL.md](THREAT_MODEL.md)
+  and [CONNECTING.md](CONNECTING.md)).
+- Letter case is compared exactly. On a filesystem that ignores case
+  (macOS and Windows by default), declare `case: insensitive`: values,
+  folders and rule paths are then lower-cased, and the tool receives the
+  lower-cased path. Signing warns about an exact path field in a rule that
+  lists paths to deny (`eq`, `in`, `under`), where a case variant names
+  the same file and is not denied.
+- Paths are POSIX paths. A Windows path (`C:\notes\x`) is refused.
+- One path per field. A tool with two paths, such as `move_file`, maps two
+  fields; an argument that holds a list of paths is `field_unreadable`.
+- Signed folders and rule paths must already be in clean form, `/` is
+  refused as a folder, a folder may not sit inside another, and a rule
+  path outside every folder is refused (the rule could never apply).
+  `two-key sign-constitution` and the constitution editor print a note
+  for each tool that maps a path field, naming its folders.
+- A path field signs as `two-key-constitution-v3`. Installs before 0.9.0
+  refuse a constitution with one, as an unknown field type.
+
+What Path A does with each value, for `under: [/home/agent/notes]` (checked
+by `tests/test_path_fields.py`):
+
+<!-- path-vectors -->
+| Value the agent sends | Result |
+| --- | --- |
+| `/home/agent/notes/todo.txt` | `/home/agent/notes/todo.txt` |
+| `/home/agent/notes` | `/home/agent/notes` |
+| `/home//agent/./notes/todo.txt/` | `/home/agent/notes/todo.txt` |
+| `/home/agent/notes/sub dir/a b.txt` | `/home/agent/notes/sub dir/a b.txt` |
+| `/home/agent/notes/../.ssh/authorized_keys` | `field_unreadable` |
+| `/home/agent/notes/..` | `field_unreadable` |
+| `todo.txt` | `field_unreadable` |
+| `./todo.txt` | `field_unreadable` |
+| `~/notes/todo.txt` | `field_unreadable` |
+| `notes/todo.txt` | `field_unreadable` |
+| `/home/agent/notes\todo.txt` | `field_unreadable` |
+| `C:\notes\todo.txt` | `field_unreadable` |
+| `/home/agent/notes/caf\u00e9.txt` | `field_unreadable` |
+| `/home/agent/notes/a\u0000.txt` | `field_unreadable` |
+| `/home/agent/notes/a\u000a.txt` | `field_unreadable` |
+| `/home/agent/notes2/todo.txt` | `field_not_allowed` |
+| `/home/agent/Notes/todo.txt` | `field_not_allowed` |
+| `/home/agent` | `field_not_allowed` |
+| `/` | `field_not_allowed` |
+| `/etc/passwd` | `field_not_allowed` |
+| `//home/agent/notes/todo.txt` | `/home/agent/notes/todo.txt` |
+<!-- /path-vectors -->
+
+In the value column, `\uXXXX` stands for that one character; a
+backslash is itself.
+
 ### Descriptions
 
 `description` is a note for the people who read and review the
@@ -574,7 +680,8 @@ refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
 `fields`. A constitution with any 0.5.0 feature signs as
 `two-key-constitution-v3`: a caller-supplied field
 (`source: caller`), a `case: exact` field, a `not_applicable` mark, or an
-`@domain` allow entry. Installs before 0.5.0 refuse v3 as an unsupported
+`@domain` allow entry; so does a `path` field (0.9.0), which installs
+before 0.9.0 refuse as an unknown field type. Installs before 0.5.0 refuse v3 as an unsupported
 format. The format label is outside the signed bytes, so the meaning comes
 from the signed bytes only: a v1 or v2 label on a constitution with any of
 them is refused, never read the 0.4.0 way. A v2
@@ -1192,6 +1299,25 @@ HTTP to a host other than `localhost`, `127.0.0.1`, or `::1` is refused
 unless the judge sets `allow_insecure_http`. A judge on a LAN address is local for the quorum
 floors but not loopback, so it still needs the agent session at call time.
 
+`local_weights: true` says where the weights run; it does not say who serves the model. An Ollama judge
+on its own host resolves both. An OpenAI-compatible server on your machine (llama.cpp, vLLM, LM Studio, or
+a local relay) with a model id that names no maker does not, so `config check` warns `unresolved_identity`
+and the proxy refuses to start. Declare where it is served instead of setting
+`allow_unresolved_identity: true`, which is weaker and allows every unresolved judge:
+
+```yaml
+- id: local-judge
+  type: openai_compatible
+  base_url: http://127.0.0.1:8080/v1
+  model: qwen2.5-7b-instruct
+  maker: alibaba
+  local_weights: true
+  upstream: localhost:8080      # served here, by this machine
+```
+
+Under `high_assurance` this is the usual shape of the local judge the profile requires
+(`min_local_judges: 1`).
+
 ## Parsing and limits
 
 Every JSON and YAML document is parsed strictly: the signed constitution,
@@ -1372,6 +1498,12 @@ decision = tk.authorize(
 )
 ```
 
+`TwoKey` does not upgrade a 0.8.0 deployment's keys; it refuses a 0.8.0
+key with `keys_upgrade_needed`. Run `two-key keys upgrade --key
+keys/principal.pem --ledger ledger --constitution constitution.signed.json`
+once, then load the upgraded files
+([UPGRADING](UPGRADING.md#from-080-to-090-step-by-step)).
+
 At start, `TwoKey` names each file or folder of the running Python, and
 each path in `check_paths=` (your integration's own settings, as paths or
 `(path, "file" | "folder")` pairs), that another account could change.
@@ -1451,7 +1583,7 @@ sequenceDiagram
   TwoKey->>PathB: prose and the action record
   PathB-->>TwoKey: quorum pass or deny
   alt both paths allow
-    TwoKey->>Ledger: decision and capability token
+    TwoKey->>Ledger: capability_issued (the token's id), then decision
     TwoKey-->>Caller: single-use token for the gateway
   else a guessed or wrong value
     TwoKey->>Ledger: deny, for example counterparty_not_allowed
@@ -1577,8 +1709,12 @@ rejected; bring such a token in through `env` or `callback`.
 
 A redemption intent is checkpointed before the tool runs. A crash after that
 intent, including after the tool has returned, does not run the token again.
-A tool exception appends an abort and leaves the token usable. A crash before
-the tool runs also blocks a retry.
+A tool exception appends an abort, and from 0.9.0 the token stays spent
+(`already_attempted`), so a tool that did part of its work and then failed
+does not run again on the same token. The agent asks again, and the judges
+decide again. A crash before the tool runs also blocks a retry. After a
+restart the same token is refused `revoked_or_reloaded` instead: the
+restart records `constitution_loaded`, and that check comes first.
 
 ### Deployment boundary: the gateway runs in the TwoKey process
 
@@ -2108,6 +2244,8 @@ on stderr and exits 1.
 | `check_path_missing: upstream.check_paths[<n>]: <path> does not exist` | An entry names nothing | Fix the path, or remove the entry |
 | `unresolved_identity: ...` | Two-Key cannot tell who serves a judge or the agent (a local proxy serving an alias, an unrecognized host), so it cannot rule out a judge that is the agent. `two-key config check` names each one as a `WARN` first | Declare `upstream:` for that side in `judges.yaml`, or set `allow_unresolved_identity: true` to accept the risk |
 | `tools: [...] are not tools in the signed constitution` | A `tools:` entry names an unsigned tool | Remove it, or sign the tool |
+| `tool_check_required: high_assurance needs the tool check for [...]` | Under `high_assurance`, a tool the proxy offers has no `tool_check` in its signed spec | Give it a receipt key, or mark it `exempt` (weaker), and re-sign ([TOOL_CHECK](TOOL_CHECK.md)) |
+| `TwoKeyConfigError: stamp_key_missing: ...`, `stamp_key_changed: ...` | The gateway's stamp key is gone or is not the one the ledger pins; the checking tools would refuse every stamp | Restore the key from where it was (it sits beside `capability.pem`) |
 | `upstream_unavailable: <type>: ...` | The child did not start, or did not speak MCP | Check the command and its user |
 | `upstream_duplicate_tool`, `upstream_tool_unreadable`, `upstream_too_many_tools`, `upstream_too_many_pages` | The upstream's tool list cannot be pinned | Fix or replace the server |
 | `upstream_name_collision` | Two signed tools map to one upstream name | Fix `upstream_name` |
@@ -2145,10 +2283,14 @@ an argument value.
 | `fact_mismatch` | The hook's answer changed between authorize and the tool call, so the token no longer fits |
 | `rule_denied:<scan rule id>` | The content scanner flagged the call (or, under the strict stance, could not answer). The agent is not told what was found |
 | `file_changed` | A file sent by path changed after it was scanned |
+| `path_symlink:<field>` | A part of a `path` field's value below its signed folder is a link or junction, checked just before the tool runs. The tool does not run ([File paths inside a folder](#file-paths-inside-a-folder-type-path)) |
 | `file_too_large`, `too_many_files`, `call_files_too_large` | A declared file is over its `max_bytes`, or the call carries more than 32 files or 100 MiB of them. Denied before the scanner and both keys, under every stance |
 | `file_unreadable` | A declared file could not be read: bad base64, a value of the wrong type, a path outside its folder, a link, a missing file. Denied the same way |
 | any `two-key authorize` reason | `rule_denied:<rule id>`, `counterparty_not_allowed`, `derive_failed:...`, `insufficient_yes:...`, `cloud_judge_session_required`, `args_too_large`, and the others in "Parsing and limits" and "Quorum policy" |
-| `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`. After a timeout the server may still have done the work. The proxy does not retry |
+| `tool_receipt_invalid:<why>` | Under `high_assurance`: a checked tool's receipt was missing (`missing`), signed by another key (`bad_signature`), for another call or result (`mismatch`), or the tool refused (`refused:<reason>`). The agent gets no output, and the tool is held | Look at the tool's key and clock, then `two-key tool release TOOL --reason ...` ([TOOL_CHECK](TOOL_CHECK.md#what-two-key-does-with-the-receipt)) |
+| `tool_held` | A checked tool is held after a bad receipt | As above |
+| `tool_args_mismatch` | The token does not bind the arguments the tool would get | Ask again; report it if it repeats |
+| `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`. After a timeout the server may still have done the work. The proxy does not retry, and the token is spent: the agent asks again |
 | `upstream_result_unreadable` | The upstream returned something that is not a tool result |
 
 An upstream result with `isError: true` is the server's own answer: the
@@ -2169,7 +2311,8 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 - **The agent host's user** must not be able to read any of that, change
   `proxy.yaml` or the constitution, or reach the upstream server or its
   credential by another path. An agent that can call the upstream directly
-  bypasses the proxy (THREAT_MODEL). [docs/CONNECTING.md](CONNECTING.md)
+  bypasses the proxy (THREAT_MODEL), unless the tool checks each call itself
+  ([TOOL_CHECK](TOOL_CHECK.md)). [docs/CONNECTING.md](CONNECTING.md)
   covers every connection and hook, the client's other tools, services on
   the same machine, and a checklist.
 - **The upstream server's user** (`mcp-billing`) gets only its own
@@ -2202,6 +2345,10 @@ Run the proxy as its own OS user, and the upstream server as a third one.
 - **The pin covers what the agent is shown,** not what the server does: a
   server can change its behavior without changing a schema. Pin the
   version.
+- **The upstream trusts its caller unless it checks.** A tool that checks
+  each call itself (the tool check, [TOOL_CHECK](TOOL_CHECK.md)) refuses a
+  call that did not come through both keys and signs a receipt the ledger
+  keeps; one that does not is open to anything that can reach it.
 - **Results are not read.** An upstream result can carry injected text back
   to the agent. Two-Key judges each later call on its own terms; it does not
   scan the result.
@@ -2364,7 +2511,7 @@ every key a signed head needs:
 
 | Bundle | Holds | Does not hold |
 | --- | --- | --- |
-| `principal.bundle.json` | `principal.pem`, `capability.pem` | ledger key, witness key |
+| `principal.bundle.json` | `principal.pem`, `capability.pem`, and `stamp.pem` (the tool check's stamp key, from 0.9.0) where there is one | ledger key, witness key |
 | `ledger.bundle.json` | `ledger.key`, `fingerprint.key`, the ledger files, and `head.anchor` from that moment | principal key, witness key |
 | `witness.bundle.json` | `witness.pem` | principal key, ledger key |
 
@@ -2452,6 +2599,7 @@ backup. Move that file aside and run restore again. Do not delete
 | --- | --- | --- |
 | `principal.pem` | the ledger will not open under that key | restore. A newer ledger keeps its other keys, including a witness rotated after the backup |
 | `capability.pem` | `capability_key_missing` or `capability_key_changed` once a token was issued | restore the principal bundle. It holds this key too. Same rule after a witness rotation |
+| `stamp.pem` (0.9.0, the tool check) | `stamp_key_missing`, and every checking tool refuses its stamps | restore the principal bundle. It holds this key and writes `stamp.pub.pem` back beside it. A backup made before 0.9.0 does not hold it |
 | `ledger.key` | `ledger key missing` or `wrong ledger key` | restore the ledger bundle |
 | `fingerprint.key` | a later start creates a new one, and identity digests no longer match | restore the ledger bundle. If a new file was already created, move it aside first. Do not let a new key be created |
 | `witness.pem` | `witness key missing` or `witness_key_changed` | restore the witness bundle. A backup from before a rotation does not hold the new witness. `--replace-ledger` puts the old ledger and the old witness back; it is not how you keep the rotated ledger |
@@ -2514,7 +2662,8 @@ two-key audit --key keys/principal.pem --ledger ledger --witness-public-key /etc
 
 It prints `witness.head` (the key that signed the head), `witness.in_ledger`
 (the pinned key, the entry that pinned it, and how), `witness.configured`,
-and `witness.history`, as `sha256:` fingerprints, plus the
+and `witness.history`, as fingerprints (`hybrid-sha256:` for a hybrid key,
+`sha256:` for a key from before the 0.9.0 key upgrade), plus the
 `check_decision_digests` result. It exits 1 on a refusal or a digest
 problem. `Ledger.verify()` returns the same `witness` report.
 

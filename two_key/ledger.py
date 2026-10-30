@@ -29,6 +29,15 @@ The witness public key is pinned twice (#58):
   where whoever writes the ledger directory cannot change it. With it, a head
   also needs the witness private key. The operator updates it after a rotation.
 
+The key upgrade (0.9.0): a ledger made by 0.8.0 is signed with Ed25519 keys. Once
+its key files are hybrid (``two_key/upgrade.py`` adds an ML-DSA-65 half to each),
+the ledger opens with ``upgrade_pending`` set and refuses every write until
+``upgrade_keys`` records ``keys_upgraded``: the old and new principal and witness
+keys, signed by all four, and the new capability and stamp key fingerprints. From
+that entry on, the head, the anchor and every rotation are hybrid, and a 0.8.0
+key is refused. The new keys keep the old Ed25519 halves, so the entries before
+it are checked with those.
+
 Neither pin detects a rollback to an earlier signed head, or a wipe (#62).
 A separate head anchor does. It lives outside the ledger directory, by default
 beside the ledger key (``<ledger>.ledger-key/head.anchor``), and it records the
@@ -54,7 +63,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -63,8 +72,9 @@ from . import _platform
 from .canonical import EncodingError, canonical_bytes, canonical_hash
 from .agent_meta import cap_ledger_text, type_tag
 from .keys import (
-    generate_private_key, load_private_key_file, load_public_key, public_from_raw, public_key,
-    public_raw, save_private_key, save_public_key, sign, verify,
+    CLASSICAL_ALG, ED_PUB_BYTES, HYBRID_ALG, HybridPrivateKey, HybridPublicKey, classical_half, generate_private_key,
+    is_hybrid, load_private_key_file, load_public_key, public_from_raw, public_key, public_raw, save_private_key,
+    save_public_key, sign, verify,
 )
 
 WRAP_FORMAT = "two-key-ledger-wrap/1"
@@ -77,6 +87,9 @@ _RECORD_AAD = b"two-key-ledger-enc/1"
 LEDGER_KEY_BYTES = 32
 
 WITNESS_ROTATION_FORMAT = "two-key-witness-rotation/1"
+KEYS_UPGRADE_FORMAT = "two-key-keys-upgraded/1"
+KEYS_UPGRADE_PENDING = ("keys_upgrade_pending: this ledger's key files are hybrid, and the ledger has not recorded the "
+                        "key upgrade yet; run two-key keys upgrade (docs/UPGRADING.md)")
 # Formats written by the two-key-concept repository (before two-key 0.4.0). They are not read; a file in
 # one gets a clear error instead of a decryption or parse failure.
 LEGACY_PREFIX = "two-key-concept-"
@@ -86,22 +99,33 @@ LEGACY_MESSAGE = "made by two-key-concept (before two-key 0.4.0); two-key cannot
 def _legacy(fmt) -> bool:
     return isinstance(fmt, str) and fmt.startswith(LEGACY_PREFIX)
 # Written only by the ledger itself: Ledger.append refuses these kinds.
-_WITNESS_KINDS = frozenset({"witness_pinned", "witness_rotated"})
+_WITNESS_KINDS = frozenset({"witness_pinned", "witness_rotated", "keys_upgraded"})
 _ANCHOR_FIELDS = ("format", "size", "tip", "merkle_root", "public_key", "witness_public_key")
 # The signed statement of a witness_rotated entry; the entry body is these plus the three signatures.
 _ROTATION_FIELDS = ("format", "seq", "prev", "old_witness_public_key", "new_witness_public_key", "reason")
+# The signed statement of a keys_upgraded entry; the entry body is these plus the four signatures.
+_UPGRADE_FIELDS = ("format", "seq", "prev", "from_alg", "to_alg", "old_principal_public_key",
+                   "new_principal_public_key", "old_witness_public_key", "new_witness_public_key",
+                   "capability_key_fingerprint", "stamp_key_fingerprint")
+_UPGRADE_SIGNATURES = ("old_principal_signature", "new_principal_signature", "old_witness_signature",
+                       "new_witness_signature")
+
+
+_SHA256 = "sha256:"      # the prefix of a digest, and of a 0.8.0 Ed25519 key's fingerprint
 
 
 def witness_key_fingerprint(raw: str) -> str:
-    """``sha256:`` and the hex SHA-256 of a raw witness public key (the base64 form the head carries)."""
-    return "sha256:" + hashlib.sha256(base64.b64decode(raw)).hexdigest()
+    """The fingerprint of a raw witness public key (the base64 form the head carries): ``hybrid-sha256:`` for a
+    hybrid key, ``sha256:`` for a 0.8.0 Ed25519 key, then the hex SHA-256 (``keys.key_fingerprint``)."""
+    data = base64.b64decode(raw)
+    return (_SHA256 if len(data) == ED_PUB_BYTES else "hybrid-sha256:") + hashlib.sha256(data).hexdigest()
 
 
 def _witness_public(raw, what: str):
     try:
         return public_from_raw(raw)
     except Exception:
-        raise LedgerError(f"{what} is not an Ed25519 public key") from None
+        raise LedgerError(f"{what} is not a hybrid Ed25519 + ML-DSA-65 (or 0.8.0 Ed25519) public key") from None
 
 
 def _write_new_secret(path, data: bytes) -> None:
@@ -249,7 +273,7 @@ def omitted_body(body: dict, error: Exception) -> dict:
     except (RecursionError, ValueError, TypeError):
         data = None
     return {**kept, "body_size": -1 if data is None else len(data),
-            "body_digest": None if data is None else "sha256:" + hashlib.sha256(data).hexdigest(),
+            "body_digest": None if data is None else _SHA256 + hashlib.sha256(data).hexdigest(),
             "body_omitted": True, "body_error": str(error)[:_KEEP_CHARS]}
 
 
@@ -269,8 +293,7 @@ class Entry:
 class Ledger:
     def __init__(self, path: Path | str, private_key, public_key=None, *,
                  witness_path: Path | str | None = None, ledger_key_path: Path | str | None = None,
-                 witness_public_key: Ed25519PublicKey | None = None,
-                 anchor_path: Path | str | None = None, _load: bool = True):
+                 witness_public_key=None, anchor_path: Path | str | None = None, _load: bool = True):
         """Open or create the ledger at ``path``.
 
         ``witness_public_key`` is the out-of-ledger witness pin: the witness public key, kept where whoever
@@ -286,8 +309,8 @@ class Ledger:
         0.2.3 for the first time pins the witness key that signed its head (trust on first use). Both are
         checkpointed. ``_load=False`` is only for ``recover_tail``.
         """
-        if witness_public_key is not None and not isinstance(witness_public_key, Ed25519PublicKey):
-            raise LedgerError("witness_public_key must be an Ed25519 public key")
+        if witness_public_key is not None and not isinstance(witness_public_key, (Ed25519PublicKey, HybridPublicKey)):
+            raise LedgerError("witness_public_key must be a Two-Key public key")
         if public_key is not None and public_raw(private_key.public_key()) != public_raw(public_key):
             # Every head it signed would fail "principal head signature failed" on the next open (#60 item 5).
             raise LedgerError("principal key mismatch: the principal private key does not match the principal "
@@ -317,8 +340,16 @@ class Ledger:
         self.entries: list[Entry] = []
         self._redeemed: set[str] = set()
         self._started: set[str] = set()
+        # Tools held after a bad receipt under high_assurance (#28): tool -> the tool_held entry's seq.
+        self._held: dict[str, int] = {}
         self._configured_witness = None if witness_public_key is None else public_raw(witness_public_key)
         self._witness_pin: tuple[str, int, str] | None = None    # (raw key, seq, source) pinned in the ledger
+        # The key upgrade: True while the key files are hybrid and the ledger is still Ed25519 (no keys_upgraded
+        # yet); the keys_upgraded entry's seq once it is read; rotations signed by the Ed25519 principal half
+        # before it, which only a keys_upgraded entry after them makes valid.
+        self.upgrade_pending = False
+        self._upgraded_at: int | None = None
+        self._classical_rotations: list[int] = []
         self._head_witness: str | None = None                   # the witness key in the verified head
         self._merkle_ranges: list[tuple[int, bytes]] = []
         self._merkle_roots: list[str] = []
@@ -673,22 +704,33 @@ class Ledger:
             self._started.discard(jti)
         elif entry.kind == "redemption_started" and jti:
             self._started.add(jti)
-        elif entry.kind == "redemption_aborted" and jti:
-            self._started.discard(jti)
-        elif entry.kind == "witness_pinned":
+        # 0.9.0: redemption_aborted leaves the jti started, so a token whose tool failed is spent (already_attempted).
+        # A ledger written by 0.8.0 may hold a later redemption of that jti; it still reads as redeemed.
+        elif entry.kind == "tool_held" and isinstance(entry.body.get("tool"), str):
+            self._held[entry.body["tool"]] = entry.seq
+        elif entry.kind == "tool_released" and isinstance(entry.body.get("tool"), str):
+            self._held.pop(entry.body["tool"], None)
+        elif entry.kind in ("witness_pinned", "witness_rotated"):
+            self._track_witness(entry, check=verify)
+        elif entry.kind == "keys_upgraded":
+            self._track_upgrade(entry, check=verify)
+        seqs = self._kind_seqs.setdefault(entry.kind, [])
+        seqs.append(entry.seq)
+
+    def _track_witness(self, entry: Entry, *, check: bool) -> None:
+        """Move the witness pin for a ``witness_pinned`` or ``witness_rotated`` entry (see ``_track``)."""
+        if entry.kind == "witness_pinned":
             raw = entry.body.get("witness_public_key")
-            if verify:
+            if check:
                 if self._witness_pin is not None:
                     raise LedgerError("ledger chain failed verification: a second witness_pinned entry "
                                       f"at {entry.seq}; the witness key changes only by witness_rotated")
                 _witness_public(raw, f"witness_pinned at {entry.seq}")
             self._witness_pin = (raw, entry.seq, str(entry.body.get("source")))
-        elif entry.kind == "witness_rotated":
-            if verify:
-                self._verify_rotation(entry)
-            self._witness_pin = (entry.body["new_witness_public_key"], entry.seq, "rotated")
-        seqs = self._kind_seqs.setdefault(entry.kind, [])
-        seqs.append(entry.seq)
+            return
+        if check:
+            self._verify_rotation(entry)
+        self._witness_pin = (entry.body["new_witness_public_key"], entry.seq, "rotated")
 
     def _verify_rotation(self, entry: Entry) -> None:
         body = entry.body
@@ -702,13 +744,90 @@ class Ledger:
         if self._witness_pin is None or statement["old_witness_public_key"] != self._witness_pin[0]:
             raise LedgerError(f"witness_rotated at {entry.seq} does not start from the pinned witness key")
         message = canonical_bytes(statement)
-        for public, field in ((self.public_key, "principal_signature"),
-                              (_witness_public(statement["old_witness_public_key"], "old witness key"),
+        self._verify_rotation_principal(entry.seq, message, body.get("principal_signature") or "")
+        for public, field in ((_witness_public(statement["old_witness_public_key"], "old witness key"),
                                "old_witness_signature"),
                               (_witness_public(statement["new_witness_public_key"], "new witness key"),
                                "new_witness_signature")):
             if not verify(public, message, body.get(field) or ""):
                 raise LedgerError(f"witness_rotated at {entry.seq}: {field} failed")
+
+    def _verify_rotation_principal(self, seq: int, message: bytes, signature: str) -> None:
+        """A rotation's principal signature. Before keys_upgraded, the principal was the Ed25519 half of today's
+        key; a keys_upgraded entry later in the chain must vouch for that (``_check_classical_rotations``)."""
+        if verify(self.public_key, message, signature):
+            return
+        if self._upgraded_at is None and self._is_classical_signature(message, signature):
+            self._classical_rotations.append(seq)
+            return
+        raise LedgerError(f"witness_rotated at {seq}: principal_signature failed")
+
+    def _is_classical_signature(self, message: bytes, signature: str) -> bool:
+        old = self._classical_principal()
+        return old is not None and verify(old, message, signature)
+
+    def _is_ledger_principal(self, raw: str) -> bool:
+        """Whether ``raw`` is this ledger's principal key, or the Ed25519 key it was upgraded from."""
+        old = self._classical_principal()
+        return raw == public_raw(self.public_key) or (old is not None and raw == public_raw(old))
+
+    def _classical_principal(self):
+        """The Ed25519 public key the principal signed with before the key upgrade, or None for an Ed25519
+        principal (nothing to upgrade from)."""
+        return classical_half(self.public_key) if is_hybrid(self.public_key) else None
+
+    def _suite_keys(self, witness) -> tuple:
+        """The principal private and public keys and the witness key this ledger signs with now: the Ed25519 halves
+        while the upgrade is pending (the ledger is still Ed25519), else the keys as given."""
+        if self.upgrade_pending:
+            return classical_half(self.private_key), classical_half(self.public_key), classical_half(witness)
+        return self.private_key, self.public_key, witness
+
+    def _track_upgrade(self, entry: Entry, *, check: bool) -> None:
+        """Move the principal suite and the witness pin for a ``keys_upgraded`` entry (see ``_track``)."""
+        if check:
+            self._verify_upgrade(entry)
+        self._upgraded_at = entry.seq
+        self.upgrade_pending = False
+        self._classical_rotations.clear()
+        self._witness_pin = (entry.body["new_witness_public_key"], entry.seq, "upgraded")
+
+    def _verify_upgrade(self, entry: Entry) -> None:
+        """A ``keys_upgraded`` entry read from disk: the only one, at its place in the chain, from Ed25519 to the
+        hybrid suite, from the pinned witness, each new key the old key plus an ML-DSA-65 half, the new principal
+        the one this ledger was opened with, and all four signatures good."""
+        body = entry.body
+        where = f"keys_upgraded at {entry.seq}"
+        statement = self._upgrade_statement(entry, where)
+        keys = {}
+        for name in ("old_principal", "new_principal", "old_witness", "new_witness"):
+            keys[name] = _witness_public(statement[f"{name}_public_key"], f"{where}: {name} key")
+        for name in ("principal", "witness"):
+            old, new = keys[f"old_{name}"], keys[f"new_{name}"]
+            if is_hybrid(old) or not is_hybrid(new) or public_raw(classical_half(new)) != public_raw(old):
+                raise LedgerError(f"{where}: the new {name} key is not the old one with an ML-DSA-65 half added")
+        message = canonical_bytes(statement)
+        for name, field in zip(("old_principal", "new_principal", "old_witness", "new_witness"), _UPGRADE_SIGNATURES):
+            if not verify(keys[name], message, body.get(field) or ""):
+                raise LedgerError(f"{where}: {field} failed")
+
+    def _upgrade_statement(self, entry: Entry, where: str) -> dict:
+        """The signed statement of a ``keys_upgraded`` entry, checked for its place, its suites and its keys."""
+        try:
+            statement = {k: entry.body[k] for k in _UPGRADE_FIELDS}
+        except KeyError:
+            raise LedgerError(f"{where} is malformed") from None
+        if (statement["format"] != KEYS_UPGRADE_FORMAT or statement["seq"] != entry.seq
+                or statement["prev"] != entry.prev):
+            raise LedgerError(f"{where} does not belong at this place in the chain")
+        if (self._upgraded_at is not None or statement["from_alg"] != CLASSICAL_ALG
+                or statement["to_alg"] != HYBRID_ALG):
+            raise LedgerError(f"{where}: a ledger moves from {CLASSICAL_ALG} to {HYBRID_ALG} once")
+        if self._witness_pin is None or statement["old_witness_public_key"] != self._witness_pin[0]:
+            raise LedgerError(f"{where} does not start from the pinned witness key")
+        if statement["new_principal_public_key"] != public_raw(self.public_key):
+            raise LedgerError(f"{where} names a principal key other than this ledger's")
+        return statement
 
     def _witness_mismatch(self, raw: str) -> str | None:
         """What a witness public key fails to match: the pin in the ledger, then the configured pin."""
@@ -719,13 +838,16 @@ class Ledger:
         return None
 
     def _check_witness(self, key, where: str) -> None:
-        expected = self._witness_mismatch(public_raw(key.public_key()))
+        expected = self._witness_mismatch(public_raw(self._suite_keys(key)[2].public_key()))
         if expected:
             raise LedgerError(f"witness_key_changed: {where} does not match {expected}; restore that key, or "
                               "change it with rotate_witness")
 
-    def _require_witness(self):
-        """Load ``witness.pem`` for a write and refuse it if it is missing or does not match a pin."""
+    def _require_witness(self, *, writing: bool = False):
+        """Load ``witness.pem`` for a write and refuse it if it is missing or does not match a pin. ``writing`` is
+        a change only a ledger past any pending key upgrade may make."""
+        if writing and self.upgrade_pending:
+            raise LedgerError(KEYS_UPGRADE_PENDING)
         if not self.witness_path.exists():
             raise LedgerError("witness key missing; refusing to sign a head the principal key alone could forge")
         key = self._load_witness()
@@ -769,7 +891,7 @@ class Ledger:
             raise LedgerError("ledger body must be an object")
         if kind in _WITNESS_KINDS:
             raise LedgerError(f"{kind} entries are written by the ledger itself; change the witness key with "
-                              "rotate_witness")
+                              "rotate_witness, and upgrade the keys with upgrade_keys")
         if kind == "ledger_recovered":
             raise LedgerError("ledger_recovered entries are written by two-key recover")
         with self._exclusive():
@@ -778,6 +900,8 @@ class Ledger:
             return self._append_unlocked(kind, body)
 
     def _append_unlocked(self, kind: str, body: dict) -> Entry:
+        if self.upgrade_pending and kind not in ("keys_upgraded", "ledger_recovered"):
+            raise LedgerError(KEYS_UPGRADE_PENDING)
         prev = self.entries[-1].entry_hash if self.entries else "0" * 64
         seq = len(self.entries)
         entry_hash = self._hash(seq, prev, kind, body)
@@ -825,17 +949,18 @@ class Ledger:
         else:
             self._check_witness(witness, "the witness key")
         self._witness = witness
+        principal, principal_public, witness_signer = self._suite_keys(witness)
         head = {
             "size": len(self.entries),
             "tip": self.entries[-1].entry_hash if self.entries else "0" * 64,
             "merkle_root": self.merkle_root(),
-            "public_key": public_raw(self.public_key),
-            "witness_public_key": public_raw(witness.public_key()),
+            "public_key": public_raw(principal_public),
+            "witness_public_key": public_raw(witness_signer.public_key()),
         }
         signed = canonical_bytes(head)
         stored = dict(head)
-        stored["signature"] = sign(self.private_key, signed)
-        stored["witness_signature"] = sign(witness, signed)
+        stored["signature"] = sign(principal, signed)
+        stored["witness_signature"] = sign(witness_signer, signed)
         self._store_head(_seal(self._data_key, json.dumps(stored)) + "\n")
         self._head_witness = head["witness_public_key"]
         self._sync_anchor_forward()
@@ -922,33 +1047,56 @@ class Ledger:
         for field in ("tip", "merkle_root", "public_key", "witness_public_key"):
             if type(body[field]) is not str:
                 raise LedgerError("head anchor is not a two-key head anchor")
-        if body["public_key"] != public_raw(self.public_key):
-            raise LedgerError("head anchor was signed by a different principal key")
+        principal = self._anchor_principal(body["public_key"])
         message = canonical_bytes(body)
-        if not verify(self.public_key, message, stored.get("signature") or ""):
+        if not verify(principal, message, stored.get("signature") or ""):
             raise LedgerError("head anchor principal signature failed")
         witness_pub = _witness_public(body["witness_public_key"], "head anchor witness key")
         if not verify(witness_pub, message, stored.get("witness_signature") or ""):
             raise LedgerError("head anchor witness signature failed")
         return body
 
+    def _anchor_principal(self, raw: str):
+        """The key an anchor's principal signature is checked with: this ledger's, or, for an anchor from before
+        the key upgrade, the Ed25519 key it was upgraded from (``_checked_anchor`` says when that is accepted)."""
+        if not self._is_ledger_principal(raw):
+            self._refuse_upgraded_from(raw)
+            raise LedgerError("head anchor was signed by a different principal key (the key given is not this "
+                              "ledger's principal key; check --key or principal_key)")
+        return self.public_key if raw == public_raw(self.public_key) else self._classical_principal()
+
+    def _checked_anchor(self) -> dict | None:
+        """The anchor, once the chain is read. One signed by the Ed25519 principal half is accepted only while the
+        upgrade is pending, or when it is from before the upgrade and the ledger ends at the keys_upgraded entry
+        (the upgrade stopped between its head and its anchor); else an Ed25519 forger could pass off an old anchor."""
+        anchor = self._read_anchor()
+        if anchor is None or anchor["public_key"] == public_raw(self.public_key) or self.upgrade_pending:
+            return anchor
+        if (self._upgraded_at is not None and anchor["size"] <= self._upgraded_at
+                and len(self.entries) == self._upgraded_at + 1):
+            return anchor
+        raise LedgerError("head anchor was signed by the principal key from before the key upgrade, and the "
+                          "ledger has moved on since; it is not this ledger's anchor")
+
     def _anchor_view(self) -> dict:
-        witness_raw = self._head_witness or public_raw(self._witness.public_key())
+        _, principal_public, witness_signer = self._suite_keys(self._witness)
+        witness_raw = self._head_witness or public_raw(witness_signer.public_key())
         return {
             "format": ANCHOR_FORMAT,
             "size": len(self.entries),
             "tip": self.entries[-1].entry_hash if self.entries else "0" * 64,
             "merkle_root": self.merkle_root(),
-            "public_key": public_raw(self.public_key),
+            "public_key": public_raw(principal_public),
             "witness_public_key": witness_raw,
         }
 
     def _write_anchor(self, body: dict) -> None:
         """Atomically replace the anchor with ``body``, signed by the principal and the current witness."""
+        principal, _, witness_signer = self._suite_keys(self._witness)
         signed = canonical_bytes(body)
         stored = dict(body)
-        stored["signature"] = sign(self.private_key, signed)
-        stored["witness_signature"] = sign(self._witness, signed)
+        stored["signature"] = sign(principal, signed)
+        stored["witness_signature"] = sign(witness_signer, signed)
         parent = self._anchor_path.parent
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if parent == self.ledger_key_path.parent:
@@ -964,7 +1112,7 @@ class Ledger:
         _platform.fsync_dir(parent)
 
     def _reject_if_behind_anchor(self) -> None:
-        anchor = self._read_anchor()
+        anchor = self._checked_anchor()
         if anchor is None:
             return
         size = len(self.entries)
@@ -980,7 +1128,7 @@ class Ledger:
         if self._head_witness is None:
             return
         current = self._anchor_view()
-        existing = self._read_anchor()
+        existing = self._checked_anchor()
         if existing is not None:
             if existing["size"] > current["size"]:
                 raise LedgerError(self._rollback_message(current["size"], existing))
@@ -998,8 +1146,7 @@ class Ledger:
     @classmethod
     def recover_tail(cls, path: Path | str, private_key, public_key=None, *,
                      witness_path: Path | str | None = None, ledger_key_path: Path | str | None = None,
-                     witness_public_key: Ed25519PublicKey | None = None,
-                     anchor_path: Path | str | None = None) -> dict:
+                     witness_public_key=None, anchor_path: Path | str | None = None) -> dict:
         """Drop only the bytes after the signed head, then record that fact.
 
         Refuses when the signed prefix itself does not verify, when the head is behind the anchor (that is
@@ -1032,7 +1179,7 @@ class Ledger:
             raise LedgerError("recovery refused: principal head signature failed")
         if not verify(public_from_raw(body["witness_public_key"]), message, stored.get("witness_signature") or ""):
             raise LedgerError("recovery refused: witness head signature failed")
-        if body["public_key"] != public_raw(self.public_key):
+        if not self._is_ledger_principal(body["public_key"]):
             raise LedgerError("recovery refused: head principal public key does not match this ledger's principal key")
         if type(body["size"]) is not int or isinstance(body["size"], bool) or body["size"] < 1:
             raise LedgerError("recovery refused: the signed head does not cover any entry; refusing to clear the file")
@@ -1090,7 +1237,8 @@ class Ledger:
                     head["tip"] != anchor["tip"] or head["merkle_root"] != anchor["merkle_root"]))):
             raise LedgerError(self._rollback_message(head["size"], anchor)
                               + " recover will not roll the anchor back.")
-        if head["witness_public_key"] != public_raw(self._witness.public_key()):
+        if head["witness_public_key"] not in (public_raw(self._witness.public_key()),
+                                              public_raw(classical_half(self._witness).public_key())):
             raise LedgerError("recovery refused: witness.pem does not match the signed head; the file was not changed")
         if self._configured_witness is not None and head["witness_public_key"] != self._configured_witness:
             raise LedgerError("witness_key_changed: the head is signed by a witness key other than the configured "
@@ -1125,7 +1273,7 @@ class Ledger:
             if os.path.lexists(tmp) and not tmp.is_symlink():
                 os.unlink(tmp)
             _platform.fsync_dir(self.path)
-        body = {"dropped_bytes": len(tail), "dropped_sha256": "sha256:" + digest,
+        body = {"dropped_bytes": len(tail), "dropped_sha256": _SHA256 + digest,
                 "dropped_nonempty_lines": tail_lines, "tail_torn": tail_torn,
                 "head_size": head["size"], "tail_file": str(dest)}
         opened = self._reopen()
@@ -1140,7 +1288,7 @@ class Ledger:
     def _merkle_add(self, leaf: bytes) -> None:
         self._merkle_roots.append(_merkle_push(self._merkle_ranges, leaf).hex())
 
-    def rotate_witness(self, new_witness: Ed25519PrivateKey | None = None, *, reason: str = "") -> dict:
+    def rotate_witness(self, new_witness: HybridPrivateKey | None = None, *, reason: str = "") -> dict:
         """Replace the witness key with ``new_witness`` (a new key when omitted), as a ledgered change.
 
         Writes a ``witness_rotated`` entry signed by the principal, the current ``witness.pem``, and the new
@@ -1158,13 +1306,13 @@ class Ledger:
         """
         if new_witness is None:
             new_witness = generate_private_key()
-        if not isinstance(new_witness, Ed25519PrivateKey):
-            raise LedgerError("the new witness key must be an Ed25519 private key")
+        if not isinstance(new_witness, HybridPrivateKey):
+            raise LedgerError("the new witness key must be a hybrid Ed25519 + ML-DSA-65 private key")
         if not isinstance(reason, str) or len(reason) > _KEEP_CHARS:
             raise LedgerError(f"reason must be a string of at most {_KEEP_CHARS} characters")
         staged = self.witness_path.with_name(self.witness_path.name + ".new")
         with self._exclusive():
-            old = self._require_witness()
+            old = self._require_witness(writing=True)
             old_raw, new_raw = public_raw(old.public_key()), public_raw(new_witness.public_key())
             if new_raw == old_raw:
                 raise LedgerError("witness_rotation_refused: the new witness key is the current one")
@@ -1211,6 +1359,68 @@ class Ledger:
                 "new_witness_key_fingerprint": witness_key_fingerprint(new_raw),
                 "witness_public_key_path": str(self.witness_path.with_suffix(".pub.pem")) if written else None}
 
+    def upgrade_keys(self, new_principal: HybridPrivateKey | None = None, *,
+                     capability_key_fingerprint: str | None = None, stamp_key_fingerprint: str | None = None) -> dict:
+        """Record the key upgrade (0.9.0, ``two_key/upgrade.py``).
+
+        Writes a ``keys_upgraded`` entry: the old (Ed25519) and new (hybrid) principal and witness keys and the
+        new capability and stamp key fingerprints, signed by all four keys, then a head and an anchor signed by
+        the new keys. ``witness.pem`` is already hybrid. A ledger opened with the 0.8.0 principal key takes the
+        hybrid key made from it as ``new_principal``; one opened with the hybrid key (``upgrade_pending``)
+        needs none. The fingerprints are those of the hybrid capability and stamp keys on disk, None for one
+        this deployment does not have. If the head cannot be written after the entry is, the ledger will not
+        open until the entry is removed, as after a crash. An out-of-ledger witness pin follows the upgrade in
+        memory only; the operator replaces it with ``witness.pub.pem``.
+        """
+        with self._exclusive():
+            if new_principal is not None and not self.upgrade_pending:
+                self._adopt_upgraded_principal(new_principal)
+            if not self.upgrade_pending:
+                raise LedgerError("keys_upgrade_refused: this ledger is not waiting for a key upgrade")
+            witness = self._require_witness()
+            if not is_hybrid(witness) or not isinstance(self.private_key, HybridPrivateKey):
+                raise LedgerError("keys_upgrade_refused: the principal and witness key files must be hybrid first")
+            statement = {"format": KEYS_UPGRADE_FORMAT, "seq": len(self.entries),
+                         "prev": self.entries[-1].entry_hash if self.entries else "0" * 64,
+                         "from_alg": CLASSICAL_ALG, "to_alg": HYBRID_ALG,
+                         "old_principal_public_key": public_raw(classical_half(self.public_key)),
+                         "new_principal_public_key": public_raw(self.public_key),
+                         "old_witness_public_key": self._witness_pin[0],
+                         "new_witness_public_key": public_raw(witness.public_key()),
+                         "capability_key_fingerprint": capability_key_fingerprint,
+                         "stamp_key_fingerprint": stamp_key_fingerprint}
+            message = canonical_bytes(statement)
+            signers = (classical_half(self.private_key), self.private_key, classical_half(witness), witness)
+            body = {**statement, **{field: sign(key, message) for field, key in zip(_UPGRADE_SIGNATURES, signers)}}
+            # The check a later open makes, before anything is written: a wrong key stops here.
+            self._verify_upgrade(Entry(statement["seq"], statement["prev"], "keys_upgraded", body, ""))
+            self._append_unlocked("keys_upgraded", body)
+            configured = self._configured_witness
+            if configured is not None:
+                self._configured_witness = statement["new_witness_public_key"]
+            try:
+                self._checkpoint_unlocked(witness)
+            except Exception as e:
+                self._configured_witness = configured
+                raise LedgerError(f"keys_upgraded was written but no head covers it "
+                                  f"({cap_ledger_text(f'{type_tag(e)}: {e}')}); the ledger will not open until that "
+                                  "entry is removed (HOWTO \"If the ledger will not open after a crash\"); then "
+                                  "run two-key keys upgrade again") from e
+            self._sync_witness_public()
+        return {"seq": statement["seq"],
+                "principal_key_fingerprint": witness_key_fingerprint(statement["new_principal_public_key"]),
+                "witness_key_fingerprint": witness_key_fingerprint(statement["new_witness_public_key"])}
+
+    def _adopt_upgraded_principal(self, new_principal) -> None:
+        """Take the hybrid key made from this ledger's 0.8.0 principal key; the upgrade is then pending."""
+        if (self._upgraded_at is not None or is_hybrid(self.public_key) or not is_hybrid(new_principal)
+                or public_raw(classical_half(new_principal).public_key()) != public_raw(self.public_key)):
+            raise LedgerError("keys_upgrade_refused: the new principal key is not this ledger's 0.8.0 principal key "
+                              "with an ML-DSA-65 half added")
+        self.private_key, self.public_key = new_principal, new_principal.public_key()
+        self._public_key_arg = None
+        self.upgrade_pending = True
+
     def _verify_head(self) -> None:
         if not self.entries:
             return
@@ -1223,10 +1433,11 @@ class Ledger:
             raise LedgerError("principal head signature failed")
         if not verify(public_from_raw(body["witness_public_key"]), message, stored.get("witness_signature") or ""):
             raise LedgerError("witness head signature failed")
-        if body["public_key"] != public_raw(self.public_key):
-            raise LedgerError("head principal public key does not match this ledger's principal key")
+        self._check_head_principal(body["public_key"], body["size"])
         if body["size"] != len(self.entries) or body["tip"] != self.entries[-1].entry_hash:
-            raise LedgerError("signed head does not match the chain")
+            raise LedgerError("signed head does not match the chain (a write stopped before its head, or the files "
+                              "were changed; after a crash see HOWTO \"If the ledger will not open after a crash\": "
+                              "two-key recover)")
         if body["merkle_root"] != self.merkle_root():
             raise LedgerError("signed head merkle root mismatch")
         # After the chain checks, so an entry the head does not cover (a crash before a checkpoint, including
@@ -1235,6 +1446,43 @@ class Ledger:
         if expected:
             raise LedgerError(f"witness_key_changed: the head is signed by a witness key other than {expected}")
         self._head_witness = body["witness_public_key"]
+
+    def _check_head_principal(self, raw: str, size) -> None:
+        """The signed head's principal is this ledger's key, or (``_head_from_other_suite``) the Ed25519 key it was
+        upgraded from; and no rotation signed by that Ed25519 key is left without a keys_upgraded after it."""
+        if raw != public_raw(self.public_key):
+            self._head_from_other_suite(raw, size)
+        if self._classical_rotations and not self.upgrade_pending:
+            raise LedgerError(f"ledger chain failed verification: witness_rotated at {self._classical_rotations[0]} "
+                              "is signed by the Ed25519 half of the principal key, and no keys_upgraded entry "
+                              "follows it")
+
+    def _head_from_other_suite(self, raw: str, size) -> None:
+        """A head whose principal is not this ledger's key. Signed by the Ed25519 half of this hybrid key, before
+        any keys_upgraded entry: the upgrade is pending. One from before a keys_upgraded entry it does not cover
+        (the upgrade stopped before its head) is left to the chain check, which says so. Anything else is
+        refused, and a 0.8.0 key on a ledger that has been upgraded is told so."""
+        old = self._classical_principal()
+        if old is not None and raw == public_raw(old):
+            if self._upgraded_at is None:
+                self.upgrade_pending = True
+                return
+            if type(size) is int and size <= self._upgraded_at:
+                return
+        self._refuse_upgraded_from(raw)
+        raise LedgerError("head principal public key does not match this ledger's principal key")
+
+    def _refuse_upgraded_from(self, raw) -> None:
+        """Refuse with ``keys_upgraded`` when this ledger was opened with the 0.8.0 key that ``raw`` (a signed
+        head's or anchor's principal) was upgraded from: there is no way back to Ed25519 alone."""
+        try:
+            signer = public_from_raw(raw)
+        except (TypeError, ValueError):
+            return
+        if (not is_hybrid(self.public_key) and is_hybrid(signer)
+                and public_raw(classical_half(signer)) == public_raw(self.public_key)):
+            raise LedgerError("keys_upgraded: this ledger's keys were upgraded to hybrid Ed25519 + ML-DSA-65, and "
+                              "the 0.8.0 principal key is refused; use the upgraded principal key file")
 
     def merkle_root(self, size: int | None = None) -> str:
         n = len(self.entries) if size is None else size
@@ -1252,6 +1500,13 @@ class Ledger:
 
     def redemption_started(self, jti: str) -> bool:
         return jti in self._started and jti not in self._redeemed
+
+    def tool_held(self, tool: str) -> bool:
+        """True while ``tool`` is held: a ``tool_held`` entry with no ``tool_released`` after it (#28)."""
+        return tool in self._held
+
+    def held_tools(self) -> list[str]:
+        return sorted(self._held)
 
     def last_before(self, size: int, kind: str) -> Entry | None:
         """The last entry of ``kind`` with ``seq`` below ``size``, or None.

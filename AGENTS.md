@@ -34,9 +34,8 @@ Do **not** add a scanning or antivirus engine, a SIEM or log storage, chain
 anchoring, or seed phrases here. The items in [ROADMAP.md](ROADMAP.md) are in
 scope: key backup (shipped in 0.3.0), an MCP adapter (0.5.0), DLP and
 antivirus hooks that call external scanners (0.6.0), ledger export for a SIEM
-(0.7.0), and, after 1.0, PKI with
-certificate recovery, hybrid ML-DSA signatures, a FIPS approved mode, and a
-local GUI. Build them in the order and with the limits stated
+(0.7.0), hybrid ML-DSA signatures (0.9.0), and, after 1.0, PKI with certificate recovery, a FIPS approved
+mode once a validated module offers ML-DSA-65, and a local GUI. Build them in the order and with the limits stated
 there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
@@ -58,7 +57,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10; CI tests 3.10 to 3.14 (3.15 in a Linux job that does not block, until PyYAML ships 3.15 wheels; no `requires-python` cap). Package name `two-key`, import name `two_key`,
-version `0.8.0` on PyPI (`pip install "two-key[yaml]==0.8.0"`), tag `v0.8.0` on `main`. Tags are not moved. docs/PYPI.md is the release process. `server.json` (the MCP Registry listing) carries the same version as `pyproject.toml`; bump them together.
+version `0.9.0` on PyPI (`pip install "two-key[yaml]==0.9.0"`), tag `v0.9.0` on `main`. Tags are not moved. docs/PYPI.md is the release process. `server.json` (the MCP Registry listing) carries the same version as `pyproject.toml`; bump them together.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
@@ -81,11 +80,11 @@ there), not in `pyproject.toml`. CI installs them with `--require-hashes`.
 
 | Extra | Provides | When needed |
 | --- | --- | --- |
-| (none) | `cryptography>=41` | Ed25519, SHA-256, AES-256-GCM ledger |
+| (none) | `cryptography>=48` | Hybrid Ed25519 + ML-DSA-65 signatures, SHA-256, AES-256-GCM ledger |
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0); `two-key config show`, `get`, `check`, `set`, and `undo`, and `two-key setup`, read and write the proxy config without the SDK (`setup` needs it only to read a schema digest from the server) |
 
-Index install: `pip install "two-key[yaml]==0.8.0"`.
+Index install: `pip install "two-key[yaml]==0.9.0"`.
 From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.8.0"`.
 
 ## Tests and docs
@@ -95,8 +94,12 @@ From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-Vib
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/CONSTITUTION_EDITOR.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
+  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/CONSTITUTION_EDITOR.md`, `docs/TOOL_CHECK.md`, `docs/QUICKSTART.md`, `docs/DEMO.md`, `docs/GUI_WALKTHROUGH.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
+- docs/QUICKSTART.md (0.9.0) is run in CI by `tests/quickstart_run.py`: every ```bash block runs in order
+  in a new folder and must exit 0, unless the `<!-- quickstart: ... -->` line above it says `skip`, `exit=N`
+  or `expect=TEXT`. Its judge there is a stand-in that always votes yes; keep that stand-in out of the
+  package and out of any example. A command changed on the page is a command changed in CI.
 - A new setting (a key a loader accepts) gets a row in `two_key/settings.py`.
   `docs/SETTINGS.md` is generated from it: run `python tests/test_settings_doc.py
   --write`. The test fails on a key with no row and on a page that is not what
@@ -123,10 +126,13 @@ From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-Vib
 
 ## Crypto and security changes
 
-Crypto here is Ed25519 and SHA-256 via `cryptography`, plus AES-256-GCM for
-ledger ciphertext. The ledger key, witness key, and capability private key
-live outside the ledger directory. The gateway must verify only; it must not
-mint.
+Crypto here is hybrid Ed25519 + ML-DSA-65 signatures (0.9.0) and SHA-256 via
+`cryptography`, plus AES-256-GCM for ledger ciphertext. Every signature is made
+and checked in `two_key/keys.py` (`sign`, `verify`); do not call a key's own
+`sign` or `verify` elsewhere, and never add a path that accepts an Ed25519-only
+signature where a hybrid one is expected. The ledger key, witness key, and
+capability private key live outside the ledger directory. The gateway must
+verify only; it must not mint.
 
 Before changing authorization, tokens, the gateway, the ledger, or judge ≠
 agent identity checks: get a security review from the maintainer. Report
@@ -175,7 +181,11 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   counterparty ids or fuzzy-match them. The one wider form is a signed
   `@domain` allow entry (v3): a plain address at exactly that ASCII domain,
   no subdomains, no wildcards, never in `deny_counterparties`
-  (`tests/test_domain_allow.py`). Do not widen it.
+  (`tests/test_domain_allow.py`). Do not widen it. A `path` field (0.9.0)
+  is the one folder-shaped match: cleaned as text only, `..` and relative
+  paths refused, inside a signed folder segment by segment, and passed to
+  the tool cleaned (`tests/test_path_fields.py`). Never resolve `..` by
+  text, accept a relative path, or compare with a plain string prefix.
 - `agent_vocabulary()` is opt-in and lists syntax, never a value: no
   `allow` list, enum value, integer bound, rule, threshold,
   `deny_counterparties`, description, default, or `irreversible` flag
@@ -204,7 +214,7 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   (`tests/test_case_exact.py`). A constitution with no custom fields must
   stay byte-for-byte v1 (`tests/test_fields_compat.py`); one without a
   0.5.0 feature (a caller field, a `case: exact` field, a `not_applicable`
-  mark, an `@domain` allow entry) must not sign as v3. Each signs only as
+  mark, an `@domain` allow entry) or a `path` field must not sign as v3. Each signs only as
   v3, and a v1 or v2 envelope that carries one is refused.
 - Format identifiers are `two-key-...` (0.4.0). Files with the old
   `two-key-concept-...` formats are refused with a clear message, never
@@ -424,5 +434,18 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   `two_key/constitution_editor.py`, the window in
   `two_key/constitution_gui.py` (`tests/test_constitution_editor.py`,
   `tests/test_constitution_gui.py`).
+- The tool check (#28, 0.9.0, `two_key/toolcheck.py`, docs/TOOL_CHECK.md) is for tools behind
+  `two-key mcp-proxy` only, turned on in the tool's signed spec (`tool_check`), and required (or `exempt`,
+  weaker) under `high_assurance`. The stamp key signs stamps only; every signed object carries a purpose label;
+  the token and stamp leave the process only after `redemption_started`. The tool helper fails closed: keep
+  every error inside it a refusal. The test vectors in docs/TOOL_CHECK.md are generated
+  (`python tests/test_toolcheck_vectors.py --write`). A tool error spends the token for every tool.
+- `two-key setup --window` (0.9.0) is a front end only: it builds the same
+  answers the terminal interview does and calls the same
+  `setup_cmd.build`, so it can never write what `setup --answers` would
+  refuse. Keep the checks it shows in `two_key/setup_form.py`, the window
+  in `two_key/setup_gui.py` (`tests/test_setup_form.py`, which also checks
+  the window and the interview write the same files, and
+  `tests/test_setup_gui.py`).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

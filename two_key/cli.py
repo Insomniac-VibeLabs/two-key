@@ -9,6 +9,8 @@
                     [--facts FILE] [--agent-session-env NAME] [--ttl-seconds N] [--emit-token PATH]
                     [--witness-public-key PEM]
   two-key rotate-witness --key KEY --ledger DIR [--witness-public-key PEM] [--reason TEXT]
+  two-key keys upgrade (--config FILE | --key KEY --ledger DIR [--constitution FILE]
+                    [--witness-public-key PEM] [--head-anchor PATH])
   two-key recover --key KEY --ledger DIR [--witness-public-key PEM] [--head-anchor PATH]
   two-key backup-export --key KEY --ledger DIR --out DIR \
                     --principal-passphrase-env NAME --ledger-passphrase-env NAME \
@@ -36,7 +38,7 @@
                     [--confirm-weaker] [--key KEY --rules FILE]
   two-key config undo --config FILE [--confirm-weaker] [--key KEY]
   two-key config key-passphrase --config FILE (--new-from FILE | --remove) [--confirm-weaker]
-  two-key setup --dir DIR [--answers FILE [--confirm-weaker]]
+  two-key setup --dir DIR [--answers FILE [--confirm-weaker]] [--window]
 
 Every command that takes --key also takes --key-passphrase-file FILE for an encrypted key; without it, it
 asks on the terminal (docs/SETUP.md).
@@ -52,7 +54,9 @@ taken on argv, where other local users and shell history can see it.
 ``--witness-public-key PEM`` is the witness pin outside the ledger: a copy of the
 witness public key kept where whoever writes the ledger directory cannot change it.
 ``rotate-witness`` changes the witness key as a ledgered ``witness_rotated`` entry;
-update that copy afterwards. ``recover`` drops only an uncheckpointed tail
+update that copy afterwards. ``keys upgrade`` makes a 0.8.0 deployment's Ed25519 keys hybrid
+Ed25519 + ML-DSA-65 and records ``keys_upgraded``; the first start of 0.9.0 does it by itself, except where
+the witness key is also pinned outside the ledger (docs/UPGRADING.md). ``recover`` drops only an uncheckpointed tail
 (a crash between append and checkpoint) and records it. It does not roll a
 signed head backwards, and it does not run on open. ``audit`` verifies the
 ledger and the decision digests and prints both witness pins as JSON. The
@@ -93,7 +97,7 @@ from pathlib import Path
 from . import _platform
 from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, encrypted_pass_notes, load_serial,
                            load_unsigned_with_fields, save_envelope, sign_constitution)
-from .fields import case_warnings, not_applicable_notes
+from .fields import case_warnings, not_applicable_notes, path_notes
 from .keys import (check_new_passphrase, generate_private_key, load_private_key_file, load_public_key, passphrase_source,
                    prompt_passphrase, read_passphrase_file, save_private_key, save_public_key)
 from .policy_vm import ConstitutionError
@@ -161,6 +165,8 @@ def _sign(args) -> int:
         print(f"two-key: {'WARNING' if warn else 'note'}: {line}", file=sys.stderr)
     for line in encrypted_pass_notes(signed["tool_specs"]):
         print(f"two-key: WARNING: {line}", file=sys.stderr)
+    for line in path_notes(signed["tool_specs"], registry):
+        print(f"two-key: note: {line}", file=sys.stderr)
     print(f"wrote {args.out}")
     return 0
 
@@ -289,6 +295,74 @@ def _open_ledger(args, key):
         return None
 
 
+def _tool_key_new(args) -> int:
+    """``two-key tool-key new``: a tool's receipt key (#28), owner-only, and the fingerprint to sign into its spec."""
+    from .toolcheck import new_tool_key
+    try:
+        fingerprint = new_tool_key(args.out)
+    except FileExistsError:
+        raise SystemExit(f"--out: {args.out} exists; a tool key is never replaced in place") from None
+    print(json.dumps({"ok": True, "tool_private_key": str(args.out), "fingerprint": fingerprint,
+                      "next": "sign it into the tool's spec as tool_check: {key: <fingerprint>} (two-key config set "
+                              "tool_specs.<tool>.tool_check, or the constitution editor); keep the key file where "
+                              "only the tool's account can read it"}, indent=2))
+    return 0
+
+
+def _tool_key_trust(args) -> int:
+    """``two-key tool-key trust``: Two-Key's two public keys for a checking tool, each checked against the
+    fingerprint the ledger pins, written to ``--out`` with the fingerprints to put in the tool's config."""
+    from .capability import capability_key_fingerprint
+    from .keys import load_public_key, save_public_key
+    from .toolcheck import key_fingerprint, stamp_key_path
+    ledger = _open_ledger(args, _principal_key(args))
+    if ledger is None:
+        return 1
+    loaded = ledger.last_before(ledger.size(), "constitution_loaded")
+    body = loaded.body if loaded is not None else {}
+    if not body.get("stamp_key_fingerprint"):
+        print(json.dumps({"ok": False, "error": "no tool in the running constitution has the tool check on, so "
+                                                "this ledger pins no stamp key; sign tool_check into a tool's spec "
+                                                "and start Two-Key once"}, indent=2))
+        return 1
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    written = {}
+    for name, source, pinned, fp in (
+            ("capability", ledger.capability_key_path().with_name("capability.pub.pem"),
+             body.get("capability_key_fingerprint"), capability_key_fingerprint),
+            ("stamp", stamp_key_path(ledger).with_name("stamp.pub.pem"), body["stamp_key_fingerprint"],
+             key_fingerprint)):
+        public = load_public_key(source)
+        if fp(public) != pinned:
+            print(json.dumps({"ok": False, "error": f"{source} is not the {name} key the ledger pins"}, indent=2))
+            return 1
+        target = out / f"two-key-{name}.pub.pem"
+        save_public_key(target, public)
+        written[f"{name}_public_key"] = str(target)
+        written[f"{name}_key_fingerprint"] = pinned
+    print(json.dumps({"ok": True, **written,
+                      "next": "put these paths and fingerprints in the tool's check config (docs/TOOL_CHECK.md)"},
+                     indent=2))
+    return 0
+
+
+def _tool_release(args) -> int:
+    """``two-key tool release``: calls to a tool held after a bad receipt go ahead again; ledgered with why."""
+    reason = (args.reason or "").strip()
+    if not reason:
+        raise SystemExit("--reason: say why the tool can be trusted again; it is recorded in the ledger")
+    ledger = _open_ledger(args, _principal_key(args))
+    if ledger is None:
+        return 1
+    if not ledger.tool_held(args.tool):
+        print(json.dumps({"ok": False, "error": f"{args.tool} is not held", "held": ledger.held_tools()}, indent=2))
+        return 1
+    ledger.record("tool_released", {"tool": args.tool, "reason": reason[:200]})
+    print(json.dumps({"ok": True, "released": args.tool, "held": ledger.held_tools()}, indent=2))
+    return 0
+
+
 def _rotate_witness(args) -> int:
     from .ledger import LedgerError
     key = _principal_key(args)
@@ -307,6 +381,53 @@ def _rotate_witness(args) -> int:
                                  ". witness.pub.pem could not be written; the next open of the ledger writes it")},
                      indent=2))
     return 0
+
+
+def _keys_upgrade(args) -> int:
+    """``two-key keys upgrade``: the key upgrade by hand (``two_key/upgrade.py``), for a deployment the first start
+    will not upgrade by itself (an out-of-ledger witness pin), or to do it before that start."""
+    from .ledger import LedgerError
+    from .upgrade import open_upgraded
+    if args.config:
+        from .mcp_proxy.config import ProxyConfigError, load_proxy_config
+        try:
+            config = load_proxy_config(args.config)
+        except ProxyConfigError as e:
+            print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+            return 1
+        where = (config.principal_key, passphrase_source(config.principal_passphrase_file), config.ledger,
+                 config.constitution, config.witness_public_key, config.head_anchor)
+    elif args.key and args.ledger:
+        where = (args.key, _key_passphrase(args), args.ledger, args.constitution, _pin_path(args), _anchor_arg(args))
+    else:
+        print(json.dumps({"ok": False, "error": "give --config FILE, or --key KEY and --ledger DIR"}, indent=2))
+        return 1
+    key_path, passphrase, ledger, constitution, pin, anchor = where
+    try:
+        opened = open_upgraded(key_path, passphrase, ledger, constitution=constitution, witness_public_key=pin,
+                               anchor_path=anchor, automatic=False)
+    except (LedgerError, ValueError, OSError) as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+        return 1
+    result = {"ok": True, "upgraded": opened.upgraded, "keys_upgraded": opened.entry, "replaced": opened.replaced}
+    if not opened.upgraded:
+        result["note"] = "the keys are already hybrid; " + _signed_again(opened.replaced)
+    elif pin is not None:
+        result["next"] = (f"replace the out-of-ledger witness pin {pin} with "
+                          f"{opened.ledger.witness_path.with_suffix('.pub.pem')}, then back up (two-key backup-export)")
+    else:
+        result["next"] = "back up now (two-key backup-export): a backup from before the upgrade holds the old keys"
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def _signed_again(replaced: list) -> str:
+    return f"signed again with the hybrid key: {', '.join(replaced)}" if replaced else "nothing to do"
+
+
+def _pin_path(args):
+    """``--witness-public-key`` as a path, checked as ``_witness_pin`` checks it, or None."""
+    return None if _witness_pin(args) is None else args.witness_public_key
 
 
 def _audit(args) -> int:
@@ -466,12 +587,46 @@ def _write_token(path: Path, token: str) -> None:
         fh.write(token + "\n")
 
 
-def _authorize(args) -> int:
-    from .constitution import load_envelope
-    from .core import TwoKey
+def _open_upgraded(args, key):
+    """The principal key and the ledger, the key upgrade done first when the deployment needs it
+    (``two_key/upgrade.py``), or None after printing why not."""
+    from .ledger import LedgerError
+    from .upgrade import open_upgraded
+    pin = _pin_path(args)
+    try:
+        opened = open_upgraded(args.key, _key_passphrase(args), args.ledger,
+                               constitution=getattr(args, "constitution", None), witness_public_key=pin,
+                               anchor_path=_anchor_arg(args), principal=key)
+    except (LedgerError, ValueError, OSError) as e:
+        print(f"ledger refused: {e}", file=sys.stderr)
+        return None
+    return opened.principal, opened.ledger
+
+
+def _open_two_key(args):
+    """``authorize``'s TwoKey, or None after printing why it would not start (a refusal, not a traceback)."""
+    from .constitution import ConstitutionSignatureError, load_envelope
+    from .core import TwoKey, TwoKeyConfigError
     from .identity import load_monitored_agent_file
     from .judges.config import load_config_file
-    from .ledger import Ledger, LedgerError
+    key = _principal_key(args)
+    judges, policy = load_config_file(Path(args.judges))
+    # The monitored agent is declared by the operator in the judges file, never by the agent.
+    agent = load_monitored_agent_file(Path(args.judges))
+    opened = _open_upgraded(args, key)
+    if opened is None:
+        return None
+    key, ledger = opened
+    try:
+        return TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
+                           private_key=key, quorum=policy, monitored_agent=agent,
+                           ttl_seconds=args.ttl_seconds)
+    except (TwoKeyConfigError, ConstitutionError, ConstitutionSignatureError) as e:
+        print(f"two-key: refused to start: {e}", file=sys.stderr)
+        return None
+
+
+def _authorize(args) -> int:
     if args.agent_session is not None:
         print("--agent-session took the secret on the command line and is no longer accepted; "
               "put it in an environment variable and pass --agent-session-env NAME", file=sys.stderr)
@@ -503,18 +658,9 @@ def _authorize(args) -> int:
     if token_path is not None and (token_path.exists() or token_path.is_symlink()):
         print(f"refusing to overwrite {token_path}", file=sys.stderr)
         return 1
-    key = _principal_key(args)
-    judges, policy = load_config_file(Path(args.judges))
-    # The monitored agent is declared by the operator in the judges file, never by the agent.
-    agent = load_monitored_agent_file(Path(args.judges))
-    try:
-        ledger = Ledger(args.ledger, key, witness_public_key=_witness_pin(args), anchor_path=_anchor_arg(args))
-    except LedgerError as e:
-        print(f"ledger refused: {e}", file=sys.stderr)
+    tk = _open_two_key(args)
+    if tk is None:
         return 1
-    tk = TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
-                     private_key=key, quorum=policy, monitored_agent=agent,
-                     ttl_seconds=args.ttl_seconds)
     action = {"tool": args.tool}
     # Omitted claims are not lies: derive fills amount and counterparty from the
     # bytes, irreversible from the spec, and a missing data_class from normalize_action (#53).
@@ -587,8 +733,26 @@ def _config_key_passphrase(args) -> int:
 
 
 def _setup(args) -> int:
+    if getattr(args, "window", False):
+        return _setup_window(args)
     from .setup_cmd import run
     return run(args)
+
+
+def _setup_window(args) -> int:
+    from .setup_cmd import SetupError
+    try:
+        from .setup_gui import load_for_window, show
+    except ImportError:
+        print("two-key setup: the window needs tkinter, which this Python does not have (on Debian and Ubuntu: apt "
+              "install python3-tk); answer on the terminal, or give --answers FILE", file=sys.stderr)
+        return 1
+    try:
+        answers = load_for_window(args.answers)
+    except SetupError as e:
+        print(f"two-key setup: refused: {e}", file=sys.stderr)
+        return 1
+    return show(answers, folder=args.dir)
 
 
 def _draft_env(items: list[str] | None) -> dict[str, str]:
@@ -750,6 +914,7 @@ def _backup_restore(args) -> int:
     return 0
 
 
+_CONSTITUTION_FLAG = "--constitution"
 _PROXY_CONFIG_HELP = "the proxy config file (YAML or JSON)"
 _KEY_HELP = "the principal private key (principal.pem from init-key, mode 0600); not principal.pub.pem"
 _KEY_UNLOCK_HELP = ("for an encrypted --key: a file only you can read holding its passphrase; without it, "
@@ -795,7 +960,7 @@ def main(argv: list[str] | None = None) -> int:
     auth = sub.add_parser("authorize", help="run Path A and Path B; do not execute the tool")
     _add_key(auth)
     auth.add_argument("--ledger", required=True)
-    auth.add_argument("--constitution", required=True)
+    auth.add_argument(_CONSTITUTION_FLAG, required=True)
     auth.add_argument("--judges", required=True)
     auth.add_argument("--tool", required=True)
     auth.add_argument("--args", default="{}")
@@ -828,6 +993,18 @@ def main(argv: list[str] | None = None) -> int:
     rotate.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     rotate.add_argument("--reason", default="", help="recorded in the witness_rotated entry (at most 200 characters)")
     rotate.set_defaults(func=_rotate_witness)
+    keys = sub.add_parser("keys", help="the key upgrade to hybrid Ed25519 + ML-DSA-65 (docs/UPGRADING.md)")
+    keys_sub = keys.add_subparsers(dest="keys_cmd", required=True)
+    upgrader = keys_sub.add_parser("upgrade", help="make a 0.8.0 deployment's keys hybrid and record keys_upgraded")
+    upgrader.add_argument("--config", default=None, metavar="FILE", help=_PROXY_CONFIG_HELP)
+    upgrader.add_argument("--key", default=None, help=_KEY_HELP)
+    upgrader.add_argument("--key-passphrase-file", default=None, metavar="FILE", help=_KEY_UNLOCK_HELP)
+    upgrader.add_argument("--ledger", default=None)
+    upgrader.add_argument(_CONSTITUTION_FLAG, default=None, metavar="FILE",
+                          help="the signed constitution, signed again with the hybrid key")
+    upgrader.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    upgrader.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    upgrader.set_defaults(func=_keys_upgrade)
     audit = sub.add_parser("audit", help="verify the ledger and print its witness pins and digest checks")
     _add_key(audit)
     audit.add_argument("--ledger", required=True)
@@ -940,6 +1117,29 @@ def main(argv: list[str] | None = None) -> int:
     siem_verify.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     siem_verify.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
     siem_verify.set_defaults(func=_siem_verify)
+    tool_key = sub.add_parser("tool-key", help="keys for the tool check (docs/TOOL_CHECK.md)")
+    tool_key_sub = tool_key.add_subparsers(dest="tool_key_cmd", required=True)
+    maker = tool_key_sub.add_parser("new", help="make a tool's receipt key and print its fingerprint")
+    maker.add_argument("--out", required=True, metavar="FILE", help="the new private key file (never replaced)")
+    maker.set_defaults(func=_tool_key_new)
+    truster = tool_key_sub.add_parser("trust", help="write Two-Key's two public keys for a checking tool, each "
+                                                    "checked against the ledger's pin")
+    _add_key(truster)
+    truster.add_argument("--ledger", required=True)
+    truster.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    truster.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    truster.add_argument("--out", required=True, metavar="DIR", help="the folder to write the two public keys to")
+    truster.set_defaults(func=_tool_key_trust)
+    tool = sub.add_parser("tool", help="a checked tool held after a bad receipt")
+    tool_sub = tool.add_subparsers(dest="tool_cmd", required=True)
+    releaser = tool_sub.add_parser("release", help="let calls to a held tool go ahead again, ledgered with why")
+    _add_key(releaser)
+    releaser.add_argument("tool", help="the tool's signed id")
+    releaser.add_argument("--ledger", required=True)
+    releaser.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    releaser.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    releaser.add_argument("--reason", required=True, help="why the tool can be trusted again (at most 200 characters)")
+    releaser.set_defaults(func=_tool_release)
     proxy = sub.add_parser("mcp-proxy", help="serve an upstream MCP server's signed tools over stdio, through "
                                              "both keys (needs the mcp extra)")
     proxy.add_argument("--config", required=True, help=_PROXY_CONFIG_HELP)
@@ -1005,12 +1205,15 @@ def main(argv: list[str] | None = None) -> int:
                        help="read the answers from this YAML or JSON file instead of asking (docs/SETUP.md)")
     setup.add_argument("--confirm-weaker", action="store_true",
                        help="go ahead with --answers quorum numbers below the profile's own, after a typed yes")
+    setup.add_argument("--window", action="store_true",
+                       help="answer in a window instead of on the terminal (tkinter); with --answers, start from "
+                            "that file")
     setup.set_defaults(func=_setup)
     drafter = sub.add_parser("mcp-draft-specs", help="draft tool_specs and the schema digest from an upstream MCP "
                                                      "server, for the principal to review and sign (needs the mcp extra)")
     drafter.add_argument("--out", default=None, metavar="DIR",
                          help="write rules.draft.yaml, proxy-tools.draft.yaml, and schemas.json here (never overwritten)")
-    drafter.add_argument("--constitution", default=None, metavar="FILE",
+    drafter.add_argument(_CONSTITUTION_FLAG, default=None, metavar="FILE",
                          help="instead, print the schema_digest of this signed constitution's tools")
     drafter.add_argument("--tool", action="append", default=None, metavar="NAME",
                          help="draft only this upstream tool (repeatable); default: all")

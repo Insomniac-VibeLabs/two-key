@@ -61,6 +61,12 @@ SAMPLE_BODIES = {
                         "old_witness_public_key": "AAAA", "new_witness_public_key": "BBBB",
                         "reason": REVOKE_SECRET, "principal_signature": "s1",
                         "old_witness_signature": "s2", "new_witness_signature": "s3"},
+    "keys_upgraded": {"format": "two-key-keys-upgraded/1", "seq": 3, "prev": "0" * 64, "from_alg": "ed25519",
+                      "to_alg": "ed25519+ml-dsa-65", "old_principal_public_key": "AAAA",
+                      "new_principal_public_key": "BBBB", "old_witness_public_key": "CCCC",
+                      "new_witness_public_key": "DDDD", "capability_key_fingerprint": "hybrid-sha256:" + "0" * 64,
+                      "stamp_key_fingerprint": None, "old_principal_signature": "s1",
+                      "new_principal_signature": "s2", "old_witness_signature": "s3", "new_witness_signature": "s4"},
     "ledger_recovered": {"dropped_bytes": 10, "dropped_sha256": "sha256:" + "0" * 64,
                          "dropped_nonempty_lines": 1, "tail_torn": False, "head_size": 4,
                          "tail_file": "/tmp/" + SECRET},
@@ -73,6 +79,9 @@ SAMPLE_BODIES = {
                           "tools": {"search": {"claim": "floor", "facts": []}},
                           "signed_tools_not_listed": []},
     "tool_not_offered": {"origin": "mcp-proxy", "tool": "nope"},
+    "tool_receipt_invalid": {"jti": "j1", "tool": "search", "why": "bad_signature"},
+    "tool_held": {"tool": "search", "jti": "j1", "why": "missing"},
+    "tool_released": {"tool": "search", "reason": REVOKE_SECRET},
     "config_changed": {"command": "set", "settings": ["ttl_seconds"], "signed": False, "weaker": [],
                        "confirmed": False, "constitution_hash": None, "account": SECRET,
                        "files": [{"role": "proxy", "file": "proxy.yaml", "old_sha256": "sha256:" + "0" * 64,
@@ -474,12 +483,27 @@ class Delivering(Fixture):
         self.assertEqual(sink.seqs(), list(range(size)))
 
     def test_a_stuck_sink_does_not_delay_a_decision(self):
-        sink = ListSink(delay=5.0)
+        # The sink stays stuck until the test lets it go, so no clock is involved: three decisions return while
+        # the sender is still inside send(). Had a decision waited for the sink, it would only return after the
+        # sink gave up (``returned``), and the last assertion fails.
+        class StuckSink(ListSink):
+            def __init__(self):
+                super().__init__()
+                self.entered, self.release, self.returned = threading.Event(), threading.Event(), False
+
+            def send(self, messages):
+                self.entered.set()
+                self.release.wait(30)
+                self.returned = True
+                super().send(messages)
+
+        sink = StuckSink()
         tk = self.start(siem_config=self.config(sink, replay_from="start"))
-        started = time.monotonic()
+        self.addCleanup(sink.release.set)       # runs before start()'s tk.close
+        self.assertTrue(sink.entered.wait(10))
         for _ in range(3):
             self.assertTrue(tk.authorize(SEARCH, {"q": "weather"}, "look").allowed)
-        self.assertLess(time.monotonic() - started, 4.0)
+        self.assertFalse(sink.returned)
 
     def test_a_sink_that_cannot_be_reached_at_start_is_a_warning_not_a_refusal(self):
         class Unreachable(ListSink):
@@ -683,7 +707,7 @@ class RefusedThroughTheGateway(Fixture):
         before = tk.ledger.size()
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            for token in ("garbage", "tk1.e30.AAAA", None):
+            for token in ("garbage", "tk2.e30.AAAA", None):
                 self.assertFalse(gateway.invoke(token, "search", {"q": SECRET}).allowed)
         self.assertEqual(tk.ledger.size(), before, "an unverified token must not write to the ledger")
         counts = gateway.refused_token_counts()
@@ -698,7 +722,7 @@ class RefusedThroughTheGateway(Fixture):
         self.assertFalse(reported["ledgered"])
         self.assertEqual(reported["seq"], -1)
         self.assertNotIn(SECRET, sink.text)
-        self.assertNotIn("tk1.e30.AAAA", sink.text)
+        self.assertNotIn("tk2.e30.AAAA", sink.text)
 
     def test_close_waits_for_the_sender_s_last_pass(self):
         """A collector that takes a moment must not lose the tail: close waits for one pass over every sink,

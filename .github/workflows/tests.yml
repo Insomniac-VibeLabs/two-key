@@ -30,10 +30,30 @@ jobs:
           pip install --require-hashes --only-binary :all: -r .github/requirements/uv.txt
           uv sync --locked --no-build --extra yaml --extra mcp --no-dev --python python --no-managed-python --no-python-downloads
       - name: Tests
-        run: uv run --no-sync --no-build python -m unittest discover -s tests
+        run: uv run --no-sync --no-build python -X faulthandler -m unittest discover -s tests
       - name: Demo
         if: ${{ !cancelled() }}
         run: uv run --no-sync --no-build python -m two_key demo
+
+  # docs/QUICKSTART.md, every command on it in order (tests/quickstart_run.py), with a stand-in judge.
+  quickstart:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13"
+      - name: Install from uv.lock
+        run: |
+          pip install --require-hashes --only-binary :all: -r .github/requirements/uv.txt
+          uv sync --locked --no-build --extra yaml --no-dev --python python --no-managed-python --no-python-downloads
+      - name: Quickstart
+        run: uv run --no-sync --no-build python tests/quickstart_run.py
 
   # Python 3.15 ahead of its release: Linux only, and not required. PyYAML publishes no cp315 wheel yet,
   # so it alone is built from source (the runner has a compiler); every other package stays wheels only, so a
@@ -55,7 +75,7 @@ jobs:
           export UV_NO_BUILD_PACKAGE="$(python -c 'import tomllib; print(" ".join(sorted({p["name"] for p in tomllib.load(open("uv.lock", "rb"))["package"]} - {"pyyaml", "two-key"})))')"
           uv sync --locked --extra yaml --extra mcp --no-dev --python python --no-managed-python --no-python-downloads
       - name: Tests
-        run: uv run --no-sync --no-build python -m unittest discover -s tests
+        run: uv run --no-sync --no-build python -X faulthandler -m unittest discover -s tests
       - name: Demo
         if: ${{ !cancelled() }}
         run: uv run --no-sync --no-build python -m two_key demo

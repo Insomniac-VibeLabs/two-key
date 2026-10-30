@@ -16,8 +16,9 @@ from unittest.mock import patch
 from two_key.capability import _b64u_dec
 from two_key.cli import main
 from two_key.constitution import save_envelope, sign_constitution
-from two_key.core import TwoKey
-from two_key.keys import generate_private_key, load_private_key_file, save_private_key, save_public_key
+from two_key.core import TwoKey, TwoKeyConfigError
+from two_key.keys import (classical_half, generate_private_key, load_private_key_file, save_private_key,
+                          save_public_key)
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
@@ -60,12 +61,32 @@ class CliTokens(unittest.TestCase):
             code = main(argv)
         return code, out.getvalue(), err.getvalue()
 
+    def test_a_config_refusal_is_a_message_not_a_traceback(self):
+        refusal = TwoKeyConfigError("monitored_agent 'agent': credential_env AGENT_KEY is not set")
+        with patch(f"{__name__}._load_with_doubles", side_effect=refusal):     # run_cli wraps it as TwoKey.load
+            code, out, err = self.run_cli()
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("refused to start: monitored_agent 'agent': credential_env AGENT_KEY is not set", err)
+        self.assertNotIn("Traceback", err)
+
+    def test_a_constitution_signed_by_the_0_8_0_key_is_a_refusal_that_says_how_to_sign_it_again(self):
+        """After the key upgrade, a constitution the start did not sign again: refused, with the command."""
+        save_envelope(self.dir / "c.json", sign_constitution(PROSE, RULES, classical_half(self.key), SPECS))
+        code, out, err = self.run_cli()
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("refused to start: constitution signature failed: it is signed by this principal's 0.8.0 "
+                      "Ed25519 key", err)
+        self.assertIn("two-key keys upgrade --key KEY --ledger DIR --constitution FILE", err)
+        self.assertNotIn("Traceback", err)
+
     def test_token_never_printed_jti_and_digest_are(self):
         code, out, _ = self.run_cli()
         self.assertEqual(code, 0)
         rec = json.loads(out)
         self.assertNotIn("token", rec)
-        self.assertNotIn("tk1.", out)
+        self.assertNotIn("tk2.", out)
         self.assertTrue(rec["token_digest"].startswith("sha256:") or len(rec["token_digest"]) >= 32)
         issued = [e for e in Ledger(self.dir / "ledger", self.key).entries if e.kind == "capability_issued"]
         self.assertEqual(issued[-1].body["jti"], rec["token_jti"])
@@ -77,7 +98,7 @@ class CliTokens(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(private(path))
         token = path.read_text().strip()
-        self.assertTrue(token.startswith("tk1."))
+        self.assertTrue(token.startswith("tk2."))
         self.assertNotIn(token, out)
         self.assertEqual(json.loads(out)["token_file"], str(path))
         code, _, err = self.run_cli("--emit-token", str(path))

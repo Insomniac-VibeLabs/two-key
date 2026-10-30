@@ -99,6 +99,7 @@ Sent, where the entry has it:
 | `*_size`, `*_digest` | the size and digest of an argument set, a proposal, or a revocation reason |
 | `verdict`, `categories`, `scanner`, `stance`, `elapsed_ms`, `parts[]` | the content scan: its verdict and each part's size and digest |
 | `witness_fingerprint`, `source` | the witness key pinned or rotated, as a fingerprint |
+| `from_alg`, `to_alg`, `old_principal_fingerprint`, `new_principal_fingerprint`, `old_witness_fingerprint`, `new_witness_fingerprint`, `capability_key_fingerprint`, `stamp_key_fingerprint` | the key upgrade (`keys_upgraded`, 0.9.0): the suites, and each key before and after, as fingerprints; never a key or a signature |
 | `origin` | `library`, `cli`, `mcp-proxy`, or whatever the integration declared |
 | `at`, `history_digest` | when a decision was made (UTC, to the second), and the digest of the judge history summary the judges saw (0.8.0; `null` when none was sent) |
 | `error_class`, `on_failure` | `judge_history_failed` (0.8.0): why the summary could not be built, as a class, and whether the call was denied or judged without it |
@@ -226,8 +227,8 @@ event as the message:
 ```
 
 Severity: an allow is informational (6), a deny, a gateway refusal, or a
-refused-token count is warning (4), and a witness pin or rotation, a recovery,
-or a revocation is notice (5).
+refused-token count is warning (4), and a witness pin or rotation, the key
+upgrade, a recovery, or a revocation is notice (5).
 
 Webhook settings: `auth_header` (default `Authorization` when
 `auth_value_file` is set) with `auth_value_file`, `hmac_key_file` (adds

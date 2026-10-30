@@ -1,0 +1,64 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
+name: mcp-registry
+
+# Lists the release on the official MCP Registry (server.json), after the same version is on PyPI.
+# A manual run on the PyPI branch only, in the pypi environment, so it waits for the maintainer's
+# approval. Signs in with GitHub Actions OIDC: no token lives in this repository. docs/PYPI.md is the
+# operator procedure.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-registry
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/PyPI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Insomniac-VibeLabs/two-key
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      # mcp-publisher v1.8.6, checked against that release's registry_1.8.6_checksums.txt.
+      PUBLISHER_URL: https://github.com/modelcontextprotocol/registry/releases/download/v1.8.6/mcp-publisher_linux_amd64.tar.gz
+      PUBLISHER_SHA256: 1fbe93fc0783c2394d8012c8d6e50a59e98cb2cc2d216264cc69f405d0e21340
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: server.json names this version, and it is on PyPI
+        run: |
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          python3 - "$version" <<'EOF'
+          import json, sys
+          version = sys.argv[1]
+          server = json.load(open("server.json"))
+          found = {server["version"], *(p["version"] for p in server["packages"])}
+          if found != {version}:
+              sys.exit(f"Refusing to publish: server.json versions {sorted(found)} are not project version {version}.")
+          EOF
+          code="$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/two-key/${version}/json")"
+          if [ "$code" != "200" ]; then
+            echo "Refusing to publish: two-key ${version} is not on PyPI yet (HTTP ${code}). Publish to PyPI first." >&2
+            exit 1
+          fi
+      - name: Install mcp-publisher
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/mcp-publisher.tar.gz" "$PUBLISHER_URL"
+          echo "${PUBLISHER_SHA256}  $RUNNER_TEMP/mcp-publisher.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/mcp-publisher.tar.gz" -C "$RUNNER_TEMP" mcp-publisher
+      - name: Sign in with GitHub Actions OIDC
+        run: '"$RUNNER_TEMP/mcp-publisher" login github-oidc'
+      - name: Publish the listing
+        run: '"$RUNNER_TEMP/mcp-publisher" publish'

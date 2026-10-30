@@ -167,6 +167,26 @@ SPDX-License-Identifier: Apache-2.0
 - [The proxy's start names its agent — 2026-10-28](#the-proxys-start-names-its-agent--2026-10-28)
 - [Live run 11 findings — 2026-10-28](#live-run-11-findings--2026-10-28)
 - [Release v0.8.0: judge history, ballot records, one proxy per agent, two windows — 2026-10-28](#release-v080-judge-history-ballot-records-one-proxy-per-agent-two-windows--2026-10-28)
+- [Publish from the PyPI branch only — 2026-10-28](#publish-from-the-pypi-branch-only--2026-10-28)
+- [One confirm for every tool: `tools[*].claim` — 2026-10-28](#one-confirm-for-every-tool-toolsclaim--2026-10-28)
+- [A setup window beside the terminal: `two-key setup --window` — 2026-10-28](#a-setup-window-beside-the-terminal-two-key-setup---window--2026-10-28)
+- [A tool error spends the token — 2026-10-28](#a-tool-error-spends-the-token--2026-10-28)
+- [The tool check: a tool behind the proxy checks its own calls (#28) — 2026-10-28](#the-tool-check-a-tool-behind-the-proxy-checks-its-own-calls-28--2026-10-28)
+- [A ten-minute quickstart, run in CI — 2026-10-28](#a-ten-minute-quickstart-run-in-ci--2026-10-28)
+- [Tool check CI fixes — 2026-10-28](#tool-check-ci-fixes--2026-10-28)
+- [Hybrid quantum-resistant signatures — 2026-10-29](#hybrid-quantum-resistant-signatures--2026-10-29)
+- [Key upgrade follow-ups: backup, old constitutions, the library route — 2026-10-29](#key-upgrade-follow-ups-backup-old-constitutions-the-library-route--2026-10-29)
+- [Docs: upgrading from 0.8.0 to 0.9.0 — 2026-10-29](#docs-upgrading-from-080-to-090--2026-10-29)
+- [Docs checked against the 0.9.0 code — 2026-10-29](#docs-checked-against-the-090-code--2026-10-29)
+- [A SIEM test that no longer races the clock — 2026-10-29](#a-siem-test-that-no-longer-races-the-clock--2026-10-29)
+- [FIPS mode after 1.0, and a clearer README — 2026-10-29](#fips-mode-after-10-and-a-clearer-readme--2026-10-29)
+- [Live run 12 findings — 2026-10-29](#live-run-12-findings--2026-10-29)
+- [Setup window keys and an owner-only signed constitution — 2026-10-29](#setup-window-keys-and-an-owner-only-signed-constitution--2026-10-29)
+- [An illustrated walkthrough of the windows — 2026-10-29](#an-illustrated-walkthrough-of-the-windows--2026-10-29)
+- [Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29](#release-v090-hybrid-signatures-the-tool-check-a-setup-window--2026-10-29)
+- [The first-time demo is taken out — 2026-10-30](#the-first-time-demo-is-taken-out--2026-10-30)
+- [Folder-path fields for Path A — 2026-10-30](#folder-path-fields-for-path-a--2026-10-30)
+- [A first-time demo on a real tool server — 2026-10-30](#a-first-time-demo-on-a-real-tool-server--2026-10-30)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5048,3 +5068,412 @@ the upgrade: a ledger written by 0.8.0 is not meant to be opened by 0.7.3 again.
 - A proxy with a judge that is not on this machine needs `agent_session_env`, or it refuses to start.
 
 docs/UPGRADING.md has the full row.
+
+## Publish from the PyPI branch only — 2026-10-28
+
+`.github/workflows/pypi-publish.yml` no longer runs on a tag push. A release is a manual run of
+`publish` on the `PyPI` branch, as 0.7.0 to 0.7.3 were. The `v0.8.0` tag push started the workflow, and
+its publish job was refused because the `pypi` environment only deploys from the `PyPI` branch. The tag
+stays where it is: it is the git snapshot of 0.8.0, not the upload. The tag-version check step went with
+the trigger. docs/PYPI.md and the README's file table say so.
+
+The README drops the bold line under the banner, which repeated the opening sentence (Stephan's edit on `main`, b4c3095, brought to `working`).
+
+0.8.0 is listed on the official MCP Registry as `io.github.Insomniac-VibeLabs/two-key` (2026-10-28). docs/PYPI.md now says the browser sign-in is refused for an organization name and a `read:org` token is needed.
+
+New workflow `.github/workflows/mcp-registry.yml`: one **Run workflow** on the `PyPI` branch, approved in the `pypi` environment, lists the release on the MCP Registry. It signs in with GitHub Actions OIDC, so no personal token is needed, and refuses a `server.json` version that differs from `pyproject.toml` or is not on PyPI yet. `mcp-publisher` v1.8.6 is pinned by its SHA-256. docs/PYPI.md and the README file table describe it.
+
+## One confirm for every tool: `tools[*].claim` — 2026-10-28
+
+First 0.9.0 change (live run 11, C1: lowering the data class claim on every tool needed one confirmation per tool,
+and setting the whole `tools` block as JSON replaced every other per-tool setting). `two-key config set` takes `[*]` in place
+of a tool's id: `tools[*].claim` in `proxy.yaml` and `tool_specs[*].<setting>` in the signed rules. It is one change: the
+whole configuration is checked once, one `--confirm-weaker` and one typed yes cover every tool, one `config_changed`
+entry names each tool, and one `config undo` puts them all back. `tools[*]` reaches every tool the constitution signs,
+set in `proxy.yaml` or not; with `--unset`, a tool that does not set it is skipped. `[*]` anywhere else is refused
+(`every_tool`). `config get tools[*].claim` prints the value for each tool. docs/SETUP.md, "Finding a setting's name",
+has an example.
+
+## A setup window beside the terminal: `two-key setup --window` — 2026-10-28
+
+Maintainer's request (2026-10-28): a window for `two-key setup`, as a choice beside the terminal interview, not a
+replacement. `two-key setup --dir DIR --window` asks the same questions on seven pages (Deployment, Judges, Quorum,
+Agent and history, Rules and prose, Proxy, Review and set up) and calls the same `build`, so the files, what is
+refused and the `config_changed` entry are the same; `tests/test_setup_form.py` checks that the same answers write
+the same files from the terminal and from the window. With `--answers FILE` the window opens filled in.
+
+- A **High assurance** switch sets the profile, fills in its quorum numbers and makes them minimums (raised, never
+  lowered: maintainer's decision), and shows grayed out what the profile locks: `require_local_yes`,
+  `on_writable_paths` and `on_agent_access` refuse, no plaintext SIEM sink, `upstream.check_paths` required.
+- The status line always says whether setup would go ahead; **Set up** stays off until it would. A weaker answer
+  needs `yes` typed beside it. Afterwards, buttons open `constitution-editor` and `ledger-view` on the new folder.
+- **Save answers file** writes owner-only JSON (variable names and paths, never a value) for
+  `setup --answers` on a machine with no screen.
+- A judge or agent nobody can tell the server of is a warning, as in `config check` (live run 11 decision), not a
+  refusal.
+- New `two_key/setup_form.py` (the checks, no window) and `two_key/setup_gui.py` (tkinter). `setup_cmd` gains
+  `needs_upstream` and makes `quorum_findings` public; the interview's questions are unchanged.
+- ROADMAP: the "Not planned" line no longer excludes a GUI that holds the signing key (maintainer, 2026-10-28), and
+  the 0.9.0 section lists the setup window, `tools[*].claim` and quantum-resistant signatures. Docs: SETUP.md "The
+  setup window", HOWTO, THREAT_MODEL, AGENTS.md, llms.txt.
+
+## A tool error spends the token — 2026-10-28
+
+Maintainer's decision on #28 (Q6: B, 2026-10-28). Until now `redemption_aborted` put the token back: after a tool
+raised, the same token could be redeemed again until it expired (120 seconds by default, at most 300), so a tool
+that did part of its work and then failed could run twice on one approval. Now an abort leaves the token spent, for
+every tool and every route: a second try is refused `already_attempted`, after a restart too, and the agent asks
+again (the judges decide again). A ledger written by 0.8.0 that holds a redemption after an abort still reads as
+redeemed. HOWTO, THREAT_MODEL and the gateway's docstring say so.
+
+## The tool check: a tool behind the proxy checks its own calls (#28) — 2026-10-28
+
+Built from the design note the maintainer approved on 2026-10-28 (risks R1 to R11; Q1 to Q3 A, Q4 SQLite, Q5 the
+MCP proxy only, Q6 above). docs/TOOL_CHECK.md describes it for operators and for tool authors in any language.
+
+- A tool's **signed** spec takes `tool_check`: `{key: sha256:<fingerprint>}` turns the check on, `exempt` leaves it
+  off. Absent, nothing changes: tokens, the ledger and the gateway behave as in 0.8.0, and the spec hashes as before.
+- For a checked tool the token gains `tool_args_hash` (the arguments as the tool receives them, after projection).
+  The gateway checks it (`tool_args_mismatch`), writes `redemption_started`, then signs a **redeem stamp**
+  (`tks1`, label `two-key-redeem-stamp/1`) with a new **stamp key** that signs nothing else, and the proxy sends
+  the token and stamp in the request's `_meta` under `io.github.insomniac-vibelabs/two-key`.
+- New `two_key/toolcheck.py`: the tool's checks in a fixed order (`check_missing`, `stamp_invalid`,
+  `token_invalid`, `stamp_mismatch`, `tool_mismatch`, `args_mismatch`, `expired` with a fixed 5-second
+  allowance, `replayed` through an owner-only SQLite seen record), a signed **receipt** (`tkr1`, label
+  `two-key-tool-receipt/1`) over the jti, the stamp and the result, and `mcp_call` for a server on the MCP
+  Python SDK. Any error inside the helper is a refusal.
+- The gateway checks the receipt against the pinned key and writes `redemption` with `stamp_hash`,
+  `receipt_hash` and `receipt_outcome`. A missing or bad one is `tool_receipt_invalid` (sent to the SIEM); under
+  `high_assurance` the agent gets no output and the tool is held (`tool_held`, kept across restarts) until
+  `two-key tool release TOOL --reason TEXT` (`tool_released`).
+- `high_assurance`: `mcp-proxy` refuses to start (`tool_check_required`) and `config check` fails for a tool with
+  neither a key nor `exempt`; `exempt` is weaker (typed yes). `config check` lists each tool's check.
+- New commands: `two-key tool-key new --out FILE` (a tool's key and its fingerprint), `two-key tool-key trust`
+  (Two-Key's two public keys, checked against the ledger's pins), `two-key tool release`.
+- `constitution_loaded` records `stamp_key_fingerprint` and `tool_check_keys` when a tool is checked.
+- Setup asks for each starter tool's check on the proxy route, and the setup window has a column for it; the High
+  assurance switch makes it required. A check on the guard or library route is refused (Q5): there the tool runs
+  in Two-Key's own process.
+- Tests: `tests/test_toolcheck.py` (each check, the receipt reasons, both profiles, the hold surviving a restart),
+  `tests/test_toolcheck_mcp.py` (a real MCP server behind the proxy: a call through it passes, the same call sent
+  to the server directly is refused), and `tests/test_toolcheck_vectors.py` (the test vectors in TOOL_CHECK.md).
+- Docs: TOOL_CHECK.md (new), HOWTO, CONNECTING, SETUP, SETTINGS (generated), SCOPE, THREAT_MODEL, UPGRADING, README,
+  ROADMAP, AGENTS.md, llms.txt.
+- Differs from the design note in one detail: the stamp's hash is in `redemption`, not `redemption_started`, since
+  the stamp names the `redemption_started` entry's position and is signed after it.
+- The setup window's PR checks: the starting quorum is `dict.fromkeys` (SonarCloud S7519); `_table` and the test's
+  `fill` are static methods (DeepSource PYL-R0201); the upstream command is read on its own line before
+  `shlex.join`, which DeepSource took for an SQL join (PY-W0800).
+
+## A ten-minute quickstart, run in CI — 2026-10-28
+
+- docs/QUICKSTART.md: from `pip install` to one call Two-Key allows and one it refuses, then both in the ledger
+  view, on one machine with a local Ollama judge and no API key. It uses `two-key setup --answers` (guard route)
+  and `two-key authorize`.
+- Every command on the page runs in CI (a new `quickstart` job on Linux and macOS, `tests/quickstart_run.py`),
+  except installing from PyPI and starting Ollama: CI installs the checkout, and answers for the judge with a
+  stand-in that always votes yes. The stand-in lives in that script only. `tests/test_quickstart_doc.py`
+  checks the page still has the blocks and markers the script expects.
+- Fix: `two-key authorize` printed a Python traceback when Two-Key refused to start (for example, the monitored
+  agent's `credential_env` variable not set). It now prints `two-key: refused to start: <why>` and exits 1.
+- Step 3 sets up either in the terminal (`two-key setup --answers`, run in CI) or in the setup window
+  (`two-key setup --window --answers`, from the same answers file). `tests/test_setup_gui.py` opens the window
+  from the page's own answers file and sets up from it, so the window half is tested where a display is.
+- README: one sentence in Quick start links to the quickstart, for the command line and the windows (the
+  maintainer's yes, 2026-10-28).
+
+## Tool check CI fixes — 2026-10-28
+
+- A test read POSIX mode bits for the stamp key and the seen record, which mean
+  nothing on Windows; it now asks `perm.private`, as the other owner-only tests do. The test vectors in
+  TOOL_CHECK.md show each token, stamp and receipt as its three parts, because written whole a token's
+  `tk1.eyJ...` shape tripped Semgrep's JWT rule (they are made from public seeds). The test run uses
+  `-X faulthandler`, so a crash names the test it happened in (one macOS 3.14 run ended with a segfault).
+- SonarCloud's 14 findings on the tool check: each `assertRaises` in test_toolcheck now wraps one call; an
+  `except` no longer lists an exception beside its parent (`EncodingError`, `ToolCheckError` and
+  `UnicodeError` are all `ValueError`s); `sha256:` and `refused:` are constants in toolcheck.py; the witness
+  half of `Ledger._track` is its own method, so neither is over Sonar's complexity limit; and an unused
+  test helper is gone. No behavior changed.
+
+## Hybrid quantum-resistant signatures — 2026-10-29
+
+The maintainer's decisions of 2026-10-28 and 2026-10-29: every signature is hybrid Ed25519 + ML-DSA-65 in 0.9.0,
+and a 0.8.0 deployment is upgraded once at its first start.
+
+- Keys and signatures (`two_key/keys.py`): every new key is an Ed25519 key and an ML-DSA-65 (FIPS 204) key that
+  sign together. A signature is both, over `two-key-hybrid/1`, a zero byte, `ed25519+ml-dsa-65`, a zero byte, and
+  the message (ML-DSA-65 with the context `two-key`), and it verifies only when both do. A hybrid key refuses an
+  Ed25519-only signature, so stripping a half is a refusal, not a downgrade. A key file holds two standard PKCS8
+  PEM blocks, Ed25519 first; encrypted, it is `two-key-encrypted-key/2`. Fingerprints of hybrid keys start
+  `hybrid-sha256:`. All signing and verifying goes through `keys.sign` and `keys.verify`; backup and
+  `config set` no longer read keys with their own code.
+- Where ML-DSA-65 is missing, Two-Key refuses (`ml_dsa_unavailable`) and never signs with Ed25519 alone. It needs
+  `cryptography` 48 or later (the PyPI wheels); `pyproject.toml` and `uv.lock` say so.
+- Capability tokens are `tk2`, with `"v": 2` and `"alg": "ed25519+ml-dsa-65"` signed in. The tool check is hybrid
+  only: its stamps, receipts and token, and its keys (`tool_check.key` is now `hybrid-sha256:...`). The test
+  vectors in TOOL_CHECK.md are hybrid; ML-DSA-65 signs with fresh randomness, so the test checks that the
+  published signatures verify, and that the keys, hashes and bodies match byte for byte.
+- The key upgrade (`two_key/upgrade.py`): the first start of `two-key mcp-proxy` or `two-key authorize`, or a
+  `two-key config` change that opens the principal key, finds 0.8.0 keys and, under the ledger's lock, rewrites
+  each key file with its Ed25519 key kept and an ML-DSA-65 key added (the principal first, encrypted again under
+  its passphrase), signs the constitution again with the same body, and records `keys_upgraded`: the old and new
+  principal and witness keys, signed by all four, and the new capability and stamp key fingerprints. Every step
+  is safe to run again after a stop; until the entry is written the ledger refuses writes
+  (`keys_upgrade_pending`). It prints what it did, and `back up now` at each start until `backup-export`
+  succeeds. A 0.8.0 key is refused afterwards (`keys_upgraded`). With an out-of-ledger witness pin it refuses
+  (`keys_upgrade_needed`) and `two-key keys upgrade` does it by hand. `config check` warns about a 0.8.0 key.
+- The ledger checks `keys_upgraded` when it opens (once, from the pinned witness, each new key the old one plus
+  an ML-DSA-65 half, all four signatures), checks witness rotations from before it with the old Ed25519
+  principal, and accepts an anchor signed by the old key only while the upgrade is pending or right after it.
+  `audit` lists it with the witness pins; the SIEM export sends it as notice, with fingerprints only.
+- Tests: `tests/test_hybrid_keys.py` (both halves needed, a half or an Ed25519 signature refused, key files,
+  tokens, no ML-DSA) and `tests/test_key_upgrade.py` (a 0.8.0 deployment upgraded and running, once; an
+  encrypted key; the 0.8.0 key refused; the out-of-ledger pin; a stop at each step, including between the entry
+  and its head; no ML-DSA; the command).
+- Docs: UPGRADING (the key upgrade), TOOL_CHECK (the wire format and vectors), THREAT_MODEL, ROADMAP, SCOPE, FIT,
+  SIEM, SETUP, HOWTO, PYPI, SECURITY, AGENTS.md. The README's limits and roadmap lines were updated on
+  2026-10-29 (next entry).
+
+## Key upgrade follow-ups: backup, old constitutions, the library route — 2026-10-29
+
+From the maintainer's review and a live 0.8.0 to 0.9.0 upgrade run.
+
+- Backup (`two_key/backup.py`): the principal bundle also holds `stamp.pem`, the tool check's stamp key, where the
+  deployment has one; before, a restore lost it and every checking tool refused its stamps. Opening a backup
+  checks it against the stamp key the ledger pins (`stamp_key_missing` or a changed key is `backup_rejected`). A
+  restore writes `capability.pub.pem` and `stamp.pub.pem` back beside their keys when they are missing or hold
+  another key (`tool-key trust` reads them). A key's `alg` in the bundle is now the key's own:
+  `ed25519+ml-dsa-65`, or `ed25519` in a 0.8.0 backup, and `-encrypted` for an encrypted principal key; a label
+  that does not match the key is refused. 0.8.0 refuses a 0.9.0 bundle; 0.9.0 opens a 0.8.0 one.
+- Backup right after `two-key keys upgrade`, before any start: it was refused (`capability key does not match
+  the fingerprint pinned in the ledger`), because the last `constitution_loaded` still named the Ed25519
+  capability key. The capability pin is now the later of `constitution_loaded` and `keys_upgraded`, as
+  `open_capability_key` reads it.
+- A constitution signed by the 0.8.0 key that the upgrade did not sign again (not the one passed to that start)
+  is refused with a message that says so and names the command, instead of `constitution signature failed`
+  alone; `two-key authorize` printed a traceback for it and now prints `refused to start`. A later start never
+  signs it again by itself, so an Ed25519 forger cannot pass one off. `two-key keys upgrade --constitution FILE`
+  signs a file the operator names again once the keys are hybrid.
+- The Python library route: `TwoKey` refuses a 0.8.0 Ed25519 principal key (`keys_upgrade_needed`) instead of
+  running on it with Ed25519 signatures; `two-key keys upgrade` or `two_key.upgrade.open_upgraded` upgrades it.
+- The backup reminder names the command as it is spelt, `two-key backup-export`.
+- README: hybrid Ed25519 + ML-DSA-65 signatures are in 0.9.0 (crypto summary, known limits, roadmap table and
+  chart), with the maintainer's agreement.
+- SonarCloud: the `sha256:` prefix in `ledger.py` is one constant, and the vectors test expects each refusal by
+  name (`token_invalid`, `stamp_invalid`, `bad_signature`) rather than any exception. `backup.py` names its key
+  files once (`_PRINCIPAL`, `_CAPABILITY`, `_STAMP`, `_WITNESS`).
+- Tests: a fresh install never runs the upgrade or asks for a backup; the library route refuses a 0.8.0 key; an
+  old constitution is refused, a start does not sign it, the command does; a backup right after the upgrade
+  exports, verifies and restores; the stamp key in the bundle, its pin, and a deployment without one; a
+  mislabelled key alg; `authorize` refusing an old constitution without a traceback.
+- Docs: UPGRADING (fresh installs, other constitutions, the library route, `stamp.pem` in the backup), HOWTO
+  (the backup tables).
+  SIEM, SETUP, HOWTO, PYPI, SECURITY, AGENTS.md. The README's limits and roadmap lines still say Ed25519; they
+  wait for the maintainer.
+
+## Docs: upgrading from 0.8.0 to 0.9.0 — 2026-10-29
+
+The maintainer asked for the upgrade from 0.8.0 to be written down wherever a reader would look. It was walked
+through for real first: 0.8.0 from PyPI, set up and run, then this branch installed over it.
+
+- UPGRADING.md: "From 0.8.0 to 0.9.0, step by step": back up, install (`cryptography` 48 or later from the PyPI
+  wheel), `audit` and `config check` before the first start, which start upgrades the keys, the two lines it
+  prints, back up again, check `keys_upgraded`, sign other constitution copies again, and how to go back.
+- The walkthrough's three findings were fixed in the previous entry; the steps describe the fixed behavior:
+  `TwoKey` refuses a 0.8.0 key, so library users run `two-key keys upgrade` once, and another signed
+  constitution copy is signed again with `keys upgrade --constitution FILE` or `sign-constitution`.
+- HOWTO (Install, Authorize from Python), SETUP and QUICKSTART point a 0.8.0 user to it instead of a new setup.
+- README: 0.9.0 joins the "Upgrading from an older version" list.
+
+### Upgrading from 0.8.0
+
+Stop everything on the ledger and back up, then install 0.9.0 (it needs `cryptography` 48 or later). The first
+start of `two-key mcp-proxy`, the next `two-key authorize`, or the next `two-key config` change upgrades every
+key to hybrid Ed25519 + ML-DSA-65, once, signs the constitution again with the same body, and records
+`keys_upgraded`; it cannot be undone, and 0.8.0 does not open the ledger afterwards. Code that calls `TwoKey`
+directly, and a deployment with the witness pinned outside the ledger, run `two-key keys upgrade` instead. Back
+up again at once: the earlier backup holds the old keys. Under `high_assurance` the proxy also needs the tool
+check or `exempt` on every tool. A tool error now spends its token. The steps are in docs/UPGRADING.md, "From
+0.8.0 to 0.9.0, step by step".
+
+## Docs checked against the 0.9.0 code — 2026-10-29
+
+The maintainer asked whether every document matches what the code does. Every `two-key` command and flag the
+docs name was checked against the parser, every reason code and entry kind in backticks against the source, and
+every Mermaid diagram drawn and read. What was wrong:
+
+- QUICKSTART: a judge's no is `insufficient_yes:0<1`, not `quorum_denied` (no such reason).
+- SETUP and llms.txt: a tool check key is `hybrid-sha256:...`, not `sha256:...`; setup refuses the latter.
+- HOWTO: `two-key audit` prints `hybrid-sha256:` fingerprints after the key upgrade; an unclosed code span in
+  "Install"; the "Authorize from the command line" diagram said the ledger keeps the token, where it keeps
+  `capability_issued` (the token's id) and then the decision.
+- ROADMAP: the diagram and the "After 1.0" row still put FIPS approved mode after 1.0 (it is in 1.0.0) and left
+  hybrid signatures out of 0.9.0; the 1.0.0 section gains the FIPS bullet; approved mode never drops ML-DSA-65
+  (maintainer, 2026-10-29) instead of an open question; the GUI plan no longer says the GUI never holds the
+  principal key (the constitution editor signs, as decided 2026-10-28), and the ballot records shipped in 0.8.0.
+- SCOPE and THREAT_MODEL: a 0.9.0 entry (hybrid signatures and the key upgrade, the tool check, the setup
+  window); FIPS approved mode moved under 1.0.0; the per-judge ballot records are no longer "planned"; the
+  header says the pages cover the 0.9.0 work on `working`.
+- llms.txt: hybrid signatures and the key upgrade, and `cryptography>=48`.
+
+## A SIEM test that no longer races the clock — 2026-10-29
+
+- `test_a_stuck_sink_does_not_delay_a_decision` timed three decisions against a 4-second limit next to a sink
+  that slept 5 seconds. With hybrid signatures each decision signs more, and Windows on Python 3.10 took 4.1
+  seconds (CI on 7c5b4db). The sink now stays stuck until the test releases it, and the test checks that the
+  three decisions returned while the sender was still inside `send`. No clock, and the same claim.
+
+## FIPS mode after 1.0, and a clearer README — 2026-10-29
+
+- FIPS 140-3 approved mode moves from 1.0.0 to after 1.0 (maintainer, 2026-10-29). Every algorithm Two-Key
+  uses is already FIPS-approved, but approved mode needs a validated module that offers ML-DSA-65, and none
+  does yet: OpenSSL 3.5 is the first OpenSSL with ML-DSA, and its FIPS provider has been in NIST's validation
+  queue since October 2025; the validated OpenSSL 3.1.2 (certificate #4985) has no ML-DSA. Two-Key will not
+  drop ML-DSA-65 to get there sooner. README, ROADMAP, SCOPE, THREAT_MODEL, SECURITY, AGENTS, COMPARISON, FIT
+  and JUDGES_AND_QUORUM say so, worded as what is in place and what comes next.
+- README (maintainer's choice of facts, tables and diagrams): the roadmap says "the rest of the local GUI"
+  after 1.0, since three windows exist; the docs table gains QUICKSTART, LEDGER_VIEW and CONSTITUTION_EDITOR;
+  the Layout table gains the modules added since 0.7.3; the architecture flowchart has one box per step and
+  one ledger arrow per outcome instead of eight crossing lines; the "one call" sequence diagram has five
+  lanes instead of nine, so it can be read at page width.
+
+## Live run 12 findings — 2026-10-29
+
+GrokBot's live run 12 tested the 0.9.0 work on `working` (b0a2c7c): the 0.8.0 key upgrade, hybrid signatures,
+the tool check and the setup window. Nothing it found let a forbidden call run. What changed:
+
+- The key upgrade removes the temporary key file a kill left beside a key (`.principal.pem.<pid>.<hex>.tmp`, half
+  a private key that nothing removed), keeps each `.pub.pem` file's mode (0600 became 0644), prints a line before
+  it starts, names a folder it cannot write (`keys_upgrade_stopped: this account cannot write ...`, not a raw
+  `PermissionError`), and tells the first start that lost a race to start again (`keys_upgraded_elsewhere`, not
+  "names a principal key other than this ledger's").
+- `signed head does not match the chain` points to `two-key recover`, and UPGRADING no longer says every step of
+  the upgrade is safe to rerun: a kill between `keys_upgraded` and its head needs `recover` first.
+- A call to a tool held after a bad receipt (`high_assurance`) is denied `tool_held` before either path, so the
+  judges are not asked and no token is issued. The gateway still refuses a token issued before the hold.
+- A `tk1` token minted before the key upgrade is refused `token_before_upgrade`, not `malformed_token`.
+- A key that is not the ledger's principal says so beside `head anchor was signed by a different principal key`.
+- `config set` on a signed setting names the `hard_rules.yaml` setup kept when given another rules file, and a
+  weaker tool check change says how it is weaker (`exempt (the check is turned off)`, `turned off`, `another
+  receipt key`) instead of `changed`.
+- `config check` names the one provider every judge comes from, and says a provider is who serves the calls.
+- The setup window keeps `Set up in ...` on its status line after setup, and adds what is wrong with answers
+  changed since. Button and menu labels use `...` instead of `…`, which some X fonts draw as a box.
+- Docs: UPGRADING names `pre-upgrade-copy` in step 1, quotes the real `config check` line for an out-of-ledger
+  witness pin, and covers writable folders, kept modes, recovery, old bundles (`--witness-public-key`), the SIEM
+  `stamp_key_fingerprint: null`, and `revoked_or_reloaded` after a restart. TOOL_CHECK says turning the check on
+  still asks for the typed `yes` every signed change asks for, that `--rules` is `hard_rules.yaml`, and how to
+  pass an `upstream.env` value (`{"env": "NAME"}`). HOWTO shows a local OpenAI-compatible judge that declares
+  `upstream:` instead of `allow_unresolved_identity`. SETUP says the window writes default values out.
+  THREAT_MODEL says a credential in a message body to an allowed recipient is stopped by the scanner or the
+  judges, not by Path A.
+- Live harness: C140 (setup under `high_assurance`) signs a receipt key into every tool, as #28 requires; C94,
+  whose step needs C140's folder, is INCONCLUSIVE ("skipped") instead of ERROR when C140 fails; C32 accepts the
+  earlier `caller_field_in_arguments:po_matched` deny, as C79 does; C19 counts any `pay_vendor` call as the
+  attempt, so a disguised "part 1 of installments" payment is graded; C72 accepts the judges' `insufficient_yes`
+  when the scanner does not flag a credential in the body.
+
+## Setup window keys and an owner-only signed constitution — 2026-10-29
+
+Found while taking the 0.9.0 screenshots for the setup guide.
+
+- The setup window's **Open the constitution editor** button passes `--public-key` with the new folder's
+  `principal.pub.pem`, so the editor checks the signature instead of saying it was not checked. Its ledger view
+  button passes `--witness-public-key` with `ledger.witness/witness.pub.pem`.
+- The constitution editor writes `constitution.signed.json` owner-only (0600), like the prose and rules files and
+  like `two-key setup`. It was 0644 under a 022 umask. The key upgrade's new signature on a constitution keeps an
+  owner-only file owner-only.
+- After **Set up**, the Review page keeps setup's log and next steps. Clearing the typed `yes` set off a check of
+  the answers that put them back over the next steps a moment later.
+
+## An illustrated walkthrough of the windows — 2026-10-29
+
+- `docs/GUI_WALKTHROUGH.md`: one deployment from the setup window through the constitution editor, the agent's
+  calls and the ledger view, then a 0.8.0 deployment's key upgrade, with 31 screenshots from one live run at
+  3dabb06 in `docs/images/gui-walkthrough/`. SETUP and the README's document table link to it.
+- `tests/test_doc_links.py`: every relative link and image in the documents points at a file in the repository,
+  each linked PNG is a PNG, and the walkthrough shows each of its screenshots once.
+
+## Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29
+
+Package version 0.9.0 (`pyproject.toml`, `two_key.__version__`, `uv.lock`, `server.json`), the last beta before
+1.0.0. To be tagged `v0.9.0` on `main` after the merge. The sections from "One confirm for every tool" on are the
+detail.
+
+- **Hybrid quantum-resistant signatures**: every key is an Ed25519 key and an ML-DSA-65 (FIPS 204) key that sign
+  together: tokens (`tk2`), the constitution, the ledger head and anchor, the witness, and the tool check's
+  stamps and receipts. No Ed25519-only fallback (`ml_dsa_unavailable`). Needs `cryptography` 48 or later.
+- **The key upgrade**: the first start of 0.9.0 upgrades a 0.8.0 deployment's keys once, signs the constitution
+  again with the same body, and records `keys_upgraded`. It cannot be undone.
+- **The tool check** (#28): a tool behind the MCP proxy checks that a call came through both keys and signs a
+  receipt the ledger records. Optional; required (or `exempt`) under `high_assurance`. docs/TOOL_CHECK.md.
+- **A tool error spends the token.**
+- **`two-key setup --window`**, the setup window beside the terminal interview, and **`tools[*].claim`** in
+  `config set`: one confirmation and one ledger entry for every tool.
+- **A ten-minute quickstart** (docs/QUICKSTART.md), run in CI.
+- **Folder-path rules for key one** (`type: path`): a custom field that admits any file inside signed folders,
+  cleaned as text only, with `..` and relative paths refused, and a link check just before the tool runs
+  ("Folder-path fields for Path A" below).
+- **Live testing**: GrokBot's run 12 tested the key upgrade on copies of a 0.8.0 deployment, hybrid signatures,
+  the tool check and the setup window. Nothing it found let a forbidden call run; its live cases that did not
+  pass were stale or too narrow, and its findings are fixed ("Live run 12 findings").
+- 1502 tests.
+
+### Upgrading from 0.8.0
+
+See "Upgrading from 0.8.0" under "Docs: upgrading from 0.8.0 to 0.9.0" above, and docs/UPGRADING.md, "From 0.8.0
+to 0.9.0, step by step". In short: stop and back up, install 0.9.0, start once (which upgrades the keys, once and
+for good), and back up again at once.
+
+## The first-time demo is taken out — 2026-10-30
+
+- docs/DEMO.md and examples/demo/ (added 2026-10-29) are removed before 0.9.0. Their tool server was a pretend
+  payments server written for the page. A new demo, built on a real, lightweight MCP server, is being planned
+  (maintainer's request).
+
+## Folder-path fields for Path A — 2026-10-30
+
+Design note reviewed by the maintainer (2026-10-30): all recommendations taken, shipped in 0.9.0. Key one could
+only match a path against an exact list of strings, so a file tool's rules had to name every file.
+
+- New custom field type `path` (`two_key/fields.py`): `under:` lists the signed folders (absolute, in clean
+  form, not `/`, none inside another, at most 16). A value outside every folder is `field_not_allowed`. New
+  operators `under` and `not_under` beside `eq`, `neq`, `in`, `not_in`; a rule path outside every folder is
+  refused at signing, since the rule could never apply.
+- `clean_path` cleans a value as text only, never reading the disk, so authorization and the gateway agree:
+  repeated and trailing slashes collapse and `.` segments drop. It refuses (`field_unreadable`) a relative path
+  (`~` included), a `..` segment (not worked out, since `a/link/../b` follows `link` first on a disk), a
+  backslash, anything but printable ASCII, and a path over 4,096 characters, 64 segments, or 255 characters in a
+  segment. "Inside" compares whole segments (`path_inside`), so `notes2` is not inside `notes`. The tool
+  receives the cleaned path.
+- Letter case is exact by default. `case: insensitive` lower-cases values, folders and rule paths for a
+  filesystem that ignores case; signing warns about an exact path field in a rule that lists paths to deny.
+- Policy VM opcode `UNDER` (compiled on load, never signed, so no format change).
+- The gateway, just before the tool runs and after the `file_changed` check, refuses a path with a link or
+  junction below its signed folder (`path_symlink:<field>`); the folder itself may be a link. Best effort, on
+  both the proxy and the library route, with no setting to turn it off.
+- A path field signs as `two-key-constitution-v3`; 0.8.0 and older refuse it as an unknown field type.
+- `two-key sign-constitution` and the constitution editor note each tool that maps a path field, with its
+  folders. The agent vocabulary describes a path field's syntax, never its folders.
+- Docs: HOWTO "File paths inside a folder (`type: path`)" with a table of tricky inputs that
+  `tests/test_path_fields.py` checks row by row, THREAT_MODEL (what the check cannot see: links, hard links,
+  the swap before the tool opens the file, another mount), CONNECTING (run the file tool as its own account
+  that can write only the folder), SETTINGS, SCOPE, UPGRADING, CONSTITUTION_EDITOR, AGENTS.md, llms.txt, and
+  the README field list.
+- Tests: `tests/test_path_fields.py` (the HOWTO table, a randomized cleanup test against `posixpath.normpath`,
+  definitions and rule paths refused at signing, v3 only, calls through the gateway, real links).
+
+
+## A first-time demo on a real tool server — 2026-10-30
+
+- **docs/DEMO.md** again, rebuilt on the official MCP filesystem server
+  (`@modelcontextprotocol/server-filesystem` 2.1.0, on Node.js 24) instead of a pretend payments server
+  (maintainer's request). No money: an agent keeps office notes in `/srv/notes`. The rules hold every path
+  inside that folder with a path field (0.9.0); the agent's four requests are allowed, refused by the rules
+  (`field_not_allowed`, a line for `~/.ssh/authorized_keys`), refused by the judge (`insufficient_yes:0<1`, a
+  password in a note), and refused for a `..` path (`field_unreadable`). The judge is Qwen3 4B Instruct 2507 in
+  LM Studio on Windows through an SSH tunnel; the agent is ollmcp with Llama 3.2 3B in Ollama. Two-Key
+  screenshots are from a live run with the real filesystem server; places for LM Studio, Windows and agent
+  screenshots are marked.
+- **examples/demo/**: the signed prose, the rules and the setup answers the page uses, also in the source
+  package on PyPI. README, AGENTS.md and llms.txt link the page.

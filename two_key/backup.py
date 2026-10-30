@@ -7,7 +7,8 @@ Three bundles, so that one file never holds every key a signed head needs
 (the principal key, the witness key, and the ledger key) when the witness
 public key is pinned outside the ledger:
 
-* ``principal.bundle.json`` — ``principal.pem`` and ``capability.pem``
+* ``principal.bundle.json`` — ``principal.pem``, ``capability.pem``, and ``stamp.pem`` (the tool check's
+  stamp key, 0.9.0) where the deployment has one
 * ``ledger.bundle.json`` — ``ledger.key``, ``fingerprint.key``, the ledger
   files, and ``head.anchor`` from the same moment
 * ``witness.bundle.json`` — ``witness.pem``
@@ -30,17 +31,16 @@ import tempfile
 from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from . import _platform
 from .canonical import EncodingError, canonical_bytes
-from .capability import capability_key_fingerprint
-from .keys import (Passphrase, decrypt_private_key, encrypted_header, is_encrypted, load_private_key_file, passphrase_bytes,
-                   public_raw, remember)
+from .capability import _pinned as pinned_capability_key, capability_key_fingerprint
+from .keys import (CLASSICAL_ALG, HYBRID_ALG, HYBRID_ENCRYPTED_FORMAT, Passphrase, decrypt_private_key, encrypted_header,
+                   is_encrypted, is_hybrid, key_fingerprint, load_private_key_file, load_public_key, passphrase_bytes,
+                   private_key_from_pem, public_raw, remember, save_public_key)
 from .ledger import witness_key_fingerprint
 from .strict import StrictParseError, loads_json
 
@@ -73,10 +73,16 @@ BUNDLE_NAMES = {
     "ledger": "ledger.bundle.json",
     "witness": "witness.bundle.json",
 }
-# What each role may carry. A file outside its role is a refusal, not an extra.
+# What each role may carry. A file outside its role is a refusal, not an extra. A private key's alg is the key's
+# own: ``ed25519+ml-dsa-65`` from 0.9.0, ``ed25519`` in a 0.8.0 backup (the key upgrade runs after its restore).
+_KEY = "key"
+_PRINCIPAL = "principal.pem"
+_CAPABILITY = "capability.pem"
+_STAMP = "stamp.pem"
+_WITNESS = "witness.pem"
 _ROLE_FILES = {
-    "principal": {"principal.pem": ("pem", "ed25519"), "capability.pem": ("pem", "ed25519")},
-    "witness": {"witness.pem": ("pem", "ed25519")},
+    "principal": {_PRINCIPAL: ("pem", _KEY), _CAPABILITY: ("pem", _KEY), _STAMP: ("pem", _KEY)},
+    "witness": {_WITNESS: ("pem", _KEY)},
     "ledger": {
         "ledger.key": ("raw", "raw-32"),
         "fingerprint.key": ("raw", "raw-32"),
@@ -86,10 +92,13 @@ _ROLE_FILES = {
         "head.anchor": ("bytes", "head-anchor"),
     },
 }
+# Present only where the deployment has it: the stamp key exists once a signed tool turns the tool check on.
+_OPTIONAL_FILES = frozenset({_STAMP})
 # principal.pem may also be Two-Key's encrypted form (two_key/keys.py): it is kept that way, bundle and all,
 # and opening the bundle then needs the key's own passphrase as well as the bundle's.
 ENCRYPTED_KEY_ALG = "ed25519-encrypted"
-_ALT_ALGS = {"principal.pem": (ENCRYPTED_KEY_ALG,)}
+HYBRID_ENCRYPTED_KEY_ALG = f"{HYBRID_ALG}-encrypted"
+_ENCRYPTABLE = frozenset({_PRINCIPAL})
 _HEADER_FIELDS = ("format", "version", "role", "alg", "kdf", "enc", "ciphertext")
 _KDF_FIELDS = ("name", "iterations", "salt", "length")
 _ENC_FIELDS = ("name", "nonce")
@@ -188,14 +197,23 @@ def _read_named(path: Path, name: str) -> bytes:
     return _read_file(path, MAX_BUNDLE_BYTES, secret=name not in _LOOSE_FILES)
 
 
-def _load_pem(data: bytes, what: str) -> Ed25519PrivateKey:
+def _load_pem(data: bytes, what: str):
+    """A Two-Key private key (hybrid, or a 0.8.0 Ed25519 key) from a backup's unencrypted PEM file."""
     try:
-        key = serialization.load_pem_private_key(data, password=None)
-    except Exception:
-        raise BackupError(f"backup_refused: {what} is not an Ed25519 private key") from None
-    if not isinstance(key, Ed25519PrivateKey):
-        raise BackupError(f"backup_refused: {what} is not an Ed25519 private key")
-    return key
+        return private_key_from_pem(data, what)
+    except ValueError:
+        raise BackupError(f"backup_refused: {what} is not a Two-Key private key") from None
+
+
+def _key_alg(data: bytes, name: str) -> str:
+    """The alg a backup names for the private key file ``data``: which suite, and whether it is encrypted."""
+    if is_encrypted(data):
+        try:
+            header = encrypted_header(data, name)     # its shape; opening it needs the key's passphrase
+        except ValueError:
+            raise BackupError(f"backup_rejected: {name} is not a private key") from None
+        return HYBRID_ENCRYPTED_KEY_ALG if header["format"] == HYBRID_ENCRYPTED_FORMAT else ENCRYPTED_KEY_ALG
+    return HYBRID_ALG if is_hybrid(_load_pem(data, name)) else CLASSICAL_ALG
 
 
 def _exact_fields(obj, fields: tuple, what: str) -> dict:
@@ -294,52 +312,60 @@ def _decrypt(blob: bytes, passphrase: str, expect_role: str) -> dict:
 def _check_payload(payload, role: str) -> dict:
     if not isinstance(payload, dict) or set(payload) != {"format", "version", "role", "files", "fingerprints"}:
         raise BackupError("backup_rejected: payload is not a backup field")
-    allowed = _ROLE_FILES[role]
     files = payload.get("files")
     fingerprints = payload.get("fingerprints")
     version = payload.get("version")
     if (payload.get("format") != PAYLOAD_FORMAT or type(version) is not int or version != BACKUP_VERSION
-            or payload.get("role") != role or not isinstance(files, dict) or set(files) != set(allowed)
+            or payload.get("role") != role or not isinstance(files, dict) or not _role_files_match(role, files)
             or not isinstance(fingerprints, dict)):
         raise BackupError("backup_rejected: payload does not match this backup role")
     out_files = {}
     for name, spec in files.items():
-        encoding, alg = allowed[name]
-        if (not isinstance(spec, dict) or set(spec) != {"encoding", "alg", "data"}
-                or spec["encoding"] != encoding or spec["alg"] not in (alg, *_ALT_ALGS.get(name, ()))):
-            raise BackupError(f"backup_rejected: {name} is not a {role} backup field")
-        if encoding == "pem":
-            if not isinstance(spec["data"], str):
-                raise BackupError(f"backup_rejected: {name} is not a private key")
-            try:
-                raw = spec["data"].encode("ascii")
-            except UnicodeEncodeError:
-                raise BackupError(f"backup_rejected: {name} is not a private key") from None
-            if spec["alg"] == ENCRYPTED_KEY_ALG:
-                try:
-                    encrypted_header(raw, name)     # its shape; opening it needs the key's passphrase
-                except ValueError:
-                    raise BackupError(f"backup_rejected: {name} is not a private key") from None
-            else:
-                _load_pem(raw, name)
-        else:
-            raw = _b64d(spec["data"], name, MAX_BUNDLE_BYTES)
-            if encoding == "raw" and len(raw) != 32:
-                raise BackupError(f"backup_rejected: {name} is not a 32-byte key")
-        expect = fingerprints.get(name)
-        if expect != _sha256(raw):
+        raw = _checked_file(role, name, spec)
+        if fingerprints.get(name) != _sha256(raw):
             raise BackupError(f"backup_rejected: {name} fingerprint does not match the bytes")
         out_files[name] = raw
-    if set(fingerprints) != set(allowed):
+    if set(fingerprints) != set(files):
         raise BackupError("backup_rejected: fingerprint list does not match the files")
     return {"format": PAYLOAD_FORMAT, "version": BACKUP_VERSION, "role": role,
             "files": out_files, "fingerprints": dict(fingerprints)}
 
 
-def _file_entry(data: bytes, encoding: str, alg: str) -> dict:
-    if encoding == "pem" and alg == "ed25519" and is_encrypted(data):
-        alg = ENCRYPTED_KEY_ALG
+def _role_files_match(role: str, names) -> bool:
+    """Every file the role needs is there, and nothing outside it."""
+    allowed = set(_ROLE_FILES[role])
+    return allowed - _OPTIONAL_FILES <= set(names) <= allowed
+
+
+def _checked_file(role: str, name: str, spec) -> bytes:
+    """The bytes of one file in a decrypted payload, its encoding and alg checked against what it is."""
+    encoding, alg = _ROLE_FILES[role][name]
+    if not isinstance(spec, dict) or set(spec) != {"encoding", "alg", "data"} or spec["encoding"] != encoding:
+        raise BackupError(f"backup_rejected: {name} is not a {role} backup field")
+    if encoding != "pem":
+        return _checked_bytes(role, name, spec, alg)
+    if not isinstance(spec["data"], str) or not spec["data"].isascii():
+        raise BackupError(f"backup_rejected: {name} is not a private key")
+    raw = spec["data"].encode("ascii")
+    if is_encrypted(raw) and name not in _ENCRYPTABLE:
+        raise BackupError(f"backup_rejected: {name} is not a {role} backup field")
+    if spec["alg"] != _key_alg(raw, name):
+        raise BackupError(f"backup_rejected: {name} is not a {role} backup field")
+    return raw
+
+
+def _checked_bytes(role: str, name: str, spec: dict, alg: str) -> bytes:
+    raw = _b64d(spec["data"], name, MAX_BUNDLE_BYTES)
+    if spec["encoding"] == "raw" and len(raw) != 32:
+        raise BackupError(f"backup_rejected: {name} is not a 32-byte key")
+    if spec["alg"] != alg:
+        raise BackupError(f"backup_rejected: {name} is not a {role} backup field")
+    return raw
+
+
+def _file_entry(data: bytes, encoding: str, alg: str, name: str) -> dict:
     if encoding == "pem":
+        alg = _key_alg(data, name)
         text = data.decode("ascii")
         stored = text
     else:
@@ -348,16 +374,17 @@ def _file_entry(data: bytes, encoding: str, alg: str) -> dict:
 
 
 def _payload(role: str, files: dict) -> dict:
-    allowed = _ROLE_FILES[role]
-    if set(files) != set(allowed):
+    if not _role_files_match(role, files):
         raise BackupError(f"backup_refused: the {role} backup is missing a file")
     stored = {}
     fingerprints = {}
-    for name, (encoding, alg) in allowed.items():
+    for name, (encoding, alg) in _ROLE_FILES[role].items():
+        if name not in files:
+            continue
         data = files[name]
         if not isinstance(data, bytes):
             raise BackupError(f"backup_refused: {name} is not bytes")
-        stored[name] = _file_entry(data, encoding, alg)
+        stored[name] = _file_entry(data, encoding, alg, name)
         fingerprints[name] = _sha256(data)
     return {"format": PAYLOAD_FORMAT, "version": BACKUP_VERSION, "role": role,
             "files": stored, "fingerprints": fingerprints}
@@ -387,9 +414,10 @@ def _ledger_layout(root: Path):
     ledger = root / "ledger"
     return {
         "ledger": ledger,
-        "principal.pem": root / "principal.pem",
-        "capability.pem": ledger.parent / f"{ledger.name}.capability" / "capability.pem",
-        "witness.pem": ledger.parent / f"{ledger.name}.witness" / "witness.pem",
+        _PRINCIPAL: root / _PRINCIPAL,
+        _CAPABILITY: ledger.parent / f"{ledger.name}.capability" / _CAPABILITY,
+        _STAMP: ledger.parent / f"{ledger.name}.capability" / _STAMP,
+        _WITNESS: ledger.parent / f"{ledger.name}.witness" / _WITNESS,
         "ledger.key": ledger.parent / f"{ledger.name}.ledger-key" / "ledger.key",
         "fingerprint.key": ledger.parent / f"{ledger.name}.ledger-key" / "fingerprint.key",
         "entries.jsonl": ledger / "entries.jsonl",
@@ -411,9 +439,9 @@ def _materialize(bundles: dict, root: Path) -> dict:
     return layout
 
 
-def _principal_of(data: bytes, key_passphrase: Passphrase) -> Ed25519PrivateKey:
+def _principal_of(data: bytes, key_passphrase: Passphrase):
     if not is_encrypted(data):
-        return _load_pem(data, "principal.pem")
+        return _load_pem(data, _PRINCIPAL)
     try:
         secret = passphrase_bytes(key_passphrase, "principal.pem (in the backup)")
         if secret is None:
@@ -426,14 +454,16 @@ def _principal_of(data: bytes, key_passphrase: Passphrase) -> Ed25519PrivateKey:
 
 def _fingerprints_of(bundles: dict, key_passphrase: Passphrase = None) -> dict:
     """Public-style fingerprints an operator can compare. Raw key bytes are not returned."""
-    principal = _principal_of(bundles["principal"]["files"]["principal.pem"], key_passphrase)
-    capability = _load_pem(bundles["principal"]["files"]["capability.pem"], "capability.pem")
-    witness = _load_pem(bundles["witness"]["files"]["witness.pem"], "witness.pem")
+    principal = _principal_of(bundles["principal"]["files"][_PRINCIPAL], key_passphrase)
+    capability = _load_pem(bundles["principal"]["files"][_CAPABILITY], _CAPABILITY)
+    witness = _load_pem(bundles["witness"]["files"][_WITNESS], _WITNESS)
     if public_raw(principal.public_key()) == public_raw(capability.public_key()):
         raise BackupError("backup_rejected: the capability key is the principal key")
+    stamp = bundles["principal"]["files"].get(_STAMP)
     return {
         "principal": capability_key_fingerprint(principal.public_key()),
         "capability": capability_key_fingerprint(capability.public_key()),
+        **({"stamp": key_fingerprint(_load_pem(stamp, _STAMP).public_key())} if stamp is not None else {}),
         "witness": witness_key_fingerprint(public_raw(witness.public_key())),
         "ledger_key": bundles["ledger"]["fingerprints"]["ledger.key"],
         "fingerprint_key": bundles["ledger"]["fingerprints"]["fingerprint.key"],
@@ -453,7 +483,7 @@ def _open_staged(root: Path, *, witness_public_key=None, anchor_name: str = "hea
     layout = _ledger_layout(root)
     anchor_before = layout["head.anchor"].read_bytes() if require_anchor else None
     try:
-        principal = load_private_key_file(layout["principal.pem"], key_passphrase)
+        principal = load_private_key_file(layout[_PRINCIPAL], key_passphrase)
     except ValueError as e:
         raise BackupError(f"backup_rejected: {e}") from None
     try:
@@ -467,21 +497,32 @@ def _open_staged(root: Path, *, witness_public_key=None, anchor_name: str = "hea
         cap = open_capability_key(ledger, principal.public_key())
     except Exception as e:
         raise BackupError(f"backup_rejected: {e}") from None
-    pinned = None
-    for entry in reversed(ledger.entries):
-        if entry.kind == "constitution_loaded":
-            pinned = entry.body.get("capability_key_fingerprint")
-            break
+    # The last constitution_loaded, or keys_upgraded when that is later: right after the key upgrade the
+    # capability key is hybrid and the last constitution_loaded still names its Ed25519 fingerprint.
+    pinned = pinned_capability_key(ledger)
     got = capability_key_fingerprint(cap.public_key())
     if isinstance(pinned, str) and pinned and pinned != got:
         raise BackupError("backup_rejected: capability key does not match the fingerprint pinned in the ledger")
     issued = any(entry.kind == "capability_issued" for entry in ledger.entries)
     if issued and pinned != got:
         raise BackupError("backup_rejected: the ledger has issued tokens and pins no matching capability key")
+    _check_stamp(ledger, layout[_STAMP])
     report = ledger.witness_report()
     return {"ok": True, "ledger_size": ledger.size(), "merkle_root": ledger.merkle_root(),
             "witness": report, "capability_key_fingerprint": got,
             "anchor": anchor_name}
+
+
+def _check_stamp(ledger, path: Path) -> None:
+    """The stamp key is the one the ledger pins, when it pins one: the checking tools hold its public key."""
+    from .core import _pinned_stamp_key
+    pinned = _pinned_stamp_key(ledger)
+    if not pinned:
+        return
+    if not os.path.lexists(path):
+        raise BackupError("backup_rejected: the ledger pins a stamp key (the tool check) and stamp.pem is missing")
+    if key_fingerprint(_load_pem(_read_named(path, _STAMP), _STAMP).public_key()) != pinned:
+        raise BackupError("backup_rejected: stamp key does not match the fingerprint pinned in the ledger")
 
 
 def verify_backup(bundles_dir, passphrases, *, witness_public_key=None, key_passphrase: Passphrase = None) -> dict:
@@ -510,9 +551,10 @@ def _destination_paths(ledger_path, principal_path, anchor_path) -> dict:
     if anchor_abs == ledger_abs or ledger_abs in anchor_abs.parents:
         raise BackupError("backup_refused: head anchor must live outside the ledger directory")
     return {
-        "principal.pem": Path(principal_path),
-        "capability.pem": ledger_path.parent / f"{ledger_path.name}.capability" / "capability.pem",
-        "witness.pem": ledger_path.parent / f"{ledger_path.name}.witness" / "witness.pem",
+        _PRINCIPAL: Path(principal_path),
+        _CAPABILITY: ledger_path.parent / f"{ledger_path.name}.capability" / _CAPABILITY,
+        _STAMP: ledger_path.parent / f"{ledger_path.name}.capability" / _STAMP,
+        _WITNESS: ledger_path.parent / f"{ledger_path.name}.witness" / _WITNESS,
         "ledger.key": ledger_path.parent / f"{ledger_path.name}.ledger-key" / "ledger.key",
         "fingerprint.key": ledger_path.parent / f"{ledger_path.name}.ledger-key" / "fingerprint.key",
         "entries.jsonl": ledger_path / "entries.jsonl",
@@ -552,7 +594,9 @@ def _install(path: Path, data: bytes, *, overwrite: bool, name: str) -> str:
 
 
 _LEDGER_BODY = ("entries.jsonl", "head.json", "keywrap.json")
-_KEY_FILES = ("principal.pem", "capability.pem", "witness.pem", "ledger.key", "fingerprint.key")
+_KEY_FILES = (_PRINCIPAL, _CAPABILITY, _STAMP, _WITNESS, "ledger.key", "fingerprint.key")
+# Public halves restored beside their keys when missing: tool-key trust reads them for a checking tool.
+_PUBLIC_FILES = {_CAPABILITY: "capability.pub.pem", _STAMP: "stamp.pub.pem"}
 
 
 def _exists_differs(path: Path, data: bytes, name: str) -> bool:
@@ -624,7 +668,7 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
     # refuses to open (ledger_rolled_back) instead of advancing a newer anchor past the backup.
     # Decide every conflict before writing, so a refusal does not leave a half-applied restore.
     order = list(_LEDGER_BODY) if write_files else []
-    order += list(_KEY_FILES)
+    order += [name for name in _KEY_FILES if name in files]
     if write_anchor:
         order.append("head.anchor")
     pending = []
@@ -652,9 +696,34 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
               file=sys.stderr)
     for name in pending:
         actions[name] = _install(dest[name], files[name], overwrite=True, name=name)
+    _restore_public_files(dest, files, actions)
     return {"ok": True, "actions": actions, "replaced_ledger": bool(replace_ledger and (files_differ or files_missing)),
             "fingerprints": fingerprints, "ledger_size": opened["ledger_size"],
             "format": FORMAT, "alg": ALG}
+
+
+def _restore_public_files(dest: dict, files: dict, actions: dict) -> None:
+    """Write ``capability.pub.pem`` and ``stamp.pub.pem`` from the backup's key where that key is now in place and
+    the public file is missing or holds another key."""
+    for name, public_name in _PUBLIC_FILES.items():
+        if name not in files or actions.get(name) == "kept":
+            continue
+        key = _load_pem(files[name], name).public_key()
+        public = dest[name].with_name(public_name)
+        if not os.path.lexists(public):
+            actions[public_name] = "created"
+        elif not _platform.is_link(public) and not _holds(public, key):
+            actions[public_name] = "replaced"
+        else:
+            continue
+        save_public_key(public, key)
+
+
+def _holds(path: Path, public) -> bool:
+    try:
+        return public_raw(load_public_key(path)) == public_raw(public)
+    except (OSError, ValueError):
+        return False
 
 
 def _preflight_live(dest: dict, files: dict, *, witness_public_key, key_passphrase: Passphrase = None) -> None:
@@ -679,8 +748,10 @@ def _preflight_live(dest: dict, files: dict, *, witness_public_key, key_passphra
         for name in _KEY_FILES:
             if os.path.lexists(dest[name]):
                 data = _read_named(dest[name], name)
-            else:
+            elif name in files:
                 data = files[name]
+            else:
+                continue
             layout[name].parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             _write_new(layout[name], data)
         try:
@@ -748,6 +819,8 @@ def export_backup(ledger_path, principal_path, out_dir, passphrases, *,
             except OSError:
                 pass
         raise
+    from .upgrade import backup_made
+    backup_made(ledger.ledger_key_path)      # the key upgrade's reminder to back up stops here
     return {"ok": True, "bundles": written, "fingerprints": fingerprints,
             "ledger_size": ledger.size(), "iterations": iterations,
             "kdf": KDF_NAME, "alg": ALG, "format": FORMAT}
@@ -793,12 +866,15 @@ def _snapshot_files(ledger, principal_path) -> dict:
         raise BackupError("backup_refused: the capability key or the fingerprint key is missing. "
                           "Start TwoKey once so both exist, then export. Export does not create them.")
     anchor = _read_file(ledger.anchor_path(), MAX_BUNDLE_BYTES)
+    stamp_path = cap_path.with_name(_STAMP)
+    stamp = {_STAMP: _read_file(stamp_path, MAX_BUNDLE_BYTES)} if os.path.lexists(stamp_path) else {}
     return {
         "principal": {
-            "principal.pem": _read_file(Path(principal_path), MAX_BUNDLE_BYTES),
-            "capability.pem": _read_file(cap_path, MAX_BUNDLE_BYTES),
+            _PRINCIPAL: _read_file(Path(principal_path), MAX_BUNDLE_BYTES),
+            _CAPABILITY: _read_file(cap_path, MAX_BUNDLE_BYTES),
+            **stamp,
         },
-        "witness": {"witness.pem": _read_file(ledger.witness_path, MAX_BUNDLE_BYTES)},
+        "witness": {_WITNESS: _read_file(ledger.witness_path, MAX_BUNDLE_BYTES)},
         "ledger": {
             "ledger.key": _read_file(ledger.ledger_key_path, MAX_BUNDLE_BYTES),
             "fingerprint.key": _read_file(fp_path, MAX_BUNDLE_BYTES),
@@ -816,7 +892,7 @@ def _require_snapshot_opens(groups: dict, *, witness_public_key, key_passphrase:
     for role in ROLES:
         bundles[role] = _check_payload(
             {"format": PAYLOAD_FORMAT, "version": BACKUP_VERSION, "role": role,
-             "files": {name: _file_entry(data, *_ROLE_FILES[role][name]) for name, data in groups[role].items()},
+             "files": {name: _file_entry(data, *_ROLE_FILES[role][name], name) for name, data in groups[role].items()},
              "fingerprints": {name: _sha256(data) for name, data in groups[role].items()}},
             role)
     try:

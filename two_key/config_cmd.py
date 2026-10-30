@@ -53,7 +53,8 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
     """``check`` for a config already read. ``config set`` runs it on the staged files before it writes."""
     environ = os.environ if environ is None else environ
     found: list[tuple[str, str]] = [(OK, f"config: {config.path} reads cleanly")]
-    found += _constitution(config)
+    constitution_found, signed = _constitution(config)
+    found += constitution_found
     loaded, bad = _judges(config)
     high = False
     judges, agent = [], None
@@ -72,18 +73,44 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
     found += _writable(config, high)
     found += _siem(config, high)
     found += _agent_access(config, high)
+    if signed is not None:
+        found += _tool_checks(signed, high)
     return found
 
 
-def _constitution(config) -> list[tuple[str, str]]:
+def _tool_checks(signed, high: bool) -> list[tuple[str, str]]:
+    """Each signed tool's tool check (#28, docs/TOOL_CHECK.md). Under ``high_assurance`` a tool with neither a
+    receipt key nor ``exempt`` is a FAIL, as the proxy refuses to start; otherwise one OK line lists them."""
+    from .toolcheck import checked
+    on = sorted(t for t, spec in signed.tool_specs.items() if checked(spec))
+    exempt = sorted(t for t, spec in signed.tool_specs.items() if spec.get("tool_check") == "exempt")
+    off = sorted(t for t, spec in signed.tool_specs.items() if "tool_check" not in spec)
+    out = [(OK, f"tool_check: on for {on or 'no tool'}; exempt: {exempt or 'none'}; off: {off or 'none'}")]
+    if high and off:
+        out.append((FAIL, f"tool_check_required: high_assurance needs the tool check for {off}; give each a "
+                          "receipt key (two-key tool-key new) or mark it exempt (docs/TOOL_CHECK.md)"))
+    return out
+
+
+def _upgrade_line(config) -> tuple[str, str]:
+    """A 0.8.0 principal key: the proxy's first start upgrades the keys, unless the witness is pinned outside."""
+    if config.witness_public_key is not None:
+        return (FAIL, "principal_key: a 0.8.0 Ed25519 key, and witness_public_key pins the witness outside the "
+                      "ledger, so the proxy will not upgrade the keys by itself; run two-key keys upgrade --config "
+                      "FILE (docs/UPGRADING.md)")
+    return (WARN, "principal_key: a 0.8.0 Ed25519 key; the proxy's first start upgrades every key to hybrid "
+                  "Ed25519 + ML-DSA-65 and signs the constitution again (docs/UPGRADING.md)")
+
+
+def _constitution(config) -> tuple[list[tuple[str, str]], Any]:
     from .constitution import load_envelope, verify_signed
-    from .keys import key_file_is_encrypted
+    from .keys import is_hybrid, key_file_is_encrypted
     try:
         # As the proxy opens it: with keys.passphrase_file when it is encrypted, never a prompt.
         public = config.load_principal_key(prompt=False).public_key()
         encrypted = key_file_is_encrypted(config.principal_key)
     except (OSError, ValueError) as e:
-        return [(FAIL, f"principal_key: {config.principal_key}: {e}")]
+        return [(FAIL, f"principal_key: {config.principal_key}: {e}")], None
     if encrypted:
         key_line = (OK, "principal_key: encrypted; keys.passphrase_file opens it")
     elif config.principal_passphrase_file is not None:
@@ -95,13 +122,15 @@ def _constitution(config) -> list[tuple[str, str]]:
     try:
         signed = verify_signed(load_envelope(config.constitution), public)
     except (OSError, ValueError) as e:
-        return [(FAIL, f"constitution: {config.constitution}: {e}")]
+        return [(FAIL, f"constitution: {config.constitution}: {e}")], None
     out = [key_line, (OK, f"constitution: signed by the principal key, digest {signed.digest}")]
+    if not is_hybrid(public):
+        out.insert(1, _upgrade_line(config))
     unknown = sorted(set(config.tools) - set(signed.tool_specs))
     if unknown:
         out.append((FAIL, f"tools: {unknown} are not tools in the signed constitution"))
     out += _unset_claims(config, signed)
-    return out
+    return out, signed
 
 
 def _blanket_class_rules(rules) -> list[tuple[str, str | None]]:

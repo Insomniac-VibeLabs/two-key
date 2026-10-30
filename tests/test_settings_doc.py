@@ -62,6 +62,7 @@ def code_keys() -> set[tuple[str, str]]:
     add("hard_rules.yaml", "tool_specs.<tool>.counterparties[].", constitution.COUNTERPARTY_KEYS)
     add("hard_rules.yaml", "tool_specs.<tool>.payload[].", constitution.PAYLOAD_KEYS)
     add("hard_rules.yaml", "tool_specs.<tool>.fields.<name>.", constitution.FIELD_MAPPING_KEYS)
+    add("hard_rules.yaml", "tool_specs.<tool>.tool_check.", constitution.TOOL_CHECK_KEYS)
     add("hard_rules.yaml", "fields.<name>.", set().union(*fields._TYPE_KEYS.values()))
     return found
 

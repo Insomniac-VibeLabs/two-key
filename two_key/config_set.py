@@ -6,7 +6,9 @@
 The files stay separate (docs/SETTINGS.md says why); this module edits the right one for you. A setting is
 named by its path in the file that holds it, the same path docs/SETTINGS.md lists, with list items numbered
 (``siem.sinks[0].port``, ``judges[1].timeout``, ``hard_rules[2].deny_if.amount_usd_gt``) and a key that has a
-dot in it in brackets (``tools[fs.read].claim``). The first part says which file: a ``proxy.yaml`` key,
+dot in it in brackets (``tools[fs.read].claim``). ``[*]`` in place of a tool's id (``tools[*].claim``,
+``tool_specs[*].irreversible``) changes that setting on every tool at once, as one change with one
+confirmation and one ledger entry. The first part says which file: a ``proxy.yaml`` key,
 ``judges``/``quorum``/``monitored_agent`` for ``judges.yaml``, and ``hard_rules``/``tool_specs``/``fields`` for
 the signed rules.
 
@@ -74,6 +76,7 @@ SECRET_LITERALS = (("upstream", "env"), ("scan", "env"))
 ENVIRONMENT_ONLY = ("upstream_env_missing:", "agent_session_missing:", "agent_credential_missing:")
 
 _SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
+EVERY = "*"     # ``tools[*].claim``: the setting on every tool
 _BRACKET = re.compile(r"\[([^\[\]]+)\]")
 
 
@@ -199,6 +202,28 @@ def catalogue_row(role: str, tokens: list[str | int], doc: Any) -> settings.Sett
         else:
             parts.pop()
     return None
+
+
+def expand(role: str, tokens: list[str | int], doc: Any, tool_ids: list[str] | None = None) -> list[list[str | int]]:
+    """The concrete names ``[*]`` stands for: one per tool, in sorted order. ``[*]`` may appear once, in place of
+    the tool's id in ``tools`` (``proxy.yaml``) or ``tool_specs`` (the signed rules), and nowhere else.
+    ``tool_ids`` are the signed tools, so ``tools[*]`` also reaches a tool with no ``tools`` entry yet."""
+    stars = [i for i, t in enumerate(tokens) if t == EVERY]
+    if not stars:
+        return [tokens]
+    name = format_name(tokens)
+    if len(stars) > 1 or stars[0] != 1 or tokens[0] not in _EVERY_TOOL.get(role, ()) or len(tokens) < 3:
+        raise ConfigChangeError(f"every_tool: {name}: [*] stands only for the tool in tools[*].<setting> or "
+                                "tool_specs[*].<setting>")
+    present = _child(doc, tokens[0])
+    ids = set(present) if isinstance(present, Mapping) else set()
+    ids.update(tool_ids or ())
+    if not ids:
+        raise ConfigChangeError(f"every_tool: {name}: there is no tool to change")
+    return [[tokens[0], tool, *tokens[2:]] for tool in sorted(ids)]
+
+
+_EVERY_TOOL = {PROXY: ("tools",), RULES: ("tool_specs",)}
 
 
 def _secret_literal_path(tokens: list[str | int]) -> bool:
@@ -599,9 +624,19 @@ def _weaker_specs(a: Mapping, b: Mapping) -> list[str]:
         if tool not in a or tool not in b:
             out.append(f"tool_specs.{tool}: " + ("added" if tool not in a else "removed"))
         else:
-            out += [f"tool_specs.{tool}.{key}: changed" for key in sorted(set(a[tool]) | set(b[tool]))
+            out += [f"tool_specs.{tool}.{key}: {_how_changed(key, b[tool].get(key))}"
+                    for key in sorted(set(a[tool]) | set(b[tool]))
                     if not _same_or_tighter(key, a[tool].get(key), b[tool].get(key))]
     return out
+
+
+def _how_changed(key: str, new) -> str:
+    """What a weaker spec change did, in words; the tool check says which way it went (run 12)."""
+    if key != "tool_check":
+        return "changed"
+    if new == "exempt":
+        return "exempt (the check is turned off)"
+    return "turned off" if new is None else "another receipt key"
 
 
 def _same_or_tighter(key: str, old, new) -> bool:
@@ -614,6 +649,8 @@ def _same_or_tighter(key: str, old, new) -> bool:
         return not old and new is True
     if key == "data_class_floor":
         return _FLOOR_RANK.get(new, 4) > _FLOOR_RANK.get(old, 4)
+    if key == "tool_check":     # #28: turning the check on is stronger; exempt, off or another key is not
+        return (old in (None, "exempt") and isinstance(new, Mapping)) or (old == "exempt" and new is None)
     return False
 
 
@@ -874,17 +911,24 @@ def ledger_body(change: Change, reasons: list[str], *, confirmed: bool) -> dict:
 
 def open_principal(config, passphrase=None):
     """The principal key this proxy uses (``keys.principal``), which signs the ledger. Encrypted, it opens
-    with ``passphrase``, else ``keys.passphrase_file``, else a prompt on the terminal."""
-    from .keys import load_private_key_file, passphrase_source
+    with ``passphrase``, else ``keys.passphrase_file``, else a prompt on the terminal. A 0.8.0 deployment's keys
+    are upgraded to hybrid first, as the proxy's first start would (``two_key/upgrade.py``)."""
+    from .keys import passphrase_source
+    from .ledger import LedgerError
+    from .upgrade import open_upgraded
     if not (Path(config.ledger) / "entries.jsonl").is_file():
         raise ConfigChangeError(f"ledger_missing: no ledger at {config.ledger}; every change is recorded there, "
                                 f"so start the proxy once (or run two-key setup) first")
     if passphrase is None:
         passphrase = passphrase_source(config.principal_passphrase_file)
     try:
-        return load_private_key_file(config.principal_key, passphrase)
+        return open_upgraded(config.principal_key, passphrase, config.ledger, constitution=config.constitution,
+                             witness_public_key=config.witness_public_key,
+                             anchor_path=config.head_anchor).principal
     except ValueError as e:
         raise ConfigChangeError(f"principal_key: {e}") from None
+    except LedgerError as e:
+        raise ConfigChangeError(f"ledger_refused: {e}") from None
 
 
 def _staged_constitution(staged: Mapping[str, Path], key):
@@ -993,6 +1037,8 @@ def get(config_path: Path | str, name: str) -> dict:
     else:
         path = _role_path(config, role)
         doc, where = _document(path), str(path)
+    if EVERY in tokens:
+        return _get_every(role, tokens, doc, where, _signed_tool_ids(config) if role == PROXY else None)
     row = catalogue_row(role, tokens, doc)
     value = get_at(doc, tokens)
     return {"setting": format_name(tokens), "file": where, "tier": settings.SIGNED if role == RULES else
@@ -1024,17 +1070,55 @@ def set_setting(config_path: Path | str, name: str, value: Any = None, *, unset:
         else:
             path = _role_path(config, role)
             doc = _document(path)
-            if catalogue_row(role, tokens, doc) is None:
-                raise ConfigChangeError(f"unknown_setting: {format_name(tokens)} is not a setting of "
-                                        f"{SETTINGS_FILE[role]}; docs/SETTINGS.md lists them")
-            new_doc = set_at(doc, tokens, value, unset=unset)
-            before = get_at(doc, tokens)
-            change = Change("set", [format_name(tokens)], [FileChange(role, path, dump(new_doc, path))],
-                            shown=[f"{format_name(tokens)} in {path.name}: "
-                                   f"{_show(tokens, before)} -> {'(unset)' if unset else _show(tokens, value)}"],
+            targets = expand(role, tokens, doc, _signed_tool_ids(config) if EVERY in tokens else None)
+            new_doc, names, shown = _set_each(role, doc, targets, value, unset, f" in {path.name}")
+            change = Change("set", names, [FileChange(role, path, dump(new_doc, path))], shown=shown,
                             key=open_principal(config, passphrase))
         return apply(config_path, config, change, confirm_weaker=confirm_weaker, confirm=confirm,
                      environ=environ, out=out)
+
+
+def _get_every(role: str, tokens: list[str | int], doc: Any, where: str, tool_ids: list[str] | None) -> dict:
+    """``config get tools[*].claim``: the setting for each tool, ``None`` where the file does not set it."""
+    targets = expand(role, tokens, doc, tool_ids)
+    row = catalogue_row(role, targets[0], doc)
+    values = {}
+    for target in targets:
+        value = get_at(doc, target)
+        values[str(target[1])] = masked(target, None if value is _MISSING else value)
+    return {"setting": format_name(tokens), "file": where, "tier": settings.SIGNED if role == RULES else
+            settings.OPERATOR, "values": values, "default": row.default if row else None,
+            "high_assurance": (row.high_assurance or None) if row else None, "about": row.summary if row else None}
+
+
+def _set_each(role: str, doc: Any, targets: list[list[str | int]], value: Any, unset: bool,
+              where: str) -> tuple[Any, list[str], list[str]]:
+    """``doc`` with the setting changed at every target, the names changed, and a line for each."""
+    names, shown = [], []
+    for target in targets:
+        name = format_name(target)
+        if catalogue_row(role, target, doc) is None:
+            raise ConfigChangeError(f"unknown_setting: {name} is not a setting of {SETTINGS_FILE[role]}; "
+                                    "docs/SETTINGS.md lists them")
+        before = get_at(doc, target)
+        if unset and before is _MISSING and len(targets) > 1:
+            continue        # [*] with --unset: a tool that does not set it already has nothing to remove
+        doc = set_at(doc, target, value, unset=unset)
+        names.append(name)
+        shown.append(f"{name}{where}: {_show(target, before)} -> {'(unset)' if unset else _show(target, value)}")
+    if not names:
+        raise ConfigChangeError(f"unchanged: no tool sets {format_name(targets[0][:1] + [EVERY] + targets[0][2:])}")
+    return doc, names, shown
+
+
+def _signed_tool_ids(config) -> list[str]:
+    """The tools the constitution signs: ``tools[*]`` reaches each, set in ``proxy.yaml`` or not."""
+    from .constitution import load_envelope
+    try:
+        specs = load_envelope(config.constitution)["signed"].get("tool_specs")
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise ConfigChangeError(f"constitution: {config.constitution}: {e}") from None
+    return list(specs) if isinstance(specs, Mapping) else []
 
 
 def _show(tokens, value) -> str:
@@ -1052,8 +1136,7 @@ def _passphrase(config, passphrase_file: str | None):
 
 def _principal(config, key_path: str | None, passphrase=None):
     """The principal key given with ``--key``; it must be the key the constitution and the proxy use."""
-    from cryptography.hazmat.primitives import serialization
-    from .keys import load_private_key_file
+    from .keys import load_private_key_file, public_raw
     if not key_path:
         raise ConfigChangeError("principal_key_needed: a signed setting is signed again; give the principal "
                                 "private key with --key FILE")
@@ -1064,8 +1147,7 @@ def _principal(config, key_path: str | None, passphrase=None):
         key = load_private_key_file(key_path, passphrase)
     except ValueError as e:
         raise ConfigChangeError(str(e)) from None
-    raw = serialization.Encoding.Raw, serialization.PublicFormat.Raw
-    if key.public_key().public_bytes(*raw) != proxy_key.public_key().public_bytes(*raw):
+    if public_raw(key.public_key()) != public_raw(proxy_key.public_key()):
         raise ConfigChangeError("principal_key_mismatch: --key is not the principal key this proxy uses "
                                 "(keys.principal)")
     return key
@@ -1108,12 +1190,24 @@ def _signed_of(rules_doc: Mapping, prose: str, key) -> dict:
         raise ConfigChangeError(f"rules_invalid: {e}") from None
 
 
+SETUP_RULES_FILE = "hard_rules.yaml"         # setup_cmd.FILES["rules"], beside the signed constitution
+
+
+def _rules_hint(config, given: Path | None) -> str:
+    """Where setup keeps the signed rules source, when it is not the file given (run 12: rules.yaml, the setup
+    input, was given in place of hard_rules.yaml)."""
+    kept = Path(config.constitution).resolve().with_name(SETUP_RULES_FILE)
+    if not kept.is_file() or kept == given:
+        return ""
+    return f" (setup keeps the signed source as {kept})"
+
+
 def _signed_change(config, tokens, value, unset, key_path, rules_path, passphrase) -> Change:
     from .constitution import load_envelope, verify_signed
     key = _principal(config, key_path, passphrase)
     if not rules_path:
         raise ConfigChangeError("rules_file_needed: a signed setting is changed in the rules file the constitution "
-                                "was signed from; give it with --rules FILE")
+                                f"was signed from; give it with --rules FILE{_rules_hint(config, None)}")
     try:
         envelope = load_envelope(config.constitution)
         current = verify_signed(envelope, key.public_key())
@@ -1127,11 +1221,9 @@ def _signed_change(config, tokens, value, unset, key_path, rules_path, passphras
     if _plain(_signed_of(rules_doc, current.prose, key)) != _plain(signed_before):
         raise ConfigChangeError(f"rules_source_differs: {rules_file} does not say what the constitution signs; "
                                 "sign it with two-key sign-constitution (or put back what was signed) first, so "
-                                "this change signs only itself")
-    if catalogue_row(RULES, tokens, rules_doc) is None:
-        raise ConfigChangeError(f"unknown_setting: {format_name(tokens)} is not a setting of hard_rules.yaml; "
-                                "docs/SETTINGS.md lists them")
-    new_doc = set_at(rules_doc, tokens, value, unset=unset)
+                                f"this change signs only itself{_rules_hint(config, rules_file)}")
+    new_doc, names, shown = _set_each(RULES, rules_doc, expand(RULES, tokens, rules_doc), value, unset,
+                                      " (signed)")
     if isinstance(new_doc.get("serial"), int) and not isinstance(new_doc.get("serial"), bool):
         # A changed constitution signs the next serial, so the ledger that ran this one never goes back to it
         # (live run 9x, C44).
@@ -1140,12 +1232,9 @@ def _signed_change(config, tokens, value, unset, key_path, rules_path, passphras
     if _plain({k: v for k, v in new_envelope["signed"].items() if k != "serial"}) == _plain(
             {k: v for k, v in signed_before.items() if k != "serial"}):
         raise ConfigChangeError(f"unchanged: {format_name(tokens)} already signs as that")
-    name = format_name(tokens)
-    shown = [f"{name} (signed): {_show(tokens, get_at(rules_doc, tokens))} -> "
-             f"{'(unset)' if unset else _show(tokens, value)}"]
     shown += signed_diff(signed_before, new_envelope["signed"])
     envelope_bytes = (json.dumps(new_envelope, indent=2) + "\n").encode("utf-8")
-    return Change("set", [name], [FileChange(RULES, rules_file, dump(new_doc, rules_file)),
+    return Change("set", names, [FileChange(RULES, rules_file, dump(new_doc, rules_file)),
                                   FileChange(CONSTITUTION, Path(config.constitution), envelope_bytes)],
                   key=key, signed_before=signed_before, signed_after=new_envelope["signed"], shown=shown)
 

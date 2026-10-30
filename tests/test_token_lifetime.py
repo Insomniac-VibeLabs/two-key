@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from two_key.canonical import canonical_bytes
-from two_key.capability import CapabilityIssuer, CapabilityVerifier, TokenError, _b64u
+from two_key.capability import CapabilityIssuer, CapabilityVerifier, TokenError, _b64u, token_format
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey, TwoKeyConfigError
 from two_key.gateway import ToolGateway
@@ -27,8 +27,10 @@ class Clock:
 
 
 def forge(issuer, payload):
-    body = _b64u(canonical_bytes(payload))
-    return f"tk1.{body}.{sign(issuer.private_key, body.encode('ascii'))}"
+    """A token signed by the issuer's key with any payload, in the key's token format (``tk2`` for a hybrid key)."""
+    prefix, version, alg = token_format(issuer.private_key.public_key())
+    body = _b64u(canonical_bytes(dict(payload, v=version, alg=alg)))
+    return f"{prefix}.{body}.{sign(issuer.private_key, body.encode('ascii'))}"
 
 
 BASE = {"v": 1, "jti": "j", "tool": "search", "args_hash": "a", "ledger_root": "r", "ledger_size": 0,
@@ -94,9 +96,10 @@ class GatewayAndTwoKey(unittest.TestCase):
             no_args_hash = forge(tk.issuer, {"v": 1, "jti": "x", "tool": "search", "iat": now, "exp": now + 30})
             self.assertEqual(gw.invoke(no_args_hash, "search", {}).reason, "malformed_token")
             for iat, exp in ((str(now), "1e400"), ("-1e400", str(now + 30))):   # JSON numbers that parse to inf
-                text = canonical_bytes(BASE).decode()[:-1] + f',"exp":{exp},"iat":{iat}}}'
+                text = canonical_bytes(dict(BASE, v=2, alg="ed25519+ml-dsa-65")).decode()[:-1] \
+                    + f',"exp":{exp},"iat":{iat}}}'
                 body = _b64u(text.encode())
-                huge = f"tk1.{body}.{sign(tk.issuer.private_key, body.encode('ascii'))}"
+                huge = f"tk2.{body}.{sign(tk.issuer.private_key, body.encode('ascii'))}"
                 self.assertEqual(gw.invoke(huge, "search", {}).reason, "malformed_token")
             long = forge(tk.issuer, dict(BASE, iat=now, exp=now + 61))
             self.assertEqual(gw.invoke(long, "search", {}).reason, "ttl_too_long")

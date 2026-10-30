@@ -117,8 +117,8 @@ class ConstitutionEditor:
         bar = tk.Menu(root)
         files = tk.Menu(bar, tearoff=False)
         files.add_command(label="New", command=lambda: self.load(new_draft(), "new constitution"))
-        files.add_command(label="Open prose and rules…", command=self.ask_open_sources)
-        files.add_command(label="Open a signed constitution…", command=self.ask_open_signed)
+        files.add_command(label="Open prose and rules...", command=self.ask_open_sources)
+        files.add_command(label="Open a signed constitution...", command=self.ask_open_signed)
         files.add_separator()
         files.add_command(label="Close", command=root.destroy)
         bar.add_cascade(label="File", menu=files)
@@ -521,14 +521,14 @@ class ConstitutionEditor:
         ttk.Label(line, text=label, width=30).pack(side="left")
         ttk.Entry(line, textvariable=var, **entry).pack(side="left", fill="x", expand=True)
         if browse is not None:
-            ttk.Button(line, text="Browse…", command=browse).pack(side="left", padx=4)
+            ttk.Button(line, text="Browse...", command=browse).pack(side="left", padx=4)
 
     def _build_key_rows(self, tab, key_path: str, folder: str) -> None:
         self.key_path.set(key_path)
         self.folder.set(folder)
         self._row(tab, "Principal key (principal.pem)", self.key_path, self.ask_key)
         self._row(tab, "Key passphrase (if encrypted)", self.passphrase, show="•")
-        self._row(tab, "…or a passphrase file", self.passphrase_file)
+        self._row(tab, "...or a passphrase file", self.passphrase_file)
         self._row(tab, "Folder to write into", self.folder, self.ask_folder)
         names = ttk.Frame(tab)
         names.pack(fill="x", pady=1)

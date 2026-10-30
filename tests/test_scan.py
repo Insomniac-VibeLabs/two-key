@@ -203,10 +203,11 @@ class Stances(Base):
 
 class Failures(Base):
     def test_a_timeout_is_unavailable(self):
-        self.make(Fixed(delay=1.0), timeout_seconds=0.2, stance="strict")
+        # The scanner sleeps well past the bound, so a slow CI runner cannot pass the check by accident or fail it.
+        self.make(Fixed(delay=3.0), timeout_seconds=0.2, stance="strict")
         started = time.monotonic()
         d, _ = self.email()
-        self.assertLess(time.monotonic() - started, 0.9)
+        self.assertLess(time.monotonic() - started, 2.5)
         self.assertFalse(d.allowed)
         self.assertEqual(self.entries("scan")[-1]["verdict"], "unavailable")
         self.assertEqual(self.entries("scan")[-1]["error"], "timeout")
