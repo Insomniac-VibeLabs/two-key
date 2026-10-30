@@ -186,6 +186,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29](#release-v090-hybrid-signatures-the-tool-check-a-setup-window--2026-10-29)
 - [The first-time demo is taken out — 2026-10-30](#the-first-time-demo-is-taken-out--2026-10-30)
 - [Folder-path fields for Path A — 2026-10-30](#folder-path-fields-for-path-a--2026-10-30)
+- [A first-time demo on a real tool server — 2026-10-30](#a-first-time-demo-on-a-real-tool-server--2026-10-30)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5462,3 +5463,17 @@ only match a path against an exact list of strings, so a file tool's rules had t
 - Tests: `tests/test_path_fields.py` (the HOWTO table, a randomized cleanup test against `posixpath.normpath`,
   definitions and rule paths refused at signing, v3 only, calls through the gateway, real links).
 
+
+## A first-time demo on a real tool server — 2026-10-30
+
+- **docs/DEMO.md** again, rebuilt on the official MCP filesystem server
+  (`@modelcontextprotocol/server-filesystem` 2.1.0, on Node.js 24) instead of a pretend payments server
+  (maintainer's request). No money: an agent keeps office notes in `/srv/notes`. The rules hold every path
+  inside that folder with a path field (0.9.0); the agent's four requests are allowed, refused by the rules
+  (`field_not_allowed`, a line for `~/.ssh/authorized_keys`), refused by the judge (`insufficient_yes:0<1`, a
+  password in a note), and refused for a `..` path (`field_unreadable`). The judge is Qwen3 4B Instruct 2507 in
+  LM Studio on Windows through an SSH tunnel; the agent is ollmcp with Llama 3.2 3B in Ollama. Two-Key
+  screenshots are from a live run with the real filesystem server; places for LM Studio, Windows and agent
+  screenshots are marked.
+- **examples/demo/**: the signed prose, the rules and the setup answers the page uses, also in the source
+  package on PyPI. README, AGENTS.md and llms.txt link the page.

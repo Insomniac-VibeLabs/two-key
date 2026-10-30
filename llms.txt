@@ -76,6 +76,10 @@ negations; all or any), and sortable on several keys. --print writes the matches
 names. No network port, no export, never appends (docs/LEDGER_VIEW.md).
 Quickstart (0.9.0, docs/QUICKSTART.md): pip install, a local Ollama judge, two-key setup --answers, one allowed
 and one refused two-key authorize, then ledger-view. Every command on the page runs in CI (tests/quickstart_run.py).
+Demo walkthrough (docs/DEMO.md, files in examples/demo/): a plain-language first-time demo with screenshots. The
+official MCP filesystem server behind two-key mcp-proxy, its paths held inside /srv/notes by a path field; an LM
+Studio judge on Windows through an SSH tunnel; an ollmcp agent with Ollama on Ubuntu. One write allowed, one
+refused by the rules, one by the judge, one with .. refused, then the ledger view.
 The tool check (0.9.0, #28; two_key/toolcheck.py, docs/TOOL_CHECK.md): a tool behind two-key mcp-proxy whose signed
 spec has tool_check {key: hybrid-sha256:...} runs a call only with the spent token and a redeem stamp the proxy sends in MCP
 _meta, refuses replays through a SQLite seen record, and signs a receipt the gateway checks and ledgers;

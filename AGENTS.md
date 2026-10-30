@@ -94,7 +94,7 @@ From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-Vib
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/CONNECTING.md` (a new connection or hook gets a row there),
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/CONSTITUTION_EDITOR.md`, `docs/TOOL_CHECK.md`, `docs/QUICKSTART.md`, `docs/GUI_WALKTHROUGH.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
+  `docs/SCOPE.md`, `docs/SIEM.md`, `docs/LEDGER_VIEW.md`, `docs/CONSTITUTION_EDITOR.md`, `docs/TOOL_CHECK.md`, `docs/QUICKSTART.md`, `docs/DEMO.md`, `docs/GUI_WALKTHROUGH.md`, `docs/PYPI.md`, `CHANGES.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `AGENTS.md`, and `llms.txt` as needed.
 - docs/QUICKSTART.md (0.9.0) is run in CI by `tests/quickstart_run.py`: every ```bash block runs in order
   in a new folder and must exit 0, unless the `<!-- quickstart: ... -->` line above it says `skip`, `exit=N`
