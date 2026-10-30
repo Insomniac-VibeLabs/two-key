@@ -103,7 +103,7 @@ class Cleanup(unittest.TestCase):
             self.assertEqual(clean_path(got), got)
             self.assertEqual(got, "/" + posixpath.normpath(raw).lstrip("/"))
             if path_inside(got, NOTES):
-                self.assertTrue(posixpath.commonpath([got, NOTES]) == NOTES)
+                self.assertEqual(posixpath.commonpath([got, NOTES]), NOTES)
         self.assertGreater(accepted, 500)
 
     def test_inside_is_whole_segments(self):
