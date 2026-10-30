@@ -182,6 +182,7 @@ SPDX-License-Identifier: Apache-2.0
 - [FIPS mode after 1.0, and a clearer README — 2026-10-29](#fips-mode-after-10-and-a-clearer-readme--2026-10-29)
 - [Live run 12 findings — 2026-10-29](#live-run-12-findings--2026-10-29)
 - [Setup window keys and an owner-only signed constitution — 2026-10-29](#setup-window-keys-and-an-owner-only-signed-constitution--2026-10-29)
+- [An illustrated walkthrough of the windows — 2026-10-29](#an-illustrated-walkthrough-of-the-windows--2026-10-29)
 - [Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29](#release-v090-hybrid-signatures-the-tool-check-a-setup-window--2026-10-29)
 - [A first-time demo walkthrough — 2026-10-29](#a-first-time-demo-walkthrough--2026-10-29)
 <!-- /toc -->
@@ -5380,6 +5381,14 @@ Found while taking the 0.9.0 screenshots for the setup guide.
 - The constitution editor writes `constitution.signed.json` owner-only (0600), like the prose and rules files and
   like `two-key setup`. It was 0644 under a 022 umask. The key upgrade's new signature on a constitution keeps an
   owner-only file owner-only.
+
+## An illustrated walkthrough of the windows — 2026-10-29
+
+- `docs/GUI_WALKTHROUGH.md`: one deployment from the setup window through the constitution editor, the agent's
+  calls and the ledger view, then a 0.8.0 deployment's key upgrade, with 31 screenshots from one live run at
+  3dabb06 in `docs/images/gui-walkthrough/`. SETUP and the README's document table link to it.
+- `tests/test_doc_links.py`: every relative link and image in the documents points at a file in the repository,
+  each linked PNG is a PNG, and the walkthrough shows each of its screenshots once.
 
 ## Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29
 

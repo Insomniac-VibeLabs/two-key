@@ -182,6 +182,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [docs/FIT.md](docs/FIT.md) | Whether Two-Key is the right control for you |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Ten minutes from install to an allowed and a refused call, on the command line or in the windows |
 | [docs/DEMO.md](docs/DEMO.md) | A first-time demo, step by step with screenshots: a local LM Studio judge on Windows, and an agent on Ubuntu behind Two-Key |
+| [docs/GUI_WALKTHROUGH.md](docs/GUI_WALKTHROUGH.md) | Every window step by step, in screenshots from one live run: setup, the constitution editor, the ledger view, and the 0.8.0 key upgrade (0.9.0) |
 | [docs/HOWTO.md](docs/HOWTO.md) | Setup, configuration, the MCP proxy, and operations |
 | [docs/CONNECTING.md](docs/CONNECTING.md) | Connecting the agent and every hook so it cannot go around Two-Key, with a checklist |
 | [docs/SETTINGS.md](docs/SETTINGS.md) | Every setting: its file, default, what `high_assurance` does to it, and who may change it |

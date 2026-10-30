@@ -271,6 +271,8 @@ turned off, one proxy per agent turned off) needs `yes` typed in the box beside 
 setup finishes, the Review page shows the next steps, and two buttons open `constitution-editor` and
 `ledger-view` on the new folder. The editor is given `--public-key principal.pub.pem`, so it checks the signed
 constitution's signature, and the ledger view is given `--witness-public-key ledger.witness/witness.pub.pem`.
+[GUI_WALKTHROUGH](GUI_WALKTHROUGH.md) shows every page of the window, then the editor and the ledger view, in
+screenshots from one live run.
 
 **The High assurance switch** sets `quorum.profile: high_assurance`, fills in the profile's quorum numbers, and
 makes them minimums: each number can be raised (with three judges you can require three yes votes) but never
