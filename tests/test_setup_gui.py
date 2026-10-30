@@ -149,10 +149,14 @@ class Window(unittest.TestCase):
         args = window.launch_arguments("ledger-view")
         witness = self.base / "deployment" / "ledger.witness" / "witness.pub.pem"
         self.assertEqual(args[args.index("--witness-public-key") + 1], str(witness))
+        # GUI guide run: the refresh that clearing the typed yes set off put the answers back over the next steps.
+        window.refresh()
+        self.assertIn("Next steps:", window.review_box.get("1.0", "end"))
         # Run 12, E3c: answers changed after the setup say what is wrong now, beside the result.
         window.high.set(True)
         window.refresh()
         self.assertRegex(window.status.cget("text"), r"^Set up in .*The answers changed since, and now: ")
+        self.assertIn("Next steps:", window.review_box.get("1.0", "end"))
 
     def test_high_assurance_switch_raises_the_numbers_and_locks_them_as_minimums(self):
         window = self.window()

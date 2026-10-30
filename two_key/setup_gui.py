@@ -494,7 +494,8 @@ class SetupWindow:
         self.quorum_note.configure(text="\n".join([*(f"WARN  {w}" for w in found.warnings),
                                                    *(f"weaker: {w}" for w in found.weaker)]))
         self.yes_label.configure(foreground=BAD if found.weaker else "")
-        _set_text(self.review_box, self._review_text(answers, found))
+        if self.result is None:     # after setup the Review page keeps its log and next steps
+            _set_text(self.review_box, self._review_text(answers, found))
         ready = found.ready and bool(self.var["dir"].get().strip()) and self.result is None
         self.setup_button.configure(state="normal" if ready else "disabled")
         if self.result is not None:
@@ -569,7 +570,7 @@ class SetupWindow:
             _set_text(self.review_box, f"Setup refused: {e}\n\n{log.getvalue()}")
             return None
         finally:
-            self.var["typed_yes"].set("")
+            self._clear_typed_yes()
         self.result = result
         steps = "\n".join(f"  - {step}" for step in result.get("next", []))
         _set_text(self.review_box, f"{log.getvalue()}\nSet up in {result['dir']}.\n\nNext steps:\n{steps}")
@@ -578,6 +579,15 @@ class SetupWindow:
         self.open_editor.configure(state="normal")
         self.open_ledger.configure(state="normal")
         return result
+
+    def _clear_typed_yes(self) -> None:
+        """Empty the typed yes without a refresh: one would replace setup's log and next steps, or the refusal,
+        on the Review page with the answers."""
+        self._filling = True
+        try:
+            self.var["typed_yes"].set("")
+        finally:
+            self._filling = False
 
     def launch_arguments(self, command: str) -> list[str]:
         """The command line that opens another two-key window on the new folder."""

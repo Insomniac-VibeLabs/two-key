@@ -5381,6 +5381,8 @@ Found while taking the 0.9.0 screenshots for the setup guide.
 - The constitution editor writes `constitution.signed.json` owner-only (0600), like the prose and rules files and
   like `two-key setup`. It was 0644 under a 022 umask. The key upgrade's new signature on a constitution keeps an
   owner-only file owner-only.
+- After **Set up**, the Review page keeps setup's log and next steps. Clearing the typed `yes` set off a check of
+  the answers that put them back over the next steps a moment later.
 
 ## An illustrated walkthrough of the windows — 2026-10-29
 

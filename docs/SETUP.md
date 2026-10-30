@@ -268,8 +268,8 @@ window sets up once: after that the status line keeps `Set up in ...`, and if yo
 what is wrong with them now. **Set
 up** stays off until nothing stops it. A weaker setting (a quorum number below the profile's own, the summary
 turned off, one proxy per agent turned off) needs `yes` typed in the box beside it, as the terminal asks. When
-setup finishes, the Review page shows the next steps, and two buttons open `constitution-editor` and
-`ledger-view` on the new folder. The editor is given `--public-key principal.pub.pem`, so it checks the signed
+setup finishes, the Review page shows setup's log and the next steps, and keeps them there even if you change
+the answers afterwards. Two buttons open `constitution-editor` and `ledger-view` on the new folder. The editor is given `--public-key principal.pub.pem`, so it checks the signed
 constitution's signature, and the ledger view is given `--witness-public-key ledger.witness/witness.pub.pem`.
 [GUI_WALKTHROUGH](GUI_WALKTHROUGH.md) shows every page of the window, then the editor and the ledger view, in
 screenshots from one live run.
