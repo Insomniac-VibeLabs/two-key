@@ -62,7 +62,7 @@ flowchart TD
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
-| 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, and formats frozen for 1.0 | Planned |
+| 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, folder-path rules for key one, and formats frozen for 1.0 | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
 | After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
@@ -206,6 +206,9 @@ frozen, so the public review looks at the final shape.
 - A ten-minute quickstart and a demo with a real MCP server.
 - `two-key config set 'tools[*].claim'`: one setting on every tool as one change, one confirmation and one
   ledger entry (live run 11).
+- Folder-path rules for key one (maintainer's request and design review, 2026-10-30): a `path` field type that
+  admits any file inside signed folders, cleaned as text with `..` and relative paths refused, and a link check
+  just before the tool runs (HOWTO "File paths inside a folder").
 - A setup window, `two-key setup --window`, beside the terminal setup (maintainer's request, 2026-10-28):
   the same answers and the same `build`, a High assurance switch that locks the profile's settings and makes
   its quorum numbers minimums, and a Save answers file for a server with no screen.

@@ -185,6 +185,7 @@ SPDX-License-Identifier: Apache-2.0
 - [An illustrated walkthrough of the windows — 2026-10-29](#an-illustrated-walkthrough-of-the-windows--2026-10-29)
 - [Release v0.9.0: hybrid signatures, the tool check, a setup window — 2026-10-29](#release-v090-hybrid-signatures-the-tool-check-a-setup-window--2026-10-29)
 - [The first-time demo is taken out — 2026-10-30](#the-first-time-demo-is-taken-out--2026-10-30)
+- [Folder-path fields for Path A — 2026-10-30](#folder-path-fields-for-path-a--2026-10-30)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5409,10 +5410,13 @@ detail.
 - **`two-key setup --window`**, the setup window beside the terminal interview, and **`tools[*].claim`** in
   `config set`: one confirmation and one ledger entry for every tool.
 - **A ten-minute quickstart** (docs/QUICKSTART.md), run in CI.
+- **Folder-path rules for key one** (`type: path`): a custom field that admits any file inside signed folders,
+  cleaned as text only, with `..` and relative paths refused, and a link check just before the tool runs
+  ("Folder-path fields for Path A" below).
 - **Live testing**: GrokBot's run 12 tested the key upgrade on copies of a 0.8.0 deployment, hybrid signatures,
   the tool check and the setup window. Nothing it found let a forbidden call run; its live cases that did not
   pass were stale or too narrow, and its findings are fixed ("Live run 12 findings").
-- 1486 tests.
+- 1502 tests.
 
 ### Upgrading from 0.8.0
 
@@ -5425,3 +5429,36 @@ for good), and back up again at once.
 - docs/DEMO.md and examples/demo/ (added 2026-10-29) are removed before 0.9.0. Their tool server was a pretend
   payments server written for the page. A new demo, built on a real, lightweight MCP server, is being planned
   (maintainer's request).
+
+## Folder-path fields for Path A — 2026-10-30
+
+Design note reviewed by the maintainer (2026-10-30): all recommendations taken, shipped in 0.9.0. Key one could
+only match a path against an exact list of strings, so a file tool's rules had to name every file.
+
+- New custom field type `path` (`two_key/fields.py`): `under:` lists the signed folders (absolute, in clean
+  form, not `/`, none inside another, at most 16). A value outside every folder is `field_not_allowed`. New
+  operators `under` and `not_under` beside `eq`, `neq`, `in`, `not_in`; a rule path outside every folder is
+  refused at signing, since the rule could never apply.
+- `clean_path` cleans a value as text only, never reading the disk, so authorization and the gateway agree:
+  repeated and trailing slashes collapse and `.` segments drop. It refuses (`field_unreadable`) a relative path
+  (`~` included), a `..` segment (not worked out, since `a/link/../b` follows `link` first on a disk), a
+  backslash, anything but printable ASCII, and a path over 4,096 characters, 64 segments, or 255 characters in a
+  segment. "Inside" compares whole segments (`path_inside`), so `notes2` is not inside `notes`. The tool
+  receives the cleaned path.
+- Letter case is exact by default. `case: insensitive` lower-cases values, folders and rule paths for a
+  filesystem that ignores case; signing warns about an exact path field in a rule that lists paths to deny.
+- Policy VM opcode `UNDER` (compiled on load, never signed, so no format change).
+- The gateway, just before the tool runs and after the `file_changed` check, refuses a path with a link or
+  junction below its signed folder (`path_symlink:<field>`); the folder itself may be a link. Best effort, on
+  both the proxy and the library route, with no setting to turn it off.
+- A path field signs as `two-key-constitution-v3`; 0.8.0 and older refuse it as an unknown field type.
+- `two-key sign-constitution` and the constitution editor note each tool that maps a path field, with its
+  folders. The agent vocabulary describes a path field's syntax, never its folders.
+- Docs: HOWTO "File paths inside a folder (`type: path`)" with a table of tricky inputs that
+  `tests/test_path_fields.py` checks row by row, THREAT_MODEL (what the check cannot see: links, hard links,
+  the swap before the tool opens the file, another mount), CONNECTING (run the file tool as its own account
+  that can write only the folder), SETTINGS, SCOPE, UPGRADING, CONSTITUTION_EDITOR, AGENTS.md, llms.txt, and
+  the README field list.
+- Tests: `tests/test_path_fields.py` (the HOWTO table, a randomized cleanup test against `posixpath.normpath`,
+  definitions and rule paths refused at signing, v3 only, calls through the gateway, real links).
+

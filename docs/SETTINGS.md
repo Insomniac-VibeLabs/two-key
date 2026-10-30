@@ -307,7 +307,7 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `tool_specs.<tool>.fields.<name>.json_path` | none |  | The argument that holds the field's value. |
 | `tool_specs.<tool>.fields.<name>.source` | the arguments |  | `caller` for a fact the proxy's hook supplies. |
 | `tool_specs.<tool>.fields.<name>.encrypted` | none |  | `pass`, only on the `scan` field: an encrypted file reaches the tool without a look inside. |
-| `fields.<name>.type` | required |  | `boolean`, `integer`, `enum`, or `string`. |
+| `fields.<name>.type` | required |  | `boolean`, `integer`, `enum`, `string`, or `path`. |
 | `fields.<name>.default` | required |  | The value a tool that does not map the field gets. |
 | `fields.<name>.description` | none |  | Text for the signer and the judges. Never an authorization rule. |
 | `fields.<name>.source` | the arguments |  | `caller`: the value comes from the caller (the proxy's fact hook, or `facts=` in code), never from the agent. |
@@ -317,4 +317,5 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `fields.<name>.charset` | ascii |  | `ascii` or `unicode`, for `enum` and `string`. |
 | `fields.<name>.scripts` | required with `charset: unicode` |  | The one writing system allowed, such as `latin`, `cyrillic` or `arabic`. Not valid with `ascii`. |
 | `fields.<name>.max_length` | required for `string` |  | Longest value. |
-| `fields.<name>.case` | case-insensitive |  | `exact`, for `string`. |
+| `fields.<name>.case` | case-insensitive for `string`, exact for `path` |  | `exact`, for `string`; `insensitive`, for `path`. |
+| `fields.<name>.under` | required for `path` |  | The folders a path must be inside, absolute and in clean form; not `/`, and none inside another. |

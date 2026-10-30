@@ -166,8 +166,13 @@ does not read the contents. Omit shape and the value's children are copied
 unread. After a derive deny, tool_args are withheld from
 judges unless tool_args_on_derive_deny is set. A derive_failed call (unreadable under its spec)
 then reaches no judge (0.5.0); amount/counterparty/irreversible mismatches and rule denies still do.
-Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer, enum, or
-string; up to 64), each with a signed default and an optional description. A tool spec maps
+Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer, enum,
+string, or path; up to 64), each with a signed default and an optional description. A path field
+(0.9.0, v3) admits an absolute file path inside one of its signed under: folders, compared whole segment
+by segment; it is cleaned as text only (repeated slashes and . dropped) and refuses .., relative paths
+and ~, backslashes and non-ASCII; the tool gets the cleaned path; ops add under and not_under; the gateway
+refuses a link below the folder just before the tool runs (path_symlink:<field>). Not a sandbox: the
+tool's own folder limit and its account stop a swap after that check. A tool spec maps
 a field to an argument path; a mapped field is required. A counterparty allow entry "@example.org"
 (0.5.0, v3) admits any plain email address at exactly that ASCII domain (no subdomains, no lookalike
 letters, no header-carrying local parts; never in deny_counterparties; no wildcards); signing warns when

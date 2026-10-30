@@ -50,6 +50,7 @@ from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVe
 from .agent_meta import cap_ledger_text, type_tag
 from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
 from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, digest_hex, to_plain
+from .fields import path_fields, path_inside
 from .derive import (MAX_ARGS_BYTES, DeriveError, args_too_large, blocked_from_rules, caller_fields, canonical_too_large,
                      derive, dropped_keys, form_for, forms_match, project_arguments, size_record)
 from .keys import public_raw
@@ -64,6 +65,18 @@ _MAX_JTI_CHARS = 64
 _MAX_DENIED_JTIS = 4096
 # Same-jti waiters: max seconds to wait for an in-flight deny append (#25).
 _DENY_INFLIGHT_WAIT_SECONDS = 30.0
+
+
+def linked_path(path: str, folders: Any) -> bool:
+    """True when a part of the cleaned ``path`` below its signed folder is a link or junction, so the tool could
+    be sent elsewhere. Best effort: a swap after this check is the tool's and the OS's to stop. A path that
+    cannot be resolved counts as linked."""
+    try:
+        folder = max((f for f in folders if path_inside(path, f)), key=len)
+        expected = os.path.normpath(os.path.join(os.path.realpath(folder), os.path.relpath(path, folder)))
+        return os.path.normcase(os.path.realpath(path)) != os.path.normcase(expected)
+    except (OSError, ValueError):       # a link loop, or no folder holds it (never after derive)
+        return True
 
 
 def _ledger_failed(e: Exception) -> str:
@@ -375,14 +388,9 @@ class ToolGateway:
                 return GatewayResult(False, "already_redeemed")
             if self.ledger.redemption_started(payload["jti"]):
                 return GatewayResult(False, "already_attempted")
-            # Last, just before the tool runs: each declared file is the one that was scanned.
-            if scan is not None:
-                try:
-                    same = self.scanner.file_digests(tool, arguments) == scan["files"]
-                except Exception:       # could not read them again: not the files that were scanned
-                    same = False
-                if not same:
-                    return GatewayResult(False, "file_changed")
+            problem = self._last_checks(spec, tool, arguments, scan, dict(derived.fields))
+            if problem:
+                return GatewayResult(False, problem)
             try:
                 started = self.ledger.record("redemption_started", {"jti": payload["jti"], "tool": tool,
                                                                     "dropped_keys": dropped_keys(spec, arguments)})
@@ -397,6 +405,22 @@ class ToolGateway:
                     return GatewayResult(False, _ledger_failed(le))
                 return GatewayResult(False, f"tool_error:{type_tag(e)}", None)
             return self._finish(payload, tool, pinned, stamp, output)
+
+    def _last_checks(self, spec: dict, tool: str, arguments: dict, scan: dict | None, fields: dict) -> str | None:
+        """Last, just before the tool runs: each declared file is the one that was scanned, and no path field
+        reaches through a link below its signed folder. Why the tool must not run, else None."""
+        if scan is not None:
+            try:
+                same = self.scanner.file_digests(tool, arguments) == scan["files"]
+            except Exception:       # could not read them again: not the files that were scanned
+                same = False
+            if not same:
+                return "file_changed"
+        registry = self.compiled.fields
+        for name in path_fields(spec, registry):
+            if linked_path(fields[name], registry[name]["under"]):
+                return f"path_symlink:{name}"
+        return None
 
     def _check_ready(self, pinned: str | None, payload: dict, tool: str, projected: dict) -> str | None:
         """Why a call to a checked tool cannot go ahead, before anything is ledgered as started; else None."""

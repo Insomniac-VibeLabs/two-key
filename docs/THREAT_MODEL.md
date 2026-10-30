@@ -191,7 +191,8 @@ flowchart TD
   in. A counterparty path is the canonical party, not the raw spelling.
   The gateway never scans: with a content scanner configured, it takes the
   verdict from the token and hashes each file sent by path again
-  (`file_changed`).
+  (`file_changed`). For a `path` field (0.9.0) it checks that no part of
+  the path below its signed folder is a link (`path_symlink:<field>`).
 - Two-Key to the content scanner (0.6.0; docs/SCANNERS.md).
   Optional. For each call to a tool the signed constitution marks (it maps
   the `scan` field), Two-Key sends the scanner every argument (keys the
@@ -737,6 +738,27 @@ claims to close.
   `FILE_FLAG_OPEN_REPARSE_POINT`, so a symlink or junction as the last part
   of the path is refused, as `O_NOFOLLOW` does on POSIX; a link earlier in
   the path is followed on every platform.
+- **Path fields** (`type: path`, 0.9.0) are a signed check on the path
+  the agent asked for, not a sandbox. Path A cleans the path as text and
+  never reads the disk, so authorization and the gateway agree; it refuses
+  `..`, relative paths, a backslash, and non-ASCII, and the tool receives
+  the cleaned path. Two-Key never opens the file; the tool does, later.
+  Four gaps follow. A symlink or junction planted below the signed folder
+  passes Path A; the gateway refuses one that exists just before the tool
+  runs (`path_symlink:<field>`), but anything that can write in the folder
+  can swap a part for a link after that check. A hard link inside the
+  folder to a file elsewhere on the same filesystem looks like an ordinary
+  file (Linux's `protected_hardlinks`, on by default, stops links to files
+  the account does not own). A tool in a container or on another mount can
+  see another file at the same path. And a tool that decodes the path
+  itself (`%2e`, `file://` URIs, its own `~`) reads it differently. What
+  covers them is the tool's own folder limit (set the MCP filesystem
+  server's allowed folder to the signed one) and an account for the tool
+  that can write only that folder, with nothing else on the host that can
+  make links there. On a filesystem that ignores letter case, an exact
+  path field misses case variants in a deny rule; signing warns, and
+  `case: insensitive` folds them. Path values (file names) are in the
+  ledger like other field values; the SIEM copy leaves them out.
 - **Content scanning** (0.6.0) is only as good as the
   operator's product and its signatures. Under the default stance a
   scanner that is down lets calls through to the two keys (ledgered once,
@@ -926,13 +948,13 @@ here.
 ## What to re-check when the code changes
 
 - `two_key/core.py`: both paths run once the call is well-formed and within limits, except that a `derive_failed:` call skips the judges unless `tool_args_on_derive_deny` is set (ledgered `skipped:derive_failed`), and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
-- `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies; a `case: exact` ASCII string is compared and passed on as written, and signs only as v3. A description is never compiled, sent to a judge, or used in a reason.
+- `two_key/fields.py` and `two_key/policy_vm.py`: custom field values come from argument paths only; `LOAD` never reads `Action.raw` or a custom name, and custom fields load with `LOAD_FIELD` from the derived mapping only. A mapped field is required. Enum and string values are normalized (ASCII, or NFKC_Casefold with declared scripts) and a character outside the declared scripts denies; a `case: exact` ASCII string is compared and passed on as written, and signs only as v3. A `path` value is cleaned as text only (`clean_path`: absolute, printable ASCII, no backslash, no `..`, repeated slashes and `.` dropped), must be inside a signed `under` folder segment by segment (`path_inside`), reaches the tool cleaned, and signs only as v3; `UNDER` compares whole segments. A description is never compiled, sent to a judge, or used in a reason.
 - `two_key/derive.py`: JSON paths only. `party_allowed`: an exact entry, or an `@domain` entry for an address whose domain equals it (ASCII host name, no subdomain) and whose local part is plain (atext and dots); `@domain` itself is not a party. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children. A `source: caller` field takes its value from `facts=` only: written in the arguments it denies (`caller_field_in_arguments`), missing it denies (`field_missing`), and a fact the tool does not map denies (`fact_not_mapped`). Its path, if any, is where the tool receives the fact.
 - `two_key/constitution.py`: a caller field, a `case: exact` field, a `not_applicable` mark, or an `@domain` allow entry signs only as v3; a v1 or v2 envelope with one is refused. A constitution without them keeps its v1 or v2 bytes. Every tool maps each field a `deny_if_fields` rule reads or marks it `not_applicable`, at signing and on load. An allow entry with `*`, or a domain entry that is not an ASCII host name, does not sign; `deny_counterparties` refuses domain entries.
 - `two_key/history.py`: every string in a summary is a signed tool id, an exact signed allow entry or the `@domain` entry an address matched (never one on `deny_counterparties`), a reason code from `REASON_CODES` (detail dropped; `rule_denied:<id>` keeps the signed id), an operator-configured agent id or `unnamed`, a scan verdict, or a time Two-Key formatted. It is written with `untrusted_json`, and with `enabled: false` no section and no system-prompt sentence are added (`tests/test_judge_history.py`). Approved totals count calls whose token ran (D6).
 - `two_key/core.py` (0.8.0): the summary is built under the ledger lock after catch-up; a failure is `internal_error:history` without judges unless `on_failure: judge_without_history`, and `judge_history_failed` is written in the decision's hold. Just before a token is minted, an approved decision for the same signed tool and party written after the summary was built is `history_changed`, no token. Every decision carries `at`, `subject`, `history_digest`, and `history_basis`; every `path_b` carries `ballots` with an error class and a keyed rationale digest, never text.
 - `two_key/quorum.py`: `lone_judge_warning` warns, never refuses, when one judge can approve alone (required_yes 1, min_responding 1, two or more judges). An abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
-- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner. A token that does not verify is still not ledgered; it only increments a class counter (`refused_tokens`), which keeps no token text.
+- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form (with the facts given to `invoke`; a changed caller field is `fact_mismatch`), the last checks just before the tool (`file_changed`, and `path_symlink:<field>` when a part of a path field below its folder is a link), then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner. A token that does not verify is still not ledgered; it only increments a class counter (`refused_tokens`), which keeps no token text.
 - `two_key/siem.py`: every ledger kind has a `KindSpec`, and every body key of every kind is `sent`, `hashed`, `excluded`, or extracted; a key nobody decided fails the tests. The excluded set keeps argument values, proposal and decline text, derived amounts, counterparties, custom field values, scanner threat names, and credentials out, and canary values in the tests prove it. The ledger observer only enqueues a sequence number; projecting, formatting, and sending happen on the sender thread, a full queue drops rather than blocks, and nothing a sink returns reaches the caller. An unledgered event (the refused-token count) carries `ledgered: false` and `seq: -1`.
 - `two_key/siem_sinks.py`: TLS sets `minimum_version` to TLS 1.2, verifies the certificate, and checks the host name, with no option to disable either; a webhook never follows a redirect and reads its authorization header and HMAC key from owner-only files; a plaintext sink warns at start and is refused under `high_assurance`.
 - `two_key/siem_export.py`: the export verifies the ledger first, writes a new owner-only file and refuses to overwrite, marks every event a `replay`, and ends with a signed summary. `verify` re-derives each event from the ledger and reports changed fields, gaps, repeats, and events from another ledger.
@@ -956,7 +978,8 @@ What each release added to the model, newest first. Each is described where it a
   (`two_key/keys.py`) and the one-time key upgrade of a 0.8.0 deployment (`two_key/upgrade.py`,
   `keys_upgraded`); the tool check (`two_key/toolcheck.py`): redeem stamps signed by a stamp-only key,
   tool receipts ledgered, and a held tool under `high_assurance`; a tool error spends the token; the
-  setup window (`two-key setup --window`), which runs the same `build` as the terminal setup.
+  setup window (`two-key setup --window`), which runs the same `build` as the terminal setup; `path`
+  fields (`two_key/fields.py`, the `UNDER` opcode) and the gateway's link check (`path_symlink`).
 - 0.8.0: the judge history summary (`two_key/history.py`), bound to each ballot and rebuilt by
   `two-key audit --check-history`; per-judge ballot records with an HMAC digest of the rationale, never
   its text; attempt episodes; one proxy per agent on a ledger (`agent_already_connected`); the proxy's

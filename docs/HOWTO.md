@@ -451,6 +451,7 @@ Types and the operators each allows:
 | `integer` | `min`, `max`, `default` | a JSON integer only (not `5.0`, `"5"`, `true`, or `null`), within `min`..`max` | `eq`, `neq`, `gt`, `gte`, `lt`, `lte` |
 | `enum` | `values`, `default`, optional `charset`/`scripts` | text equal, after normalization, to one declared value | `eq`, `neq`, `in`, `not_in` |
 | `string` | `max_length`, `default`, optional `charset`/`scripts`, or `case: exact` | text of at most `max_length` characters | `eq`, `neq`, `in`, `not_in` |
+| `path` | `under` (signed folders), `default`, optional `case: insensitive` | an absolute file path inside one of the `under` folders, cleaned up first ([below](#file-paths-inside-a-folder-type-path)) | `eq`, `neq`, `in`, `not_in`, `under`, `not_under` |
 
 Every value in a rule is checked against the field when the constitution
 is signed and loaded. An enum value that is not declared (`prdo`), an
@@ -479,7 +480,7 @@ not allow is refused, so a typo cannot become a rule that never fires.
 | --- | --- |
 | mapped path missing | `derive_failed:field_missing:<field>` |
 | wrong JSON type, or a character outside the field's character set | `derive_failed:field_unreadable:<field>` |
-| integer outside `min`..`max`, enum value not declared, string longer than `max_length` | `derive_failed:field_not_allowed:<field>` |
+| integer outside `min`..`max`, enum value not declared, string longer than `max_length`, path outside every `under` folder | `derive_failed:field_not_allowed:<field>` |
 
 Each is a derive deny, and no token is issued. The call cannot be read, so
 it is not sent to the judges, and Path B is ledgered as
@@ -557,6 +558,103 @@ hard_rules:
   its format guide; `agent_vocabulary()` says "letter case matters" for
   such a field, and never lists a value.
 
+#### File paths inside a folder (`type: path`)
+
+For a file tool, such as the MCP filesystem server, list the folders it may
+use instead of every file. A `path` value inside one of the `under` folders
+passes; anything else is `field_not_allowed`. Rules can deny a subfolder
+(`under`), allow only one (`not_under`), or name single files (`eq`, `in`):
+
+```yaml
+fields:
+  note_path:
+    type: path
+    under: [/home/agent/notes]
+    default: /home/agent/notes
+tool_specs:
+  write_file:
+    fields: {note_path: {json_path: path}}
+    payload: [{json_path: content}]
+  read_file:
+    fields: {note_path: {json_path: path}}
+hard_rules:
+  - id: tools
+    allow_only_tools: [write_file, read_file]
+  - id: no-private
+    deny_if_fields: {note_path: {under: /home/agent/notes/private}}
+```
+
+- "Inside" is the folder itself or anything below it, compared whole
+  segment by segment: `/home/agent/notes2/x` is not inside
+  `/home/agent/notes`.
+- Path A cleans the path up as text and never reads the disk: repeated and
+  trailing slashes collapse and `.` segments drop. It refuses
+  (`field_unreadable`), rather than guesses at, anything else: a relative
+  path (`todo.txt`, `./todo.txt`, `~/todo.txt`), a `..` segment, a
+  backslash, a character outside printable ASCII, and a path over 4,096
+  characters, 64 segments, or 255 characters in one segment. `..` is
+  refused because on a disk `a/link/../b` follows `link` first, so the
+  text answer could name another file than the tool opens. Relative paths
+  are refused because they depend on the tool's working folder, which
+  Two-Key does not know. Name the full path in the agent's instruction.
+- The tool receives the cleaned path Path A checked, not the agent's
+  spelling.
+- Just before the tool runs, the gateway checks that no part of the path
+  below its folder is a link or junction (`path_symlink:<field>`; the
+  tool does not run). The folder itself and the folders above it may be
+  links. This is best effort: anything that can write in the folder can
+  still swap a part for a link after the check. The tool's own folder
+  limit and the account it runs as close that (see [THREAT_MODEL.md](THREAT_MODEL.md)
+  and [CONNECTING.md](CONNECTING.md)).
+- Letter case is compared exactly. On a filesystem that ignores case
+  (macOS and Windows by default), declare `case: insensitive`: values,
+  folders and rule paths are then lower-cased, and the tool receives the
+  lower-cased path. Signing warns about an exact path field in a rule that
+  lists paths to deny (`eq`, `in`, `under`), where a case variant names
+  the same file and is not denied.
+- Paths are POSIX paths. A Windows path (`C:\notes\x`) is refused.
+- One path per field. A tool with two paths, such as `move_file`, maps two
+  fields; an argument that holds a list of paths is `field_unreadable`.
+- Signed folders and rule paths must already be in clean form, `/` is
+  refused as a folder, a folder may not sit inside another, and a rule
+  path outside every folder is refused (the rule could never apply).
+  `two-key sign-constitution` and the constitution editor print a note
+  for each tool that maps a path field, naming its folders.
+- A path field signs as `two-key-constitution-v3`. Installs before 0.9.0
+  refuse a constitution with one, as an unknown field type.
+
+What Path A does with each value, for `under: [/home/agent/notes]` (checked
+by `tests/test_path_fields.py`):
+
+<!-- path-vectors -->
+| Value the agent sends | Result |
+| --- | --- |
+| `/home/agent/notes/todo.txt` | `/home/agent/notes/todo.txt` |
+| `/home/agent/notes` | `/home/agent/notes` |
+| `/home//agent/./notes/todo.txt/` | `/home/agent/notes/todo.txt` |
+| `/home/agent/notes/sub dir/a b.txt` | `/home/agent/notes/sub dir/a b.txt` |
+| `/home/agent/notes/../.ssh/authorized_keys` | `field_unreadable` |
+| `/home/agent/notes/..` | `field_unreadable` |
+| `todo.txt` | `field_unreadable` |
+| `./todo.txt` | `field_unreadable` |
+| `~/notes/todo.txt` | `field_unreadable` |
+| `notes/todo.txt` | `field_unreadable` |
+| `/home/agent/notes\todo.txt` | `field_unreadable` |
+| `C:\notes\todo.txt` | `field_unreadable` |
+| `/home/agent/notes/caf\u00e9.txt` | `field_unreadable` |
+| `/home/agent/notes/a\u0000.txt` | `field_unreadable` |
+| `/home/agent/notes/a\u000a.txt` | `field_unreadable` |
+| `/home/agent/notes2/todo.txt` | `field_not_allowed` |
+| `/home/agent/Notes/todo.txt` | `field_not_allowed` |
+| `/home/agent` | `field_not_allowed` |
+| `/` | `field_not_allowed` |
+| `/etc/passwd` | `field_not_allowed` |
+| `//home/agent/notes/todo.txt` | `/home/agent/notes/todo.txt` |
+<!-- /path-vectors -->
+
+In the value column, `\uXXXX` stands for that one character; a
+backslash is itself.
+
 ### Descriptions
 
 `description` is a note for the people who read and review the
@@ -582,7 +680,8 @@ refuses any signed key other than `prose`, `hard_rules`, `tool_specs`, and
 `fields`. A constitution with any 0.5.0 feature signs as
 `two-key-constitution-v3`: a caller-supplied field
 (`source: caller`), a `case: exact` field, a `not_applicable` mark, or an
-`@domain` allow entry. Installs before 0.5.0 refuse v3 as an unsupported
+`@domain` allow entry; so does a `path` field (0.9.0), which installs
+before 0.9.0 refuse as an unknown field type. Installs before 0.5.0 refuse v3 as an unsupported
 format. The format label is outside the signed bytes, so the meaning comes
 from the signed bytes only: a v1 or v2 label on a constitution with any of
 them is refused, never read the 0.4.0 way. A v2
@@ -2184,6 +2283,7 @@ an argument value.
 | `fact_mismatch` | The hook's answer changed between authorize and the tool call, so the token no longer fits |
 | `rule_denied:<scan rule id>` | The content scanner flagged the call (or, under the strict stance, could not answer). The agent is not told what was found |
 | `file_changed` | A file sent by path changed after it was scanned |
+| `path_symlink:<field>` | A part of a `path` field's value below its signed folder is a link or junction, checked just before the tool runs. The tool does not run ([File paths inside a folder](#file-paths-inside-a-folder-type-path)) |
 | `file_too_large`, `too_many_files`, `call_files_too_large` | A declared file is over its `max_bytes`, or the call carries more than 32 files or 100 MiB of them. Denied before the scanner and both keys, under every stance |
 | `file_unreadable` | A declared file could not be read: bad base64, a value of the wrong type, a path outside its folder, a link, a missing file. Denied the same way |
 | any `two-key authorize` reason | `rule_denied:<rule id>`, `counterparty_not_allowed`, `derive_failed:...`, `insufficient_yes:...`, `cloud_judge_session_required`, `args_too_large`, and the others in "Parsing and limits" and "Quorum policy" |

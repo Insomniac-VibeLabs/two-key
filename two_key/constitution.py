@@ -18,7 +18,7 @@ from . import _platform
 from .action import DATA_CLASSES, DEFAULT_DATA_CLASS, DEFAULT_IRREVERSIBLE
 from .canonical import canonical_bytes, canonical_hash
 from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path, has_caller_fields,
-                     has_exact_fields, is_caller, rule_fields, validate_fields)
+                     has_exact_fields, has_path_fields, is_caller, rule_fields, validate_fields)
 from .derive import DOMAIN, is_domain_entry
 from .keys import classical_half, fingerprint, is_hybrid, sign, verify
 from .policy_vm import ConstitutionError, validate_rules
@@ -158,8 +158,8 @@ def _check_caller_mapping(where: str, defn: Mapping, entry: Any) -> None:
                                 "whose values include encrypted")
 
 
-V3_FEATURES = ("caller-supplied fields (source: caller), case: exact fields, not_applicable marks, and @domain "
-               "allow entries")
+V3_FEATURES = ("caller-supplied fields (source: caller), case: exact fields, path fields, not_applicable marks, "
+               "and @domain allow entries")
 
 
 def validate_serial(value: Any) -> int | None:
@@ -172,9 +172,9 @@ def validate_serial(value: Any) -> int | None:
 
 
 def uses_v3(registry: Mapping, specs: Mapping) -> bool:
-    """True when the signed bytes need a 0.5.0 reader: a caller-supplied or ``case: exact`` field, or a
-    ``not_applicable`` mark."""
-    return has_caller_fields(registry) or has_exact_fields(registry) or any(
+    """True when the signed bytes need a 0.5.0 reader: a caller-supplied, ``case: exact`` or path field, a
+    ``not_applicable`` mark, or an @domain entry. (A path field needs 0.9.0; earlier v3 readers refuse its type.)"""
+    return has_caller_fields(registry) or has_exact_fields(registry) or has_path_fields(registry) or any(
         entry == NOT_APPLICABLE for spec in specs.values() for entry in (spec.get("fields") or {}).values()) or any(
         is_domain_entry(item) for spec in specs.values() for party in spec.get("counterparties") or []
         for item in party.get("allow") or [])

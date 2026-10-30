@@ -20,8 +20,8 @@ A field declared ``source: caller`` is a caller-supplied fact: its value comes o
 constitution with such a field signs as v3 (constitution.py).
 
 Types: ``boolean``, ``integer`` (``min`` and ``max`` required, within +/-(2**53 - 1) so a float compare is
-exact), ``enum`` (a declared list of values), and ``string`` (``max_length`` required). Enum and string
-values use a character set:
+exact), ``enum`` (a declared list of values), ``string`` (``max_length`` required), and ``path`` (a file path
+inside one of the signed folders in ``under``; see "Paths" below). Enum and string values use a character set:
 
 - ``ascii`` (the default): printable ASCII, trimmed and lower-cased. A ``string`` field may declare
   ``case: exact`` instead: printable ASCII compared, and passed to the tool, exactly as written (no trim, no
@@ -31,6 +31,14 @@ values use a character set:
   folding (NFKC_Casefold). A letter outside the declared scripts, a control or format character, a
   private-use or unassigned code point, a generic combining mark, and non-ASCII punctuation that does not
   belong to a declared script are refused. ZWJ and ZWNJ are allowed only with a script that uses them.
+
+Paths (0.9.0): a ``path`` value is an absolute POSIX path, cleaned up as text only (``clean_path``): repeated
+and trailing slashes collapse and ``.`` segments drop. A value that is not printable ASCII, holds a backslash,
+is relative, starts with ``~``, has a ``..`` segment, or is over the limits is unreadable, never guessed at. A
+cleaned value outside every signed folder is not allowed. "Inside" is the folder itself or anything below it,
+whole segment by segment, so ``/a/notes2`` is not inside ``/a/notes``. Letter case is compared exactly unless
+the field declares ``case: insensitive`` (then values are lower-cased). The tool receives the cleaned value.
+Nothing here reads the disk: links are the gateway's check, just before the tool runs (``linked_path``).
 
 A ``description`` is an annotation: signed, never compiled, never sent to a judge, never in a deny reason.
 
@@ -60,6 +68,10 @@ MAX_CONDITIONS = 16                # operator conditions in one deny_if_fields r
 MAX_SAFE_INT = 2 ** 53 - 1
 MAX_PATH_SEGMENTS = 16
 MAX_PATH_CHARS = 512
+MAX_PATH_ROOTS = 16                # folders in one path field's ``under``
+MAX_FILE_PATH_CHARS = 4096         # one path value, before and after cleaning
+MAX_FILE_PATH_SEGMENTS = 64
+MAX_FILE_SEGMENT_CHARS = 255
 
 FIELD_NAME = re.compile(r"[a-z][a-z0-9_]{0,%d}" % (MAX_FIELD_NAME_CHARS - 1))
 # Names a custom field can never take: the built-in form and action fields, and the keys around them.
@@ -69,7 +81,7 @@ RESERVED_NAMES = frozenset({
 })
 RESERVED_PREFIXES = ("two_key",)
 
-FIELD_TYPES = ("boolean", "integer", "enum", "string")
+FIELD_TYPES = ("boolean", "integer", "enum", "string", "path")
 CHARSETS = ("ascii", "unicode")
 _COMMON_KEYS = {"type", "default", "description", "source"}
 SOURCES = ("caller",)       # an omitted source is the arguments; it is never written, so v1/v2 bytes do not change
@@ -81,13 +93,16 @@ _TYPE_KEYS = {
     "integer": _COMMON_KEYS | {"min", "max"},
     "enum": _COMMON_KEYS | {"values", "charset", "scripts"},
     "string": _COMMON_KEYS | {"max_length", "charset", "scripts", "case"},
+    "path": _COMMON_KEYS | {"under", "case"},
 }
 CASES = ("exact",)          # an omitted case is case-insensitive; it is never written, so v1/v2 bytes do not change
+PATH_CASES = ("insensitive",)   # a path's omitted case is exact: the other way round from a string
 OPS = {
     "boolean": ("eq",),
     "integer": ("eq", "neq", "gt", "gte", "lt", "lte"),
     "enum": ("eq", "neq", "in", "not_in"),
     "string": ("eq", "neq", "in", "not_in"),
+    "path": ("eq", "neq", "in", "not_in", "under", "not_under"),
 }
 
 # Unicode character-name prefixes that identify each supported script. Python's standard library has no
@@ -235,6 +250,42 @@ def normalize_text(value: Any, charset: str, scripts: str | None = None, case: s
     return text
 
 
+# --- Paths ------------------------------------------------------------------------------------------------
+
+def clean_path(value: Any, case: str | None = None) -> str:
+    """The cleaned form of a path value, or ``FieldValueError``. Text only: it never reads the disk.
+
+    Refused, not guessed: anything but printable ASCII, a backslash, a relative path (``~`` included), a ``..``
+    segment, and a path over the limits. ``..`` is refused rather than worked out because on a disk
+    ``a/link/../b`` follows ``link`` first, so the text answer can name another file than the tool opens."""
+    if not isinstance(value, str) or len(value) > MAX_FILE_PATH_CHARS:
+        raise _unreadable()
+    if any(not 0x20 <= ord(c) < 0x7F for c in value) or "\\" in value or not value.startswith("/"):
+        raise _unreadable()
+    segments = [part for part in value.split("/") if part not in ("", ".")]
+    if (".." in segments or len(segments) > MAX_FILE_PATH_SEGMENTS
+            or any(len(part) > MAX_FILE_SEGMENT_CHARS for part in segments)):
+        raise _unreadable()
+    text = "/" + "/".join(segments)
+    return text.lower() if case == "insensitive" else text
+
+
+def path_inside(path: str, folder: str) -> bool:
+    """True when the cleaned ``path`` is the cleaned ``folder`` or below it, whole segment by segment."""
+    return path == folder or path.startswith(folder.rstrip("/") + "/")
+
+
+def inside_any(path: str, folders: Any) -> bool:
+    return any(path_inside(path, folder) for folder in folders)
+
+
+def _coerce_path(defn: Mapping[str, Any], raw: Any) -> str:
+    cleaned = clean_path(raw, defn.get("case"))
+    if not inside_any(cleaned, defn["under"]):
+        raise FieldValueError("field_not_allowed")
+    return cleaned
+
+
 def _text_within(text: str, max_chars: int, max_bytes: int) -> bool:
     return len(text) <= max_chars and len(text.encode("utf-8")) <= max_bytes
 
@@ -252,6 +303,8 @@ def coerce_value(defn: Mapping[str, Any], raw: Any) -> Any:
         if not defn["min"] <= raw <= defn["max"]:
             raise FieldValueError("field_not_allowed")
         return int(raw)
+    if kind == "path":
+        return _coerce_path(defn, raw)
     text = normalize_text(raw, defn["charset"], defn.get("scripts"), defn.get("case"))
     if kind == "enum":
         if text not in defn["values"]:
@@ -368,12 +421,45 @@ def _field_type(defn: Any, where: str) -> str:
 
 
 def _letter_case(out: dict, defn: Mapping[str, Any], where: str) -> None:
-    """``case: exact`` (string only, per _TYPE_KEYS), set before the default is read."""
+    """``case: exact`` (string) or ``case: insensitive`` (path), per _TYPE_KEYS, set before the default is read."""
+    if out["type"] == "path":
+        if defn["case"] not in PATH_CASES:
+            raise FieldError(f"{where}.case: expected insensitive (omit it for a path compared exactly)")
+        out["case"] = defn["case"]
+        return
     if defn["case"] not in CASES:
         raise FieldError(f"{where}.case: expected exact (omit it for a case-insensitive field)")
     if out["charset"] != "ascii":
         raise FieldError(f"{where}.case: exact is only valid with charset: ascii")
     out["case"] = defn["case"]
+
+
+def signed_path(defn: Mapping[str, Any], value: Any, where: str) -> str:
+    """A path the principal signs: already in clean form, so what is signed is what is compared."""
+    try:
+        cleaned = clean_path(value, defn.get("case"))
+    except FieldValueError:
+        raise FieldError(f"{where}: not a path this field can hold (absolute, printable ASCII, no backslash, "
+                         "no .. segment)") from None
+    if cleaned != value:
+        raise FieldError(f"{where}: write it in clean form, {cleaned!r}")
+    return cleaned
+
+
+def _path_roots(out: dict, defn: Mapping[str, Any], where: str) -> None:
+    """``under``: the folders a path must be inside. Clean, not ``/``, and none inside another."""
+    roots = defn.get("under")
+    if not isinstance(roots, list) or not roots:
+        raise FieldError(f"{where}.under: expected a non-empty list of folders")
+    if len(roots) > MAX_PATH_ROOTS:
+        raise FieldError(f"{where}.under: more than {MAX_PATH_ROOTS} folders")
+    cleaned = sorted(signed_path(out, root, f"{where}.under[{i}]") for i, root in enumerate(roots))
+    if "/" in cleaned:
+        raise FieldError(f"{where}.under: / admits every path; name the folder the tool may use")
+    nested = [(a, b) for a in cleaned for b in cleaned if a != b and path_inside(a, b)]
+    if len(set(cleaned)) != len(cleaned) or nested:
+        raise FieldError(f"{where}.under: a folder is listed twice or inside another")
+    out["under"] = cleaned
 
 
 def _source(out: dict, defn: Mapping[str, Any], where: str) -> None:
@@ -396,6 +482,8 @@ def _definition(name: str, defn: Any) -> dict:
         _enum_values(out, defn, where)
     if kind == "string":
         _string_limit(out, defn, where)
+    if kind == "path":
+        _path_roots(out, defn, where)
     try:
         out["default"] = coerce_value(out, defn["default"])
     except FieldValueError:
@@ -418,6 +506,15 @@ def has_caller_fields(registry: Mapping[str, Mapping[str, Any]]) -> bool:
 
 def has_exact_fields(registry: Mapping[str, Mapping[str, Any]]) -> bool:
     return any(defn.get("case") == "exact" for defn in registry.values())
+
+
+def has_path_fields(registry: Mapping[str, Mapping[str, Any]]) -> bool:
+    return any(defn.get("type") == "path" for defn in registry.values())
+
+
+def path_fields(spec: Mapping[str, Any], registry: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """The path fields a tool spec maps (not those it marks ``not_applicable``)."""
+    return sorted(name for name in field_mappings(spec) if registry.get(name, {}).get("type") == "path")
 
 
 def field_mappings(spec: Mapping[str, Any]) -> dict:
@@ -458,14 +555,19 @@ def defaults(registry: Mapping[str, Mapping[str, Any]]) -> dict:
 
 # --- Rules ------------------------------------------------------------------------------------------------
 
+def _list_literal(defn: Mapping[str, Any], value: Any, where: str) -> list:
+    """The list of an ``in`` / ``not_in`` condition, each item checked as an ``eq`` value."""
+    if not isinstance(value, list) or not value:
+        raise FieldError(f"{where}: expected a non-empty list")
+    if len(value) > MAX_LIST_ITEMS:
+        raise FieldError(f"{where}: more than {MAX_LIST_ITEMS} items")
+    return sorted({_literal(defn, "eq", item, f"{where}[{i}]") for i, item in enumerate(value)})
+
+
 def _literal(defn: Mapping[str, Any], op: str, value: Any, where: str) -> Any:
     kind = defn["type"]
     if op in ("in", "not_in"):
-        if not isinstance(value, list) or not value:
-            raise FieldError(f"{where}: expected a non-empty list")
-        if len(value) > MAX_LIST_ITEMS:
-            raise FieldError(f"{where}: more than {MAX_LIST_ITEMS} items")
-        return sorted({_literal(defn, "eq", item, f"{where}[{i}]") for i, item in enumerate(value)})
+        return _list_literal(defn, value, where)
     if kind == "boolean":
         if not isinstance(value, bool):
             raise FieldError(f"{where}: expected a boolean")
@@ -475,12 +577,21 @@ def _literal(defn: Mapping[str, Any], op: str, value: Any, where: str) -> Any:
         if not defn["min"] <= value <= defn["max"]:
             raise FieldError(f"{where}: outside the field's min and max, so the rule could never apply")
         return value
+    if kind == "path":
+        return _path_literal(defn, value, where)
     text = _text_member(defn, value, where)
     if kind == "enum" and text not in defn["values"]:
         raise FieldError(f"{where}: {text!r} is not one of the field's values")
     if kind == "string" and len(text) > defn["max_length"]:
         raise FieldError(f"{where}: longer than the field's max_length")
     return text
+
+
+def _path_literal(defn: Mapping[str, Any], value: Any, where: str) -> str:
+    cleaned = signed_path(defn, value, where)
+    if not inside_any(cleaned, defn["under"]):
+        raise FieldError(f"{where}: {cleaned!r} is outside the field's under folders, so the rule could never apply")
+    return cleaned
 
 
 def validate_condition(body: Any, registry: Mapping[str, Mapping[str, Any]], where: str) -> dict:
@@ -512,6 +623,7 @@ _HOLDS = {
     "gt": lambda v, lit: v > lit, "gte": lambda v, lit: v >= lit,
     "lt": lambda v, lit: v < lit, "lte": lambda v, lit: v <= lit,
     "in": lambda v, lit: v in lit, "not_in": lambda v, lit: v not in lit,
+    "under": path_inside, "not_under": lambda v, lit: not path_inside(v, lit),
 }
 
 
@@ -577,4 +689,32 @@ def case_warnings(rules: list, tool_specs: Mapping[str, Mapping[str, Any]],
                 out.append(f"tool {tool!r}: the string field {name} maps {path!r}, which looks like an identifier; "
                            "the tool receives it lower-cased. If the tool's ids are case-sensitive, declare "
                            f"{name} with case: exact")
+    return out + _path_case_warnings(rules, registry)
+
+
+def _path_case_warnings(rules: list, registry: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """A path field compared exactly, in a rule that lists paths or folders to deny (``eq``, ``in``, ``under``):
+    on a filesystem that ignores letter case, a case variant names the same file and does not match."""
+    out: list[str] = []
+    for rule in rules:
+        body = rule.get("deny_if_fields") if isinstance(rule, Mapping) else None
+        for name, ops in sorted((body or {}).items()):
+            defn = registry.get(name, {})
+            if defn.get("type") == "path" and "case" not in defn and set(ops) & {"eq", "in", "under"}:
+                out.append(f"rule {rule.get('id')!r}: the path field {name} is compared exactly and the rule lists "
+                           "paths to deny (eq/in/under). On a filesystem that ignores letter case (macOS and "
+                           "Windows by default), a case variant names the same file and is not denied; declare "
+                           f"{name} with case: insensitive there")
+    return out
+
+
+def path_notes(tool_specs: Mapping[str, Mapping[str, Any]], registry: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """What each path field admits, for the signer. Takes the canonical specs and registry."""
+    out: list[str] = []
+    for tool in sorted(tool_specs):
+        for name in path_fields(tool_specs[tool], registry):
+            out.append(f"tool {tool!r}: {name} admits any path inside {', '.join(registry[name]['under'])}. Two-Key "
+                       "checks the path as text and refuses a link below the folder just before the tool runs; "
+                       "the tool's own folder limit and the account it runs as stop a swap after that "
+                       "(docs/THREAT_MODEL.md)")
     return out

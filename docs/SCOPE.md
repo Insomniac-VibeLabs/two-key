@@ -18,10 +18,13 @@ It has:
   Omitting them does not load. Path A evaluates five built-in structured
   fields (`tool`, `amount_usd`, `data_class`, `counterparty`,
   `irreversible`) plus up to 64 operator-declared custom fields (0.3.0):
-  `boolean`, `integer`, `enum`, or `string`, each with a signed default and
+  `boolean`, `integer`, `enum`, `string`, or `path`, each with a signed default and
   an optional description that is never an authorization rule. Enum and
   string values are printable ASCII by default, or Unicode with a declared
-  script, or, for a case-sensitive id, `case: exact` (0.5.0). Rules name
+  script, or, for a case-sensitive id, `case: exact` (0.5.0). A `path`
+  value (0.9.0) is an absolute file path inside one of the field's signed
+  folders, cleaned as text only; Two-Key does not open the file, so it is a
+  signed check on the request, not a sandbox. Rules name
   them with `deny_if_fields`, and every tool maps each field a rule reads
   or marks it `not_applicable` (0.5.0). A rules file that declares fields
   signs as a v2 constitution, or v3 with a 0.5.0 feature. `deny_unmapped`
@@ -206,10 +209,10 @@ After 1.0, not scheduled:
   Filtering by judge uses the per-judge ballot records the ledger holds since
   0.8.0 (judge id, vote, confidence, error class, and a rationale digest,
   never the rationale text).
-- More spec field types: decimal, URL, path,
+- More spec field types: decimal, URL,
   email, and opaque bytes. `amount` and `counterparty` become ordinary typed
   fields. Custom `boolean`, `integer`, `enum`, and `string` fields shipped
-  in 0.3.0 and are described above.
+  in 0.3.0, and `path` fields in 0.9.0; they are described above.
 
 Read [FIT.md](FIT.md) before adopting it, [COMPARISON.md](COMPARISON.md)
 before treating it as a substitute, and [THREAT_MODEL.md](THREAT_MODEL.md)

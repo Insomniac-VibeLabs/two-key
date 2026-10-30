@@ -230,7 +230,7 @@ use that pass to run the tool.
      machine. It does not read English. It only reads structured fields.
    - It reads five built-in fields (`tool`, `amount_usd`, `data_class`,
      `counterparty`, and `irreversible`) plus any custom fields the
-     principal declares under `fields:` (boolean, integer, enum, or string;
+     principal declares under `fields:` (boolean, integer, enum, string, or path;
      up to 64; see [examples/custom_fields.yaml](examples/custom_fields.yaml)
      and HOWTO "Custom Path A fields"). A field's description is a signed
      note for people, never a rule.

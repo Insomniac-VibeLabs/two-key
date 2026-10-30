@@ -28,7 +28,7 @@ from typing import Any, Iterable, Mapping
 
 from .action import DATA_CLASSES, LOADABLE_FIELDS, Action, canon_str
 from .agent_meta import exception_ledger_error
-from .fields import FieldError, validate_condition
+from .fields import FieldError, path_inside, validate_condition
 
 DEFAULT_MAX_STEPS = 4096
 
@@ -52,6 +52,7 @@ class Op(IntEnum):
     PASS = 16
     ASSERT = 17       # pop bool; if False -> deny with label arg
     LOAD_FIELD = 18   # load a custom field derived from the argument bytes (never Action.raw)
+    UNDER = 19        # cleaned path is the folder or inside it, whole segment by segment (fields.path_inside)
 
 
 class ConstitutionError(ValueError):
@@ -74,6 +75,12 @@ def _num(a: Any) -> float:
     if isinstance(a, bool) or not isinstance(a, (int, float)) or math.isnan(float(a)):
         raise VMFault(f"non-numeric operand {a!r}")
     return float(a)
+
+
+def _under(path: Any, folder: Any) -> bool:
+    if not isinstance(path, str) or not isinstance(folder, str):
+        raise VMFault("UNDER on a non-string")
+    return path_inside(path, folder)
 
 
 class PolicyVM:
@@ -133,6 +140,9 @@ class PolicyVM:
                         raise VMFault("IN haystack is not a list")
                     # A tuple needle is only data_class's parts (Action.field_value): any part matches.
                     stack.append(any(n in hay for n in needle) if isinstance(needle, tuple) else needle in hay)
+                elif op == Op.UNDER:
+                    folder, path = pop(), pop()
+                    stack.append(_under(path, folder))
                 elif op == Op.CONTAINS:
                     needle, hay = pop(), pop()
                     if not isinstance(hay, (list, tuple, str)):
@@ -273,11 +283,11 @@ _FIELD_OPS = {"eq": Op.EQ, "neq": Op.NEQ, "gt": Op.GT, "gte": Op.GTE, "lt": Op.L
 
 
 def _compile_field_condition(name: str, op_name: str, lit: Any) -> list[tuple]:
-    """One condition: LOAD_FIELD, PUSH, compare. ``not_in`` is IN then NOT."""
+    """One condition: LOAD_FIELD, PUSH, compare. ``not_in`` is IN then NOT; ``not_under`` is UNDER then NOT."""
     part: list[tuple] = [(Op.LOAD_FIELD, name), (Op.PUSH, lit)]
-    if op_name in ("in", "not_in"):
-        part.append((Op.IN,))
-        if op_name == "not_in":
+    if op_name in ("in", "not_in", "under", "not_under"):
+        part.append((Op.UNDER,) if op_name in ("under", "not_under") else (Op.IN,))
+        if op_name.startswith("not_"):
             part.append((Op.NOT,))
     else:
         part.append((_FIELD_OPS[op_name],))

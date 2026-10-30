@@ -72,7 +72,9 @@ Two-Key's own and is not part of the constitution; **Try a call** shows it.
   body, edit it as YAML, and **Apply**. **Up** and **Down** change the order; the first rule that denies is
   the one the ledger names.
 - **Custom fields.** The field registry as YAML ([HOWTO, Custom Path A fields](HOWTO.md#custom-path-a-fields)).
-  **Insert an example** adds one enum field to change.
+  **Insert an example** adds one enum field to change. A `path` field (a file path inside signed folders,
+  [HOWTO](HOWTO.md#file-paths-inside-a-folder-type-path)) is written here the same way, and **Review and
+  sign** then notes each tool that maps one, with its folders.
 - **Try a call.** See below.
 - **Review and sign.** The serial, the envelope format (`auto` unless you need an older one), every check
   and note `sign-constitution` would print, the rules file exactly as it will be written, and the key and
