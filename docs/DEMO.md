@@ -197,7 +197,9 @@ different from the one you wrote down in Part 1, use the name shown here.
 
 ## Part 4: Install Two-Key and the demo shop
 
-Make a folder for Two-Key that belongs to `twokey`, and install Two-Key into it:
+Two-Key is published on [PyPI](https://pypi.org/project/two-key/), the public library of Python programs, so
+`pip` can download and install it in one step. Make a folder for Two-Key that belongs to `twokey`, and install
+Two-Key into it:
 
 ```bash
 sudo install -d -o twokey -g twokey -m 755 /opt/two-key
@@ -205,15 +207,41 @@ sudo -iu twokey python3 -m venv /opt/two-key/.venv
 sudo -iu twokey /opt/two-key/.venv/bin/pip install "two-key[yaml,mcp]==0.9.0"
 ```
 
-Now download the Demo Shop. It is a tiny MCP server with two tools: `pay_vendor`, which writes each payment
-into a text file, and `delete_all_records`, which Two-Key will hide from the agent. It belongs to `root`, so
-neither the agent nor Two-Key can change it.
+Next, get the demo files: the Demo Shop and the three setup files you use in Part 5. Pick **one** of the two
+ways below. Both give you the same files.
+
+**Way 1: from PyPI.** Two-Key's source package on PyPI carries the demo files in its `examples/demo` folder, at
+the same version as the Two-Key you just installed. This downloads that package without installing it, and
+unpacks it into `/tmp/two-key-files`:
 
 ```bash
-sudo mkdir -p /opt/demo-shop
-sudo curl -fsSL -o /opt/demo-shop/demo_shop.py \
-  https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/main/examples/demo/demo_shop.py
-sudo chmod 644 /opt/demo-shop/demo_shop.py
+/opt/two-key/.venv/bin/pip download --no-deps --no-binary :all: "two-key==0.9.0" -d /tmp/two-key-files
+tar -xzf /tmp/two-key-files/two_key-0.9.0.tar.gz -C /tmp/two-key-files
+DEMO=/tmp/two-key-files/two_key-0.9.0/examples/demo
+ls $DEMO
+```
+
+You should see `answers.yaml`, `constitution.md`, `demo_shop.py`, and `rules.yaml`.
+
+**Way 2: from GitHub.** Download the four files one by one from the Two-Key repository:
+
+```bash
+mkdir -p /tmp/two-key-files/demo
+for f in answers.yaml constitution.md demo_shop.py rules.yaml; do
+  curl -fsSL -o "/tmp/two-key-files/demo/$f" \
+    "https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/main/examples/demo/$f"
+done
+DEMO=/tmp/two-key-files/demo
+ls $DEMO
+```
+
+Now put the Demo Shop in its own folder. It is a tiny MCP server with two tools: `pay_vendor`, which writes
+each payment into a text file, and `delete_all_records`, which Two-Key will hide from the agent. It belongs to
+`root`, so neither the agent nor Two-Key can change it.
+
+```bash
+sudo install -d -m 755 /opt/demo-shop
+sudo install -m 644 $DEMO/demo_shop.py /opt/demo-shop/demo_shop.py
 ```
 
 ## Part 5: Set up Two-Key
@@ -226,15 +254,17 @@ echo 'export PATH=/opt/two-key/.venv/bin:$PATH' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-The prompt now starts with `twokey@`. Download the three demo files:
+The prompt now starts with `twokey@`. Copy in the three setup files from Part 4. Use the line for the way you
+picked:
 
 ```bash
 mkdir -p ~/demo-files && cd ~/demo-files
-for f in answers.yaml constitution.md rules.yaml; do
-  curl -fsSLO "https://raw.githubusercontent.com/Insomniac-VibeLabs/two-key/main/examples/demo/$f"
-done
+cp /tmp/two-key-files/two_key-0.9.0/examples/demo/{answers.yaml,constitution.md,rules.yaml} .   # Way 1, PyPI
+cp /tmp/two-key-files/demo/{answers.yaml,constitution.md,rules.yaml} .                          # Way 2, GitHub
 ls
 ```
+
+Run only one of the two `cp` lines. The other one would just say "No such file or directory".
 
 Here is what each file is:
 
@@ -535,7 +565,7 @@ When you are done, remove the demo. On Ubuntu, from your own account:
 
 ```bash
 sudo rm /etc/sudoers.d/two-key-demo
-sudo rm -rf /opt/two-key /opt/demo-shop
+sudo rm -rf /opt/two-key /opt/demo-shop /tmp/two-key-files
 sudo deluser --remove-home twokey
 sudo deluser --remove-home agent
 ```

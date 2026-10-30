@@ -5431,3 +5431,5 @@ for good), and back up again at once.
   The judge's answers ask for `response_format: json_schema`, since LM Studio's server documents only that JSON
   format.
 - README links the page from its documentation table.
+- The page gets its demo files either from PyPI (the source package carries `examples/demo`, at the version
+  installed) or from GitHub (maintainer's request).
