@@ -187,6 +187,7 @@ SPDX-License-Identifier: Apache-2.0
 - [The first-time demo is taken out — 2026-10-30](#the-first-time-demo-is-taken-out--2026-10-30)
 - [Folder-path fields for Path A — 2026-10-30](#folder-path-fields-for-path-a--2026-10-30)
 - [A first-time demo on a real tool server — 2026-10-30](#a-first-time-demo-on-a-real-tool-server--2026-10-30)
+- [Fixes from Claude's 0.9.0 feature test — 2026-11-02](#fixes-from-claudes-090-feature-test--2026-11-02)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5477,3 +5478,17 @@ only match a path against an exact list of strings, so a file tool's rules had t
   screenshots are marked.
 - **examples/demo/**: the signed prose, the rules and the setup answers the page uses, also in the source
   package on PyPI. README, AGENTS.md and llms.txt link the page.
+
+
+## Fixes from Claude's 0.9.0 feature test — 2026-11-02
+
+- **docs/DEMO.md**, from a live run of every step on Ubuntu 24.04: Ubuntu gives a new account a umask that lets
+  its own group write new files, so the `twokey` virtual environment and `~/demo-files` were group-writable and
+  setup, `config check` and the proxy each printed an extra `writable_path` warning the page does not show.
+  Part 4 now installs with `umask 022`, and Part 5 adds `umask 022` to `twokey`'s `.bashrc`. With both, the
+  output matches the page (one `WARN` at setup, `0 failure(s), 1 warning(s)`, three warnings at proxy start).
+- **docs/DEMO.md**, Part 9: the ledger does keep the cleaned path the rules checked for a call they allowed
+  (`action_normalized`); for a call they refused it keeps only the reason. The page said it never kept a path.
+- `two-key setup --window --answers FILE` with no display now says to run it again without `--window`, instead
+  of telling you to give the `--answers FILE` you already gave. Test in `tests/test_setup_gui.py`.
+- 1503 tests.

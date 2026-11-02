@@ -613,8 +613,9 @@ def show(answers: dict | None = None, *, folder: str = "") -> int:
     try:
         root = tk.Tk()
     except tk.TclError as e:
-        print(f"two-key setup: cannot open a window ({e}); answer on the terminal, or give --answers FILE",
-              file=sys.stderr)
+        instead = ("run it again without --window to set up from the answers file" if answers
+                   else "answer on the terminal, or give --answers FILE")
+        print(f"two-key setup: cannot open a window ({e}); {instead}", file=sys.stderr)
         return 1
     root.title("two-key setup")
     root.geometry("1100x820")

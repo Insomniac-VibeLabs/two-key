@@ -209,9 +209,12 @@ and install it there:
 
 ```bash
 sudo install -d -o twokey -g twokey -m 755 /opt/two-key
-sudo -iu twokey python3 -m venv /opt/two-key/.venv
-sudo -iu twokey /opt/two-key/.venv/bin/pip install "two-key[yaml,mcp]==0.9.0"
+sudo -iu twokey sh -c 'umask 022 && python3 -m venv /opt/two-key/.venv'
+sudo -iu twokey sh -c 'umask 022 && /opt/two-key/.venv/bin/pip install "two-key[yaml,mcp]==0.9.0"'
 ```
+
+The `umask 022` makes the new files writable by `twokey` only. Ubuntu otherwise lets the account's own group
+write them too, and Two-Key would warn about it (`writable_path`) every time it starts.
 
 **Node.js 24.** The filesystem server needs Node.js 24, and Ubuntu's own Node.js is older. These lines download
 Node.js 24 from [nodejs.org](https://nodejs.org), check that the download is exactly what nodejs.org published
@@ -269,6 +272,7 @@ Switch to the `twokey` account. Everything in this part runs there.
 ```bash
 sudo -iu twokey
 echo 'export PATH=/opt/two-key/.venv/bin:$PATH' >> ~/.bashrc
+echo 'umask 022' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -545,7 +549,9 @@ said no, so the judge was never asked.
 ![The judge's ballot for the password call: judge lmstudio-judge, vote no, 0 yes and 1 no](images/demo/08-ledger-judge-vote.png)
 
 The ledger keeps a fingerprint (a digest) of the judge's explanation, not the words. It never stores the file
-text or the path the agent sent either, so private details stay out of the record book.
+text either. For a call the rules allowed, it keeps the cleaned path the rules checked (in the
+`action_normalized` line); for a call the rules refused, such as the `authorized_keys` and `..` paths, it keeps
+only the reason.
 
 **In the terminal** (works over SSH, with no desktop):
 

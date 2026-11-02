@@ -244,6 +244,18 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("needs tkinter", err.getvalue())
 
+    @unittest.skipIf(tk is None, "this Python has no tkinter")
+    def test_without_a_display_it_says_how_to_go_on(self):
+        from two_key import setup_gui
+        for answers, hint in (({"route": "proxy"}, "without --window to set up from the answers file"),
+                              ({}, "give --answers FILE")):
+            with self.subTest(answers=bool(answers)), \
+                    mock.patch.object(setup_gui.tk, "Tk", side_effect=tk.TclError("no display name")), \
+                    mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+                self.assertEqual(setup_gui.show(answers), 1)
+            self.assertIn("cannot open a window (no display name)", err.getvalue())
+            self.assertIn(hint, err.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
