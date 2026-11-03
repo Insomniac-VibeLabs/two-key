@@ -5500,3 +5500,6 @@ only match a path against an exact list of strings, so a file tool's rules had t
   before the tool runs (behind the proxy the server gets an empty call). For a tool that takes arguments, give a
   `rules_file` that names them, such as the one `two-key mcp-draft-specs` drafts. Found in the 0.9.0 regression
   test (unchanged since 0.8.0; the gateway is meant to drop what the signed spec does not name).
+- `tests/test_proposal_text.py`: the check that oversized proposal text stays out of the ledger looked for
+  `QQQQ`, which a hybrid public key's base64 can hold by chance (it failed once on macOS, 3.10). It now looks for
+  64 in a row.

@@ -50,7 +50,8 @@ class ProposalText(unittest.TestCase):
         self.assertEqual(body["proposal_text_size"], len(json.dumps(text)))
         self.assertTrue(body["proposal_text_digest"].startswith("sha256:"))
         self.assertTrue(body["proposal_text_omitted"])
-        self.assertNotIn("QQQQ", json.dumps([e.body for e in self.tk.ledger.entries]))
+        # 64 in a row: key material in the ledger is base64 and can hold a short run of Q by chance.
+        self.assertNotIn("Q" * 64, json.dumps([e.body for e in self.tk.ledger.entries]))
         self.assertEqual(body["agent"]["id"], "grok")
 
     def test_parse_proposal_refuses_oversized_text_before_parsing(self):
