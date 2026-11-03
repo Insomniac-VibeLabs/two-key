@@ -335,9 +335,9 @@ KINDS: dict[str, KindSpec] = {
     "gateway_denied": KindSpec(sent=("reason", "jti", "tool"), severity=WARNING),
     "redemption_started": KindSpec(sent=("jti", "tool"), excluded=("dropped_keys",)),
     "redemption": KindSpec(sent=("jti", "tool", "stamp_hash", "receipt_hash", "receipt_outcome")),
-    # The tool check (#28): a checked tool's receipt was missing or bad, or the tool crashed before it gave one
+    # The tool check (#28): a checked tool's receipt was missing or bad, or the call went unanswered (an error or a timeout)
     # (``at`` set). Under high_assurance a bad receipt holds the tool until the operator releases it (two-key tool
-    # release); repeated crashes hold it until ``until``, then it is released by itself.
+    # release); repeated unanswered calls hold it until ``until``, then it is released by itself.
     "tool_receipt_invalid": KindSpec(sent=("jti", "tool", "why", "at"), severity=WARNING),
     "tool_held": KindSpec(sent=("tool", "jti", "why", "until"), severity=WARNING),
     "tool_released": KindSpec(sent=("tool",), hashed=("reason",), severity=NOTICE),

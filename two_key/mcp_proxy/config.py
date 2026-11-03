@@ -43,7 +43,7 @@ UPSTREAM_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
 _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "head_anchor", "ttl_seconds",
              "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools", "scan",
-             "on_writable_paths", "on_agent_access", "siem", "one_proxy_per_agent"}
+             "on_writable_paths", "on_agent_access", "siem", "one_proxy_per_agent", "unanswered_hold"}
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
 _KEY_KEYS = {"principal", "passphrase_file"}
 _UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds",
@@ -137,6 +137,10 @@ class ProxyConfig:
     # One running proxy per agent on a ledger (0.8.0, D10): a second proxy for the same agent_id (or for no
     # agent_id, "unnamed") refuses to start with agent_already_connected. False is weaker and warns at start.
     one_proxy_per_agent: bool = True
+    # Hold a checked tool that keeps leaving calls unanswered (decision 2026-11-03): 3 in a row or within 10 minutes hold
+    # it for 15 minutes (two_key/gateway.py). None: off, except under high_assurance, which is always on and
+    # refuses an explicit false.
+    unanswered_hold: bool | None = None
 
     def tool_policy(self, tool: str) -> ToolPolicy:
         return self.tools.get(tool) or ToolPolicy()
@@ -430,6 +434,7 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
         on_writable_paths=_writable_mode(top["on_writable_paths"]) if "on_writable_paths" in top else None,
         on_agent_access=_agent_access_mode(top["on_agent_access"]) if "on_agent_access" in top else None,
         one_proxy_per_agent=_flag(top, "one_proxy_per_agent", True),
+        unanswered_hold=_flag(top, "unanswered_hold", None),
         **meta,
     )
 
@@ -445,7 +450,15 @@ def _required(top: Mapping[str, Any]) -> Mapping[str, Any]:
     return keys
 
 
-def _flag(top: Mapping[str, Any], key: str, default: bool) -> bool:
+def unanswered_hold_problem(config: ProxyConfig, high: bool) -> str | None:
+    """Why the proxy refuses to start over ``unanswered_hold``, else None: ``high_assurance`` always holds."""
+    if high and config.unanswered_hold is False:
+        return ("unanswered_hold: high_assurance holds a checked tool that keeps leaving calls unanswered; remove unanswered_hold: false "
+                "(docs/TOOL_CHECK.md)")
+    return None
+
+
+def _flag(top: Mapping[str, Any], key: str, default: bool | None) -> bool | None:
     """A true/false top-level setting, or its default when it is left out."""
     return _bool(top[key], key) if key in top else default
 

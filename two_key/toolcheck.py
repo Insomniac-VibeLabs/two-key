@@ -409,8 +409,8 @@ class ToolChecker:
         """For an MCP server on the Python SDK: check, then ``await run(arguments)`` (an MCP ``CallToolResult``),
         and return that result with the receipt in its ``_meta``. A refused call returns an error result with a
         refusal receipt, and ``run`` is never called. When ``run`` raises, the call returns an error result naming
-        only the exception's type, with an ordinary receipt: the gateway sees a signed failure, not a crash, so a
-        tool error never counts towards a crash hold."""
+        only the exception's type, with an ordinary receipt: the gateway sees a signed failure, not an unanswered call,
+        so a tool error never counts towards a hold."""
         import mcp_types as types      # the server already depends on the MCP SDK
         try:
             call = self.check(arguments, meta)

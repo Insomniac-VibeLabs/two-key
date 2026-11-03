@@ -55,7 +55,7 @@ from .fields import path_fields, path_inside
 from .derive import (MAX_ARGS_BYTES, DeriveError, args_too_large, blocked_from_rules, caller_fields, canonical_too_large,
                      derive, dropped_keys, form_for, forms_match, project_arguments, size_record)
 from .keys import public_raw
-from .ledger import CRASH_HOLD_SECONDS, CRASH_PREFIX, LedgerError
+from .ledger import UNANSWERED_HOLD_SECONDS, TOOL_ERROR_PREFIX, LedgerError
 from .scan import CALL_VERDICTS, ENCRYPTED
 from .toolcheck import ToolCheckError, checked, text_hash, tool_args_hash, verify_receipt
 
@@ -156,7 +156,8 @@ class ToolGateway:
     def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None,
                  max_denied_jtis: int | None = None,
                  deny_inflight_wait_seconds: float | None = None, scanner=None, refused_tokens=None,
-                 stamp_signer=None, receipt_reader=None, high_assurance: bool = False):
+                 stamp_signer=None, receipt_reader=None, high_assurance: bool = False,
+                 unanswered_hold: bool = False):
         self.ledger = ledger
         _warn_unbound_ledger(ledger)
         self.issuer = _as_verifier(issuer)
@@ -178,7 +179,8 @@ class ToolGateway:
         self.stamp_signer = stamp_signer
         self.receipt_reader = receipt_reader
         self.high_assurance = high_assurance
-        self.clock = time.time      # when a checked tool crashed, and when its crash hold ends
+        self.unanswered_hold = unanswered_hold or high_assurance      # high_assurance always holds
+        self.clock = time.time      # when a checked call went unanswered, and when that hold ends
         # One in-process lock per jti being redeemed. #42: _lock_refs counts the threads that hold or
         # wait on each lock, under _locks_guard; the entry is removed when the count reaches zero, so the
         # map holds only jtis in flight. No LRU cap: evicting a held lock would split one jti in two.
@@ -440,25 +442,26 @@ class ToolGateway:
         return None
 
     def _aborted(self, jti: str, tool: str, pinned: str | None, error: Exception) -> GatewayResult:
-        """The tool raised or timed out: ``redemption_aborted``, and for a checked tool a crash (``_crashed``)."""
-        why = f"{CRASH_PREFIX}{type_tag(error)}"
+        """The tool raised or timed out: ``redemption_aborted``, and for a checked tool an unanswered call (``_unanswered``)."""
+        why = f"{TOOL_ERROR_PREFIX}{type_tag(error)}"
         try:
             self.ledger.record("redemption_aborted", {"jti": jti, "tool": tool})
             if pinned is not None:
-                self._crashed(jti, tool, why)
+                self._unanswered(jti, tool, why)
         except Exception as e:
             return GatewayResult(False, _ledger_failed(e))
         return GatewayResult(False, why, None)
 
-    def _crashed(self, jti: str, tool: str, why: str) -> None:
+    def _unanswered(self, jti: str, tool: str, why: str) -> None:
         """A checked tool raised or timed out after it got the token: no receipt came back. Ledgered as
-        ``tool_receipt_invalid`` and sent to the SIEM every time; under ``high_assurance``, enough crashes hold the
-        tool for ``CRASH_HOLD_SECONDS``, then the hold ends by itself (``Ledger.crash_hold_due``)."""
+        ``tool_receipt_invalid`` and sent to the SIEM every time; with ``unanswered_hold`` (always under
+        ``high_assurance``), enough unanswered calls hold the tool for ``UNANSWERED_HOLD_SECONDS``, then the hold ends by itself
+        (``Ledger.unanswered_hold_due``)."""
         now = int(self.clock())
         self.ledger.record("tool_receipt_invalid", {"jti": jti, "tool": tool, "why": why, "at": now})
-        if self.high_assurance and self.ledger.crash_hold_due(tool, now):
-            self.ledger.record("tool_held", {"tool": tool, "jti": jti, "why": "crashes",
-                                             "until": now + CRASH_HOLD_SECONDS})
+        if self.unanswered_hold and self.ledger.unanswered_hold_due(tool, now):
+            self.ledger.record("tool_held", {"tool": tool, "jti": jti, "why": "unanswered",
+                                             "until": now + UNANSWERED_HOLD_SECONDS})
 
     def _call(self, fn, projected: dict, pinned: str | None, token: str, payload: dict, seq: int) -> tuple:
         """Run the tool: (output, stamp), the stamp None for an unchecked tool. For a checked one the token is

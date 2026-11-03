@@ -107,6 +107,7 @@ class SetupWindow:
         self.high = tk.BooleanVar(master=root, value=False)
         self.history = tk.BooleanVar(master=root, value=True)
         self.one_proxy = tk.BooleanVar(master=root, value=True)
+        self.unanswered_hold = tk.BooleanVar(master=root, value=False)
         self.judge_var = {k: tk.StringVar(master=root) for k in JUDGE_KEYS}
         self.agent_var = {k: tk.StringVar(master=root) for k in AGENT_KEYS}
         self.tool_var = {"id": tk.StringVar(master=root), "data_class_floor": tk.StringVar(master=root),
@@ -126,7 +127,8 @@ class SetupWindow:
         self._build_proxy(self.proxy_tab)
         self._build_review(self._tab("Review and set up"))
         self.load(answers or {})
-        for v in [*self.var.values(), *self.agent_var.values(), self.history, self.one_proxy]:
+        for v in [*self.var.values(), *self.agent_var.values(), self.history, self.one_proxy,
+                  self.unanswered_hold]:
             v.trace_add("write", self._changed)
         for v in self.quorum.values():
             v.trace_add("write", self._quorum_changed)
@@ -234,6 +236,10 @@ class SetupWindow:
         _row(form, "Agent session (environment variable)", self.var["agent_session_env"], 2)
         ttk.Checkbutton(tab, text="Only one proxy at a time serves this agent on this ledger (off is weaker)",
                         variable=self.one_proxy).pack(anchor="w", pady=8)
+        self.unanswered_box = ttk.Checkbutton(tab, variable=self.unanswered_hold,
+                                         text="Hold a checked tool that leaves calls unanswered: 3 in a row or within "
+                                              "10 minutes hold it for 15 minutes (always on under high assurance)")
+        self.unanswered_box.pack(anchor="w")
 
     def _build_review(self, tab) -> None:
         self.review_box = tk.Text(tab, height=22, wrap="word", state=SHOWN_ONLY)
@@ -290,6 +296,8 @@ class SetupWindow:
             out["upstream"] = {"command": self._command(), "schema_digest": self.var["schema_digest"].get().strip()}
             out["agent_session_env"] = self.var["agent_session_env"].get().strip()
             out["one_proxy_per_agent"] = bool(self.one_proxy.get())
+            if self.unanswered_hold.get() or self.high.get():
+                out["unanswered_hold"] = True
         return clean(out)
 
     def _agent(self) -> dict:
@@ -348,6 +356,7 @@ class SetupWindow:
         self.var["command"].set(shlex.join(command))
         self.var["schema_digest"].set(upstream.get("schema_digest") or "")
         self.one_proxy.set(answers.get("one_proxy_per_agent", True) is not False)
+        self.unanswered_hold.set(answers.get("unanswered_hold") is True)
 
     def _profile(self) -> str:
         return HIGH_ASSURANCE if self.high.get() else "default"
@@ -481,6 +490,13 @@ class SetupWindow:
             self.root.after_cancel(self._pending)
             self._pending = None
 
+    def _lock_unanswered_box(self) -> None:
+        """High assurance always holds a tool that keeps leaving calls unanswered: the box shows it on and cannot be changed."""
+        if self.high.get():
+            self.unanswered_box.state(["disabled", "selected"])
+        else:
+            self.unanswered_box.state(["!disabled", "selected" if self.unanswered_hold.get() else "!selected"])
+
     def refresh(self) -> None:
         """Check the answers again and show the result on the Review page and the status line."""
         self._pending = None
@@ -490,6 +506,7 @@ class SetupWindow:
             self.ha_box.pack(fill="x")
         else:
             self.ha_box.pack_forget()
+        self._lock_unanswered_box()
         self.notebook.tab(self.proxy_tab, state="normal" if answers.get("route") == "proxy" else "disabled")
         self.quorum_note.configure(text="\n".join([*(f"WARN  {w}" for w in found.warnings),
                                                    *(f"weaker: {w}" for w in found.weaker)]))

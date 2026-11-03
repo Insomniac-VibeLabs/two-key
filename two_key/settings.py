@@ -119,6 +119,10 @@ PROXY = _rows(PROXY_YAML, [
     ("one_proxy_per_agent", "true", "`true` lets one running proxy serve this `agent_id` (or, with none, the "
      "`unnamed` agent) on this ledger: a second refuses to start with `agent_already_connected`, ledgered and sent to "
      "the SIEM. `false` lets several run at once and warns at start; it counts as weaker in `config set`. Since 0.8.0."),
+    ("unanswered_hold", "false", "`true` holds a checked tool that keeps leaving calls unanswered (an error or a timeout): 3 unanswered calls in a row with no "
+     "verified receipt between, or 3 within 10 minutes, hold it for 15 minutes, and then the hold ends by itself "
+     "(TOOL_CHECK, \"When the tool does not answer\"). `false` only ledgers each unanswered call and sends it to the SIEM. "
+     "Turning it off counts as weaker in `config set`. Since 0.9.0.", {"ha": "always on; `false` is refused"}),
     ("upstream", "required", "The MCP server the proxy starts and forwards signed calls to."),
     ("upstream.command", "required", "Program and arguments, as a list. Run without a shell."),
     ("upstream.env", "none", "Variables for the child: a literal, or `{env: NAME}` read from the proxy's "
@@ -481,6 +485,7 @@ constitution does not yet state a minimum profile.
 | `quorum.require_local_yes` | false | true |
 | `on_writable_paths` | `warn` | always refuses; `warn` is refused |
 | `on_agent_access` | `refuse` | always refuses; `warn` is refused |
+| `unanswered_hold` | `false` | always on; `false` is refused |
 | a plaintext SIEM sink (`udp`, `tcp`, `http://`) | allowed, with a start-up warning | refused (`siem_plaintext_refused`) |
 | a tool behind the proxy with no `tool_check` | allowed: the tool check is off | refused (`tool_check_required`); `exempt` is allowed and weaker |
 | a scan stance other than `strict` (set by the signed `scan` rule) | allowed | allowed, with a start-up warning |

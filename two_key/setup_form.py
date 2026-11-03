@@ -39,6 +39,7 @@ HIGH_ASSURANCE_SETTINGS = (
     ("on_agent_access", "refuse: the proxy does not start when the agent's account could reach Two-Key's files"),
     ("siem plaintext sinks", "refused: no ledger copy is sent in the clear"),
     ("upstream.check_paths", "required: the upstream server's files are checked, or the proxy does not start"),
+    ("unanswered_hold", "on: a checked tool that keeps leaving calls unanswered is held for 15 minutes"),
 )
 # The lowest each quorum box accepts under the default profile (two_key/quorum.py refuses less).
 _DEFAULT_MINIMUMS = {"required_yes": 1, "min_responding": 1, "min_distinct_providers": 1, "min_makers": 1,

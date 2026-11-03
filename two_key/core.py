@@ -210,7 +210,7 @@ class TwoKey:
                  private_key=None, quorum: QuorumPolicy | None = None, ttl_seconds: int = 120,
                  allow_test_doubles: bool = False, clock=None, monitored_agent: Any = None,
                  scanner: Scanner | None = None, on_writable_paths: str | None = None, check_paths=(),
-                 siem: Any = None, known_agent_ids=()):
+                 siem: Any = None, known_agent_ids=(), unanswered_hold: bool = False):
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
             raise ValueError("test-double judges refused; pass allow_test_doubles=True only for offline tests")
         _require_hybrid(public_key)
@@ -235,6 +235,8 @@ class TwoKey:
             # Ballots are matched to judges by id; a shared id lets one judge's ballot stand in for another's.
             raise TwoKeyConfigError("duplicate_judge_id: judge ids must be unique, non-empty strings")
         self.quorum = (quorum or QuorumPolicy()).resolved(len(self.judges))
+        # Hold a checked tool that keeps leaving calls unanswered (gateway.py); the gateway adds high_assurance, which always holds.
+        self.unanswered_hold = unanswered_hold
         unmeetable = unmeetable_floor(self.judges, self.quorum)
         if unmeetable:
             # Never met: every authorize would deny, after sending the call to every judge (#54).
@@ -385,6 +387,7 @@ class TwoKey:
         kw.setdefault("refused_tokens", self.refused_tokens)
         kw.setdefault("stamp_signer", self.stamp_signer)
         kw.setdefault("high_assurance", self.quorum.is_high_assurance)
+        kw.setdefault("unanswered_hold", self.unanswered_hold)
         return ToolGateway(self.ledger, self.issuer.verifier(), self.compiled, tools=tools, scanner=self.scanner,
                            **kw)
 
@@ -1011,7 +1014,7 @@ class TwoKey:
     def _held_deny(self, spec, tool: str, origin: str | None, agent) -> Decision | None:
         """A checked tool held after a bad receipt (#28) is denied before either path: the gateway refuses it anyway,
         so the judges are not asked and no token is issued (run 12, D6c). The hold is read under the ledger's lock,
-        which catches up on a ``tool release`` another process wrote; a crash hold whose time is up ends here."""
+        which catches up on a ``tool release`` another process wrote; a hold for unanswered calls whose time is up ends here."""
         if spec is None or checked(spec) is None:
             return None
         with self.ledger.exclusive():

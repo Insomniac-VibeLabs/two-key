@@ -32,7 +32,7 @@ from ..derive import size_record
 from ..fields import field_mappings
 from ..guard import Guard, GuardConfigError, GuardedTool
 from ..toolcheck import META_KEY, mcp_receipt
-from .config import ProxyConfig, ProxyConfigError, ToolPolicy, UpstreamConfig
+from .config import ProxyConfig, ProxyConfigError, ToolPolicy, UpstreamConfig, unanswered_hold_problem
 
 _NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
@@ -476,6 +476,9 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
         if missing:
             raise ProxyConfigError(f"{missing}; the proxy refuses to start")
         high = bool(getattr(policy, "is_high_assurance", False))
+        problem = unanswered_hold_problem(config, high)
+        if problem:
+            raise ProxyConfigError(problem)
         check_upstream_paths(config.upstream, high)
         paths = startup_paths(config)
         agent_access.check(paths, agent_access.resolve_mode(config.on_agent_access, high),
@@ -492,6 +495,7 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
         tk = TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
                          private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
                          scanner=scanner, on_writable_paths=config.on_writable_paths,
+                         unanswered_hold=bool(config.unanswered_hold),
                          check_paths=paths, siem=siem, known_agent_ids=[config.agent_id] if config.agent_id else ())
         hold_agent_lock(tk, config)
         return tk

@@ -154,8 +154,8 @@ refusal and runs the tool anyway turns the check off.
 When the tool's own code raises, `mcp_call` returns an error result,
 `tool failed: <exception type>`, with an ordinary receipt. The message of
 the exception is not sent. The gateway sees a signed failure, so a tool
-error never counts towards a crash hold (below). A process that dies or
-hangs gives no receipt at all, and that is a crash.
+error never counts as an unanswered call (below). Only a server that stops
+or hangs leaves a call unanswered.
 
 For another framework, call `checker.check(arguments, meta)` (it raises
 `ToolCheckError` with the reason), run the tool, then
@@ -312,28 +312,32 @@ the SIEM at once. The tool did run (or refused), so the token stays spent.
   `high_assurance`, a refusal receipt most likely means a wrong key or a
   wrong clock, and the operator should look before releasing.
 
-### When the tool crashes or times out
+### When the tool does not answer
 
-A checked tool that raises or times out after it got the token gives no
-receipt. The agent gets `tool_error:<type>`, the token stays spent
+A checked tool that raises an error or times out after it got the token
+gives no receipt: the call is unanswered. The agent gets `tool_error:<type>`, the token stays spent
 (`redemption_aborted`), and the gateway also writes `tool_receipt_invalid`
 with why `tool_error:<type>` and the time (`at`), sent to the SIEM at once.
 
-Under `high_assurance` a crash does not hold the tool at once, since an
-agent could then lock any tool with one bad call. The tool is held when
-either count reaches 3 (decision 2026-11-03):
+With `unanswered_hold: true` in `proxy.yaml` (always on under `high_assurance`,
+which refuses `unanswered_hold: false`), unanswered calls can hold the tool.
+One does not hold it at once, since an agent could then lock any tool with one bad
+call. The tool is held when either count reaches 3 (decision 2026-11-03):
 
-- 3 crashes in a row, with no verified receipt between them, or
-- 3 crashes within 10 minutes, whatever came between, so an agent cannot
+- 3 unanswered calls in a row, with no verified receipt between them, or
+- 3 unanswered calls within 10 minutes, whatever came between, so an agent cannot
   reset the count with good calls.
 
-This hold (`tool_held` with why `crashes` and an `until` time) lasts 15
+This hold (`tool_held` with why `unanswered` and an `until` time) lasts 15
 minutes and then ends by itself: the next call or decision after `until`
-writes `tool_released` with reason `crash hold expired`, and counting
+writes `tool_released` with reason `hold expired`, and counting
 starts again. `two-key tool release` ends it earlier. A hold after a
 missing, forged or mismatched receipt has no `until` and still waits for
-the operator. In the default profile crashes are ledgered and sent to the
-SIEM but never hold the tool.
+the operator. With `unanswered_hold` off (the default profile's default),
+unanswered calls are ledgered and sent to the SIEM but never hold the tool. Turn it
+on with `two-key config set --config proxy.yaml unanswered_hold true`, or with the
+check box on the setup window's Proxy page; turning it off again counts as
+weaker and needs the typed yes.
 
 Other refusals at the gateway, before anything is ledgered as started:
 `tool_args_mismatch` (the token's `tool_args_hash` is not the hash of what

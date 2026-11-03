@@ -292,23 +292,24 @@ class Entry:
                 "body": self.body, "entry_hash": self.entry_hash}
 
 
-# A checked tool that crashes or times out leaves no receipt (#28). Under high_assurance this many crashes in a row,
-# or this many within the window, hold it for CRASH_HOLD_SECONDS; the hold then ends by itself (maintainer's
+# A checked tool that raises an error or times out leaves the call unanswered, with no receipt (#28). With
+# unanswered_hold (always under high_assurance) this many in a row,
+# or this many within the window, hold it for UNANSWERED_HOLD_SECONDS; the hold then ends by itself (maintainer's
 # decision, 2026-11-03). A forged or missing receipt still holds it until ``two-key tool release``.
-CRASH_PREFIX = "tool_error:"
-CRASH_HOLD_COUNT = 3
-CRASH_WINDOW_SECONDS = 600
-CRASH_HOLD_SECONDS = 900
+TOOL_ERROR_PREFIX = "tool_error:"
+UNANSWERED_HOLD_COUNT = 3
+UNANSWERED_WINDOW_SECONDS = 600
+UNANSWERED_HOLD_SECONDS = 900
 
 
 def _whole(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def is_crash(body: dict) -> bool:
+def is_unanswered(body: dict) -> bool:
     """A ``tool_receipt_invalid`` body for a checked tool that raised or timed out, not a bad receipt."""
     why = body.get("why")
-    return isinstance(why, str) and why.startswith(CRASH_PREFIX)
+    return isinstance(why, str) and why.startswith(TOOL_ERROR_PREFIX)
 
 
 class Ledger:
@@ -362,7 +363,7 @@ class Ledger:
         self._redeemed: set[str] = set()
         self._started: set[str] = set()
         # Tools held after a bad receipt under high_assurance (#28): tool -> (the tool_held entry's seq, the time
-        # a crash hold ends, or None for a hold that lasts until ``two-key tool release``).
+        # a hold for unanswered calls ends, or None for a hold that lasts until ``two-key tool release``).
         self._held: dict[str, tuple[int, int | None]] = {}
         self._configured_witness = None if witness_public_key is None else public_raw(witness_public_key)
         self._witness_pin: tuple[str, int, str] | None = None    # (raw key, seq, source) pinned in the ledger
@@ -1526,7 +1527,7 @@ class Ledger:
 
     def tool_held(self, tool: str, now: float | None = None) -> bool:
         """True while ``tool`` is held: a ``tool_held`` entry with no ``tool_released`` after it (#28), and, for a
-        crash hold, before its ``until``."""
+        hold for unanswered calls, before its ``until``."""
         held = self._held.get(tool)
         if held is None:
             return False
@@ -1537,12 +1538,12 @@ class Ledger:
         return sorted(tool for tool in self._held if self.tool_held(tool))
 
     def release_expired_hold(self, tool: str, now: float | None = None) -> None:
-        """End a crash hold whose time is up with a ``tool_released`` entry, so the ledger says when calls went
+        """End a hold for unanswered calls whose time is up with a ``tool_released`` entry, so the ledger says when calls went
         ahead again. A hold with no ``until`` is left for ``two-key tool release``."""
         with self._exclusive():
             held = self._held.get(tool)
             if held is not None and held[1] is not None and not self.tool_held(tool, now):
-                self.record("tool_released", {"tool": tool, "reason": "crash hold expired"})
+                self.record("tool_released", {"tool": tool, "reason": "hold expired"})
 
     def _since_last_hold(self, tool: str):
         """``tool``'s receipt problems and redemptions, newest first, back to its last hold or release."""
@@ -1556,9 +1557,9 @@ class Ledger:
                 return
             yield entry
 
-    def crash_hold_due(self, tool: str, now: float) -> bool:
-        """True when ``tool``'s crashes since its last hold or release call for a hold: ``CRASH_HOLD_COUNT`` in a
-        row with no verified receipt between them, or that many within ``CRASH_WINDOW_SECONDS`` whatever came
+    def unanswered_hold_due(self, tool: str, now: float) -> bool:
+        """True when ``tool``'s unanswered calls since its last hold or release call for a hold: ``UNANSWERED_HOLD_COUNT`` in a
+        row with no verified receipt between them, or that many within ``UNANSWERED_WINDOW_SECONDS`` whatever came
         between. An agent cannot end either count by sending good calls."""
         in_a_row = in_window = 0
         streak = True
@@ -1566,12 +1567,12 @@ class Ledger:
             if entry.kind == "redemption":
                 streak = streak and entry.body.get("receipt_outcome") != "ran"
                 continue
-            if not is_crash(entry.body):
+            if not is_unanswered(entry.body):
                 continue
             at = entry.body.get("at")
             in_a_row += int(streak)
-            in_window += int(_whole(at) and now - at < CRASH_WINDOW_SECONDS)
-            if CRASH_HOLD_COUNT in (in_a_row, in_window):
+            in_window += int(_whole(at) and now - at < UNANSWERED_WINDOW_SECONDS)
+            if UNANSWERED_HOLD_COUNT in (in_a_row, in_window):
                 return True
         return False
 

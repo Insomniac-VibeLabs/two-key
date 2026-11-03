@@ -177,6 +177,22 @@ class Window(unittest.TestCase):
         self.top.update()
         self.assertFalse(window.ha_box.winfo_manager())
 
+    def test_unanswered_hold_box_and_high_assurance_locks_it_on(self):
+        window = self.window()
+        self.fill(window, judges=(LOCAL, dict(JUDGE, id="j2")), check="hybrid-sha256:" + "1" * 64)
+        self.assertNotIn("unanswered_hold", window.answers())
+        window.unanswered_hold.set(True)
+        self.assertIs(window.answers()["unanswered_hold"], True)
+        window.unanswered_hold.set(False)
+        window.high.set(True)
+        self.top.update()
+        self.assertIs(window.answers()["unanswered_hold"], True)
+        self.assertTrue(window.unanswered_box.instate(["disabled"]))
+        window.high.set(False)
+        self.top.update()
+        self.assertFalse(window.unanswered_box.instate(["disabled"]))
+        self.assertNotIn("unanswered_hold", window.answers())
+
     def test_high_assurance_needs_each_tools_check(self):
         window = self.window()
         self.fill(window, judges=(LOCAL, dict(JUDGE, id="j2")))

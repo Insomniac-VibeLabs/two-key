@@ -46,7 +46,8 @@ PROFILES = ("default", "high_assurance")
 JUDGE_TYPES = ("openai_compatible", "anthropic", "gemini", "ollama")
 DATA_CLASSES = ("public", "personal", "medical", "financial", "classified")
 ANSWER_KEYS = {"route", "profile", "judges", "quorum", "monitored_agent", "rules_file", "prose_file", "tools",
-               "upstream", "agent_session_env", "key_passphrase_file", "judge_history", "one_proxy_per_agent"}
+               "upstream", "agent_session_env", "key_passphrase_file", "judge_history", "one_proxy_per_agent",
+               "unanswered_hold"}
 # The quorum numbers setup asks for; the other quorum settings keep their defaults until `config set`.
 QUORUM_COUNTS = ("required_yes", "min_responding", "min_distinct_providers", "min_makers", "min_local_judges")
 QUORUM_QUESTIONS = {
@@ -463,7 +464,19 @@ def proxy_doc(answers: Mapping, digest: str) -> dict:
         if not isinstance(answers["one_proxy_per_agent"], bool):
             raise SetupError("one_proxy_per_agent: expected true or false")
         doc["one_proxy_per_agent"] = answers["one_proxy_per_agent"]
+    _unanswered_hold(doc, answers.get("unanswered_hold"), high)
     return doc
+
+
+def _unanswered_hold(doc: dict, value: Any, high: bool) -> None:
+    """``unanswered_hold``: on or off for the default profile; ``high_assurance`` always holds and refuses false."""
+    if value is None:
+        return
+    if not isinstance(value, bool):
+        raise SetupError("unanswered_hold: expected true or false")
+    if high and not value:
+        raise SetupError("unanswered_hold: high_assurance always holds a checked tool that keeps leaving calls unanswered")
+    doc["unanswered_hold"] = value
 
 
 def _write(path: Path, data: bytes) -> None:

@@ -291,6 +291,18 @@ class Setup(Deployment):
         with self.assertRaisesRegex(setup_cmd.SetupError, "one_proxy_per_agent"):
             quiet(setup_cmd.build, dict(ANSWERS, one_proxy_per_agent="yes"), self.base / "bad", environ={})
 
+    def test_setup_writes_unanswered_hold(self):
+        from two_key.mcp_proxy.config import load_proxy_config
+        self.assertIsNone(load_proxy_config(self.proxy).unanswered_hold)        # off unless asked for
+        quiet(setup_cmd.build, dict(ANSWERS, unanswered_hold=True), self.base / "held", environ={})
+        self.assertIs(load_proxy_config(self.base / "held" / "proxy.yaml").unanswered_hold, True)
+        high = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                    tools=CHECKED_TOOLS)
+        for answers, why in ((dict(ANSWERS, unanswered_hold="yes"), "expected true or false"),
+                             (dict(high, unanswered_hold=False), "high_assurance always holds")):
+            with self.subTest(why=why), self.assertRaisesRegex(setup_cmd.SetupError, f"unanswered_hold: {why}"):
+                quiet(setup_cmd.build, answers, self.base / "bad", environ={})
+
 
 class SetupQuorum(unittest.TestCase):
     """The quorum numbers in ``setup``: offered at the profile's own, a lower one weaker as in ``config set``,
@@ -618,6 +630,8 @@ class Weaker(Deployment):
                  ("monitored_agent.model", "another-agent-model", "monitored_agent: changed"),
                  ("siem", {"sinks": [{"type": "syslog", "host": "127.0.0.1", "transport": "udp"}]}, "in the clear")]
         self.set("upstream.check_paths", [str(self.dir)])
+        self.set("unanswered_hold", True)
+        cases.append(("unanswered_hold", False, "unanswered_hold: turned off"))
         for name, value, why in cases:
             with self.subTest(name=name):
                 self.refused(f"weaker: .*{why}", name, value, unset=value is None)
@@ -692,6 +706,7 @@ class HighAssurance(Deployment):
         self.refused("config_check_failed: on_agent_access: high_assurance", "on_agent_access", "warn",
                      confirm_weaker=True)
         self.refused("config_check_failed: on_writable_paths", "on_writable_paths", "warn", confirm_weaker=True)
+        self.refused("config_check_failed: unanswered_hold: high_assurance", "unanswered_hold", False, confirm_weaker=True)
         self.refused("config_check_failed: siem_plaintext_refused", "siem",
                      {"sinks": [{"type": "syslog", "host": "127.0.0.1", "transport": "tcp"}]}, confirm_weaker=True)
 

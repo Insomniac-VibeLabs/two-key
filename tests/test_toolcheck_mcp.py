@@ -91,7 +91,7 @@ class ThroughTheProxy(unittest.TestCase):
         self.assertNotIn("tool_receipt_invalid", [e.kind for e in self.tk.ledger.entries])
 
     def test_a_tool_that_raises_answers_with_a_signed_error(self):
-        """Decision 2026-11-03, B: the helper signs an ordinary tool error, so it is never a crash to the gateway."""
+        """Decision 2026-11-03, B: the helper signs an ordinary tool error, so it is never an unanswered call."""
         async def body(client):
             return await client.call_tool("pay_vendor", CALL)
         result = self.run_client(body, "fail")

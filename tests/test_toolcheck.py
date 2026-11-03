@@ -17,7 +17,7 @@ from two_key.canonical import canonical_bytes
 from two_key.constitution import ConstitutionError, sign_constitution, verify_signed
 from two_key.core import TwoKey, TwoKeyConfigError
 from two_key.keys import generate_private_key, save_public_key
-from two_key.ledger import CRASH_HOLD_SECONDS, CRASH_WINDOW_SECONDS, Ledger
+from two_key.ledger import UNANSWERED_HOLD_SECONDS, UNANSWERED_WINDOW_SECONDS, Ledger
 from two_key.quorum import QuorumPolicy
 from two_key.strict import loads_json
 from two_key.testing import TEST_AGENT, FixedJudge
@@ -237,23 +237,23 @@ class Gateway(Deployment):
 
 
 
-class Crashes(Deployment):
+class Unanswered(Deployment):
     """A checked tool that raises or times out gives no receipt (decision 2026-11-03): ledgered as
-    ``tool_receipt_invalid`` every time; under high_assurance enough crashes hold it for 15 minutes, then the hold
+    ``tool_receipt_invalid`` every time; under high_assurance enough unanswered calls hold it for 15 minutes, then the hold
     ends by itself. A forged or missing receipt still holds it until ``two-key tool release``."""
 
     def setUp(self):
         super().setUp()
         self.now = int(time.time())
-        # The crash clock: the gateway's, and the ledger's when it ends a hold. Tokens keep the real time.
+        # The clock for unanswered calls: the gateway's, and the ledger's when it ends a hold. Tokens keep the real time.
         clock = mock.patch("two_key.ledger.time", mock.Mock(time=lambda: float(self.now)))
         clock.start()
         self.addCleanup(clock.stop)
-        self.crash = True
+        self.failing = True
         good = self.upstream(self.checker())
 
         def run(arguments, check=None):
-            if self.crash:
+            if self.failing:
                 raise TimeoutError("no answer")
             return good(arguments, check)
         self.run_tool = run
@@ -263,15 +263,15 @@ class Crashes(Deployment):
         gw.clock = lambda: self.now
         return gw
 
-    def call(self, gw, crash=True, after=0):
+    def call(self, gw, fail=True, after=0):
         self.now += after
-        self.crash = crash
+        self.failing = fail
         return gw.invoke(self.token(), "send", ARGS).reason
 
     def bodies(self, kind):
         return [e.body for e in self.tk.ledger.entries if e.kind == kind]
 
-    def test_a_crash_is_a_receipt_problem_but_the_default_profile_never_holds(self):
+    def test_an_unanswered_call_is_a_receipt_problem_but_the_default_profile_never_holds(self):
         gw = self.gw()
         for _ in range(4):
             self.assertEqual(self.call(gw), "tool_error:TimeoutError")
@@ -280,6 +280,14 @@ class Crashes(Deployment):
         self.assertEqual(len(self.bodies("tool_receipt_invalid")), 4)
         self.assertFalse(self.tk.ledger.tool_held("send", self.now))
 
+    def test_unanswered_hold_on_in_the_default_profile(self):
+        gw = self.gw(unanswered_hold=True)
+        for _ in range(3):
+            self.call(gw)
+        self.assertEqual(self.bodies("tool_held")[-1]["why"], "unanswered")
+        self.assertTrue(self.tk.ledger.tool_held("send", self.now))
+        self.assertFalse(self.gw().unanswered_hold)       # TwoKey passes its own setting, off by default
+
     def test_three_in_a_row_hold_for_fifteen_minutes_then_calls_go_ahead(self):
         gw = self.gw(high_assurance=True)
         earlier = self.token()                 # issued before the hold
@@ -287,41 +295,41 @@ class Crashes(Deployment):
             self.call(gw, after=after)
         held = self.bodies("tool_held")
         self.assertEqual(len(held), 1)
-        self.assertEqual((held[0]["why"], held[0]["until"]), ("crashes", self.now + CRASH_HOLD_SECONDS))
-        self.now += CRASH_HOLD_SECONDS - 1
+        self.assertEqual((held[0]["why"], held[0]["until"]), ("unanswered", self.now + UNANSWERED_HOLD_SECONDS))
+        self.now += UNANSWERED_HOLD_SECONDS - 1
         self.assertEqual(self.tk.authorize(CLAIM, ARGS, "send a note").reason, "tool_held")
         self.assertEqual(gw.invoke(earlier, "send", ARGS).reason, "tool_held")
-        self.assertEqual(self.call(gw, crash=False, after=1), "redeemed")
-        self.assertEqual(self.bodies("tool_released")[-1], {"tool": "send", "reason": "crash hold expired"})
+        self.assertEqual(self.call(gw, fail=False, after=1), "redeemed")
+        self.assertEqual(self.bodies("tool_released")[-1], {"tool": "send", "reason": "hold expired"})
         self.assertEqual(self.call(gw), "tool_error:TimeoutError")     # counting starts again after the hold
         self.assertEqual(len(self.bodies("tool_held")), 1)
 
     def test_a_verified_call_ends_the_streak(self):
         gw = self.gw(high_assurance=True)
-        for crash in (True, True, False, True, True):
-            self.call(gw, crash=crash, after=CRASH_WINDOW_SECONDS)
+        for fail in (True, True, False, True, True):
+            self.call(gw, fail=fail, after=UNANSWERED_WINDOW_SECONDS)
         self.assertFalse(self.tk.ledger.tool_held("send", self.now))
 
     def test_three_within_ten_minutes_hold_whatever_came_between(self):
         gw = self.gw(high_assurance=True)
-        for crash in (True, False, True, False, True):     # an agent's good calls do not end this count
-            self.call(gw, crash=crash, after=60)
+        for fail in (True, False, True, False, True):     # an agent's good calls do not end this count
+            self.call(gw, fail=fail, after=60)
         self.assertTrue(self.tk.ledger.tool_held("send", self.now))
 
-    def test_crashes_older_than_ten_minutes_do_not_count_towards_the_window(self):
+    def test_unanswered_calls_older_than_ten_minutes_do_not_count_towards_the_window(self):
         gw = self.gw(high_assurance=True)
-        for crash, after in ((True, 0), (True, 0), (False, 0), (True, CRASH_WINDOW_SECONDS)):
-            self.call(gw, crash=crash, after=after)
+        for fail, after in ((True, 0), (True, 0), (False, 0), (True, UNANSWERED_WINDOW_SECONDS)):
+            self.call(gw, fail=fail, after=after)
         self.assertFalse(self.tk.ledger.tool_held("send", self.now))
 
-    def test_a_crash_hold_ends_in_a_new_decision_too(self):
+    def test_a_unanswered_hold_ends_in_a_new_decision_too(self):
         gw = self.gw(high_assurance=True)
         for _ in range(3):
             self.call(gw)
         self.assertEqual(self.tk.authorize(CLAIM, ARGS, "send a note").reason, "tool_held")
-        self.now += CRASH_HOLD_SECONDS
+        self.now += UNANSWERED_HOLD_SECONDS
         self.assertTrue(self.tk.authorize(CLAIM, ARGS, "send a note").allowed)
-        self.assertEqual(self.bodies("tool_released")[-1]["reason"], "crash hold expired")
+        self.assertEqual(self.bodies("tool_released")[-1]["reason"], "hold expired")
 
     def test_a_missing_receipt_hold_does_not_end_by_itself(self):
         self.tk.ledger.record("tool_held", {"tool": "send", "jti": "j", "why": "missing"})

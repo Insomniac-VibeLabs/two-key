@@ -502,6 +502,7 @@ def _weaker_proxy(old: Posture, new: Posture) -> list[str]:
         (b.ttl_seconds > a.ttl_seconds, "ttl_seconds: tokens live longer"),
         (a.agent_session_env and not b.agent_session_env, "agent_session_env: removed"),
         (a.one_proxy_per_agent and not b.one_proxy_per_agent, "one_proxy_per_agent: turned off"),
+        (bool(a.unanswered_hold) and not b.unanswered_hold, "unanswered_hold: turned off"),
     ]
     return [line for weaker_now, line in checks if weaker_now]
 

@@ -100,6 +100,7 @@ The same keys go in an `--answers` file (YAML or JSON). An unknown key is refuse
 | `agent_session_env` | Proxy only: the name of the variable that holds the agent's session. Needed when a judge runs in the cloud ([below](#a-cloud-judge-needs-the-agents-session)) | none |
 | `judge_history` | Whether judges get a summary of recent decisions (`enabled`), what happens when it cannot be built (`on_failure`: `deny` or `judge_without_history`), and how many denies in how many minutes are an attempt episode (`burst_denies`, `burst_minutes`). Anything less than the default is recorded as weaker ([JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md#judge-history)) | on, `deny`, 5 in 10 |
 | `one_proxy_per_agent` | Proxy only: refuse a second proxy for the same agent on this ledger | `true` |
+| `unanswered_hold` | Proxy only: hold a checked tool for 15 minutes after 3 unanswered calls in a row or within 10 minutes ([TOOL_CHECK](TOOL_CHECK.md#when-the-tool-does-not-answer)). Always on under `high_assurance`, which refuses `false` | off (on under `high_assurance`) |
 | `key_passphrase_file` | The absolute path of a file only this account can read, holding a passphrase to encrypt the principal key with ([below](#protecting-the-principal-key-with-a-passphrase)). Never the passphrase itself | none: not encrypted |
 
 `schema_digest` is the `sha256:` digest that `two-key mcp-draft-specs --constitution` prints. Leave it blank
@@ -418,6 +419,7 @@ loaded the way the proxy loads them, not from the key you typed. Each of these i
 | `quorum.judge_inputs`, `tool_args_on_derive_deny`, `tool_args_on_scan_flag` | Judges see the proposal or the arguments |
 | `quorum.judge_history` | It is turned off, its `window_days` or `max_items` is lowered, `on_failure` becomes `judge_without_history`, `burst_denies` is raised, or `burst_minutes` is shortened |
 | `one_proxy_per_agent` | It is turned off |
+| `unanswered_hold` | It is turned off |
 | `quorum.ballot_binding`, `heterogeneity_scope` | `echo` becomes `stamp`, `responding` becomes `selection` |
 | `judges` | A judge is added or removed, or any of its keys changes but `timeout`, `json_mode`, `max_tokens`, `response_format`, and `reasoning_effort` |
 | `monitored_agent` | It is removed or changed (judges are checked against it) |

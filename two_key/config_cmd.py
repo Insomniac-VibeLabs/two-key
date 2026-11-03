@@ -73,9 +73,19 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
     found += _writable(config, high)
     found += _siem(config, high)
     found += _agent_access(config, high)
+    found += _unanswered_hold(config, high)
     if signed is not None:
         found += _tool_checks(signed, high)
     return found
+
+
+def _unanswered_hold(config, high: bool) -> list[tuple[str, str]]:
+    """``unanswered_hold`` (docs/TOOL_CHECK.md): a FAIL when ``high_assurance`` is told not to hold."""
+    from .mcp_proxy.config import unanswered_hold_problem
+    problem = unanswered_hold_problem(config, high)
+    if problem:
+        return [(FAIL, problem)]
+    return [(OK, f"unanswered_hold: {'on' if config.unanswered_hold or high else 'off'}")]
 
 
 def _tool_checks(signed, high: bool) -> list[tuple[str, str]]:
@@ -364,6 +374,7 @@ def show(path: Path | str) -> dict[str, Any]:
         "allow_unresolved_identity": config.allow_unresolved_identity,
         "on_writable_paths": writable.resolve_mode(config.on_writable_paths, high),
         "on_agent_access": agent_access.resolve_mode(config.on_agent_access, high),
+        "unanswered_hold": bool(config.unanswered_hold) or high,
         "high_assurance": high,
         "upstream": {
             "command": list(config.upstream.command),

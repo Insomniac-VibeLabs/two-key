@@ -189,7 +189,7 @@ SPDX-License-Identifier: Apache-2.0
 - [A first-time demo on a real tool server — 2026-10-30](#a-first-time-demo-on-a-real-tool-server--2026-10-30)
 - [Fixes from Claude's 0.9.0 feature test — 2026-11-02](#fixes-from-claudes-090-feature-test--2026-11-02)
 - [Docs: starter tools carry no arguments — 2026-11-03](#docs-starter-tools-carry-no-arguments--2026-11-03)
-- [A checked tool that crashes — 2026-11-03](#a-checked-tool-that-crashes--2026-11-03)
+- [A checked tool that leaves a call unanswered — 2026-11-03](#a-checked-tool-that-leaves-a-call-unanswered--2026-11-03)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5505,22 +5505,27 @@ only match a path against an exact list of strings, so a file tool's rules had t
   `QQQQ`, which a hybrid public key's base64 can hold by chance (it failed once on macOS, 3.10). It now looks for
   64 in a row.
 
-## A checked tool that crashes — 2026-11-03
+## A checked tool that leaves a call unanswered — 2026-11-03
 
 From Claude's 0.9.0 feature test, design chosen by the maintainer (2026-11-03): "both triggers, 15-minute hold,
-plus B".
+plus B", then "on/off setting, fixed numbers". The docs call this an unanswered call (an error or a timeout).
 
-- **Gateway**: a checked tool that raises or times out after it got the token gave no receipt, and the ledger
-  said only `redemption_aborted`, so `high_assurance` never held it. It now also writes `tool_receipt_invalid`
-  with why `tool_error:<type>` and `at`, sent to the SIEM. Under `high_assurance`, 3 crashes in a row (no
-  verified receipt between) or 3 within 10 minutes (whatever came between) hold the tool with
-  `tool_held {why: crashes, until}` for 15 minutes; the next call or decision after that writes
-  `tool_released` (`crash hold expired`). A crash never holds at once, so one bad call cannot lock a tool. A
-  missing, forged or mismatched receipt still holds until `two-key tool release`. The default profile never
-  holds on crashes.
+- **Gateway**: a checked tool that raised an error or timed out after it got the token gave no receipt, and the
+  ledger said only `redemption_aborted`, so `high_assurance` never held it. It now also writes
+  `tool_receipt_invalid` with why `tool_error:<type>` and `at`, sent to the SIEM. With `unanswered_hold`, 3
+  unanswered calls in a row (no verified receipt between) or 3 within 10 minutes (whatever came between) hold the
+  tool with `tool_held {why: unanswered, until}` for 15 minutes; the next call or decision after that writes
+  `tool_released` (`hold expired`). One unanswered call never holds at once, so one bad call cannot lock a tool.
+  A missing, forged or mismatched receipt still holds until `two-key tool release`.
+- **`unanswered_hold`** in `proxy.yaml`: default `false` (each unanswered call is only ledgered and sent to the
+  SIEM); `true` turns the hold on. The numbers are fixed. `high_assurance` is always on and refuses
+  `unanswered_hold: false` at start and in `config check`. `config set` changes it, and turning it off is weaker
+  (typed yes). The setup window has a check box on the Proxy page, locked on under High assurance; an answers
+  file takes `unanswered_hold: true`.
 - **Helper** (`ToolChecker.mcp_call`): when the tool's code raises, it returns `tool failed: <type>` as an error
-  result with an ordinary receipt, never the exception's message, so a tool error is not a crash.
-- SIEM: `tool_receipt_invalid` sends `at` and `tool_held` sends `until`. Docs: TOOL_CHECK ("When the tool
-  crashes or times out", the helper), HOWTO reasons, THREAT_MODEL.
+  result with an ordinary receipt, never the exception's message, so an ordinary tool error is answered.
+- SIEM: `tool_receipt_invalid` sends `at` and `tool_held` sends `until`. Docs: TOOL_CHECK ("When the tool does
+  not answer", the helper), SETTINGS (generated), SETUP, HOWTO, THREAT_MODEL.
 - ROADMAP: 0.9.1 plans a TypeScript tool-check helper as its own npm package (maintainer's decision).
-- Tests in `tests/test_toolcheck.py` and `tests/test_toolcheck_mcp.py`. 1511 tests.
+- Tests in `tests/test_toolcheck.py`, `tests/test_toolcheck_mcp.py`, `tests/test_config_set.py` and
+  `tests/test_setup_gui.py`. 1514 tests.
