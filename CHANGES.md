@@ -190,6 +190,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Fixes from Claude's 0.9.0 feature test — 2026-11-02](#fixes-from-claudes-090-feature-test--2026-11-02)
 - [Docs: starter tools carry no arguments — 2026-11-03](#docs-starter-tools-carry-no-arguments--2026-11-03)
 - [A checked tool that leaves a call unanswered — 2026-11-03](#a-checked-tool-that-leaves-a-call-unanswered--2026-11-03)
+- [Regression test of the unanswered-call hold — 2026-11-03](#regression-test-of-the-unanswered-call-hold--2026-11-03)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5529,3 +5530,17 @@ plus B", then "on/off setting, fixed numbers". The docs call this an unanswered 
 - ROADMAP: 0.9.1 plans a TypeScript tool-check helper as its own npm package (maintainer's decision).
 - Tests in `tests/test_toolcheck.py`, `tests/test_toolcheck_mcp.py`, `tests/test_config_set.py` and
   `tests/test_setup_gui.py`. 1514 tests.
+
+## Regression test of the unanswered-call hold — 2026-11-03
+
+From Claude's regression test of the change above (full suite, a live proxy in both profiles, `config set`,
+setup from an answers file, the terminal interview and the setup window).
+
+- **Gateway, a hold is never shortened**: calls already running when a bad receipt held the tool could, if 3 of
+  them then went unanswered, write a 15-minute `tool_held` over the hold that waits for `two-key tool release`, and
+  the tool went ahead again after 15 minutes. The gateway now writes no hold for unanswered calls while the tool is
+  held, and the ledger keeps a hold without `until` when a timed one is written after it (also on reopening).
+- **Terminal setup** (`two-key setup` with no answers file) now asks the `unanswered_hold` question for the proxy
+  route in the default profile, as the setup window's check box does; `high_assurance` does not ask, since it
+  always holds. A no is left out of the answers, as in the window, so both write the same `proxy.yaml`.
+- Tests in `tests/test_toolcheck.py` and `tests/test_config_set.py`.

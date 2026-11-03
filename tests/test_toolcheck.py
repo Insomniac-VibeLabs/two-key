@@ -331,6 +331,33 @@ class Unanswered(Deployment):
         self.assertTrue(self.tk.authorize(CLAIM, ARGS, "send a note").allowed)
         self.assertEqual(self.bodies("tool_released")[-1]["reason"], "hold expired")
 
+    def test_unanswered_calls_in_flight_do_not_shorten_a_hold_for_a_bad_receipt(self):
+        gw = self.gw(high_assurance=True)
+        tokens = [self.token() for _ in range(3)]
+        started = []
+
+        def run(arguments, check=None):
+            started.append(1)
+            if len(started) < 3:
+                gw.invoke(tokens[len(started)], "send", ARGS)       # the next call is in flight too
+            else:       # another call's bad receipt holds the tool while these three run
+                self.tk.ledger.record("tool_held", {"tool": "send", "jti": "j", "why": "receipt_signature"})
+            raise TimeoutError("no answer")
+        gw.tools["send"] = run
+        self.assertEqual(gw.invoke(tokens[0], "send", ARGS).reason, "tool_error:TimeoutError")
+        self.assertEqual(len(self.bodies("tool_receipt_invalid")), 3)
+        self.assertEqual(len(self.bodies("tool_held")), 1)      # no timed hold on top of it
+        self.now += UNANSWERED_HOLD_SECONDS + 1
+        self.assertEqual(self.tk.authorize(CLAIM, ARGS, "send a note").reason, "tool_held")
+
+    def test_a_timed_hold_written_after_a_bad_receipt_hold_does_not_shorten_it(self):
+        self.tk.ledger.record("tool_held", {"tool": "send", "jti": "j", "why": "missing"})
+        self.tk.ledger.record("tool_held", {"tool": "send", "jti": "k", "why": "unanswered", "until": self.now + 1})
+        self.now += 10 ** 6
+        self.assertTrue(self.tk.ledger.tool_held("send", self.now))
+        reopened = Ledger(self.tk.ledger.path, self.key)
+        self.assertTrue(reopened.tool_held("send", self.now))
+
     def test_a_missing_receipt_hold_does_not_end_by_itself(self):
         self.tk.ledger.record("tool_held", {"tool": "send", "jti": "j", "why": "missing"})
         self.now += 10 ** 6

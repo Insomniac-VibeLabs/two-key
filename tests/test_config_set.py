@@ -232,7 +232,8 @@ class Setup(Deployment):
                    "agent", "some-model", "other", "https://agent.example/v1", "", "AGENT_KEY_VAR",
                    "", "", "", "",          # judge history: on, deny on failure, 5 denies, 10 minutes
                    "", "", "tool_a", "no", "public", "", "", "server --stdio", DIGEST, "",
-                   ""]                      # one proxy per agent: yes
+                   "",                      # one proxy per agent: yes
+                   "yes"]                   # hold a tool that leaves calls unanswered: yes
         asked = []
 
         def ask(prompt):
@@ -245,6 +246,7 @@ class Setup(Deployment):
         self.assertEqual(answers["judge_history"], {"enabled": True, "on_failure": "deny", "burst_denies": 5,
                                                     "burst_minutes": 10})
         self.assertIs(answers["one_proxy_per_agent"], True)
+        self.assertIs(answers["unanswered_hold"], True)
         self.assertEqual(answers["quorum"], {"required_yes": 1, "min_responding": 1, "min_distinct_providers": 1,
                                              "min_makers": 1, "min_local_judges": 0})
         for q in asked:
@@ -254,7 +256,9 @@ class Setup(Deployment):
             if re.search(r"api key|credential|session", q.lower()):
                 self.assertIn("name of the environment variable", q.lower())
         quiet(setup_cmd.build, answers, self.base / "asked", environ={})
-        self.assertIn("one_proxy_per_agent: true", (self.base / "asked" / "proxy.yaml").read_text(encoding="utf-8"))
+        proxy_yaml = (self.base / "asked" / "proxy.yaml").read_text(encoding="utf-8")
+        self.assertIn("one_proxy_per_agent: true", proxy_yaml)
+        self.assertIn("unanswered_hold: true", proxy_yaml)
         self.assertIn("on_failure: deny", (self.base / "asked" / "judges.yaml").read_text(encoding="utf-8"))
 
     def test_the_interview_asks_where_an_unresolved_judge_forwards(self):
@@ -264,7 +268,7 @@ class Setup(Deployment):
         replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:8081/v1", "", "api.x.ai",
                    "", "no", "", "", "", "", "",
                    "agent", "claude-sonnet", "anthropic", "https://api.anthropic.com", "AGENT_KEY_VAR",
-                   "", "", "", "", "", "", "tool_a", "no", "public", "", "", "server --stdio", DIGEST, "", ""]
+                   "", "", "", "", "", "", "tool_a", "no", "public", "", "", "server --stdio", DIGEST, "", "", ""]
         asked = []
 
         def ask(prompt):
@@ -414,7 +418,7 @@ class SetupQuorum(unittest.TestCase):
         replies = (self.START + second
                    + ["1", "1", "", "", "", "no"]       # required_yes 1 of 2: weaker, not kept
                    + ["1", "2", "", "", "", "yes"]      # again, with every judge answering: kept
-                   + self.AGENT + ["", ""])
+                   + self.AGENT + ["", "", ""])
         answers, asked, err = self.interview(replies)
         self.assertEqual(answers["quorum"]["required_yes"], 1)
         self.assertEqual(answers["quorum"]["min_responding"], 2)
@@ -425,16 +429,34 @@ class SetupQuorum(unittest.TestCase):
         self.assertIn("Quorum: required_yes, yes votes a call needs [2]: ", asked)
 
     def test_the_interview_asks_again_for_numbers_the_judges_cannot_meet(self):
-        replies = self.START + ["no", "2", "", "", "", "", "yes", "", "", "", "", ""] + self.AGENT + ["", ""]
+        replies = self.START + ["no", "2", "", "", "", "", "yes", "", "", "", "", ""] + self.AGENT + ["", "", ""]
         answers, _, err = self.interview(replies)
         self.assertIn("too_few_judges_configured:1<2", err)
         self.assertEqual(answers["quorum"]["required_yes"], 1)
         self.assertIn("one judge decides every call", err)
 
+    def test_the_interview_asks_about_unanswered_calls_only_in_the_default_profile(self):
+        """high_assurance always holds a checked tool that keeps leaving calls unanswered, so it is not asked."""
+        given = {"Profile": "high_assurance", ": model": "m", "base URL": "http://127.0.0.1:11434/v1",
+                 "who made": "maker", "provider (": "other", "numbers again": "no", "tool ids": "tool_a",
+                 "tool check": "exempt", "the command": "server", "schema digest": DIGEST,
+                 "name of the environment variable": "VAR"}
+        asked = []
+
+        def ask(prompt):
+            asked.append(prompt)
+            self.assertLess(len(asked), 80, "the interview did not end")
+            return next((v for k, v in given.items() if k in prompt), "")
+        answers, _, _ = quiet(setup_cmd.interview, ask)
+        self.assertEqual((answers["profile"], answers["upstream"]["command"]), ("high_assurance", ["server"]))
+        self.assertIs(answers["one_proxy_per_agent"], True)       # the question just before it was asked
+        self.assertNotIn("unanswered_hold", answers)
+        self.assertFalse([q for q in asked if "unanswered" in q], asked)
+
     def test_the_interview_needs_the_session_with_a_cloud_judge(self):
         cloud = ["proxy", "default", "openai_compatible", "j1", "m", "https://judge.example/v1", "", "", "JUDGE_KEY_VAR",
                  "no", "", "", "", "", ""]
-        replies = cloud + self.AGENT + ["", "SESSION_VAR", ""]
+        replies = cloud + self.AGENT + ["", "SESSION_VAR", "", ""]
         answers, _, err = self.interview(replies)
         self.assertEqual(answers["agent_session_env"], "SESSION_VAR")
         self.assertIn("Judge(s) j1 are not on this machine", err)

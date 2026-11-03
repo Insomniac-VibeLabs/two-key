@@ -335,9 +335,10 @@ starts again. `two-key tool release` ends it earlier. A hold after a
 missing, forged or mismatched receipt has no `until` and still waits for
 the operator. With `unanswered_hold` off (the default profile's default),
 unanswered calls are ledgered and sent to the SIEM but never hold the tool. Turn it
-on with `two-key config set --config proxy.yaml unanswered_hold true`, or with the
-check box on the setup window's Proxy page; turning it off again counts as
-weaker and needs the typed yes.
+on with `two-key config set --config proxy.yaml unanswered_hold true`, with the
+check box on the setup window's Proxy page, or by answering yes when
+`two-key setup` asks on the terminal; turning it off again counts as weaker
+and needs the typed yes.
 
 Other refusals at the gateway, before anything is ledgered as started:
 `tool_args_mismatch` (the token's `tool_args_hash` is not the hash of what

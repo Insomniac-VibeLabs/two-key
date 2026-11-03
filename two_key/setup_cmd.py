@@ -129,6 +129,11 @@ def interview(ask: Ask = input) -> dict:
         _ask_session(out, ask, cloud_judges(judges))
         out["one_proxy_per_agent"] = _yes(ask, "Let only one proxy at a time serve this agent on this ledger? "
                                           "(no is weaker)", True)
+        # high_assurance always holds, so it is not asked; a no is left out, as the setup window does.
+        if out["profile"] != "high_assurance" and _yes(
+                ask, "Hold a checked tool for 15 minutes when it leaves 3 calls unanswered in a row or within 10 "
+                "minutes?", False):
+            out["unanswered_hold"] = True
     return out
 
 

@@ -100,7 +100,7 @@ The same keys go in an `--answers` file (YAML or JSON). An unknown key is refuse
 | `agent_session_env` | Proxy only: the name of the variable that holds the agent's session. Needed when a judge runs in the cloud ([below](#a-cloud-judge-needs-the-agents-session)) | none |
 | `judge_history` | Whether judges get a summary of recent decisions (`enabled`), what happens when it cannot be built (`on_failure`: `deny` or `judge_without_history`), and how many denies in how many minutes are an attempt episode (`burst_denies`, `burst_minutes`). Anything less than the default is recorded as weaker ([JUDGES_AND_QUORUM](JUDGES_AND_QUORUM.md#judge-history)) | on, `deny`, 5 in 10 |
 | `one_proxy_per_agent` | Proxy only: refuse a second proxy for the same agent on this ledger | `true` |
-| `unanswered_hold` | Proxy only: hold a checked tool for 15 minutes after 3 unanswered calls in a row or within 10 minutes ([TOOL_CHECK](TOOL_CHECK.md#when-the-tool-does-not-answer)). Always on under `high_assurance`, which refuses `false` | off (on under `high_assurance`) |
+| `unanswered_hold` | Proxy only: hold a checked tool for 15 minutes after 3 unanswered calls in a row or within 10 minutes ([TOOL_CHECK](TOOL_CHECK.md#when-the-tool-does-not-answer)). Always on under `high_assurance`, which refuses `false` and does not ask | off (asked in the default profile; on under `high_assurance`) |
 | `key_passphrase_file` | The absolute path of a file only this account can read, holding a passphrase to encrypt the principal key with ([below](#protecting-the-principal-key-with-a-passphrase)). Never the passphrase itself | none: not encrypted |
 
 `schema_digest` is the `sha256:` digest that `two-key mcp-draft-specs --constitution` prints. Leave it blank

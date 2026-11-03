@@ -730,8 +730,7 @@ class Ledger:
         # 0.9.0: redemption_aborted leaves the jti started, so a token whose tool failed is spent (already_attempted).
         # A ledger written by 0.8.0 may hold a later redemption of that jti; it still reads as redeemed.
         elif entry.kind == "tool_held" and isinstance(entry.body.get("tool"), str):
-            until = entry.body.get("until")
-            self._held[entry.body["tool"]] = (entry.seq, until if _whole(until) else None)
+            self._track_hold(entry)
         elif entry.kind == "tool_released" and isinstance(entry.body.get("tool"), str):
             self._held.pop(entry.body["tool"], None)
         elif entry.kind in ("witness_pinned", "witness_rotated"):
@@ -740,6 +739,15 @@ class Ledger:
             self._track_upgrade(entry, check=verify)
         seqs = self._kind_seqs.setdefault(entry.kind, [])
         seqs.append(entry.seq)
+
+    def _track_hold(self, entry: Entry) -> None:
+        """Hold the tool of a ``tool_held`` entry: until a time (unanswered calls), or until ``two-key tool release``.
+        A hold until ``two-key tool release`` is never cut short by a timed one written after it."""
+        tool = entry.body["tool"]
+        until = entry.body.get("until") if _whole(entry.body.get("until")) else None
+        earlier = self._held.get(tool)
+        if until is None or earlier is None or earlier[1] is not None:
+            self._held[tool] = (entry.seq, until)
 
     def _track_witness(self, entry: Entry, *, check: bool) -> None:
         """Move the witness pin for a ``witness_pinned`` or ``witness_rotated`` entry (see ``_track``)."""

@@ -458,10 +458,12 @@ class ToolGateway:
         ``high_assurance``), enough unanswered calls hold the tool for ``UNANSWERED_HOLD_SECONDS``, then the hold ends by itself
         (``Ledger.unanswered_hold_due``)."""
         now = int(self.clock())
-        self.ledger.record("tool_receipt_invalid", {"jti": jti, "tool": tool, "why": why, "at": now})
-        if self.unanswered_hold and self.ledger.unanswered_hold_due(tool, now):
-            self.ledger.record("tool_held", {"tool": tool, "jti": jti, "why": "unanswered",
-                                             "until": now + UNANSWERED_HOLD_SECONDS})
+        with self.ledger.exclusive():       # catches up on a hold another call or process wrote while this one ran
+            self.ledger.record("tool_receipt_invalid", {"jti": jti, "tool": tool, "why": why, "at": now})
+            if (self.unanswered_hold and not self.ledger.tool_held(tool, now)
+                    and self.ledger.unanswered_hold_due(tool, now)):
+                self.ledger.record("tool_held", {"tool": tool, "jti": jti, "why": "unanswered",
+                                                 "until": now + UNANSWERED_HOLD_SECONDS})
 
     def _call(self, fn, projected: dict, pinned: str | None, token: str, payload: dict, seq: int) -> tuple:
         """Run the tool: (output, stamp), the stamp None for an unchecked tool. For a checked one the token is
