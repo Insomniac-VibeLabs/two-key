@@ -188,6 +188,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Folder-path fields for Path A — 2026-10-30](#folder-path-fields-for-path-a--2026-10-30)
 - [A first-time demo on a real tool server — 2026-10-30](#a-first-time-demo-on-a-real-tool-server--2026-10-30)
 - [Fixes from Claude's 0.9.0 feature test — 2026-11-02](#fixes-from-claudes-090-feature-test--2026-11-02)
+- [Docs: starter tools carry no arguments — 2026-11-03](#docs-starter-tools-carry-no-arguments--2026-11-03)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5492,3 +5493,10 @@ only match a path against an exact list of strings, so a file tool's rules had t
 - `two-key setup --window --answers FILE` with no display now says to run it again without `--window`, instead
   of telling you to give the `--answers FILE` you already gave. Test in `tests/test_setup_gui.py`.
 - 1503 tests.
+
+## Docs: starter tools carry no arguments — 2026-11-03
+
+- docs/SETUP.md, the `tools` answer: a starter tool names no arguments, so the gateway drops every argument
+  before the tool runs (behind the proxy the server gets an empty call). For a tool that takes arguments, give a
+  `rules_file` that names them, such as the one `two-key mcp-draft-specs` drafts. Found in the 0.9.0 regression
+  test (unchanged since 0.8.0; the gateway is meant to drop what the signed spec does not name).
