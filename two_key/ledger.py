@@ -59,7 +59,9 @@ import json
 import os
 import stat
 import sys
+import heapq
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -290,6 +292,25 @@ class Entry:
                 "body": self.body, "entry_hash": self.entry_hash}
 
 
+# A checked tool that crashes or times out leaves no receipt (#28). Under high_assurance this many crashes in a row,
+# or this many within the window, hold it for CRASH_HOLD_SECONDS; the hold then ends by itself (maintainer's
+# decision, 2026-11-03). A forged or missing receipt still holds it until ``two-key tool release``.
+CRASH_PREFIX = "tool_error:"
+CRASH_HOLD_COUNT = 3
+CRASH_WINDOW_SECONDS = 600
+CRASH_HOLD_SECONDS = 900
+
+
+def _whole(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def is_crash(body: dict) -> bool:
+    """A ``tool_receipt_invalid`` body for a checked tool that raised or timed out, not a bad receipt."""
+    why = body.get("why")
+    return isinstance(why, str) and why.startswith(CRASH_PREFIX)
+
+
 class Ledger:
     def __init__(self, path: Path | str, private_key, public_key=None, *,
                  witness_path: Path | str | None = None, ledger_key_path: Path | str | None = None,
@@ -340,8 +361,9 @@ class Ledger:
         self.entries: list[Entry] = []
         self._redeemed: set[str] = set()
         self._started: set[str] = set()
-        # Tools held after a bad receipt under high_assurance (#28): tool -> the tool_held entry's seq.
-        self._held: dict[str, int] = {}
+        # Tools held after a bad receipt under high_assurance (#28): tool -> (the tool_held entry's seq, the time
+        # a crash hold ends, or None for a hold that lasts until ``two-key tool release``).
+        self._held: dict[str, tuple[int, int | None]] = {}
         self._configured_witness = None if witness_public_key is None else public_raw(witness_public_key)
         self._witness_pin: tuple[str, int, str] | None = None    # (raw key, seq, source) pinned in the ledger
         # The key upgrade: True while the key files are hybrid and the ledger is still Ed25519 (no keys_upgraded
@@ -707,7 +729,8 @@ class Ledger:
         # 0.9.0: redemption_aborted leaves the jti started, so a token whose tool failed is spent (already_attempted).
         # A ledger written by 0.8.0 may hold a later redemption of that jti; it still reads as redeemed.
         elif entry.kind == "tool_held" and isinstance(entry.body.get("tool"), str):
-            self._held[entry.body["tool"]] = entry.seq
+            until = entry.body.get("until")
+            self._held[entry.body["tool"]] = (entry.seq, until if _whole(until) else None)
         elif entry.kind == "tool_released" and isinstance(entry.body.get("tool"), str):
             self._held.pop(entry.body["tool"], None)
         elif entry.kind in ("witness_pinned", "witness_rotated"):
@@ -1501,12 +1524,56 @@ class Ledger:
     def redemption_started(self, jti: str) -> bool:
         return jti in self._started and jti not in self._redeemed
 
-    def tool_held(self, tool: str) -> bool:
-        """True while ``tool`` is held: a ``tool_held`` entry with no ``tool_released`` after it (#28)."""
-        return tool in self._held
+    def tool_held(self, tool: str, now: float | None = None) -> bool:
+        """True while ``tool`` is held: a ``tool_held`` entry with no ``tool_released`` after it (#28), and, for a
+        crash hold, before its ``until``."""
+        held = self._held.get(tool)
+        if held is None:
+            return False
+        until = held[1]
+        return until is None or (time.time() if now is None else now) < until
 
     def held_tools(self) -> list[str]:
-        return sorted(self._held)
+        return sorted(tool for tool in self._held if self.tool_held(tool))
+
+    def release_expired_hold(self, tool: str, now: float | None = None) -> None:
+        """End a crash hold whose time is up with a ``tool_released`` entry, so the ledger says when calls went
+        ahead again. A hold with no ``until`` is left for ``two-key tool release``."""
+        with self._exclusive():
+            held = self._held.get(tool)
+            if held is not None and held[1] is not None and not self.tool_held(tool, now):
+                self.record("tool_released", {"tool": tool, "reason": "crash hold expired"})
+
+    def _since_last_hold(self, tool: str):
+        """``tool``'s receipt problems and redemptions, newest first, back to its last hold or release."""
+        kinds = ("tool_receipt_invalid", "redemption", "tool_held", "tool_released")
+        seqs = heapq.merge(*(reversed(self._kind_seqs.get(kind, [])) for kind in kinds), reverse=True)
+        for seq in seqs:
+            entry = self.entries[seq]
+            if entry.body.get("tool") != tool:
+                continue
+            if entry.kind in ("tool_held", "tool_released"):
+                return
+            yield entry
+
+    def crash_hold_due(self, tool: str, now: float) -> bool:
+        """True when ``tool``'s crashes since its last hold or release call for a hold: ``CRASH_HOLD_COUNT`` in a
+        row with no verified receipt between them, or that many within ``CRASH_WINDOW_SECONDS`` whatever came
+        between. An agent cannot end either count by sending good calls."""
+        in_a_row = in_window = 0
+        streak = True
+        for entry in self._since_last_hold(tool):
+            if entry.kind == "redemption":
+                streak = streak and entry.body.get("receipt_outcome") != "ran"
+                continue
+            if not is_crash(entry.body):
+                continue
+            at = entry.body.get("at")
+            in_a_row += int(streak)
+            in_window += int(_whole(at) and now - at < CRASH_WINDOW_SECONDS)
+            if CRASH_HOLD_COUNT in (in_a_row, in_window):
+                return True
+        return False
 
     def last_before(self, size: int, kind: str) -> Entry | None:
         """The last entry of ``kind`` with ``seq`` below ``size``, or None.

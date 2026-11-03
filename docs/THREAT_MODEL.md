@@ -466,6 +466,11 @@ claims to close.
     is not scanned; each later call is still authorized on its own.
   - A call that times out (`call_timeout_seconds`) is recorded as
     `redemption_aborted`, but the server may still have done the work.
+    For a checked tool it is `tool_receipt_invalid` too; under
+    `high_assurance` 3 crashes in a row or within 10 minutes hold the tool
+    for 15 minutes. An agent that can crash the tool can still make it
+    unavailable that long, again and again; each hold is ledgered and sent
+    to the SIEM.
   - A fact-like argument still mapped by `json_path` alone is the agent's
     assertion; the drafter leaves such properties out of the spec, but a
     principal who maps one back accepts the agent's word (run 5c, C05).

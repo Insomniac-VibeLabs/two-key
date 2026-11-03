@@ -17,6 +17,7 @@ promise: the order may change, and version numbers are targets, not dates.
 - [Ground rules](#ground-rules)
 - [0.8.0: Judge history and ballot records](#080-judge-history-and-ballot-records)
 - [0.9.0: Tool-side token check and remote agents](#090-tool-side-token-check-and-remote-agents)
+- [0.9.1: TypeScript tool-check helper](#091-typescript-tool-check-helper)
 - [1.0.0: First stable release](#100-first-stable-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
   - [PKI and certificate recovery](#pki-and-certificate-recovery)
@@ -63,6 +64,7 @@ flowchart TD
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, folder-path rules for key one, and formats frozen for 1.0 | Planned |
+| 0.9.1 | A TypeScript tool-check helper as its own npm package, and fixes from the 0.9.0 review | Planned |
 | 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
 | After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
@@ -222,6 +224,17 @@ frozen, so the public review looks at the final shape.
   [UPGRADING.md](docs/UPGRADING.md).
 - Before release: a live round across the full case list plus the new
   cases.
+
+## 0.9.1: TypeScript tool-check helper
+
+Planned (maintainer's decision, 2026-11-03), after 0.9.0 ships:
+
+- A TypeScript helper for the tool check (#28), so an MCP server on the TypeScript SDK can check the token and
+  sign its receipt as `two_key.toolcheck` does for Python. It is its own npm package with its own release, so
+  the Python package and its 1.0 freeze do not change; the wire format and test vectors in
+  docs/TOOL_CHECK.md are what it must match. Like the Python helper, it signs an ordinary tool error rather
+  than sending no receipt.
+- Fixes from the 0.9.0 review, as for any 0.9.x.
 
 ## 1.0.0: First stable release
 

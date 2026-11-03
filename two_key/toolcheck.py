@@ -408,7 +408,9 @@ class ToolChecker:
     async def mcp_call(self, arguments: Any, meta: Any, run: Callable[[Any], Awaitable[Any]]) -> Any:
         """For an MCP server on the Python SDK: check, then ``await run(arguments)`` (an MCP ``CallToolResult``),
         and return that result with the receipt in its ``_meta``. A refused call returns an error result with a
-        refusal receipt, and ``run`` is never called."""
+        refusal receipt, and ``run`` is never called. When ``run`` raises, the call returns an error result naming
+        only the exception's type, with an ordinary receipt: the gateway sees a signed failure, not a crash, so a
+        tool error never counts towards a crash hold."""
         import mcp_types as types      # the server already depends on the MCP SDK
         try:
             call = self.check(arguments, meta)
@@ -416,7 +418,11 @@ class ToolChecker:
             text = f"two-key tool check refused this call: {e.reason}"
             return types.CallToolResult(content=[types.TextContent(type="text", text=text)], is_error=True,
                                         _meta={META_KEY: {"receipt": self.refusal(e.reason, meta)}})
-        result = await run(arguments)
+        try:
+            result = await run(arguments)
+        except Exception as e:      # the token is spent: answer with a signed error, never with no receipt
+            text = f"tool failed: {type(e).__name__}"
+            result = types.CallToolResult(content=[types.TextContent(type="text", text=text)], is_error=True)
         wire = result.model_dump(mode="json", by_alias=True, exclude_none=True)
         meta_out = dict(wire.get("_meta") or {})
         meta_out[META_KEY] = {"receipt": self.receipt(call, wire)}

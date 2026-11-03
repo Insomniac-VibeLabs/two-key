@@ -2288,9 +2288,9 @@ an argument value.
 | `file_unreadable` | A declared file could not be read: bad base64, a value of the wrong type, a path outside its folder, a link, a missing file. Denied the same way |
 | any `two-key authorize` reason | `rule_denied:<rule id>`, `counterparty_not_allowed`, `derive_failed:...`, `insufficient_yes:...`, `cloud_judge_session_required`, `args_too_large`, and the others in "Parsing and limits" and "Quorum policy" |
 | `tool_receipt_invalid:<why>` | Under `high_assurance`: a checked tool's receipt was missing (`missing`), signed by another key (`bad_signature`), for another call or result (`mismatch`), or the tool refused (`refused:<reason>`). The agent gets no output, and the tool is held | Look at the tool's key and clock, then `two-key tool release TOOL --reason ...` ([TOOL_CHECK](TOOL_CHECK.md#what-two-key-does-with-the-receipt)) |
-| `tool_held` | A checked tool is held after a bad receipt | As above |
+| `tool_held` | A checked tool is held after a bad receipt, or for 15 minutes after repeated crashes under `high_assurance` | As above; a crash hold also ends by itself ([TOOL_CHECK](TOOL_CHECK.md#when-the-tool-crashes-or-times-out)) |
 | `tool_args_mismatch` | The token does not bind the arguments the tool would get | Ask again; report it if it repeats |
-| `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`. After a timeout the server may still have done the work. The proxy does not retry, and the token is spent: the agent asks again |
+| `tool_error:<type>` | The upstream call raised: `MCPError` for an error response, `TimeoutError` after `call_timeout_seconds`. The ledger has `redemption_aborted`, and for a checked tool `tool_receipt_invalid` as well. After a timeout the server may still have done the work. The proxy does not retry, and the token is spent: the agent asks again |
 | `upstream_result_unreadable` | The upstream returned something that is not a tool result |
 
 An upstream result with `isError: true` is the server's own answer: the

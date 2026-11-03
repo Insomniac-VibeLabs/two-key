@@ -40,6 +40,7 @@ import math
 import os
 import sys
 import threading
+import time
 import warnings
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -54,7 +55,7 @@ from .fields import path_fields, path_inside
 from .derive import (MAX_ARGS_BYTES, DeriveError, args_too_large, blocked_from_rules, caller_fields, canonical_too_large,
                      derive, dropped_keys, form_for, forms_match, project_arguments, size_record)
 from .keys import public_raw
-from .ledger import LedgerError
+from .ledger import CRASH_HOLD_SECONDS, CRASH_PREFIX, LedgerError
 from .scan import CALL_VERDICTS, ENCRYPTED
 from .toolcheck import ToolCheckError, checked, text_hash, tool_args_hash, verify_receipt
 
@@ -177,6 +178,7 @@ class ToolGateway:
         self.stamp_signer = stamp_signer
         self.receipt_reader = receipt_reader
         self.high_assurance = high_assurance
+        self.clock = time.time      # when a checked tool crashed, and when its crash hold ends
         # One in-process lock per jti being redeemed. #42: _lock_refs counts the threads that hold or
         # wait on each lock, under _locks_guard; the entry is removed when the count reaches zero, so the
         # map holds only jtis in flight. No LRU cap: evicting a held lock would split one jti in two.
@@ -399,11 +401,7 @@ class ToolGateway:
             try:
                 output, stamp = self._call(fn, projected, pinned, encoded["token"], payload, started.seq)
             except Exception as e:
-                try:
-                    self.ledger.record("redemption_aborted", {"jti": payload["jti"], "tool": tool})
-                except Exception as le:
-                    return GatewayResult(False, _ledger_failed(le))
-                return GatewayResult(False, f"tool_error:{type_tag(e)}", None)
+                return self._aborted(payload["jti"], tool, pinned, e)
             return self._finish(payload, tool, pinned, stamp, output)
 
     def _last_checks(self, spec: dict, tool: str, arguments: dict, scan: dict | None, fields: dict) -> str | None:
@@ -435,9 +433,32 @@ class ToolGateway:
                 return "tool_args_mismatch"
         except (TypeError, ValueError):     # EncodingError is a ValueError
             return "tool_args_mismatch"
-        if self.ledger.tool_held(tool):
+        now = self.clock()
+        self.ledger.release_expired_hold(tool, now)
+        if self.ledger.tool_held(tool, now):
             return "tool_held"
         return None
+
+    def _aborted(self, jti: str, tool: str, pinned: str | None, error: Exception) -> GatewayResult:
+        """The tool raised or timed out: ``redemption_aborted``, and for a checked tool a crash (``_crashed``)."""
+        why = f"{CRASH_PREFIX}{type_tag(error)}"
+        try:
+            self.ledger.record("redemption_aborted", {"jti": jti, "tool": tool})
+            if pinned is not None:
+                self._crashed(jti, tool, why)
+        except Exception as e:
+            return GatewayResult(False, _ledger_failed(e))
+        return GatewayResult(False, why, None)
+
+    def _crashed(self, jti: str, tool: str, why: str) -> None:
+        """A checked tool raised or timed out after it got the token: no receipt came back. Ledgered as
+        ``tool_receipt_invalid`` and sent to the SIEM every time; under ``high_assurance``, enough crashes hold the
+        tool for ``CRASH_HOLD_SECONDS``, then the hold ends by itself (``Ledger.crash_hold_due``)."""
+        now = int(self.clock())
+        self.ledger.record("tool_receipt_invalid", {"jti": jti, "tool": tool, "why": why, "at": now})
+        if self.high_assurance and self.ledger.crash_hold_due(tool, now):
+            self.ledger.record("tool_held", {"tool": tool, "jti": jti, "why": "crashes",
+                                             "until": now + CRASH_HOLD_SECONDS})
 
     def _call(self, fn, projected: dict, pinned: str | None, token: str, payload: dict, seq: int) -> tuple:
         """Run the tool: (output, stamp), the stamp None for an unchecked tool. For a checked one the token is

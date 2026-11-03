@@ -1011,10 +1011,11 @@ class TwoKey:
     def _held_deny(self, spec, tool: str, origin: str | None, agent) -> Decision | None:
         """A checked tool held after a bad receipt (#28) is denied before either path: the gateway refuses it anyway,
         so the judges are not asked and no token is issued (run 12, D6c). The hold is read under the ledger's lock,
-        which catches up on a ``tool release`` another process wrote."""
+        which catches up on a ``tool release`` another process wrote; a crash hold whose time is up ends here."""
         if spec is None or checked(spec) is None:
             return None
         with self.ledger.exclusive():
+            self.ledger.release_expired_hold(tool)
             held = self.ledger.tool_held(tool)
         if not held:
             return None

@@ -355,6 +355,7 @@ def _tool_release(args) -> int:
     ledger = _open_ledger(args, _principal_key(args))
     if ledger is None:
         return 1
+    ledger.release_expired_hold(args.tool)
     if not ledger.tool_held(args.tool):
         print(json.dumps({"ok": False, "error": f"{args.tool} is not held", "held": ledger.held_tools()}, indent=2))
         return 1

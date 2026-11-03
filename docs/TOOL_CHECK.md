@@ -151,10 +151,20 @@ and an error inside the helper, such as an unreadable key file, is a
 refusal too. Only use the helper this way: a pattern that catches the
 refusal and runs the tool anyway turns the check off.
 
+When the tool's own code raises, `mcp_call` returns an error result,
+`tool failed: <exception type>`, with an ordinary receipt. The message of
+the exception is not sent. The gateway sees a signed failure, so a tool
+error never counts towards a crash hold (below). A process that dies or
+hangs gives no receipt at all, and that is a crash.
+
 For another framework, call `checker.check(arguments, meta)` (it raises
 `ToolCheckError` with the reason), run the tool, then
 `checker.receipt(call, result)` with the result in MCP wire form. On a
-refusal, send `checker.refusal(reason, meta)`.
+refusal, send `checker.refusal(reason, meta)`. If the tool raises, sign an
+error result the same way rather than sending none.
+
+The helper is Python only. A TypeScript helper, as its own npm package, is
+planned for 0.9.1 (ROADMAP.md).
 
 ## The wire format
 
@@ -301,6 +311,29 @@ the SIEM at once. The tool did run (or refused), so the token stays spent.
   The release is ledgered as `tool_released` with its reason. Under
   `high_assurance`, a refusal receipt most likely means a wrong key or a
   wrong clock, and the operator should look before releasing.
+
+### When the tool crashes or times out
+
+A checked tool that raises or times out after it got the token gives no
+receipt. The agent gets `tool_error:<type>`, the token stays spent
+(`redemption_aborted`), and the gateway also writes `tool_receipt_invalid`
+with why `tool_error:<type>` and the time (`at`), sent to the SIEM at once.
+
+Under `high_assurance` a crash does not hold the tool at once, since an
+agent could then lock any tool with one bad call. The tool is held when
+either count reaches 3 (decision 2026-11-03):
+
+- 3 crashes in a row, with no verified receipt between them, or
+- 3 crashes within 10 minutes, whatever came between, so an agent cannot
+  reset the count with good calls.
+
+This hold (`tool_held` with why `crashes` and an `until` time) lasts 15
+minutes and then ends by itself: the next call or decision after `until`
+writes `tool_released` with reason `crash hold expired`, and counting
+starts again. `two-key tool release` ends it earlier. A hold after a
+missing, forged or mismatched receipt has no `until` and still waits for
+the operator. In the default profile crashes are ledgered and sent to the
+SIEM but never hold the tool.
 
 Other refusals at the gateway, before anything is ledgered as started:
 `tool_args_mismatch` (the token's `tool_args_hash` is not the hash of what

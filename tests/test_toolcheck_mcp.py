@@ -55,9 +55,10 @@ class ThroughTheProxy(unittest.TestCase):
             "stamp_public_key": "stamp.pub.pem", "stamp_key_fingerprint": self.tk.stamp_signer.fingerprint,
             "tool_private_key": "tool.pem", "seen_record": "seen.sqlite"}))
 
-    def config(self, digest="sha256:" + "0" * 64):
+    def config(self, digest="sha256:" + "0" * 64, variant=""):
         upstream = {"command": [sys.executable, str(FAKE)], "schema_digest": digest,
-                    "env": {"FAKE_MCP_TOOL_CHECK": str(self.check_config), "PYTHONPATH": str(ROOT)}}
+                    "env": {"FAKE_MCP_TOOL_CHECK": str(self.check_config), "PYTHONPATH": str(ROOT),
+                            "FAKE_MCP_VARIANT": variant}}
         return parse_proxy_config({"constitution": "c.json", "keys": {"principal": "k.pem"}, "ledger": "ledger",
                                    "judges": "judges.yaml", "upstream": upstream,
                                    "tools": {"pay_vendor": {"claim": "floor"}}}, self.tmp / "proxy.yaml")
@@ -69,8 +70,8 @@ class ThroughTheProxy(unittest.TestCase):
                 return select_tools(await sdk.list_upstream_tools(client), SPECS, {}).digest
         return anyio.run(main)
 
-    def run_client(self, body):
-        cfg = self.config(self.digest())
+    def run_client(self, body, variant=""):
+        cfg = self.config(self.digest(), variant)
 
         async def main():
             async with sdk.running_core(cfg, two_key=self.tk) as core:
@@ -85,6 +86,17 @@ class ThroughTheProxy(unittest.TestCase):
         result = self.run_client(body)
         self.assertFalse(result.is_error, result)
         self.assertNotIn(META_KEY, result.meta or {})          # the receipt never reaches the agent
+        redemption = [e.body for e in self.tk.ledger.entries if e.kind == "redemption"][-1]
+        self.assertEqual(redemption["receipt_outcome"], "ran")
+        self.assertNotIn("tool_receipt_invalid", [e.kind for e in self.tk.ledger.entries])
+
+    def test_a_tool_that_raises_answers_with_a_signed_error(self):
+        """Decision 2026-11-03, B: the helper signs an ordinary tool error, so it is never a crash to the gateway."""
+        async def body(client):
+            return await client.call_tool("pay_vendor", CALL)
+        result = self.run_client(body, "fail")
+        self.assertTrue(result.is_error)
+        self.assertEqual(result.content[0].text, "tool failed: RuntimeError")     # never the exception's message
         redemption = [e.body for e in self.tk.ledger.entries if e.kind == "redemption"][-1]
         self.assertEqual(redemption["receipt_outcome"], "ran")
         self.assertNotIn("tool_receipt_invalid", [e.kind for e in self.tk.ledger.entries])
