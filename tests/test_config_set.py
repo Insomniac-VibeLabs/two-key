@@ -207,7 +207,7 @@ class Setup(Deployment):
 
         def ask(prompt):
             if "Add another agent" in prompt:
-                return next(more)
+                return next(more, "no")
             if "Agent 2: id" in prompt:
                 return "public"
             if "Agent 2: the account" in prompt:

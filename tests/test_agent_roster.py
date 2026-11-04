@@ -147,7 +147,9 @@ class Base(unittest.TestCase):
         self.dir = Path(tmp.name)
         self.key = generate_private_key()
 
-    def start(self, roster_entries=None, specs=SPECS, judges=None, quorum=None, monitored=TEST_AGENT, **kw):
+    def start(self, roster_entries=None, specs=None, judges=None, quorum=None, monitored=None, **kw):
+        specs = SPECS if specs is None else specs
+        monitored = TEST_AGENT if monitored is None else monitored
         env = sign_constitution("Pay billing's invoices.", RULES, self.key, specs, agents=roster_entries)
         con = verify_signed(env, self.key.public_key())
         ledger = quiet(Ledger, self.dir / "ledger", self.key)[0]
