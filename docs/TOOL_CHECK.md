@@ -340,6 +340,13 @@ check box on the setup window's Proxy page, or by answering yes when
 `two-key setup` asks on the terminal; turning it off again counts as weaker
 and needs the typed yes.
 
+The count looks back to the tool's last hold or release, not to when the
+hold was turned on (maintainer's decision, 2026-11-04). Unanswered calls
+ledgered while `unanswered_hold` was off still count, so right after turning
+it on one more unanswered call can hold the tool, and so can the next call
+when 3 of them were within the last 15 minutes. Release the tool first
+(`two-key tool release`) to start the count from zero.
+
 A hold is its own ledger entry, written just after the `tool_receipt_invalid`
 that calls for it. If the proxy is killed between the two, the next decision
 or call to that tool writes the hold it missed before going on (run 13): a

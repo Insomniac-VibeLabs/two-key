@@ -5579,5 +5579,7 @@ GrokBot's live run 13, the 0.9.0 release gate, at 340c876. Nothing it tried let 
   insensitive`, a local judge's 30-second `timeout`), SETUP (a one-account starter-tool test needs weaker
   settings), DEMO (`judges[0].timeout` beside the round's, answer `n` to a call you did not ask for, `/quit`, a
   clean-up that works with Python 3.14 venvs and removes the Node.js download).
+- TOOL_CHECK: unanswered calls from before `unanswered_hold` was turned on still count (maintainer's decision,
+  2026-11-04); `two-key tool release` starts the count from zero.
 - Tests in `tests/test_toolcheck.py`, `tests/test_key_upgrade.py`, `tests/test_mcp_proxy_sdk.py`,
   `tests/test_cli_tokens.py`, `tests/test_path_fields.py` and `tests/test_siem.py`. 1528 tests.
