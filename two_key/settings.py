@@ -282,6 +282,9 @@ JUDGES = _rows(JUDGES_YAML, [
      "deny."),
     ("quorum.tool_args_on_scan_flag", "false", "Send the arguments and the proposal to judges when the scanner "
      "flagged the call."),
+    ("quorum.require_other_maker", "false", "Judge diversity (0.9.0, opt-in): an allow needs a yes from a judge "
+     "whose model maker is not a monitored agent's (`other_maker_yes_required`); refused at start when no judge is "
+     "(`judge_diversity_unmet`). Turning it off is weaker."),
     ("quorum.allow_same_provider_judge", "false", "Deprecated and ignored: the same provider is allowed."),
     ("quorum.allow_same_model_distinct_tenant", "false", "Deprecated and ignored."),
     ("quorum.judge_history", "on, with the defaults below", "The decision history summary judges get with each call "
@@ -349,6 +352,16 @@ RULES = _rows(RULES_YAML, [
      "`constitution_serial_reused`); once a ledger has run one with a serial, one without is refused too. "
      "Signs as a v3 constitution. `two-key setup` writes `serial: 1`; `config set` on a signed setting raises "
      "it by one."),
+    ("agents", "none", "The signed agent roster (0.9.0): the agents that may connect, each with the account it runs "
+     "as. With one, `two-key mcp-proxy` serves the entry for the account that started it and refuses any other "
+     "account (`agent_account_unlisted`). Signs as a v3 constitution.", {"ha": "required (`agent_roster_required`)"}),
+    ("agents[].id", "required", "The agent's name in the ledger and to the judges. Letters, digits, `.`, `_`, `-`, "
+     "at most 128; `unnamed` and `any` are reserved."),
+    ("agents[].account", "required", "The local account, or the SSH login account, the agent runs as. Each entry "
+     "has its own account."),
+    ("agents[].shared", "false", "`true` marks a group of callers Two-Key cannot tell apart (for example public "
+     "agents through one gateway account), judged as one agent; `one_proxy_per_agent` does not apply to it."),
+    ("agents[].hosting", "none", "Where the agent runs, as ledger metadata."),
     ("hard_rules[].id", "`rule[i]:type`", "The rule's name in the ledger. Unique."),
     ("hard_rules[].allow_only_tools", _ONE_RULE_TYPE, "A list of tool ids; any other tool is denied."),
     ("hard_rules[].deny_counterparties", _ONE_RULE_TYPE, "A list of blocked parties, each exact. No "
@@ -387,6 +400,9 @@ RULES = _rows(RULES_YAML, [
      "start with a tool that has neither; `exempt` and turning it off are weaker."),
     ("tool_specs.<tool>.tool_check.key", "required with a mapping", "The fingerprint of the key that signs the "
      "tool's receipts, as `two-key tool-key new` prints it."),
+    ("tool_specs.<tool>.agents", "any", "The roster agents that may call the tool: `any`, or a list of agent ids. "
+     "Another agent does not see the tool and a call is denied `tool_not_for_agent`. Needs `agents:`. `any` is "
+     "weaker.", {"ha": "a list of ids (`agent_list_required`)"}),
     ("tool_specs.<tool>.fields", "none", "Maps each custom field to an argument, or marks it `not_applicable`."),
     ("tool_specs.<tool>.fields.<name>.json_path", "none", "The argument that holds the field's value."),
     ("tool_specs.<tool>.fields.<name>.source", "the arguments", "`caller` for a fact the proxy's hook supplies."),

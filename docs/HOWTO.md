@@ -2145,7 +2145,7 @@ what `high_assurance` does to it, and which file tier it is in, is in
 | `witness_public_key`, `head_anchor` | no | As `--witness-public-key` and `--head-anchor` |
 | `ttl_seconds` | no | Token lifetime, 1 to 300 (default 120) |
 | `agent_session_env` | no | The variable holding the agent's session, read once at start; unset or empty refuses to start |
-| `agent_id`, `hosting` | no | Ledger metadata, at most 256 characters; not trust |
+| `agent_id`, `hosting` | no | Ledger metadata, at most 256 characters; not trust. With a signed agent roster, leave `agent_id` out: the proxy serves the roster entry for the account that started it, and refuses an `agent_id` that names another ([AGENT_ROSTER](AGENT_ROSTER.md)) |
 | `allow_unresolved_identity` | no | `true` starts despite an `unresolved_identity` warning (default `false`) |
 | `on_agent_access` | no | `refuse` (default) does not start when the account that started the proxy (the agent host's, or the SSH login account's) is Two-Key's own (`agent_same_account`), is root (`agent_account_root`), cannot be told (`agent_account_unknown`, which includes Windows for now), or can change a file or folder the proxy runs or reads (`agent_can_write`); `warn` names it and starts, for a test on one machine under one account. `high_assurance` refuses either way and does not accept `warn` ([CONNECTING](CONNECTING.md#what-two-key-checks-for-you), 0.7.0) |
 | `one_proxy_per_agent` | no | `true` (default): one running proxy per `agent_id` on this ledger (a proxy without one counts as the agent `unnamed`). A second proxy for the same agent refuses to start with `agent_already_connected`, which is ledgered and sent to the SIEM; the lock goes when the first proxy's process ends. `false` lets several run at once, warns at start, and is weaker in `config set`. Clients that open several sessions at once need one `agent_id` per session, or `false` ([Judge history](JUDGES_AND_QUORUM.md#judge-history), 0.8.0) |
@@ -2210,7 +2210,9 @@ it writes anything ([SETUP](SETUP.md)).
   upstream child, lists its tools (every page), and checks the schema
   digest. It imports each fact hook and refuses to start when a
   caller-supplied field a tool maps has no hook. Last, it ledgers
-  `mcp_proxy_started`: the agent it serves (`agent_id`, or `unnamed`), the
+  `mcp_proxy_started`: the agent it serves (`agent_id`, or `unnamed`;
+  with a signed roster, the entry for the account that started it, and
+  `account` and `agent_source`, [AGENT_ROSTER](AGENT_ROSTER.md)), the
   upstream program and a digest of its command,
   both schema digests, `on_schema_change`, `allow_unresolved_identity`, and
   each tool's claim and fact fields.

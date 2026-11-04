@@ -190,6 +190,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [docs/SCANNERS.md](docs/SCANNERS.md) | Content scanning with your antivirus or DLP product (0.6.0) |
 | [docs/SIEM.md](docs/SIEM.md) | Sending the ledger to a SIEM, and checking a copy against it (0.7.0) |
 | [docs/TOOL_CHECK.md](docs/TOOL_CHECK.md) | The tool check: a tool behind the proxy refuses a call that did not come through both keys, and signs a receipt (0.9.0) |
+| [docs/AGENT_ROSTER.md](docs/AGENT_ROSTER.md) | The signed agent roster: each agent tied to the account it runs as, which tools each may use, and judges from another maker (0.9.0) |
 | [docs/LEDGER_VIEW.md](docs/LEDGER_VIEW.md) | `two-key ledger-view`: search, filter and sort the ledger in a read-only window for an audit (0.8.0) |
 | [docs/CONSTITUTION_EDITOR.md](docs/CONSTITUTION_EDITOR.md) | `two-key constitution-editor`: write, try and sign a constitution in a window (0.8.0) |
 | [docs/JUDGES_AND_QUORUM.md](docs/JUDGES_AND_QUORUM.md) | How judges vote and how the two keys combine |

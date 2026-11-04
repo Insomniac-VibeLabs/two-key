@@ -84,7 +84,10 @@ always says what is still missing.
 
 6. **Agent and history.** Describe the monitored agent and name the variable that holds its credential. Fill in
    *upstream* too (who serves the agent's model) when the address does not say: without it the Review page
-   warns `unresolved_identity` and the proxy would refuse to start. Keep the judge-history defaults.
+   warns `unresolved_identity` and the proxy would refuse to start. Keep the judge-history defaults. Since these
+   pictures were taken the page also asks for the account the agent runs as (here `agent`), with a table for more
+   agents: with an account, setup signs an agent roster, and under `high_assurance` it is required
+   ([AGENT_ROSTER](AGENT_ROSTER.md)).
 
    ![The monitored agent and the judge-history defaults](images/gui-walkthrough/05-setup-agent-history.png)
 

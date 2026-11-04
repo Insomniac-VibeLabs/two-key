@@ -114,7 +114,7 @@ class Window(unittest.TestCase):
         self.assertEqual(self.top.title(), "Two-Key constitution: new constitution")
         self.assertIn("Does not sign yet", editor.status_text())
         self.assertIn("allow_only_tools", editor.review_text())
-        self.assertEqual(len(editor.notebook.tabs()), 6)
+        self.assertEqual(len(editor.notebook.tabs()), 7)
 
     def test_tools_and_rules_make_it_sign(self):
         editor = self.editor()
@@ -213,6 +213,24 @@ class Window(unittest.TestCase):
         _set_text(editor.fields_box, "")
         editor.apply_fields()
         self.assertEqual(editor.draft.fields, {})
+
+    def test_the_agent_roster(self):
+        editor = self.editor()
+        self.add_tools(editor)
+        editor.agents_example()
+        editor.apply_agents()
+        self.assertIn("2 agent(s) applied", editor.agents_note.cget("text"))
+        self.assertEqual(sorted(a["id"] for a in editor.draft.agents), ["coder", "public"])
+        self.assertIn("Ready to sign", editor.status_text())
+        _set_text(editor.agents_box, "- {id: a, account: x}\n- {id: b, account: x}\n")
+        editor.apply_agents()
+        self.assertIn("share the account", editor.status_text())
+        _set_text(editor.agents_box, "{id: a}")
+        editor.apply_agents()
+        self.assertIn("expected a list", editor.agents_note.cget("text"))
+        _set_text(editor.agents_box, "")
+        editor.apply_agents()
+        self.assertEqual(editor.draft.agents, [])
 
     def test_try_a_call_shows_path_a_and_the_prompt(self):
         editor = self.editor()

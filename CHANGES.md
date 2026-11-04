@@ -193,6 +193,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Regression test of the unanswered-call hold — 2026-11-03](#regression-test-of-the-unanswered-call-hold--2026-11-03)
 - [Fixes from GrokBot's run 13 — 2026-11-04](#fixes-from-grokbots-run-13--2026-11-04)
 - [Judge history: one agent's bursts are never shown as another's — 2026-11-04](#judge-history-one-agents-bursts-are-never-shown-as-anothers--2026-11-04)
+- [Agents told apart by the account they run as — 2026-11-04](#agents-told-apart-by-the-account-they-run-as--2026-11-04)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5605,3 +5606,32 @@ GrokBot's live run 13, the 0.9.0 release gate, at 340c876. Nothing it tried let 
   configure in bursts of its own; it is still shown to judges, and ledgered in `attempt_episode`, only as
   `unnamed`. `audit --check-history` still rebuilds a v1 summary as 0.8.0 built it. Docs: JUDGES_AND_QUORUM.
   Tests in `tests/test_judge_history.py`. 1539 tests.
+
+## Agents told apart by the account they run as — 2026-11-04
+
+- **Signed agent roster** (maintainer's decisions, 2026-11-04, in 0.9.0): `agents:` in the rules file lists each
+  agent's `id` and the `account` it runs as (a local account, or its SSH login), with optional `shared` and
+  `hosting`. It is signed into a v3 constitution, sorted by id, and signing refuses two entries on one account and
+  the reserved ids `unnamed` and `any`. Before, `agent_id` in `proxy.yaml` was a label nothing checked; without a
+  roster it still is. New module `two_key/roster.py`.
+- **The account picks the agent**: with a roster, the MCP proxy serves the entry whose account started it
+  (compared by uid). It refuses an account the roster does not list (`agent_account_unlisted`) or an `agent_id`
+  that names another entry (`agent_account_mismatch`), and ledgers `agent_refused`, which goes to the SIEM
+  without the account. `mcp_proxy_started` records `account` and `agent_source` (`roster` or `proxy_yaml`), and
+  each decision's `agent` records `account`. A `shared: true` group is judged as one agent and is not held to
+  `one_proxy_per_agent`.
+- **Tools per agent**: `tool_specs.<tool>.agents` is `any` (the default) or a list of roster ids. The proxy does
+  not list a tool to an agent it is not for, and a call to it is denied `tool_not_for_agent` before the judges.
+- **High assurance**: needs the roster (`agent_roster_required`) and a list of agents on every tool
+  (`agent_list_required`); `two-key setup` asks for the agent's account and refuses a proxy setup without one
+  (`agent_account_required`).
+- **Judges from another maker** (opt-in): `quorum.require_other_maker: true` needs a yes from a judge whose maker
+  is not a monitored agent's (`other_maker_yes_required`), and Two-Key does not start without such a judge
+  (`judge_diversity_unmet`). `monitored_agent` in `judges.yaml` may be a list, one declaration per agent.
+- **Setup, config check and the windows**: `two-key setup` (terminal and window) asks for the account, more
+  agents, and each tool's agents; `config check` lists the roster with each agent's tools and checks the accounts;
+  the constitution editor has an Agents tab and keeps the roster when it signs; `ledger-view` shows
+  `agent.account.name` by default.
+- Docs: new [AGENT_ROSTER](docs/AGENT_ROSTER.md); CONNECTING, UPGRADING, SETUP, JUDGES_AND_QUORUM, SIEM,
+  THREAT_MODEL, SCOPE, HOWTO, CONSTITUTION_EDITOR, GUI_WALKTHROUGH and SETTINGS. Tests in
+  `tests/test_agent_roster.py` and the setup, editor and ledger-view tests.

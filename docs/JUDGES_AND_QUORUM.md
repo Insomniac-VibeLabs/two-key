@@ -160,6 +160,10 @@ These requirements do not prove that judges are independent:
 
 For high-impact tools, configure the judge set deliberately, check the actual endpoints and credentials, and choose thresholds according to the risk.
 
+### A judge from another maker (0.9.0)
+
+`require_other_maker: true` under `quorum:` makes an allow need a yes from at least one judge whose maker is not a monitored agent's, so one compromised or jailbroken model cannot pass a call alone. A judge's makers are its `maker` label (its provider by default) and the maker its model id names; an agent's are its provider and the maker its model id names. Two-Key does not start when no judge is from another maker (`judge_diversity_unmet`), and denies a call when none of those judges votes yes (`other_maker_yes_required`). It is off by default and `high_assurance` does not turn it on. `monitored_agent` may be a list, one declaration per agent with its own `id`, so that no judge may be any of them ([AGENT_ROSTER](AGENT_ROSTER.md#judges-from-another-maker)).
+
 ## How Path A and Path B combine
 
 Path A evaluates deterministic policy rules against the normalized structured action record. Path B evaluates the action using the configured judge quorum. Neither path alone is sufficient for authorization.

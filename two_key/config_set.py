@@ -1165,12 +1165,13 @@ def resign(signed: Mapping, rules_doc: Mapping, key, current_format: str) -> dic
     from .constitution import sign_constitution, verify_signed
     try:
         envelope = sign_constitution(signed["prose"], rules_doc.get("hard_rules"), key, rules_doc.get("tool_specs"),
-                                     fields=rules_doc.get("fields"), serial=rules_doc.get("serial"))
+                                     fields=rules_doc.get("fields"), serial=rules_doc.get("serial"),
+                                     agents=rules_doc.get("agents"))
         if _envelope_rank(envelope["format"]) < _envelope_rank(current_format):
             envelope = sign_constitution(signed["prose"], rules_doc.get("hard_rules"), key,
                                          rules_doc.get("tool_specs"), fields=rules_doc.get("fields"),
                                          envelope_format="v3" if _envelope_rank(current_format) == 3 else "v2",
-                                         serial=rules_doc.get("serial"))
+                                         serial=rules_doc.get("serial"), agents=rules_doc.get("agents"))
         verify_signed(json.loads(json.dumps(envelope)), key.public_key())
     except (ValueError, TypeError) as e:
         raise ConfigChangeError(f"constitution_refused: {e}") from None
@@ -1186,7 +1187,8 @@ def _signed_of(rules_doc: Mapping, prose: str, key) -> dict:
     from .constitution import sign_constitution
     try:
         return sign_constitution(prose, rules_doc.get("hard_rules"), key, rules_doc.get("tool_specs"),
-                                 fields=rules_doc.get("fields"), serial=rules_doc.get("serial"))["signed"]
+                                 fields=rules_doc.get("fields"), serial=rules_doc.get("serial"),
+                                 agents=rules_doc.get("agents"))["signed"]
     except (ValueError, TypeError) as e:
         raise ConfigChangeError(f"rules_invalid: {e}") from None
 

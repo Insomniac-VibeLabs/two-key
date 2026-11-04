@@ -368,7 +368,7 @@ but not tested in CI.
 
 ## Reason codes you will see
 
-These are the start-up refusals and warnings this feature adds, and the WARNING kinds that 0.8.0 adds.
+These are the start-up refusals and warnings this feature adds, and the WARNING kinds that 0.8.0 and 0.9.0 add.
 
 | Code or line | What it means |
 | --- | --- |
@@ -382,4 +382,5 @@ These are the start-up refusals and warnings this feature adds, and the WARNING 
 | `judge_history_failed` | the judge history summary could not be built; with `on_failure: deny` (the default) the call was denied `internal_error:history` |
 | `attempt_episode` | one agent reached `burst_denies` denies within `burst_minutes`; the agent id is the operator's, or `unnamed` |
 | `agent_already_connected` | a second MCP proxy for an agent already connected to this ledger refused to start (`one_proxy_per_agent`) |
+| `agent_refused` | an MCP proxy refused to start because the account that started it is not on the signed agent roster (`agent_account_unlisted`), or is another agent's (`agent_account_mismatch`); the account itself stays in the ledger ([AGENT_ROSTER](AGENT_ROSTER.md)) |
 | `two-key: gateway refused N token(s) that did not verify in T s: ...` | the refused-token count, also sent as `gateway_token_refused` |

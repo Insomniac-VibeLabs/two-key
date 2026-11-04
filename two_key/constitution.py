@@ -22,6 +22,7 @@ from .fields import (MAX_FIELDS_PER_TOOL, NOT_APPLICABLE, FieldError, check_path
 from .derive import DOMAIN, is_domain_entry
 from .keys import classical_half, fingerprint, is_hybrid, sign, verify
 from .policy_vm import ConstitutionError, validate_rules
+from .roster import roster_of, validate_agents, validate_tool_agents
 
 FORMAT_V1 = "two-key-constitution-v1"
 # v2 may carry a custom-field registry (``fields``) and refuses any other unknown signed key.
@@ -35,12 +36,13 @@ ENVELOPE_FORMATS = ("auto", "v2", "v3")
 _V2_SIGNED_KEYS = {"prose", "hard_rules", "tool_specs", "fields"}
 # The principal's ordering of constitutions (live run 9x, C44): a positive integer, signed, v3 only. A ledger that has
 # run serial N refuses a lower one and refuses N again with other bytes (two_key.core).
-_V3_SIGNED_KEYS = _V2_SIGNED_KEYS | {"serial"}
+# The signed agent roster (0.9.0, two_key/roster.py) is v3 only too: an older install refuses it as an unknown key.
+_V3_SIGNED_KEYS = _V2_SIGNED_KEYS | {"serial", "agents"}
 # The keys the loaders accept in a rules file and in a tool spec. Named here so docs/SETTINGS.md and its test
 # (two_key/settings.py) read the same sets the validators use.
-RULES_FILE_KEYS = ("hard_rules", "tool_specs", "fields", "serial")
+RULES_FILE_KEYS = ("hard_rules", "tool_specs", "fields", "serial", "agents")
 TOOL_SPEC_KEYS = ("irreversible", "data_class_floor", "amount", "counterparties", "payload", "deny_unmapped",
-                  "fields", "tool_check")
+                  "fields", "tool_check", "agents")
 # A tool's check (#28, docs/TOOL_CHECK.md): the fingerprint of the tool's receipt key, or "exempt".
 # Hybrid only (0.9.0): the tool check has no classical keys to stay compatible with.
 TOOL_CHECK_KEY = re.compile(r"hybrid-sha256:[0-9a-f]{64}")
@@ -87,6 +89,11 @@ class Constitution:
     @property
     def digest(self) -> str:
         return canonical_hash(self.document["signed"])
+
+    @property
+    def agents(self) -> tuple:
+        """The signed agent roster (two_key/roster.py) as ``RosterAgent`` entries; empty without one."""
+        return roster_of(self.document["signed"].get("agents"))
 
 
 _PATH = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
@@ -292,7 +299,8 @@ def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: li
     return out
 
 
-def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) -> dict:
+def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None,
+                        agents: list | None = None) -> dict:
     """Canonical tool specs. Every allow-listed tool must have one.
 
     A spec says which argument paths Path A may read. It is not an English
@@ -312,8 +320,11 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
     ``fields`` maps custom fields declared in the registry (``fields``) to argument paths. A mapped
     field is required at authorization time. A field path may not equal, contain, or sit under any
     other declared path, compared without regard to case.
+    ``agents`` says which roster agents may call the tool: ``any`` or a list of ids (two_key/roster.py); it
+    needs the canonical roster, passed as ``agents``.
     """
     registry = fields or {}
+    roster_ids = None if agents is None else [a["id"] for a in agents]
     if not isinstance(specs, Mapping):
         raise ConstitutionError("tool_specs must be a mapping")
     allowed_keys = set(TOOL_SPEC_KEYS)
@@ -432,6 +443,8 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None) 
         if fields_out:      # absent for a tool with no custom fields, so its spec hashes as before
             out[tool]["fields"] = fields_out
         out[tool].update(_tool_check(tool, spec))      # absent unless set, for the same reason
+        if "agents" in spec:                            # absent unless set: no roster means every caller
+            out[tool]["agents"] = validate_tool_agents(tool, spec["agents"], roster_ids)
     allow = _allow_listed(rules)
     missing = [tool for tool in allow if tool not in out]
     if missing:
@@ -462,7 +475,7 @@ def load_unsigned_with_fields(prose_path: Path | str, rules_path: Path | str) ->
     """Return prose, hard rules, tool specs, and the canonical custom-field registry (empty if none). A
     ``serial`` in the rules file is read by ``load_serial``."""
     prose = Path(prose_path).read_text(encoding="utf-8")
-    rules, specs, fields, _ = _load_rules_document(Path(rules_path))
+    rules, specs, fields, _, _ = _load_rules_document(Path(rules_path))
     try:
         registry = validate_fields(fields)
     except FieldError as e:
@@ -475,7 +488,13 @@ def load_serial(rules_path: Path | str) -> int | None:
     return validate_serial(_load_rules_document(Path(rules_path))[3])
 
 
-def _load_rules_document(path: Path) -> tuple[list, Mapping, Any, Any]:
+def load_agents(rules_path: Path | str) -> list | None:
+    """The agent roster a rules file declares (``agents:``), canonical; None when it declares none."""
+    value = _load_rules_document(Path(rules_path))[4]
+    return None if value is None else validate_agents(value)
+
+
+def _load_rules_document(path: Path) -> tuple[list, Mapping, Any, Any, Any]:
     if path.suffix.lower() != ".json":
         try:
             import yaml  # noqa: F401
@@ -499,12 +518,13 @@ def _load_rules_document(path: Path) -> tuple[list, Mapping, Any, Any]:
         specs = data["tool_specs"]
         if not isinstance(specs, Mapping):
             raise ConstitutionError("tool_specs must be a mapping")
-        return rules, specs, data.get("fields"), data.get("serial")
+        return rules, specs, data.get("fields"), data.get("serial"), data.get("agents")
     raise ConstitutionError("hard rules must be a list")
 
 
 def signed_body(prose: str, rules: list, tool_specs: Any = None, *, fields: Any = None,
-                envelope_format: str = "auto", serial: int | None = None) -> tuple[str, dict]:
+                envelope_format: str = "auto", serial: int | None = None,
+                agents: Any = None) -> tuple[str, dict]:
     """The envelope format and the body ``sign_constitution`` signs, checked the same way and not signed: what
     ``two-key constitution-editor`` shows before it signs."""
     if envelope_format not in ENVELOPE_FORMATS:
@@ -518,30 +538,38 @@ def signed_body(prose: str, rules: list, tool_specs: Any = None, *, fields: Any 
         raise ConstitutionError(
             "tool_specs required: every allow-listed tool needs a spec"
         )
+    roster = None if agents is None else validate_agents(agents)
     signed: dict[str, Any] = {
         "prose": prose,
         "hard_rules": rules,
-        "tool_specs": validate_tool_specs(tool_specs, rules, registry),
+        "tool_specs": validate_tool_specs(tool_specs, rules, registry, roster),
     }
+    if roster is not None:
+        signed["agents"] = roster
     if registry:
         signed["fields"] = registry
     serial = validate_serial(serial)
     if serial is not None:
         signed["serial"] = serial
-    v3 = uses_v3(registry, signed["tool_specs"]) or serial is not None
+    return _body_format(signed, envelope_format), signed
+
+
+def _body_format(signed: Mapping, envelope_format: str) -> str:
+    """The envelope format a checked body signs as."""
+    registry = signed.get("fields")
+    v3 = uses_v3(registry or {}, signed["tool_specs"]) or "serial" in signed or "agents" in signed
     if v3 and envelope_format == "v2":
-        raise ConstitutionError(f"{V3_FEATURES}, and a serial, need a v3 constitution")
+        raise ConstitutionError(f"{V3_FEATURES}, a serial, and an agent roster need a v3 constitution")
     if v3 or envelope_format == "v3":
-        fmt = FORMAT_V3
-    elif registry or envelope_format == "v2":
-        fmt = FORMAT_V2
-    else:
-        fmt = FORMAT_V1
-    return fmt, signed
+        return FORMAT_V3
+    if registry or envelope_format == "v2":
+        return FORMAT_V2
+    return FORMAT_V1
 
 
 def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = None, *,
-                      fields: Any = None, envelope_format: str = "auto", serial: int | None = None) -> dict:
+                      fields: Any = None, envelope_format: str = "auto", serial: int | None = None,
+                      agents: Any = None) -> dict:
     """Sign prose, hard rules, tool specs, and the optional custom-field registry.
 
     ``envelope_format`` is the principal's choice at signing time. ``auto`` (the default) writes
@@ -551,7 +579,8 @@ def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = No
     always writes ``v3``. None of those can be signed as ``v2``. An install older than custom fields refuses a ``v2`` envelope; one before 0.5.0
     refuses ``v3``.
     """
-    fmt, signed = signed_body(prose, rules, tool_specs, fields=fields, envelope_format=envelope_format, serial=serial)
+    fmt, signed = signed_body(prose, rules, tool_specs, fields=fields, envelope_format=envelope_format, serial=serial,
+                              agents=agents)
     signature = sign(private_key, canonical_bytes(signed))
     return {
         "format": fmt,
@@ -618,6 +647,13 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
         if fmt != FORMAT_V3:
             raise ConstitutionError("a serial needs a v3 constitution")
         validate_serial(signed["serial"])
+    roster = None
+    if "agents" in signed:
+        if fmt != FORMAT_V3:
+            raise ConstitutionError("an agent roster needs a v3 constitution")
+        roster = validate_agents(signed["agents"])
+        if roster != signed["agents"]:
+            raise ConstitutionError("agents: the signed roster is not in canonical form")
     prose = signed.get("prose")
     rules = signed.get("hard_rules")
     if not isinstance(prose, str) or not prose.strip():
@@ -631,7 +667,7 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
     rules = validate_rules(rules, fields=registry)
     if "tool_specs" not in signed:
         raise ConstitutionError("tool_specs required")
-    specs = validate_tool_specs(signed["tool_specs"], rules, registry)
+    specs = validate_tool_specs(signed["tool_specs"], rules, registry, roster)
     if uses_v3(registry, specs) and fmt != FORMAT_V3:
         raise ConstitutionError(f"{V3_FEATURES} need a v3 constitution")
     return Constitution(prose, rules, envelope, specs, True, registry)

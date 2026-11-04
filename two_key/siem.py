@@ -332,6 +332,9 @@ KINDS: dict[str, KindSpec] = {
     "attempt_episode": KindSpec(sent=("agent_id", "started", "denies", "reasons"), severity=WARNING),
     # A second proxy for an agent already connected to this ledger refused to start (0.8.0, D10).
     "agent_already_connected": KindSpec(sent=("agent_id", "origin"), severity=WARNING),
+    # The account that started a proxy is not the account of the agent it would serve (0.9.0, two_key/roster.py).
+    # The account itself stays in the ledger, as for config_changed.
+    "agent_refused": KindSpec(sent=("reason", "origin"), excluded=("account",), severity=WARNING),
     "gateway_denied": KindSpec(sent=("reason", "jti", "tool"), severity=WARNING),
     "redemption_started": KindSpec(sent=("jti", "tool"), excluded=("dropped_keys",)),
     "redemption": KindSpec(sent=("jti", "tool", "stamp_hash", "receipt_hash", "receipt_outcome")),
@@ -345,8 +348,8 @@ KINDS: dict[str, KindSpec] = {
     "revocation": KindSpec(hashed=("reason",), severity=NOTICE),
     "mcp_proxy_started": KindSpec(
         sent=("agent_id", "upstream_program", "upstream_command_digest", "schema_digest_pinned", "schema_digest_seen",
-              "on_schema_change", "allow_unresolved_identity", "signed_tools_not_listed"),
-        excluded=("tools",), extract=_proxy_fields),
+              "on_schema_change", "allow_unresolved_identity", "signed_tools_not_listed", "agent_source"),
+        excluded=("tools", "account"), extract=_proxy_fields),
     "tool_not_offered": KindSpec(sent=("origin", "tool"), severity=WARNING),
     # A tools/call the proxy refused before authorize: its JSON repeated a key (run 13, D2).
     "tool_call_refused": KindSpec(sent=("origin", "tool", "why"), severity=WARNING),
@@ -368,7 +371,7 @@ UNLEDGERED = {
 
 _DENY_KINDS = frozenset({"gateway_denied", "tool_not_offered", "tool_call_refused", "redemption_aborted", "gateway_token_refused",
                          "scanner_unavailable", "judge_history_failed", "attempt_episode",
-                         "agent_already_connected", "tool_receipt_invalid", "tool_held"})
+                         "agent_already_connected", "agent_refused", "tool_receipt_invalid", "tool_held"})
 
 
 def spec_for(kind: str) -> KindSpec:

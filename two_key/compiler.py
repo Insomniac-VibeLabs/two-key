@@ -28,7 +28,7 @@ class CompiledConstitution:
 
 def compile_both(prose: str, rules: list, tool_specs: dict | None = None, *,
                  specs_enforced: bool = False, max_steps: int = 4096,
-                 fields: dict | None = None) -> CompiledConstitution:
+                 fields: dict | None = None, agents: list | None = None) -> CompiledConstitution:
     """``spec_hash`` covers the tool specs and, when there is one, the custom-field registry: the field
     types and defaults decide the derived form, so a token binds them. Without a registry it is the hash
     of the specs alone, as before."""
@@ -39,7 +39,7 @@ def compile_both(prose: str, rules: list, tool_specs: dict | None = None, *,
     except FieldError as e:
         raise ConstitutionError(str(e)) from None
     if specs_enforced:
-        specs = validate_tool_specs(tool_specs or {}, rules, registry)
+        specs = validate_tool_specs(tool_specs or {}, rules, registry, agents)
         spec_hash = canonical_hash({"fields": registry, "tool_specs": specs}) if registry else canonical_hash(specs)
     else:
         specs = {}

@@ -36,7 +36,7 @@ from typing import Any, Mapping
 from . import _platform
 from .canonical import canonical_hash
 from .constitution import (ENVELOPE_FORMATS, RULES_FILE_KEYS, domain_allow_notes, encrypted_pass_notes,
-                           load_envelope, load_serial, load_unsigned_with_fields, save_envelope, sign_constitution,
+                           load_agents, load_envelope, load_serial, load_unsigned_with_fields, save_envelope, sign_constitution,
                            signed_body, verify_signed)
 from .fields import case_warnings, not_applicable_notes, path_notes
 from .policy_vm import ConstitutionError, RULE_TYPES
@@ -56,6 +56,10 @@ RULE_TEMPLATES: dict[str, Any] = {
     "deny_if_fields": {"FIELD_NAME": {"eq": "VALUE"}},
 }
 SPEC_KEYS = ("irreversible", "data_class_floor", "deny_unmapped")      # the ones the window has controls for
+AGENTS_EXAMPLE = [
+    {"id": "coder", "account": "tk-coder"},
+    {"id": "public", "account": "tk-gateway", "shared": True, "hosting": "public callers through one gateway"},
+]
 FIELDS_EXAMPLE = {
     "environment": {"type": "enum", "values": ["dev", "staging", "prod"], "default": "dev",
                     "description": "Where the call takes effect."},
@@ -86,6 +90,7 @@ class Draft:
     fields: dict = field(default_factory=dict)
     serial: int | None = 1
     envelope_format: str = "auto"
+    agents: list = field(default_factory=list)      # the signed agent roster (0.9.0); empty when there is none
 
     def copy(self) -> "Draft":
         return copy.deepcopy(self)
@@ -111,8 +116,12 @@ def draft_from(prose: str, document: Mapping) -> Draft:
         raise EditorError("tool_specs must be a mapping")
     if fields is not None and not isinstance(fields, Mapping):
         raise EditorError("fields must be a mapping")
+    agents = document.get("agents")
+    if agents is not None and not isinstance(agents, list):
+        raise EditorError("agents must be a list of {id, account}")
     return Draft(prose=prose, rules=copy.deepcopy(rules), tool_specs=copy.deepcopy(dict(specs)),
-                 fields=copy.deepcopy(dict(fields or {})), serial=document.get("serial"))
+                 fields=copy.deepcopy(dict(fields or {})), serial=document.get("serial"),
+                 agents=copy.deepcopy(list(agents or [])))
 
 
 def open_sources(prose_path: Path | str, rules_path: Path | str) -> Draft:
@@ -315,10 +324,12 @@ def dump_value(value: Any) -> str:
 
 
 def rules_document(draft: Draft) -> dict:
-    """The rules file's document: serial, fields, hard_rules, tool_specs (empty ones left out)."""
+    """The rules file's document: serial, agents, fields, hard_rules, tool_specs (empty ones left out)."""
     doc: dict[str, Any] = {}
     if draft.serial is not None:
         doc["serial"] = draft.serial
+    if draft.agents:
+        doc["agents"] = draft.agents
     if draft.fields:
         doc["fields"] = draft.fields
     doc["hard_rules"] = draft.rules
@@ -372,7 +383,8 @@ def check(draft: Draft) -> Report:
     try:
         fmt, signed = signed_body(draft.prose, copy.deepcopy(draft.rules), copy.deepcopy(draft.tool_specs),
                                   fields=copy.deepcopy(draft.fields) or None,
-                                  envelope_format=draft.envelope_format, serial=draft.serial)
+                                  envelope_format=draft.envelope_format, serial=draft.serial,
+                                  agents=copy.deepcopy(draft.agents) or None)
         notes = _signed_notes(signed)
     except (ValueError, TypeError) as e:
         return Report(str(e))
@@ -442,7 +454,8 @@ def same_from_files(paths: Mapping[str, Path], signed: Mapping) -> None:
     """The prose and rules files read back as ``two-key sign-constitution`` reads them sign the same body."""
     try:
         prose, rules, specs, fields = load_unsigned_with_fields(paths["prose"], paths["rules"])
-        _, again = signed_body(prose, rules, specs, fields=fields or None, serial=load_serial(paths["rules"]))
+        _, again = signed_body(prose, rules, specs, fields=fields or None, serial=load_serial(paths["rules"]),
+                               agents=load_agents(paths["rules"]))
     except (OSError, ValueError) as e:
         raise EditorError(f"the files written do not read back ({e}); the signed file was not written") from None
     if canonical_hash(again) != canonical_hash(signed):
@@ -469,7 +482,8 @@ def sign_and_save(draft: Draft, private_key, folder: Path | str, names: Mapping[
                           "them (sign-constitution's --force)")
     envelope = sign_constitution(draft.prose, copy.deepcopy(draft.rules), private_key,
                                  copy.deepcopy(draft.tool_specs), fields=copy.deepcopy(draft.fields) or None,
-                                 envelope_format=draft.envelope_format, serial=draft.serial)
+                                 envelope_format=draft.envelope_format, serial=draft.serial,
+                                 agents=copy.deepcopy(draft.agents) or None)
     verify_signed(json.loads(json.dumps(envelope)), private_key.public_key())
     _write_sources(paths, draft, "not signed")
     same_from_files(paths, envelope["signed"])
@@ -540,9 +554,17 @@ def claim_for(tool: str, claim: str, specs: Mapping) -> dict:
     return {"tool": tool, "data_class": claim}
 
 
+def _first_agent(spec: Any) -> str | None:
+    allowed = spec.get("agents") if isinstance(spec, Mapping) else None
+    return allowed[0] if isinstance(allowed, list) and allowed and isinstance(allowed[0], str) else None
+
+
 def try_call(draft: Draft, tool: str, arguments: Any, *, claim: str = "none", proposal: str = "",
-             facts: Any = None) -> Trial:
-    """Run one call through the draft on a temporary ledger with a throwaway key and a stand-in judge."""
+             facts: Any = None, agent: str | None = None) -> Trial:
+    """Run one call through the draft on a temporary ledger with a throwaway key and a stand-in judge.
+
+    ``agent`` is the roster id the call comes from. Left out, it is the first agent the tool names in its
+    ``agents`` list (a tool open to ``any`` agent needs none)."""
     from .core import TwoKey
     from .judges.llm import SYSTEM_PROMPT
     from .keys import generate_private_key
@@ -553,14 +575,16 @@ def try_call(draft: Draft, tool: str, arguments: Any, *, claim: str = "none", pr
         raise EditorError(f"the draft does not sign yet: {report.error}")
     key = generate_private_key()
     envelope = sign_constitution(draft.prose, copy.deepcopy(draft.rules), key, copy.deepcopy(draft.tool_specs),
-                                 fields=copy.deepcopy(draft.fields) or None, serial=draft.serial)
+                                 fields=copy.deepcopy(draft.fields) or None, serial=draft.serial,
+                                 agents=copy.deepcopy(draft.agents) or None)
     judge = _PromptKeeper()
     with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(io.StringIO()):
         two_key = TwoKey(Ledger(Path(tmp) / "ledger", key), key.public_key(), verify_signed(envelope, key.public_key()),
                          [judge], private_key=key, allow_test_doubles=True, monitored_agent=TEST_AGENT)
         try:
             decision = two_key.authorize(claim_for(tool, claim, draft.tool_specs), arguments,
-                                         proposal or f"call {tool}", facts=facts)
+                                         proposal or f"call {tool}", facts=facts,
+                                         agent_id=agent or _first_agent(draft.tool_specs.get(tool)))
         finally:
             two_key.close()
     path_a = decision.path_a or {}

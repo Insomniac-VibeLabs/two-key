@@ -368,6 +368,42 @@ class Signing(unittest.TestCase):
         self.assertEqual(len(ce.save_sources(ce.new_draft(), self.dir, overwrite=True)), 2)
 
 
+class Roster(unittest.TestCase):
+    """The signed agent roster (0.9.0) goes through the editor: checked, signed, written, and opened again."""
+
+    def draft(self) -> ce.Draft:
+        draft = draft_with_tools()
+        draft.agents = [{"id": "coder", "account": "tk-coder"}, {"id": "billing", "account": "tk-billing"}]
+        draft.tool_specs["pay_vendor"]["agents"] = ["billing"]
+        return draft
+
+    def test_the_roster_is_signed_and_reads_back(self):
+        report = ce.check(self.draft())
+        self.assertTrue(report.ok, report.error)
+        self.assertEqual([a["id"] for a in report.body["agents"]], ["billing", "coder"])
+        with tempfile.TemporaryDirectory() as tmp:
+            key = generate_private_key()
+            saved = ce.sign_and_save(self.draft(), key, tmp)
+            again, _ = ce.open_signed(saved.signed, key.public_key())
+            self.assertEqual([a["id"] for a in again.agents], ["billing", "coder"])
+            self.assertEqual(ce.check(again).body["agents"], report.body["agents"])
+            self.assertEqual(ce.check(ce.open_sources(saved.prose, saved.rules)).digest, saved.digest)
+
+    def test_a_bad_roster_does_not_sign(self):
+        draft = self.draft()
+        draft.agents.append({"id": "other", "account": "tk-coder"})
+        self.assertIn("share the account", ce.check(draft).error)
+        draft = draft_with_tools()
+        draft.tool_specs["pay_vendor"]["agents"] = ["billing"]
+        self.assertIn("needs an agents: roster", ce.check(draft).error)
+
+    def test_a_trial_comes_from_an_agent_the_tool_names(self):
+        trial = ce.try_call(self.draft(), "pay_vendor", {"amount": 50, "to": "power-co.example"})
+        self.assertEqual(trial.decision_reason, "both_paths_allow")
+        trial = ce.try_call(self.draft(), "pay_vendor", {"amount": 50, "to": "power-co.example"}, agent="coder")
+        self.assertEqual(trial.decision_reason, "tool_not_for_agent")
+
+
 class TryingACall(unittest.TestCase):
     def test_path_a_denies_and_the_judge_prompt_is_shown(self):
         trial = ce.try_call(draft_with_tools(), "pay_vendor", {"amount": 500, "to": "power-co.example"})

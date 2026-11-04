@@ -26,14 +26,15 @@ from typing import Any, Mapping
 
 from . import _platform
 from .setup_cmd import (ANSWER_KEYS, PROFILES, QUORUM_COUNTS, ROUTES, SetupError, build, cloud_judges,
-                        load_answers, needs_upstream, profile_quorum, quorum_findings, tool_check_problems,
-                        weaker_reasons)
+                        load_answers, needs_upstream, profile_quorum, quorum_findings, roster_entries,
+                        tool_check_problems, weaker_reasons)
 
 HIGH_ASSURANCE = "high_assurance"
 # What the high_assurance profile sets beyond the quorum numbers (docs/SETTINGS.md, "high_assurance"). The window
 # shows each one grayed out while the switch is on.
 HIGH_ASSURANCE_SETTINGS = (
     ("tool_specs.<tool>.tool_check", "required behind the proxy: a receipt key, or exempt (weaker, typed yes)"),
+    ("agents", "required behind the proxy: a signed roster, the agent's account given, each tool naming its agents"),
     ("quorum.require_local_yes", "true: a judge on this machine must vote yes"),
     ("on_writable_paths", "refuse: the proxy does not start when another account can change a file it runs or reads"),
     ("on_agent_access", "refuse: the proxy does not start when the agent's account could reach Two-Key's files"),
@@ -91,6 +92,7 @@ def review(answers: Mapping) -> Review:
     judges = [j for j in answers.get("judges") or [] if isinstance(j, Mapping)]
     found.problems += _judge_problems(judges)
     found.problems += _agent_problems(answers.get("monitored_agent"))
+    found.problems += _roster_problems(answers, route, profile)
     found.problems += _source_problems(answers)
     if route == "proxy":
         found.problems += _proxy_problems(answers, judges)
@@ -132,6 +134,25 @@ def _agent_problems(agent: Any) -> list[str]:
         return ["monitored agent: id, model, provider and base URL are needed"]
     return [f"monitored agent: {key.replace('_', ' ')} is needed" for key in ("id", "model", "provider", "base_url")
             if not agent.get(key)]
+
+
+def _roster_problems(answers: Mapping, route: str, profile: str) -> list[str]:
+    """The signed roster the answers give (two_key/roster.py): valid, required behind the proxy under high assurance,
+    and each starter tool's agents on it."""
+    try:
+        entries = roster_entries(answers)
+    except SetupError as e:
+        return [f"agents: {e}"]
+    if not entries:
+        if route == "proxy" and profile == HIGH_ASSURANCE:
+            return ["monitored agent: high assurance needs the account it runs as (a signed roster)"]
+        if any(isinstance(t, Mapping) and t.get("agents") for t in answers.get("tools") or []):
+            return ["tools: naming a tool's agents needs the monitored agent's account (a signed roster)"]
+        return []
+    ids = {e["id"] for e in entries}
+    return [f"tool {t.get('id')}: agents {sorted(set(t['agents']) - ids)} are not on the roster"
+            for t in answers.get("tools") or []
+            if isinstance(t, Mapping) and isinstance(t.get("agents"), list) and set(t["agents"]) - ids]
 
 
 def _source_problems(answers: Mapping) -> list[str]:

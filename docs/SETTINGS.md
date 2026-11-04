@@ -219,6 +219,7 @@ Tier: operator config. The judges, the quorum policy, and the `monitored_agent:`
 | `quorum.require_path_a_first` | false |  | Stored, not enforced: `authorize` runs both paths either way. |
 | `quorum.tool_args_on_derive_deny` | false |  | Send the arguments to judges, and ask them, after a derive deny. |
 | `quorum.tool_args_on_scan_flag` | false |  | Send the arguments and the proposal to judges when the scanner flagged the call. |
+| `quorum.require_other_maker` | false |  | Judge diversity (0.9.0, opt-in): an allow needs a yes from a judge whose model maker is not a monitored agent's (`other_maker_yes_required`); refused at start when no judge is (`judge_diversity_unmet`). Turning it off is weaker. |
 | `quorum.allow_same_provider_judge` | false |  | Deprecated and ignored: the same provider is allowed. |
 | `quorum.allow_same_model_distinct_tenant` | false |  | Deprecated and ignored. |
 | `quorum.judge_history` | on, with the defaults below |  | The decision history summary judges get with each call (0.8.0): recent decisions for the same signed tool and allow-listed counterparty, counts for all tools, and the agent's bursts of denied calls. Built from signed names and reason codes only, never from the agent's text. |
@@ -279,6 +280,11 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `tool_specs` | required |  | Where Path A reads each value, per tool. Every allow-listed tool needs one. |
 | `fields` | none |  | The custom Path A fields, up to 64. A rules file with `fields:` signs as a v2 constitution. |
 | `serial` | none |  | A positive integer: the principal's order of constitutions. A ledger that has run serial N refuses a lower one, and N again with other rules (`constitution_rollback`, `constitution_serial_reused`); once a ledger has run one with a serial, one without is refused too. Signs as a v3 constitution. `two-key setup` writes `serial: 1`; `config set` on a signed setting raises it by one. |
+| `agents` | none | required (`agent_roster_required`) | The signed agent roster (0.9.0): the agents that may connect, each with the account it runs as. With one, `two-key mcp-proxy` serves the entry for the account that started it and refuses any other account (`agent_account_unlisted`). Signs as a v3 constitution. |
+| `agents[].id` | required |  | The agent's name in the ledger and to the judges. Letters, digits, `.`, `_`, `-`, at most 128; `unnamed` and `any` are reserved. |
+| `agents[].account` | required |  | The local account, or the SSH login account, the agent runs as. Each entry has its own account. |
+| `agents[].shared` | false |  | `true` marks a group of callers Two-Key cannot tell apart (for example public agents through one gateway account), judged as one agent; `one_proxy_per_agent` does not apply to it. |
+| `agents[].hosting` | none |  | Where the agent runs, as ledger metadata. |
 | `hard_rules[].id` | `rule[i]:type` |  | The rule's name in the ledger. Unique. |
 | `hard_rules[].allow_only_tools` | one rule type per rule |  | A list of tool ids; any other tool is denied. |
 | `hard_rules[].deny_counterparties` | one rule type per rule |  | A list of blocked parties, each exact. No `@domain` entries. |
@@ -305,6 +311,7 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `tool_specs.<tool>.deny_unmapped` | false |  | `true` denies an argument the spec does not name, instead of dropping it. |
 | `tool_specs.<tool>.tool_check` | none (off) |  | The tool check (docs/TOOL_CHECK.md), for a tool behind `two-key mcp-proxy`: `{key: hybrid-sha256:...}` turns it on, `exempt` leaves it off. `high_assurance` refuses to start with a tool that has neither; `exempt` and turning it off are weaker. |
 | `tool_specs.<tool>.tool_check.key` | required with a mapping |  | The fingerprint of the key that signs the tool's receipts, as `two-key tool-key new` prints it. |
+| `tool_specs.<tool>.agents` | any | a list of ids (`agent_list_required`) | The roster agents that may call the tool: `any`, or a list of agent ids. Another agent does not see the tool and a call is denied `tool_not_for_agent`. Needs `agents:`. `any` is weaker. |
 | `tool_specs.<tool>.fields` | none |  | Maps each custom field to an argument, or marks it `not_applicable`. |
 | `tool_specs.<tool>.fields.<name>.json_path` | none |  | The argument that holds the field's value. |
 | `tool_specs.<tool>.fields.<name>.source` | the arguments |  | `caller` for a fact the proxy's hook supplies. |

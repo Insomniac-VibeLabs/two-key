@@ -138,10 +138,14 @@ a yes from a local judge. No judge may be the monitored agent (a judge holding i
   `high_assurance`; a tool error spends the token; `two-key setup --window`
   asks setup's questions in a window ([SETUP.md](SETUP.md#the-setup-window-two-key-setup---window));
   `config set 'tools[*].claim'` changes one setting on every tool as one
-  change; and a ten-minute [quickstart](QUICKSTART.md)
+  change; a signed agent roster ties each agent to the account it runs as,
+  names which tools each may call, and is required under `high_assurance`
+  ([AGENT_ROSTER.md](AGENT_ROSTER.md)); an opt-in quorum rule needs a yes
+  from a judge of another model maker (`require_other_maker`); and a
+  ten-minute [quickstart](QUICKSTART.md)
 - passphrase backup of this package's own keys (0.3.0): three bundles, so the ledger key and the witness key are never in one file. `backup-verify` checks fingerprints in a temporary ledger. `backup-restore` puts `head.anchor` back from the same moment as the ledger. This is not a seed phrase
 
-Modules that carry these rules include `two_key/keys.py` and `two_key/upgrade.py` (hybrid keys and the key upgrade), `two_key/toolcheck.py` (the tool check), `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
+Modules that carry these rules include `two_key/keys.py` and `two_key/upgrade.py` (hybrid keys and the key upgrade), `two_key/toolcheck.py` (the tool check), `two_key/fields.py` (custom Path A fields), `two_key/identity.py` (judge ≠ agent), `two_key/roster.py` (the signed agent roster), `two_key/guard.py` (one guarded call, with fact hooks), `two_key/mcp_proxy/` (the MCP proxy and drafter; only `sdk.py` imports the SDK),
 `two_key/strict.py` (duplicate-key JSON/YAML), `two_key/audit.py` (decision
 digest checks), `two_key/history.py` (the judge history summary), `two_key/backup.py` (key backup), `two_key/siem.py` and
 `two_key/siem_sinks.py` (the SIEM field allowlist and sinks), and the per-install fingerprint key beside the ledger

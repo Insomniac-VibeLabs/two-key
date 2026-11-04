@@ -10,6 +10,8 @@ the trial call, and the signing are two_key/constitution_editor.py's; this file 
 - **Tools**: the allow list and each tool's spec (irreversible, lowest data class, argument mappings).
 - **Rules**: Path A's hard rules, in order, each with an id, a type, and a body.
 - **Custom fields**: the field registry the rules and specs can name.
+- **Agents**: the signed agent roster (0.9.0): each agent's id and the account it runs as. A tool names the
+  agents that may call it with ``agents:`` in its argument mappings.
 - **Try a call**: one call through the draft, with what Path A decides and the prompt a judge is sent.
 - **Review and sign**: the serial, the envelope format, every check and note, the rules file as it will be
   written, and Sign and save, which needs the principal key.
@@ -27,7 +29,7 @@ from typing import Any, Callable
 
 from .action import DEFAULT_DATA_CLASS
 from .constitution import ENVELOPE_FORMATS
-from .constitution_editor import (CLAIMS, DATA_CLASSES, FIELDS_EXAMPLE, FILE_NAMES, RULE_TEMPLATES, WARNING, Draft,
+from .constitution_editor import (AGENTS_EXAMPLE, CLAIMS, DATA_CLASSES, FIELDS_EXAMPLE, FILE_NAMES, RULE_TEMPLATES, WARNING, Draft,
                                   EditorError, build_rule, build_spec, check, dump_value, move_rule, new_draft,
                                   open_signed, open_sources, parse_value, remove_tool, rule_summary, rule_type,
                                   rules_text, save_sources, set_tool, sign_and_save, spec_form, tool_names,
@@ -45,6 +47,10 @@ TOOLS_HELP = ("Only the tools listed here can be called. Each needs a spec: whet
               "lowest data class, and which argument paths Path A reads (amount, counterparties, payload, fields).")
 RULES_HELP = ("Path A runs these in order and reports the first that denies. The allow list (allow_only_tools) "
               "comes from the Tools tab; edit the others here.")
+AGENTS_HELP = ("The signed agent roster: each agent's id and the account it runs as (one account per agent; a group "
+               "Two-Key cannot tell apart is one entry with shared: true). The MCP proxy serves the entry for the "
+               "account that starts it. Leave it empty for no roster. A tool limits its callers with agents: [ids] "
+               "in its argument mappings.")
 FIELDS_HELP = ("Custom fields Path A derives from a call's arguments (type, default, values). Tools map them in "
                "their spec; deny_if_fields rules test them.")
 TRY_HELP = ("Runs one call through this draft on a throwaway key and a temporary ledger, with a stand-in judge "
@@ -97,6 +103,7 @@ class ConstitutionEditor:
         self._build_tools(self._tab("Tools"))
         self._build_rules(self._tab("Rules"))
         self._build_fields(self._tab("Custom fields"))
+        self._build_agents(self._tab("Agents"))
         self._build_try(self._tab("Try a call"))
         self._build_sign(self._tab("Review and sign"), key_path, folder)
         self.load(self.draft, title, opened)
@@ -133,6 +140,7 @@ class ConstitutionEditor:
         _set_text(self.prose, draft.prose)
         self.prose.edit_modified(False)
         _set_text(self.fields_box, dump_value(draft.fields))
+        _set_text(self.agents_box, dump_value(draft.agents) if draft.agents else "")
         self.serial_var.set("" if draft.serial is None else str(draft.serial))
         self.format_var.set(draft.envelope_format)
         self.tool_selected, self.rule_selected = None, None
@@ -444,6 +452,35 @@ class ConstitutionEditor:
         self.after_edit()
         self.say(self.fields_note, f"{len(fields)} field(s) applied")
 
+    # -- agents ---------------------------------------------------------------------------------------------
+
+    def _build_agents(self, tab) -> None:
+        _help(tab, AGENTS_HELP)
+        self.agents_box = _text(tab, 16)
+        self.agents_box.pack(fill="both", expand=True)
+        buttons = ttk.Frame(tab, padding=(0, 6, 0, 0))
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text=APPLY, command=self.apply_agents).pack(side="left")
+        ttk.Button(buttons, text="Insert an example", command=self.agents_example).pack(side="left", padx=4)
+        self.agents_note = ttk.Label(buttons, padding=(12, 0))
+        self.agents_note.pack(side="left", fill="x")
+
+    def agents_example(self) -> None:
+        current = _get_text(self.agents_box).rstrip()
+        _set_text(self.agents_box, (current + "\n" if current else "") + dump_value(AGENTS_EXAMPLE))
+
+    def apply_agents(self) -> None:
+        try:
+            agents = parse_value(_get_text(self.agents_box), "agents") or []
+            if not isinstance(agents, list):
+                raise EditorError("agents: expected a list of {id, account}")
+        except EditorError as e:
+            self.say(self.agents_note, str(e), bad=True)
+            return
+        self.draft.agents = agents
+        self.after_edit()
+        self.say(self.agents_note, f"{len(agents)} agent(s) applied")
+
     # -- try a call -------------------------------------------------------------------------------------------
 
     def _build_try(self, tab) -> None:
@@ -545,7 +582,8 @@ class ConstitutionEditor:
         if report.ok:
             lines = [f"Signs as {report.envelope_format}.", f"Digest: {report.digest}",
                      f"Tools: {len(report.body['tool_specs'])}, rules: {len(report.body['hard_rules'])}, "
-                     f"custom fields: {len(report.body.get('fields') or {})}, serial: "
+                     f"custom fields: {len(report.body.get('fields') or {})}, "
+                     f"agents: {len(report.body.get('agents') or [])}, serial: "
                      f"{report.body.get('serial', 'none')}", ""]
             lines += [f"{level}: {text}" for level, text in report.notes] or ["No warnings or notes."]
         else:

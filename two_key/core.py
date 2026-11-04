@@ -46,7 +46,9 @@ from .history import HistoryIndex, format_time, shown_parties, subject_record
 from .keys import is_hybrid
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
-from .quorum import QuorumPolicy, ballot_records, check_judge_set, convene, lone_judge_warning, unmeetable_floor
+from .quorum import (QuorumPolicy, agent_makers, ballot_records, check_judge_set, convene, lone_judge_warning,
+                     other_maker, unmeetable_floor)
+from .roster import tool_allows
 from .scan import CLIENT_BUDGET_SECONDS, FileDeniedError, Outcome, ScanConfigError, Scanner
 from .siem import RefusedTokens, SiemConfig, start_delivery as start_siem
 from .toolcheck import StampSigner, ToolCheckError, checked, open_stamp_key, tool_args_hash
@@ -224,7 +226,8 @@ class TwoKey:
         self._previous_digest = check_constitution_order(ledger, constitution)
         self.compiled: CompiledConstitution = compile_both(
             constitution.prose, constitution.hard_rules, constitution.tool_specs,
-            specs_enforced=True, fields=constitution.fields)
+            specs_enforced=True, fields=constitution.fields,
+            agents=constitution.document["signed"].get("agents"))
         self.vm = PolicyVM(self.compiled.bytecode)
         self.judges = list(judges)
         if not self.judges:
@@ -264,6 +267,12 @@ class TwoKey:
         # credential at any address, or keyless on the agent's keyless address; likely accidents are warned on
         # stderr and recorded below.
         self.separation = self._check_separation(monitored_agent, allow_test_doubles)
+        # Judge diversity (opt-in): some judge must be from a maker no monitored agent uses (quorum.other_maker).
+        self._agent_makers = agent_makers(self._agent_sources)
+        if self.quorum.require_other_maker and not any(other_maker(j, self._agent_makers) for j in self.judges):
+            raise TwoKeyConfigError("judge_diversity_unmet: quorum.require_other_maker needs a judge whose model "
+                                    f"maker is not the monitored agent's ({sorted(self._agent_makers) or 'unknown'}); "
+                                    "add one, or set the judge's maker: label (docs/JUDGES_AND_QUORUM.md)")
         # The resolved identities are written once, in constitution_loaded; every decision entry
         # carries the digest of the policy in effect (policy_digest) and of those identities (identities_digest).
         sep = self.separation.to_record()
@@ -307,6 +316,7 @@ class TwoKey:
         # The supported deployment: the gateway runs in this process on this ledger object (#45).
         mark_two_key_ledger(ledger)
         ids = [getattr(a, "id", None) or getattr(a, "agent_id", None) for a in self._agent_sources]
+        ids += [a.id for a in constitution.agents]      # the signed roster's agents are named to judges too
         # The agent ids a judge may see by name (D4); any other agent is "unnamed". Recorded in constitution_loaded.
         self._history_agent_ids = sorted({a for a in (*ids, *known_agent_ids) if isinstance(a, str) and a})
         with self.ledger.exclusive():
@@ -556,12 +566,14 @@ class TwoKey:
     def authorize(self, action: dict, arguments: dict, proposal: str, *,
                   agent_id: str | None = None, hosting: str | None = None,
                   agent_session: str | None = None, origin: str = "library",
-                  facts: Mapping[str, Any] | None = None) -> Decision:
+                  facts: Mapping[str, Any] | None = None, agent_account: str | None = None) -> Decision:
         """Run both paths once the call is well-formed and within limits. Any exception is a deny that is written to the ledger (``internal_error:``).
 
         ``origin`` is recorded on the decision entry (the CLI passes ``"cli"``).
         ``origin``, ``agent_id``, and ``hosting`` are operator/library metadata for the
         ledger (at most 256 characters after strip; non-str refused). They are not trust.
+        ``agent_account`` is the account the MCP proxy checked against the signed roster (two_key/roster.py),
+        recorded on the decision as ``agent.account``.
 
         ``facts`` holds the caller-supplied facts (``source: caller`` fields) the tool maps: trusted values
         from the integration, never from the agent. A fact the agent wrote, a missing fact, or an unknown one
@@ -573,7 +585,7 @@ class TwoKey:
             # Fail closed: never echo the bad origin onto the ledger.
             return self._deny(None, e.reason, None, None, None, e.detail)
         try:
-            agent = ledger_agent_record(agent_id, hosting)
+            agent = ledger_agent_record(agent_id, hosting, agent_account)
         except AgentMetadataError as e:
             return self._deny(origin, e.reason, None, None, None, e.detail)
         try:
@@ -664,6 +676,9 @@ class TwoKey:
         spec = None
         if self.compiled.specs_enforced:
             spec = self.compiled.tool_specs.get(normalized.tool)
+        if spec is not None and not tool_allows(spec, (agent or {}).get("id")):
+            # The signed roster gives this tool to other agents (two_key/roster.py): no judge sees the call.
+            return self._deny(origin, "tool_not_for_agent", agent, None, None)
         held = self._held_deny(spec, normalized.tool, origin, agent)
         if held:
             return held
@@ -800,7 +815,7 @@ class TwoKey:
             else:
                 quorum = convene(self.judges, self.compiled.judge_text, judge_action, judge_proposal,
                                  self.quorum, round_binding, judge_args, agent_session,
-                                 configured_secrets=configured)
+                                 configured_secrets=configured, agent_makers=self._agent_makers)
                 quorum_passed, quorum_reason = quorum.passed, quorum.reason
                 path_b_rec = {"passed": quorum.passed, "reason": quorum.reason,
                               "yes": quorum.yes, "no": quorum.no, "abstain": quorum.abstain,

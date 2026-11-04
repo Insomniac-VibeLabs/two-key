@@ -545,6 +545,21 @@ claims to close.
   `high_assurance` the window lets the quorum numbers go up only. Save
   answers file writes owner-only JSON with variable names and paths, no
   values. Residual: whoever can see the screen sees the answers.
+- Agents told apart by account (0.9.0, signed `agents:` roster). Each
+  roster entry names the account its agent runs as, and the proxy serves
+  the entry for the account that started it, refusing an account the
+  roster does not list (`agent_account_unlisted`) or an `agent_id` that
+  names another entry (`agent_account_mismatch`); each refusal is an
+  `agent_refused` entry. Signing refuses two entries on one account. A
+  tool may name the agents that may call it, and a call from another is
+  denied `tool_not_for_agent` before the judges. Residual: an account
+  that can start processes as another (root, a broad sudo rule) can be
+  any agent; a `shared: true` group is one agent to Two-Key, so its
+  callers share a history and tools; a remote agent is whoever holds its
+  SSH login. Without a roster, `agent_id` is still an unchecked label,
+  and `high_assurance` refuses that. Optional `require_other_maker` needs
+  a yes from a judge of another model maker than the agents'; maker
+  labels are the operator's, not verified.
 - One proxy per agent (0.8.0, `one_proxy_per_agent`, on by default). A
   second proxy for an agent already connected to the ledger refuses
   (`agent_already_connected`). A proxy whose client died but whose process

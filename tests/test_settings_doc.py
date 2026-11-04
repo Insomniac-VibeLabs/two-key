@@ -20,7 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(ROOT))
 
 from test_doc_toc import with_toc  # noqa: E402
-from two_key import agents, constitution, fields, history, identity, policy_vm, scan, scanners, settings, siem_sinks  # noqa: E402
+from two_key import (agents, constitution, fields, history, identity, policy_vm, roster, scan, scanners,  # noqa: E402
+                     settings, siem_sinks)
 from two_key.judges import config as judges_config  # noqa: E402
 from two_key.mcp_proxy import config as proxy_config  # noqa: E402
 
@@ -63,6 +64,7 @@ def code_keys() -> set[tuple[str, str]]:
     add("hard_rules.yaml", "tool_specs.<tool>.payload[].", constitution.PAYLOAD_KEYS)
     add("hard_rules.yaml", "tool_specs.<tool>.fields.<name>.", constitution.FIELD_MAPPING_KEYS)
     add("hard_rules.yaml", "tool_specs.<tool>.tool_check.", constitution.TOOL_CHECK_KEYS)
+    add("hard_rules.yaml", "agents[].", roster.AGENT_KEYS)
     add("hard_rules.yaml", "fields.<name>.", set().union(*fields._TYPE_KEYS.values()))
     return found
 

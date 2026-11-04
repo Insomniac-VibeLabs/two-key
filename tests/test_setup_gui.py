@@ -161,6 +161,7 @@ class Window(unittest.TestCase):
     def test_high_assurance_switch_raises_the_numbers_and_locks_them_as_minimums(self):
         window = self.window()
         self.fill(window, judges=(LOCAL, dict(JUDGE, id="j2")), check="hybrid-sha256:" + "1" * 64)
+        window.agent_var["account"].set("tk-agent")      # high assurance: the agent on a signed roster
         window.high.set(True)
         self.top.update()
         lowest = setup_form.quorum_minimums("high_assurance", 2)
@@ -199,6 +200,9 @@ class Window(unittest.TestCase):
         window.high.set(True)
         self.top.update()
         window.refresh()
+        self.assertIn("high assurance needs the account it runs as", window.status.cget("text"))
+        window.agent_var["account"].set("tk-agent")
+        window.refresh()
         self.assertIn("tool tool_a: high_assurance needs the tool check", window.status.cget("text"))
         window.tool_table.selection_set(window.tool_table.get_children()[0])
         window._tool_clicked()
@@ -206,6 +210,32 @@ class Window(unittest.TestCase):
         window.add_tool()
         self.assertEqual(window.answers()["tools"][0]["tool_check"], "exempt")
         self.assertIn("tool_specs.tool_a.tool_check: exempt", window.review_box.get("1.0", "end"))
+
+    def test_the_signed_roster_and_each_tools_agents(self):
+        window = self.window()
+        self.fill(window)
+        window.agent_var["account"].set("tk-agent")
+        window.roster_var["id"].set("public")
+        window.roster_var["account"].set("tk-gateway")
+        window.roster_shared.set(True)
+        window.add_roster_agent()
+        window.tool_table.selection_set(window.tool_table.get_children()[0])
+        window._tool_clicked()
+        window.tool_var["agents"].set("agent")
+        window.add_tool()
+        answers = window.answers()
+        self.assertEqual(answers["monitored_agent"]["account"], "tk-agent")
+        self.assertEqual(answers["agents"], [{"id": "public", "account": "tk-gateway", "shared": True}])
+        self.assertEqual(answers["tools"][0]["agents"], ["agent"])
+        self.assertEqual(window.roster_table.item(window.roster_table.get_children()[0])["values"][:2],
+                         ["public", "tk-gateway"])
+        window.tool_var["agents"].set("nobody")
+        window.add_tool()
+        window.refresh()
+        self.assertIn("agents ['nobody'] are not on the roster", window.status.cget("text"))
+        window.tool_var["agents"].set("any")
+        window.add_tool()
+        self.assertNotIn("agents", window.answers()["tools"][0])
 
     def test_weaker_needs_the_typed_yes(self):
         window = self.window()

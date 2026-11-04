@@ -43,8 +43,9 @@ GOOD, BAD = "#1b5e20", "#b00020"
 READ_ONLY = "readonly"
 SHOWN_ONLY = "disabled"
 JUDGE_KEYS = ("id", "type", "model", "base_url", "maker", "upstream", "auth_env")
-AGENT_KEYS = ("id", "model", "provider", "base_url", "upstream", "credential_env")
-TOOL_COLUMNS = ("id", "irreversible", "data_class_floor", "tool_check")
+AGENT_KEYS = ("id", "model", "provider", "base_url", "upstream", "credential_env", "account")
+TOOL_COLUMNS = ("id", "irreversible", "data_class_floor", "tool_check", "agents")
+ROSTER_COLUMNS = ("id", "account", "shared")
 ON_FAILURE = ("deny", "judge_without_history")
 HA_HELP = ("High assurance: two judges from two different model makers, at least one on this machine, and a yes "
            "from a judge on this machine. Each quorum number can be raised, never lowered below the profile's.")
@@ -55,6 +56,21 @@ def _check_text(value) -> str:
     if isinstance(value, dict):
         return str(value.get("key", ""))
     return "" if value is None else str(value)
+
+
+def _cell(column: str, value) -> str:
+    """One table cell: a tool check as :func:`_check_text`, a tool's agents as their ids, anything else as text."""
+    if column == "tool_check":
+        return _check_text(value)
+    if isinstance(value, list):
+        return " ".join(map(str, value))
+    return "" if value is None else str(value)
+
+
+def _tool_agents(text: str):
+    """A tool's agents from its entry: None for blank or ``any`` (any listed agent), else the ids."""
+    ids = shlex.split(text) if text.strip() else []
+    return None if not ids or ids == ["any"] else ids
 
 
 def _help(parent, text: str) -> None:
@@ -99,6 +115,7 @@ class SetupWindow:
         self._filling = False
         self.judges: list[dict] = []
         self.tools: list[dict] = []
+        self.roster: list[dict] = []          # more agents on the signed roster, after the monitored agent
         self.result: dict | None = None
         self.var = {name: tk.StringVar(master=root) for name in (
             "dir", "route", "key_passphrase_file", "rules_file", "prose_file", "command", "schema_digest",
@@ -111,7 +128,9 @@ class SetupWindow:
         self.judge_var = {k: tk.StringVar(master=root) for k in JUDGE_KEYS}
         self.agent_var = {k: tk.StringVar(master=root) for k in AGENT_KEYS}
         self.tool_var = {"id": tk.StringVar(master=root), "data_class_floor": tk.StringVar(master=root),
-                         "tool_check": tk.StringVar(master=root)}
+                         "tool_check": tk.StringVar(master=root), "agents": tk.StringVar(master=root)}
+        self.roster_var = {"id": tk.StringVar(master=root), "account": tk.StringVar(master=root)}
+        self.roster_shared = tk.BooleanVar(master=root, value=False)
         self.tool_irreversible = tk.BooleanVar(master=root, value=True)
         self.quorum = {name: tk.IntVar(master=root, value=1) for name in QUORUM_COUNTS}
         self.status = ttk.Label(root, padding=8, anchor="w")
@@ -191,9 +210,23 @@ class SetupWindow:
         form = ttk.Frame(tab)
         form.pack(fill="x")
         form.columnconfigure(1, weight=1)
-        labels = {"credential_env": "credential (environment variable; blank: none)"}
+        labels = {"credential_env": "credential (environment variable; blank: none)",
+                  "account": "account it runs as (local, or SSH login; blank: no signed roster)"}
         for n, key in enumerate(AGENT_KEYS):
             _row(form, labels.get(key, key.replace("_", " ")), self.agent_var[key], n)
+        _help(tab, "The signed roster: with the account above, the proxy serves the agent whose account started it "
+                   "and refuses any other account; high assurance needs it. More agents each get their own account; "
+                   "a shared group is many callers on one account (for example public agents through a gateway), "
+                   "judged as one agent.")
+        self.roster_table = self._table(tab, ROSTER_COLUMNS, self._roster_clicked, height=3)
+        more = ttk.Frame(tab)
+        more.pack(fill="x", pady=4)
+        more.columnconfigure(1, weight=1)
+        _row(more, "agent id", self.roster_var["id"], 0)
+        _row(more, "its account", self.roster_var["account"], 1)
+        ttk.Checkbutton(more, text="a shared group (callers Two-Key cannot tell apart)",
+                        variable=self.roster_shared).grid(row=2, column=1, sticky="w")
+        self._buttons(tab, ("Add agent", self.add_roster_agent), ("Remove agent", self.remove_roster_agent))
         ttk.Checkbutton(tab, text="Show the judges a summary of recent decisions (off is weaker)",
                         variable=self.history).pack(anchor="w", pady=(12, 2))
         history = ttk.Frame(tab)
@@ -222,8 +255,9 @@ class SetupWindow:
         _row(form, "tool id", self.tool_var["id"], 0)
         _row(form, "lowest data class", self.tool_var["data_class_floor"], 1, choices=DATA_CLASSES)
         _row(form, "tool check (hybrid-sha256:..., exempt, or blank: off)", self.tool_var["tool_check"], 2)
+        _row(form, "agents that may call it (blank or any: every listed agent; or ids)", self.tool_var["agents"], 3)
         ttk.Checkbutton(form, text="a call cannot be undone", variable=self.tool_irreversible).grid(
-            row=3, column=1, sticky="w")
+            row=4, column=1, sticky="w")
         self._buttons(tab, ("Add", self.add_tool), ("Remove", self.remove_tool))
 
     def _build_proxy(self, tab) -> None:
@@ -292,6 +326,8 @@ class SetupWindow:
             out[key] = self.var[key].get().strip()
         if not out["rules_file"]:
             out["tools"] = [dict(t) for t in self.tools]
+        if self.roster:
+            out["agents"] = [dict(a) for a in self.roster]
         if out["route"] == "proxy":
             out["upstream"] = {"command": self._command(), "schema_digest": self.var["schema_digest"].get().strip()}
             out["agent_session_env"] = self.var["agent_session_env"].get().strip()
@@ -326,6 +362,7 @@ class SetupWindow:
             self.high.set(answers.get("profile") == HIGH_ASSURANCE)
             self.judges = [dict(j) for j in answers.get("judges") or [] if isinstance(j, dict)]
             self.tools = [dict(t) for t in answers.get("tools") or [] if isinstance(t, dict)]
+            self.roster = [dict(a) for a in answers.get("agents") or [] if isinstance(a, dict)]
             for key in ("key_passphrase_file", "rules_file", "prose_file", "agent_session_env"):
                 self.var[key].set(str(answers.get(key) or ""))
             self._load_agent(answers.get("monitored_agent") or {})
@@ -409,6 +446,12 @@ class SetupWindow:
         check = self.tool_var["tool_check"].get().strip()
         if check:
             tool["tool_check"] = check if check == "exempt" else {"key": check}
+        try:
+            agents = _tool_agents(self.tool_var["agents"].get())
+        except ValueError:
+            agents = None
+        if agents:
+            tool["agents"] = agents
         self.tools.append(tool)
         self._show_tables()
         self.refresh()
@@ -428,6 +471,34 @@ class SetupWindow:
             self.tool_var["data_class_floor"].set(tool.get("data_class_floor", "classified"))
             self.tool_irreversible.set(bool(tool.get("irreversible", True)))
             self.tool_var["tool_check"].set(_check_text(tool.get("tool_check")))
+            self.tool_var["agents"].set(_cell("agents", tool.get("agents")))
+
+    def add_roster_agent(self) -> None:
+        agent_id, account = self.roster_var["id"].get().strip(), self.roster_var["account"].get().strip()
+        if not agent_id or not account:
+            return
+        self.roster = [a for a in self.roster if a["id"] != agent_id]
+        entry: dict[str, Any] = {"id": agent_id, "account": account}
+        if self.roster_shared.get():
+            entry["shared"] = True
+        self.roster.append(entry)
+        self._show_tables()
+        self.refresh()
+
+    def remove_roster_agent(self) -> None:
+        index = self._selected(self.roster_table)
+        if index is not None:
+            del self.roster[index]
+            self._show_tables()
+            self.refresh()
+
+    def _roster_clicked(self) -> None:
+        index = self._selected(self.roster_table)
+        if index is not None:
+            entry = self.roster[index]
+            self.roster_var["id"].set(entry["id"])
+            self.roster_var["account"].set(entry.get("account", ""))
+            self.roster_shared.set(bool(entry.get("shared")))
 
     def reset_quorum(self) -> None:
         self._quorum_touched = False
@@ -445,11 +516,11 @@ class SetupWindow:
 
     def _show_tables(self) -> None:
         for table, rows, columns in ((self.judge_table, self.judges, JUDGE_KEYS),
-                                     (self.tool_table, self.tools, TOOL_COLUMNS)):
+                                     (self.tool_table, self.tools, TOOL_COLUMNS),
+                                     (self.roster_table, self.roster, ROSTER_COLUMNS)):
             table.delete(*table.get_children())
             for row in rows:
-                table.insert("", "end", values=[_check_text(row.get(c)) if c == "tool_check" else str(row.get(c, ""))
-                                                for c in columns])
+                table.insert("", "end", values=[_cell(c, row.get(c)) for c in columns])
 
     # -- keeping the pages current -------------------------------------------------------------------------
 

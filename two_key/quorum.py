@@ -78,7 +78,7 @@ import threading
 import time
 import unicodedata
 from dataclasses import dataclass, fields, replace
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from .action import Action
 from .agent_meta import exception_ledger_error
@@ -115,6 +115,9 @@ class QuorumPolicy:
     # When the content scanner flags a call, the judges get the record without the arguments and the proposal
     # text, so a detected secret is not sent to a judge vendor (scan.py). Set true (a local judge set) to send them.
     tool_args_on_scan_flag: bool = False
+    # Judge diversity (0.9.0, opt-in): an allow needs a yes from a judge whose model maker is not a monitored
+    # agent's, so one compromised or jailbroken model cannot pass a call by itself (other_maker_yes_required).
+    require_other_maker: bool = False
     # Deprecated, no effect (2026-10-08): a judge is refused when it uses the monitored agent's credential, or is
     # keyless on a keyless agent's address (identity.compare), so there is nothing left for this flag to lift.
     # Still accepted, recorded and part of the policy digest, with a note on stderr, so older configurations load.
@@ -158,6 +161,8 @@ class QuorumPolicy:
             raise QuorumConfigError("tool_args_on_derive_deny must be a boolean")
         if not isinstance(self.tool_args_on_scan_flag, bool):
             raise QuorumConfigError("tool_args_on_scan_flag must be a boolean")
+        if not isinstance(self.require_other_maker, bool):
+            raise QuorumConfigError("require_other_maker must be a boolean")
         if not isinstance(self.allow_same_model_distinct_tenant, bool):
             raise QuorumConfigError("allow_same_model_distinct_tenant must be a boolean")
         if not isinstance(self.allow_same_provider_judge, bool):
@@ -206,6 +211,7 @@ class QuorumPolicy:
                 "allow_same_model_distinct_tenant": self.allow_same_model_distinct_tenant,
                 # Present only when set, so a policy without it records and digests as before.
                 **({"tool_args_on_scan_flag": True} if self.tool_args_on_scan_flag else {}),
+                **({"require_other_maker": True} if self.require_other_maker else {}),
                 # Always present (0.8.0): the record that judges now see history, or that they do not.
                 "judge_history": self.judge_history.to_record()}
 
@@ -277,6 +283,46 @@ def _maker(j) -> str:
     "openai " are one maker, not two."""
     raw = str(getattr(j, "maker", None) or getattr(j, "provider", None) or "?")
     return unicodedata.normalize("NFKC", raw).strip().casefold() or "?"
+
+
+def maker_key(raw: Any) -> str:
+    """A maker label compared the way the diversity floors compare them: NFKC, trimmed, case-folded."""
+    return unicodedata.normalize("NFKC", str(raw or "")).strip().casefold()
+
+
+def judge_makers(j) -> frozenset[str]:
+    """Every maker a judge could be: its ``maker`` label (the provider by default) and the maker its model id
+    names, when the id names one (identity.model_maker)."""
+    from .identity import model_maker
+    out = {_maker(j)}
+    model = getattr(j, "model", None)
+    if isinstance(model, str) and model.strip():
+        named = model_maker(model)
+        if named:
+            out.add(maker_key(named))
+    return frozenset(m for m in out if m and m != "?")
+
+
+def agent_makers(declarations: Sequence) -> frozenset[str]:
+    """The monitored agents' makers: each declaration's provider label and the maker its model id names."""
+    from .identity import model_maker
+    out = set()
+    for d in declarations:
+        provider, model = getattr(d, "provider", None), getattr(d, "model", None)
+        if isinstance(provider, str) and provider.strip():
+            out.add(maker_key(provider))
+        if isinstance(model, str) and model.strip():
+            named = model_maker(model)
+            if named:
+                out.add(maker_key(named))
+    return frozenset(out)
+
+
+def other_maker(j, makers: frozenset[str]) -> bool:
+    """Whether judge ``j`` is from a maker none of the monitored agents uses. A judge whose maker cannot be told
+    (no label, no recognized model) is not counted as different."""
+    mine = judge_makers(j)
+    return bool(mine) and not (mine & makers)
 
 
 def unmeetable_floor(judges: Sequence, policy: QuorumPolicy) -> str | None:
@@ -477,8 +523,11 @@ def convene(
     tool_args: Mapping | None = None,
     agent_session: str | None = None,
     configured_secrets: frozenset[str] | None = None,
+    agent_makers: frozenset[str] = frozenset(),
 ) -> QuorumResult:
     """Convene the judges.
+
+    ``agent_makers`` are the monitored agents' model makers (``agent_makers``), for ``require_other_maker``.
 
     ``binding`` = {action_hash, constitution_hash, nl_hash, bytecode_hash} (Two-Key always passes it).
     """
@@ -551,6 +600,8 @@ def convene(
     if policy.require_local_yes:
         if not any(b.vote == "yes" and _local(j) for j, b in pairs):
             return result(False, "local_judge_required")
+    if policy.require_other_maker and not any(b.vote == "yes" and other_maker(j, agent_makers) for j, b in pairs):
+        return result(False, "other_maker_yes_required")
     return result(True, "quorum_pass")
 
 

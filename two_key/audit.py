@@ -120,7 +120,8 @@ def check_history_digests(ledger, constitution) -> list[str]:
     from .compiler import compile_both
     from .derive import blocked_from_rules
     compiled = compile_both(constitution.prose, constitution.hard_rules, constitution.tool_specs,
-                            specs_enforced=True, fields=constitution.fields)
+                            specs_enforced=True, fields=constitution.fields,
+                            agents=constitution.document["signed"].get("agents"))
     rebuild = _HistoryRebuild(ledger.entries, compiled.tool_specs, blocked_from_rules(compiled.rules))
     problems: list[str] = []
     # policy_digest -> each distinct constitution_loaded with it, by the settings a rebuild reads

@@ -313,7 +313,10 @@ flowchart TD
    Since 0.8.0 a second proxy for the same `agent_id` on one ledger refuses
    to start (`agent_already_connected`, `one_proxy_per_agent`), and a
    proxy with no `agent_id` counts as one agent, `unnamed`; give each
-   agent its own `agent_id`. The proxy holds its lock until it exits, so
+   agent its own `agent_id`. From 0.9.0 a signed agent roster ties each
+   agent to its login account, and the proxy serves the agent whose
+   account started it, so one `proxy.yaml` with no `agent_id` serves them
+   all ([AGENT_ROSTER](AGENT_ROSTER.md)). The proxy holds its lock until it exits, so
    a session whose connection dropped keeps it until sshd notices: set
    `ClientAliveInterval 30` and `ClientAliveCountMax 3` in `sshd_config`
    so the agent can reconnect within a couple of minutes.
