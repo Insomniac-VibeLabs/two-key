@@ -5635,3 +5635,6 @@ GrokBot's live run 13, the 0.9.0 release gate, at 340c876. Nothing it tried let 
 - Docs: new [AGENT_ROSTER](docs/AGENT_ROSTER.md); CONNECTING, UPGRADING, SETUP, JUDGES_AND_QUORUM, SIEM,
   THREAT_MODEL, SCOPE, HOWTO, CONSTITUTION_EDITOR, GUI_WALKTHROUGH and SETTINGS. Tests in
   `tests/test_agent_roster.py` and the setup, editor and ledger-view tests.
+- `validate_tool_specs` is split into one small helper per part of a spec (amount, counterparties, payload, and the
+  rest), with the same checks in the same order and the same signed output, so SonarCloud's complexity rule
+  passes (it was 102 against a limit of 15).

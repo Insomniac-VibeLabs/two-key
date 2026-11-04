@@ -307,6 +307,149 @@ def _tool_agents(tool: str, spec: Mapping, agents: list | None) -> dict:
     return {"agents": validate_tool_agents(tool, spec["agents"], roster_ids)}
 
 
+def _spec_tool_name(name: Any, seen: Mapping) -> str:
+    """A tool spec's name, canonical (trimmed, case-folded), refused when empty or already used."""
+    if not isinstance(name, str) or not name.strip():
+        raise ConstitutionError("tool_specs: tool name must be a non-empty string")
+    tool = name.strip().casefold()
+    if tool in seen:
+        raise ConstitutionError(f"tool_specs: duplicate tool {tool}")
+    return tool
+
+
+def _spec_basics(tool: str, spec: Any) -> tuple[bool, str]:
+    """The spec's own keys checked, and its ``irreversible`` and canonical ``data_class_floor``.
+
+    Both are optional. Left out, they take the fail-closed defaults, written into the signed spec, so a spec
+    that leaves them out signs as if it had written them."""
+    if not isinstance(spec, Mapping):
+        raise ConstitutionError(f"tool_specs.{tool}: expected a mapping")
+    extra = set(spec) - set(TOOL_SPEC_KEYS)
+    if extra:
+        raise ConstitutionError(f"tool_specs.{tool}: unknown key(s) {sorted(extra)}")
+    irreversible = spec.get("irreversible", DEFAULT_IRREVERSIBLE)
+    if not isinstance(irreversible, bool):
+        raise ConstitutionError(f"tool_specs.{tool}.irreversible: expected a boolean")
+    floor = spec.get("data_class_floor", DEFAULT_DATA_CLASS)
+    if not isinstance(floor, str) or floor.strip().casefold() not in DATA_CLASSES:
+        raise ConstitutionError(f"tool_specs.{tool}.data_class_floor: expected one of {list(DATA_CLASSES)}")
+    if "deny_unmapped" in spec and not isinstance(spec["deny_unmapped"], bool):
+        raise ConstitutionError(f"tool_specs.{tool}.deny_unmapped: expected a boolean")
+    return irreversible, floor.strip().casefold()
+
+
+def _amount_spec(tool: str, amount: Any, take) -> dict | None:
+    """A spec's ``amount``, canonical; None when it has none."""
+    if amount is None:
+        return None
+    where = f"tool_specs.{tool}.amount"
+    if not isinstance(amount, Mapping):
+        raise ConstitutionError(f"{where}: expected a mapping")
+    if set(amount) - set(AMOUNT_KEYS) or "json_path" not in amount or "unit" not in amount:
+        raise ConstitutionError(f"{where}: requires json_path and unit (usd or cents)")
+    if amount["unit"] not in ("usd", "cents"):
+        raise ConstitutionError(f"{where}.unit: expected usd or cents")
+    out = {"json_path": take(_json_path(amount["json_path"], where), where), "unit": amount["unit"]}
+    if "currency_path" in amount:
+        out["currency_path"] = take(_json_path(amount["currency_path"], where), f"{where}.currency_path")
+    return out
+
+
+def _allow_entries(where: str, allow: Any) -> list[str]:
+    """A counterparty ``allow`` list, canonical: trimmed, case-folded, sorted, no wildcards."""
+    if not isinstance(allow, list) or not allow or any(not isinstance(item, str) or not item.strip() for item in allow):
+        raise ConstitutionError(f"{where}.allow: expected a non-empty list of strings")
+    canonical = sorted({item.strip().casefold() for item in allow})
+    for item in canonical:
+        if "*" in item:
+            raise ConstitutionError(f"{where}.allow: {item!r}: wildcards are not supported; list each party, or "
+                                    "use @domain for every address at one domain")
+        if is_domain_entry(item) and not DOMAIN.fullmatch(item[1:]):
+            raise ConstitutionError(f"{where}.allow: {item!r} is not a domain entry: @ and an ASCII host name such "
+                                    "as @example.org (no subdomain patterns)")
+    return canonical
+
+
+def _counterparty_specs(tool: str, parties: Any, take) -> list[dict]:
+    """A spec's ``counterparties``, canonical."""
+    if not isinstance(parties, list):
+        raise ConstitutionError(f"tool_specs.{tool}.counterparties: expected a list")
+    out = []
+    for index, entry in enumerate(parties):
+        where = f"tool_specs.{tool}.counterparties[{index}]"
+        if not isinstance(entry, Mapping) or set(entry) != set(COUNTERPARTY_KEYS):
+            raise ConstitutionError(f"{where}: expected json_path and allow")
+        path = take(_json_path(entry["json_path"], where), where)
+        out.append({"json_path": path, "allow": _allow_entries(where, entry["allow"])})
+    return out
+
+
+def _control_overlap(path: str, control_paths: list[str]) -> str | None:
+    """The first path Path A reads that ``path`` equals, covers, or sits under, compared case-folded (a tool
+    that reads keys case-insensitively must not see ``TO.name`` as payload)."""
+    folded = path.casefold()
+    for control in control_paths:
+        c = control.casefold()
+        if folded == c or c.startswith(folded + ".") or folded.startswith(c + "."):
+            return control
+    return None
+
+
+def _payload_entry(where: str, entry: Any, control_paths: list[str], take) -> dict:
+    """One ``payload`` entry, canonical."""
+    if not isinstance(entry, Mapping) or "json_path" not in entry:
+        raise ConstitutionError(f"{where}: expected json_path")
+    extra = set(entry) - set(PAYLOAD_KEYS)
+    if extra:
+        raise ConstitutionError(f"{where}: unknown key(s) {sorted(extra)}")
+    path = take(_json_path(entry["json_path"], where), where)
+    control = _control_overlap(path, control_paths)
+    if control is not None:
+        raise ConstitutionError(f"{where}: payload path {path!r} overlaps the field path {control!r}")
+    shape = entry.get("shape")
+    if shape is not None and shape not in ("string", "number", "list"):
+        raise ConstitutionError(f"{where}.shape: expected string, number, or list")
+    limit = entry.get("max_length")
+    if limit is not None:
+        if shape not in ("string", "list"):
+            raise ConstitutionError(f"{where}.max_length: only valid for string or list")
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ConstitutionError(f"{where}.max_length: expected a positive integer")
+    return {"json_path": path, "shape": shape, "max_length": limit}
+
+
+def _payload_specs(tool: str, payload: Any, control_paths: list[str], take) -> list[dict]:
+    """A spec's ``payload``: paths copied unread, none of which may cover or sit under a path Path A reads."""
+    if not isinstance(payload, list):
+        raise ConstitutionError(f"tool_specs.{tool}.payload: expected a list")
+    return [_payload_entry(f"tool_specs.{tool}.payload[{index}]", entry, control_paths, take)
+            for index, entry in enumerate(payload)]
+
+
+def _tool_spec(tool: str, spec: Any, registry: Mapping, agents: list | None) -> dict:
+    """One tool's canonical spec."""
+    irreversible, floor = _spec_basics(tool, spec)
+    take = _PathSet().take
+    amount_out = _amount_spec(tool, spec.get("amount"), take)
+    party_out = _counterparty_specs(tool, spec.get("counterparties", []), take)
+    control_paths = [p for p in ((amount_out or {}).get("json_path"), (amount_out or {}).get("currency_path"))
+                     if p] + [entry["json_path"] for entry in party_out]
+    fields_out = _field_mappings(tool, spec.get("fields"), registry, control_paths, take)
+    out = {
+        "irreversible": irreversible,
+        "data_class_floor": floor,
+        "amount": amount_out,
+        "counterparties": party_out,
+        "payload": _payload_specs(tool, spec.get("payload", []), control_paths, take),
+        "deny_unmapped": spec.get("deny_unmapped", False) is True,
+    }
+    if fields_out:      # absent for a tool with no custom fields, so its spec hashes as before
+        out["fields"] = fields_out
+    out.update(_tool_check(tool, spec))      # absent unless set, for the same reason
+    out.update(_tool_agents(tool, spec, agents))      # absent unless set: no roster means any caller
+    return out
+
+
 def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None,
                         agents: list | None = None) -> dict:
     """Canonical tool specs. Every allow-listed tool must have one.
@@ -334,123 +477,10 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None,
     registry = fields or {}
     if not isinstance(specs, Mapping):
         raise ConstitutionError("tool_specs must be a mapping")
-    allowed_keys = set(TOOL_SPEC_KEYS)
     out: dict[str, dict] = {}
     for name, spec in specs.items():
-        if not isinstance(name, str) or not name.strip():
-            raise ConstitutionError("tool_specs: tool name must be a non-empty string")
-        tool = name.strip().casefold()
-        if tool in out:
-            raise ConstitutionError(f"tool_specs: duplicate tool {tool}")
-        if not isinstance(spec, Mapping):
-            raise ConstitutionError(f"tool_specs.{tool}: expected a mapping")
-        extra = set(spec) - allowed_keys
-        if extra:
-            raise ConstitutionError(f"tool_specs.{tool}: unknown key(s) {sorted(extra)}")
-        # Both are optional. Left out, they take the fail-closed defaults, written into the signed spec,
-        # so a spec that leaves them out signs as if it had written them.
-        irreversible = spec.get("irreversible", DEFAULT_IRREVERSIBLE)
-        if not isinstance(irreversible, bool):
-            raise ConstitutionError(f"tool_specs.{tool}.irreversible: expected a boolean")
-        floor = spec.get("data_class_floor", DEFAULT_DATA_CLASS)
-        if not isinstance(floor, str) or floor.strip().casefold() not in DATA_CLASSES:
-            raise ConstitutionError(
-                f"tool_specs.{tool}.data_class_floor: expected one of {list(DATA_CLASSES)}"
-            )
-        if "deny_unmapped" in spec and not isinstance(spec["deny_unmapped"], bool):
-            raise ConstitutionError(f"tool_specs.{tool}.deny_unmapped: expected a boolean")
-        take = _PathSet().take
-
-        amount = spec.get("amount")
-        amount_out = None
-        if amount is not None:
-            if not isinstance(amount, Mapping):
-                raise ConstitutionError(f"tool_specs.{tool}.amount: expected a mapping")
-            amount_extra = set(amount) - set(AMOUNT_KEYS)
-            if amount_extra or "json_path" not in amount or "unit" not in amount:
-                raise ConstitutionError(
-                    f"tool_specs.{tool}.amount: requires json_path and unit (usd or cents)"
-                )
-            if amount["unit"] not in ("usd", "cents"):
-                raise ConstitutionError(f"tool_specs.{tool}.amount.unit: expected usd or cents")
-            amount_out = {
-                "json_path": take(
-                    _json_path(amount["json_path"], f"tool_specs.{tool}.amount"),
-                    f"tool_specs.{tool}.amount",
-                ),
-                "unit": amount["unit"],
-            }
-            if "currency_path" in amount:
-                amount_out["currency_path"] = take(
-                    _json_path(amount["currency_path"], f"tool_specs.{tool}.amount"),
-                    f"tool_specs.{tool}.amount.currency_path",
-                )
-        parties = spec.get("counterparties", [])
-        if not isinstance(parties, list):
-            raise ConstitutionError(f"tool_specs.{tool}.counterparties: expected a list")
-        party_out = []
-        for index, entry in enumerate(parties):
-            where = f"tool_specs.{tool}.counterparties[{index}]"
-            if not isinstance(entry, Mapping) or set(entry) != set(COUNTERPARTY_KEYS):
-                raise ConstitutionError(f"{where}: expected json_path and allow")
-            path = take(_json_path(entry["json_path"], where), where)
-            allow = entry["allow"]
-            if not isinstance(allow, list) or not allow or any(not isinstance(item, str) or not item.strip() for item in allow):
-                raise ConstitutionError(f"{where}.allow: expected a non-empty list of strings")
-            canonical = sorted({item.strip().casefold() for item in allow})
-            for item in canonical:
-                if "*" in item:
-                    raise ConstitutionError(f"{where}.allow: {item!r}: wildcards are not supported; list each "
-                                            "party, or use @domain for every address at one domain")
-                if is_domain_entry(item) and not DOMAIN.fullmatch(item[1:]):
-                    raise ConstitutionError(f"{where}.allow: {item!r} is not a domain entry: @ and an ASCII "
-                                            "host name such as @example.org (no subdomain patterns)")
-            party_out.append({"json_path": path, "allow": canonical})
-        # A payload path is copied unread. It must not cover, or sit under, a path Path A reads,
-        # compared without regard to case.
-        control_paths = [p for p in ((amount_out or {}).get("json_path"), (amount_out or {}).get("currency_path"))
-                         if p] + [entry["json_path"] for entry in party_out]
-        fields_out = _field_mappings(tool, spec.get("fields"), registry, control_paths, take)
-        payload = spec.get("payload", [])
-        if not isinstance(payload, list):
-            raise ConstitutionError(f"tool_specs.{tool}.payload: expected a list")
-        payload_out = []
-        for index, entry in enumerate(payload):
-            where = f"tool_specs.{tool}.payload[{index}]"
-            if not isinstance(entry, Mapping) or "json_path" not in entry:
-                raise ConstitutionError(f"{where}: expected json_path")
-            extra = set(entry) - set(PAYLOAD_KEYS)
-            if extra:
-                raise ConstitutionError(f"{where}: unknown key(s) {sorted(extra)}")
-            path = take(_json_path(entry["json_path"], where), where)
-            # Casefolded: a tool that reads keys case-insensitively must not see `TO.name` as payload.
-            folded = path.casefold()
-            for control in control_paths:
-                c = control.casefold()
-                if folded == c or c.startswith(folded + ".") or folded.startswith(c + "."):
-                    raise ConstitutionError(f"{where}: payload path {path!r} overlaps the field path {control!r}")
-            shape = entry.get("shape")
-            if shape is not None and shape not in ("string", "number", "list"):
-                raise ConstitutionError(f"{where}.shape: expected string, number, or list")
-            limit = entry.get("max_length")
-            if limit is not None:
-                if shape not in ("string", "list"):
-                    raise ConstitutionError(f"{where}.max_length: only valid for string or list")
-                if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-                    raise ConstitutionError(f"{where}.max_length: expected a positive integer")
-            payload_out.append({"json_path": path, "shape": shape, "max_length": limit})
-        out[tool] = {
-            "irreversible": irreversible,
-            "data_class_floor": floor.strip().casefold(),
-            "amount": amount_out,
-            "counterparties": party_out,
-            "payload": payload_out,
-            "deny_unmapped": spec.get("deny_unmapped", False) is True,
-        }
-        if fields_out:      # absent for a tool with no custom fields, so its spec hashes as before
-            out[tool]["fields"] = fields_out
-        out[tool].update(_tool_check(tool, spec))      # absent unless set, for the same reason
-        out[tool].update(_tool_agents(tool, spec, agents))      # absent unless set: no roster means any caller
+        tool = _spec_tool_name(name, out)
+        out[tool] = _tool_spec(tool, spec, registry, agents)
     allow = _allow_listed(rules)
     missing = [tool for tool in allow if tool not in out]
     if missing:
