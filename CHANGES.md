@@ -3408,3 +3408,14 @@ Details:
 - Part B key upgrade 9/9 (B3 with real judges), Part C hybrid signatures 5/5, Part D tool check 11/11, Part E 7/7 (E4 Ollama quickstart N/A), extras X1-X9 all PASS. F1: 8 UPGRADING rows differ from Part B; F2 FIPS wording consistent.
 - 32 findings (about 27 fix, 5 WAD); see REPORT.md "Claude: fix vs WAD".
 - `tests/live/run12/`: REPORT.md, NOTES.md, LIVE_RESULTS.md (codes only), shots/ (E3 window tabs; B2/B8/D6 rendered from logs).
+
+## Live run 13 results — 2026-11-03
+
+- Build: `working` @ 340c876 (0.9.0 release gate). Python 3.14.8, cryptography 50.0.2, mcp 2.3.0.
+- Live relay pass (A3): 177 cases, 175 PASS / 1 INCONCLUSIVE / 1 FAIL (C141, fixture issue); nothing forbidden ran.
+- A2 sabotage 9/10 caught: `gateway_skips_argument_hash` undetected while the harness still prints "SABOTAGE: ok".
+- Y8 FAIL: a kill between `tool_receipt_invalid` and `tool_held` loses the hold.
+- C8 FAIL: starter prose makes the local qwen2.5:7b judge vote no.
+- B6 partial: 2 of 9 concurrent first starts get a raw `LedgerError` instead of `keys_upgraded_elsewhere`. B3: 1 PASS / 1 FAIL (fixture issue).
+- D + Y1-Y5 14/14, E 6/6, F 6/6, G 10/10.
+- `tests/live/run13/`: LIVE_RESULTS.md, results.json, A3_RESULTS.md, A3_results.json (masked), parts/ (PART_*.md, SETUP_LOG.md; PLAN.md is gitignored).
