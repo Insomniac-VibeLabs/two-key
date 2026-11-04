@@ -1019,6 +1019,8 @@ class TwoKey:
             return None
         with self.ledger.exclusive():
             self.ledger.release_expired_hold(tool)
+            self.ledger.catch_up_hold(tool, unanswered_hold=self.unanswered_hold or self.quorum.is_high_assurance,
+                                      high_assurance=self.quorum.is_high_assurance)
             held = self.ledger.tool_held(tool)
         if not held:
             return None

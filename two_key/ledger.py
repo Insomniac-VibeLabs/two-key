@@ -312,6 +312,45 @@ def is_unanswered(body: dict) -> bool:
     return isinstance(why, str) and why.startswith(TOOL_ERROR_PREFIX)
 
 
+def _missed_receipt_hold(tool: str, entries: list) -> dict | None:
+    """A bad receipt with no redemption after it: under high_assurance its hold is written before the redemption."""
+    redeemed = {e.body.get("jti") for e in entries if e.kind == "redemption"}
+    for e in entries:
+        if e.kind == "tool_receipt_invalid" and not is_unanswered(e.body) and e.body.get("jti") not in redeemed:
+            return {"tool": tool, "jti": e.body.get("jti"), "why": e.body.get("why")}
+    return None
+
+
+def _missed_unanswered_hold(tool: str, entries: list, now: float) -> dict | None:
+    """The newest unanswered call, if the count reached a hold there and that hold's time is not up at ``now``."""
+    for i, e in enumerate(entries):
+        if e.kind != "tool_receipt_invalid" or not is_unanswered(e.body):
+            continue
+        at = e.body.get("at")
+        if not _whole(at) or now >= at + UNANSWERED_HOLD_SECONDS or not _hold_due(entries[i:], at):
+            return None
+        return {"tool": tool, "jti": e.body.get("jti"), "why": "unanswered", "until": at + UNANSWERED_HOLD_SECONDS}
+    return None
+
+
+def _hold_due(entries, now: float) -> bool:
+    """``Ledger.unanswered_hold_due`` over ``entries``: one tool's receipt problems and redemptions, newest first."""
+    in_a_row = in_window = 0
+    streak = True
+    for entry in entries:
+        if entry.kind == "redemption":
+            streak = streak and entry.body.get("receipt_outcome") != "ran"
+            continue
+        if entry.kind != "tool_receipt_invalid" or not is_unanswered(entry.body):
+            continue
+        at = entry.body.get("at")
+        in_a_row += int(streak)
+        in_window += int(_whole(at) and now - at < UNANSWERED_WINDOW_SECONDS)
+        if UNANSWERED_HOLD_COUNT in (in_a_row, in_window):
+            return True
+    return False
+
+
 class Ledger:
     def __init__(self, path: Path | str, private_key, public_key=None, *,
                  witness_path: Path | str | None = None, ledger_key_path: Path | str | None = None,
@@ -1569,20 +1608,35 @@ class Ledger:
         """True when ``tool``'s unanswered calls since its last hold or release call for a hold: ``UNANSWERED_HOLD_COUNT`` in a
         row with no verified receipt between them, or that many within ``UNANSWERED_WINDOW_SECONDS`` whatever came
         between. An agent cannot end either count by sending good calls."""
-        in_a_row = in_window = 0
-        streak = True
-        for entry in self._since_last_hold(tool):
-            if entry.kind == "redemption":
-                streak = streak and entry.body.get("receipt_outcome") != "ran"
-                continue
-            if not is_unanswered(entry.body):
-                continue
-            at = entry.body.get("at")
-            in_a_row += int(streak)
-            in_window += int(_whole(at) and now - at < UNANSWERED_WINDOW_SECONDS)
-            if UNANSWERED_HOLD_COUNT in (in_a_row, in_window):
-                return True
-        return False
+        return _hold_due(self._since_last_hold(tool), now)
+
+    def catch_up_hold(self, tool: str, now: float | None = None, *, unanswered_hold: bool, high_assurance: bool) -> bool:
+        """Write the ``tool_held`` entry a kill kept from being written, and return True (run 13, Y8).
+
+        A hold is a second ledger write after the ``tool_receipt_invalid`` that calls for it. A process killed
+        between the two left the tool free after a restart. So before a call to a checked tool, this looks at what
+        happened since the tool's last hold or release, the same way the hold itself is decided: a bad receipt under
+        ``high_assurance`` with no redemption after it (the bad-receipt path always writes one, after the hold), or
+        unanswered calls that called for a hold whose time is not up yet. The hold it writes ends when the missed one
+        would have: until ``two-key tool release``, or 15 minutes after the last unanswered call."""
+        if now is None:
+            now = time.time()
+        with self._exclusive():
+            if self.tool_held(tool, now):
+                return False
+            body = self._missed_hold(tool, now, unanswered_hold=unanswered_hold, high_assurance=high_assurance)
+            if body is None:
+                return False
+            self.record("tool_held", body)
+            return True
+
+    def _missed_hold(self, tool: str, now: float, *, unanswered_hold: bool, high_assurance: bool) -> dict | None:
+        """The ``tool_held`` body ``catch_up_hold`` writes, or None when no hold was missed."""
+        entries = list(self._since_last_hold(tool))
+        body = _missed_receipt_hold(tool, entries) if high_assurance else None
+        if body is None and unanswered_hold:
+            body = _missed_unanswered_hold(tool, entries, now)
+        return body
 
     def last_before(self, size: int, kind: str) -> Entry | None:
         """The last entry of ``kind`` with ``seq`` below ``size``, or None.

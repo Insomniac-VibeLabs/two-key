@@ -436,10 +436,11 @@ class ToolGateway:
         except (TypeError, ValueError):     # EncodingError is a ValueError
             return "tool_args_mismatch"
         now = self.clock()
-        self.ledger.release_expired_hold(tool, now)
-        if self.ledger.tool_held(tool, now):
-            return "tool_held"
-        return None
+        with self.ledger.exclusive():
+            self.ledger.release_expired_hold(tool, now)
+            self.ledger.catch_up_hold(tool, now, unanswered_hold=self.unanswered_hold, high_assurance=self.high_assurance)
+            held = self.ledger.tool_held(tool, now)
+        return "tool_held" if held else None
 
     def _aborted(self, jti: str, tool: str, pinned: str | None, error: Exception) -> GatewayResult:
         """The tool raised or timed out: ``redemption_aborted``, and for a checked tool an unanswered call (``_unanswered``)."""
@@ -502,10 +503,11 @@ class ToolGateway:
                 self.ledger.record("redemption", {**body, "receipt_hash": text_hash(receipt), "receipt_outcome": "ran"})
                 return GatewayResult(True, "redeemed", output)
             self.ledger.record("tool_receipt_invalid", {"jti": jti, "tool": tool, "why": why})
+            if self.high_assurance:     # before the redemption: a kill here leaves a bad receipt with none (catch_up_hold)
+                self.ledger.record("tool_held", {"tool": tool, "jti": jti, "why": why})
             self.ledger.record("redemption", {**body, "receipt_hash": None, "receipt_outcome": why})
             if not self.high_assurance:
                 return GatewayResult(True, "redeemed", output)
-            self.ledger.record("tool_held", {"tool": tool, "jti": jti, "why": why})
         except Exception as e:
             return GatewayResult(False, _ledger_failed(e), output if why is None else None)
         return GatewayResult(False, f"tool_receipt_invalid:{why}")

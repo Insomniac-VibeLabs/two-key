@@ -124,7 +124,7 @@ class Definition(unittest.TestCase):
                ({"type": "path", "under": [NOTES, NOTES], "default": NOTES}, "listed twice"),
                ({"type": "path", "under": [NOTES], "default": "/etc"}, "default: not a valid value"),
                ({"type": "path", "under": [NOTES], "default": NOTES, "case": "exact"}, "expected insensitive"),
-               ({"type": "path", "under": ["/Home"], "default": "/home", "case": "insensitive"}, "clean form"),
+               ({"type": "path", "under": ["/Home"], "default": "/home", "case": "insensitive"}, "write it in lower case"),
                ({"type": "path", "under": [NOTES], "default": NOTES, "max_length": 9}, "unknown key"),
                ({"type": "path", "under": ["/a"] * 17, "default": "/a"}, "more than 16 folders")]
         for defn, msg in bad:

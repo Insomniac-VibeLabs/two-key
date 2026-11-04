@@ -348,6 +348,8 @@ KINDS: dict[str, KindSpec] = {
               "on_schema_change", "allow_unresolved_identity", "signed_tools_not_listed"),
         excluded=("tools",), extract=_proxy_fields),
     "tool_not_offered": KindSpec(sent=("origin", "tool"), severity=WARNING),
+    # A tools/call the proxy refused before authorize: its JSON repeated a key (run 13, D2).
+    "tool_call_refused": KindSpec(sent=("origin", "tool", "why"), severity=WARNING),
     "siem_configured": KindSpec(sent=("event_schema", "event_format", "replay_from", "sinks")),
     # two-key setup, config set and config undo (two_key/config_set.py): which settings and files changed,
     # never a value. The account is in the ledger only.
@@ -364,7 +366,7 @@ UNLEDGERED = {
         severity=WARNING),
 }
 
-_DENY_KINDS = frozenset({"gateway_denied", "tool_not_offered", "redemption_aborted", "gateway_token_refused",
+_DENY_KINDS = frozenset({"gateway_denied", "tool_not_offered", "tool_call_refused", "redemption_aborted", "gateway_token_refused",
                          "scanner_unavailable", "judge_history_failed", "attempt_episode",
                          "agent_already_connected", "tool_receipt_invalid", "tool_held"})
 

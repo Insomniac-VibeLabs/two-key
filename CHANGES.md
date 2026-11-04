@@ -191,6 +191,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Docs: starter tools carry no arguments — 2026-11-03](#docs-starter-tools-carry-no-arguments--2026-11-03)
 - [A checked tool that leaves a call unanswered — 2026-11-03](#a-checked-tool-that-leaves-a-call-unanswered--2026-11-03)
 - [Regression test of the unanswered-call hold — 2026-11-03](#regression-test-of-the-unanswered-call-hold--2026-11-03)
+- [Fixes from GrokBot's run 13 — 2026-11-04](#fixes-from-grokbots-run-13--2026-11-04)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5544,3 +5545,39 @@ setup from an answers file, the terminal interview and the setup window).
   route in the default profile, as the setup window's check box does; `high_assurance` does not ask, since it
   always holds. A no is left out of the answers, as in the window, so both write the same `proxy.yaml`.
 - Tests in `tests/test_toolcheck.py` and `tests/test_config_set.py`.
+
+## Fixes from GrokBot's run 13 — 2026-11-04
+
+GrokBot's live run 13, the 0.9.0 release gate, at 340c876. Nothing it tried let a forbidden call run.
+
+- **Gateway and decisions, a hold a kill lost** (Y8): a hold is a second ledger entry after the
+  `tool_receipt_invalid` that calls for it, and a proxy killed between the two left the tool free after a restart.
+  Before a call or decision for a checked tool, `Ledger.catch_up_hold` now writes the hold that was missed: under
+  `high_assurance` for a bad receipt with no redemption after it, and for unanswered calls that reached a count,
+  until 15 minutes after the last of them (nothing when that time has passed). Under `high_assurance` the hold for a
+  bad receipt is now written before the redemption entry, so a kill there cannot lose it either.
+- **Key upgrade, the race** (B6): a first start that opened the ledger only after another start had upgraded it
+  still gave the raw `LedgerError: keys_upgraded at N names a principal key other than this ledger's`. It now says
+  `keys_upgraded_elsewhere: ... start again`, like the start that waited for the lock.
+- **Key upgrade, messages** (B5, B7): `keys_upgrade_stopped` names the folder and the key file it could not
+  replace, not the temporary file. `backup-due` is written just before `keys_upgraded`, so a start killed right
+  after the upgrade still leaves `back up now`; until the backup, a later start also says `the key upgrade to hybrid
+  ed25519+ml-dsa-65 is complete (keys_upgraded at seq N)`, which the killed start never printed.
+- **`two-key --version`** prints `two-key 0.9.0`; it was a usage error.
+- **Proxy, a repeated JSON key** (D2): a `tools/call` with two `path` keys was accepted, the last one winning (the
+  value Two-Key checked and the tool got). The proxy now reads each line from the agent's host strictly once more,
+  and refuses a `tools/call` that repeats a key anywhere with `duplicate_keys` before `authorize`, ledgered as
+  `tool_call_refused` (sent to the SIEM as a deny), as `two-key authorize` and agent proposals already refused one.
+- **Signing a path field**: a folder of a `case: insensitive` field not in lower case now says "write it in lower
+  case", not "write it in clean form".
+- **Live harness**: C141 books a Tuesday at least two weeks after the cases are made, not a fixed date that had
+  passed; C19 also accepts the judges' `insufficient_yes`; a pass holds a lock on its ports and folder, so a second
+  pass started at the same time is refused; a pass refuses to start when the `python3` on PATH lacks the MCP SDK,
+  which the launcher cases need; `--sabotage all` names its blind spots instead of a bare "ok".
+- Docs: UPGRADING (start again after a kill; `recover` only when the start refuses; the new messages), TOOL_CHECK
+  (the missed hold), HOWTO (`duplicate_keys`, hard links in a path folder, lower-case folders for `case:
+  insensitive`, a local judge's 30-second `timeout`), SETUP (a one-account starter-tool test needs weaker
+  settings), DEMO (`judges[0].timeout` beside the round's, answer `n` to a call you did not ask for, `/quit`, a
+  clean-up that works with Python 3.14 venvs and removes the Node.js download).
+- Tests in `tests/test_toolcheck.py`, `tests/test_key_upgrade.py`, `tests/test_mcp_proxy_sdk.py`,
+  `tests/test_cli_tokens.py`, `tests/test_path_fields.py` and `tests/test_siem.py`. 1528 tests.

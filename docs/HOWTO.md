@@ -603,15 +603,21 @@ hard_rules:
   below its folder is a link or junction (`path_symlink:<field>`; the
   tool does not run). The folder itself and the folders above it may be
   links. This is best effort: anything that can write in the folder can
-  still swap a part for a link after the check. The tool's own folder
-  limit and the account it runs as close that (see [THREAT_MODEL.md](THREAT_MODEL.md)
+  still swap a part for a link after the check. A hard link inside the
+  folder to a file elsewhere is not a link to this check, and a write goes
+  through it to that file. The tool's own folder limit and the account it
+  runs as close these (see [THREAT_MODEL.md](THREAT_MODEL.md)
   and [CONNECTING.md](CONNECTING.md)).
 - Letter case is compared exactly. On a filesystem that ignores case
-  (macOS and Windows by default), declare `case: insensitive`: values,
-  folders and rule paths are then lower-cased, and the tool receives the
-  lower-cased path. Signing warns about an exact path field in a rule that
-  lists paths to deny (`eq`, `in`, `under`), where a case variant names
-  the same file and is not denied.
+  (macOS and Windows by default), declare `case: insensitive`: the
+  agent's values are then lower-cased, and the tool receives the
+  lower-cased path. The signed folders and rule paths of such a field must
+  be written in lower case already; signing refuses `/srv/Notes` with
+  "write it in lower case". Signing warns about an exact path field in a
+  rule that lists paths to deny (`eq`, `in`, `under`), where a case variant
+  names the same file and is not denied: under an exact `/private` deny,
+  `PRIVATE/x` passes, and on a filesystem that ignores case it is the same
+  folder. Declare `case: insensitive` for such a disk.
 - Paths are POSIX paths. A Windows path (`C:\notes\x`) is refused.
 - One path per field. A tool with two paths, such as `move_file`, maps two
   fields; an argument that holds a list of paths is `field_unreadable`.
@@ -1403,6 +1409,13 @@ ollama pull qwen2.5:7b
 ```
 
 The model card is <https://huggingface.co/Qwen/Qwen2.5-7B-Instruct>.
+
+A local model on a CPU, or one that is busy, can take longer than a judge's
+request is allowed: 30 seconds (`timeout` on the judge, in `judges.yaml`). A
+judge not done by then does not vote (`insufficient_responses`). Raise the
+judge's `timeout` and the round's `quorum.timeout_seconds` together, the round
+a little longer than the judge, for example `timeout: 170` and
+`timeout_seconds: 180` (`two-key config set ... judges[0].timeout 170`).
 
 ## Authorize from the command line
 
@@ -2279,6 +2292,7 @@ an argument value.
 | Reason | Meaning |
 | --- | --- |
 | `tool_not_offered` | A name the proxy does not show. Nothing is authorized, since no token can exist for it. The attempt is ledgered as `tool_not_offered` (the name only when it is a short identifier, else its size and digest), and a line goes to stderr |
+| `duplicate_keys` | The `tools/call` message's JSON repeats a key, in the arguments or anywhere else (0.9.0, run 13). The MCP SDK would keep the last one; the proxy refuses the call before `authorize`, as `two-key authorize` and agent proposals refuse a repeated key. Ledgered as `tool_call_refused` with `why: duplicate_keys` and the tool name as for `tool_not_offered`, and a line goes to stderr |
 | `derive_failed:caller_field_in_arguments:<field>` | The agent wrote a caller-supplied fact itself, although the proxy hides it |
 | `derive_failed:field_missing:<field>` | The fact hook returned nothing (for example, an unknown invoice) or raised |
 | `fact_mismatch` | The hook's answer changed between authorize and the tool call, so the token no longer fits |

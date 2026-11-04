@@ -442,6 +442,9 @@ def signed_path(defn: Mapping[str, Any], value: Any, where: str) -> str:
         raise FieldError(f"{where}: not a path this field can hold (absolute, printable ASCII, no backslash, "
                          "no .. segment)") from None
     if cleaned != value:
+        if defn.get("case") == "insensitive" and cleaned == clean_path(value, None).lower():
+            # run 13, D6: "clean form" did not say that only the letter case was wrong
+            raise FieldError(f"{where}: write it in lower case, as case: insensitive compares it, {cleaned!r}")
         raise FieldError(f"{where}: write it in clean form, {cleaned!r}")
     return cleaned
 

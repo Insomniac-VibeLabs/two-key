@@ -362,6 +362,7 @@ def _ledger_name(name: Any) -> dict:
 
 
 UpstreamCall = Callable[[str, dict], Any]
+DUPLICATE_KEYS = "duplicate_keys"
 
 
 class ProxyCore:
@@ -439,6 +440,16 @@ class ProxyCore:
             self.guard.record("tool_not_offered", {"origin": ORIGIN, **_ledger_name(name)})
         except Exception as e:      # still refused; the ledger write failing is reported, never an allow
             print(f"two-key: mcp-proxy: could not record tool_not_offered: {type(e).__name__}", file=sys.stderr)
+
+    def refuse_duplicate_keys(self, name: Any) -> CallOutcome:
+        """A ``tools/call`` whose JSON repeats a key (run 13, D2). The SDK keeps the last one, which is the value
+        Two-Key checks and the tool gets; refused anyway, as ``two-key authorize`` and agent proposals refuse it."""
+        print("two-key: mcp-proxy: refused a call whose JSON repeats a key", file=sys.stderr)
+        try:
+            self.guard.record("tool_call_refused", {"origin": ORIGIN, "why": DUPLICATE_KEYS, **_ledger_name(name)})
+        except Exception as e:      # still refused; the ledger write failing is reported, never an allow
+            print(f"two-key: mcp-proxy: could not record tool_call_refused: {type(e).__name__}", file=sys.stderr)
+        return CallOutcome(False, DUPLICATE_KEYS, stage="proxy")
 
     def call_tool(self, name: Any, arguments: Any) -> CallOutcome:
         if not isinstance(name, str) or name not in self._specs:

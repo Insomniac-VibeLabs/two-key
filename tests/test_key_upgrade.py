@@ -9,6 +9,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import stat
 import tempfile
 import unittest
@@ -144,8 +145,11 @@ class Upgrade(unittest.TestCase):
         again_result, said = self.dep.upgrade()
         self.assertFalse(again_result.upgraded)
         self.assertIn("back up now", said)
+        self.assertIn(f"key upgrade to hybrid ed25519+ml-dsa-65 is complete (keys_upgraded at seq {self.dep.size})", said)
         backup_made(again_result.ledger.ledger_key_path)
-        self.assertNotIn("back up now", self.dep.upgrade()[1])
+        said = self.dep.upgrade()[1]
+        self.assertNotIn("back up now", said)
+        self.assertNotIn("is complete", said)
 
     def test_an_encrypted_principal_key_stays_encrypted_under_its_passphrase(self):
         self._tmp.cleanup()
@@ -257,7 +261,9 @@ class Upgrade(unittest.TestCase):
         denied.filename = str(self.dep.root / ".principal.pem.1.0a1b2c3d.tmp")
         before = self.dep.files()
         with mock.patch("two_key.upgrade._platform.create_new", side_effect=denied):
-            with self.assertRaisesRegex(UpgradeError, "^keys_upgrade_stopped: this account cannot write .*writable"):
+            with self.assertRaisesRegex(UpgradeError, "^keys_upgrade_stopped: this account cannot write the folder "
+                                        f"{re.escape(str(self.dep.root))} \\(to replace "
+                                        f"{re.escape(str(self.dep.root / 'principal.pem'))}\\).*writable"):
                 self.dep.upgrade()
         self.assertEqual(self.dep.files(), before)
 
@@ -268,6 +274,14 @@ class Upgrade(unittest.TestCase):
         self.dep.upgrade()                              # the other process wins while this one has the ledger open
         late, said = mock.patch("two_key.upgrade.Ledger", return_value=old_ledger), io.StringIO()
         with late, self.assertRaisesRegex(UpgradeError, "^keys_upgraded_elsewhere: .*start again"):
+            open_upgraded(self.dep.principal_path, None, self.dep.ledger_path, principal=self.dep.old, out=said)
+
+    def test_a_start_that_lost_the_race_before_opening_the_ledger_says_so_too(self):
+        """Run 13, B6: a start that loaded the 0.8.0 key, then opened the ledger after another start upgraded it, still
+        got the raw LedgerError from the ledger's own check of the keys_upgraded entry."""
+        self.dep.upgrade()
+        said = io.StringIO()
+        with self.assertRaisesRegex(UpgradeError, "^keys_upgraded_elsewhere: .*start again"):
             open_upgraded(self.dep.principal_path, None, self.dep.ledger_path, principal=self.dep.old, out=said)
 
     def test_a_new_principal_that_is_not_the_old_one_made_hybrid_is_refused(self):

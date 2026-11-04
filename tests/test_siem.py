@@ -79,6 +79,7 @@ SAMPLE_BODIES = {
                           "tools": {"search": {"claim": "floor", "facts": []}},
                           "signed_tools_not_listed": []},
     "tool_not_offered": {"origin": "mcp-proxy", "tool": "nope"},
+    "tool_call_refused": {"origin": "mcp-proxy", "tool": "search", "why": "duplicate_keys"},
     "tool_receipt_invalid": {"jti": "j1", "tool": "search", "why": "bad_signature"},
     "tool_held": {"tool": "search", "jti": "j1", "why": "missing"},
     "tool_released": {"tool": "search", "reason": REVOKE_SECRET},

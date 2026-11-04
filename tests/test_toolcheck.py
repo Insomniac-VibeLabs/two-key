@@ -350,6 +350,45 @@ class Unanswered(Deployment):
         self.now += UNANSWERED_HOLD_SECONDS + 1
         self.assertEqual(self.tk.authorize(CLAIM, ARGS, "send a note").reason, "tool_held")
 
+    def killed_before_the_hold(self, count=3):
+        """The ledger a proxy killed between ``tool_receipt_invalid`` and ``tool_held`` leaves (run 13, Y8)."""
+        for i in range(count):
+            self.tk.ledger.record("tool_receipt_invalid", {"jti": f"j{i}", "tool": "send",
+                                                           "why": "tool_error:TimeoutError", "at": self.now})
+
+    def test_a_hold_a_kill_kept_from_being_written_is_written_at_the_next_call(self):
+        gw = self.gw(high_assurance=True)
+        at = self.now
+        self.killed_before_the_hold()
+        self.assertEqual(self.call(gw, fail=False, after=60), "tool_held")
+        self.assertEqual(self.bodies("tool_held"), [{"tool": "send", "jti": "j2", "why": "unanswered",
+                                                     "until": at + UNANSWERED_HOLD_SECONDS}])
+        self.assertEqual(self.calls, [])        # the tool never ran
+
+    def test_the_decision_writes_a_missed_hold_too(self):
+        self.tk.unanswered_hold = True
+        self.killed_before_the_hold()
+        self.assertEqual(self.tk.authorize(CLAIM, ARGS, "send a note").reason, "tool_held")
+        self.assertEqual(len(self.bodies("tool_held")), 1)
+
+    def test_a_missed_hold_whose_time_is_up_is_not_written(self):
+        gw = self.gw(high_assurance=True)
+        self.killed_before_the_hold()
+        self.assertEqual(self.call(gw, fail=False, after=UNANSWERED_HOLD_SECONDS), "redeemed")
+        self.assertEqual(self.bodies("tool_held"), [])
+
+    def test_two_unanswered_calls_are_not_a_missed_hold(self):
+        gw = self.gw(high_assurance=True)
+        self.killed_before_the_hold(count=2)
+        self.assertEqual(self.call(gw, fail=False), "redeemed")
+        self.assertEqual(self.bodies("tool_held"), [])
+
+    def test_a_bad_receipt_with_no_redemption_after_it_holds_under_high_assurance(self):
+        self.tk.ledger.record("tool_receipt_invalid", {"jti": "j", "tool": "send", "why": "mismatch"})
+        self.assertEqual(self.call(self.gw(), fail=False), "redeemed")      # the default profile never holds
+        self.assertEqual(self.call(self.gw(high_assurance=True), fail=False), "tool_held")
+        self.assertEqual(self.bodies("tool_held"), [{"tool": "send", "jti": "j", "why": "mismatch"}])
+
     def test_a_timed_hold_written_after_a_bad_receipt_hold_does_not_shorten_it(self):
         self.tk.ledger.record("tool_held", {"tool": "send", "jti": "j", "why": "missing"})
         self.tk.ledger.record("tool_held", {"tool": "send", "jti": "k", "why": "unanswered", "until": self.now + 1})

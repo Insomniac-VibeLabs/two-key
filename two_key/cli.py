@@ -94,7 +94,7 @@ import stat
 import sys
 from pathlib import Path
 
-from . import _platform
+from . import __version__, _platform
 from .constitution import (ENVELOPE_FORMATS, domain_allow_notes, encrypted_pass_notes, load_serial,
                            load_unsigned_with_fields, save_envelope, sign_constitution)
 from .fields import case_warnings, not_applicable_notes, path_notes
@@ -931,6 +931,7 @@ _ANCHOR_HELP = ("monotonic head anchor outside the ledger directory (default <le
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="two-key")
+    parser.add_argument("--version", action="version", version=f"two-key {__version__}")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     def _add_key(parser, help=_KEY_HELP):

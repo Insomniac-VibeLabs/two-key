@@ -18,8 +18,10 @@ decides nothing (``two_key.mcp_proxy.core`` does).
 
 from __future__ import annotations
 
+import io
+import json
 import sys
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from typing import Any, AsyncIterator
 
 try:
@@ -40,13 +42,66 @@ except ImportError as e:  # pragma: no cover - exercised only without the extra
 
 from .. import __version__
 from .._platform import resolve_program
+from ..strict import DuplicateKeyError, loads_json
 from .config import ProxyConfig, ProxyConfigError
 from .core import CallOutcome, ProxyCore, ToolSelection, agent_session, build_two_key, check_tools_signed, \
     identity_refusal, schema_check, select_tools, undeclared_file_inputs, undescribed_inputs
 
 SERVER_NAME = "two-key-mcp-proxy"
+# Set by mark_repeated_keys in a tools/call's _meta; a call that carries it is refused (an agent setting it is too).
+REPEATED_KEY_MARK = "io.github.insomniac-vibelabs.two-key/repeated-key"
 MAX_TOOL_PAGES = 100           # tools/list pages read from the upstream at start
 MAX_UPSTREAM_TOOLS = 10_000
+
+
+def mark_repeated_keys(line: str) -> str:
+    """One line from the agent's host, as the SDK reads it. A ``tools/call`` whose JSON repeats a key anywhere is
+    given ``REPEATED_KEY_MARK`` in its ``_meta``, so ``on_call_tool`` refuses it (run 13, D2): the SDK's parser keeps
+    the last key and says nothing. Any other line is passed on unchanged, for the SDK to read or refuse."""
+    try:
+        loads_json(line)
+        return line
+    except DuplicateKeyError:
+        pass
+    except ValueError:      # not JSON, or NaN: the SDK's own error
+        return line
+    message = json.loads(line)
+    if not isinstance(message, dict) or message.get("method") != "tools/call":
+        return line
+    params = message.get("params")
+    if not isinstance(params, dict):
+        return line
+    meta = params.get("_meta")
+    params["_meta"] = {**(meta if isinstance(meta, dict) else {}), REPEATED_KEY_MARK: True}
+    return json.dumps(message) + "\n"
+
+
+class _MarkedLines:
+    """The agent's stdin for ``stdio_server``, each line through ``mark_repeated_keys``."""
+
+    def __init__(self, stdin: Any):
+        self._stdin = stdin
+
+    def __aiter__(self):
+        return self._lines()
+
+    async def _lines(self):
+        async for line in self._stdin:
+            yield mark_repeated_keys(line)
+
+
+class _AgentText(io.TextIOWrapper):
+    """The agent's stdin as UTF-8 text. Closing it never closes ``sys.stdin``'s buffer, which is not its own."""
+
+    def close(self) -> None:
+        with suppress(ValueError):
+            self.detach()
+
+
+def agent_stdin() -> _MarkedLines:
+    """The agent's stdin for ``stdio_server``: ``sys.stdin``'s buffer as UTF-8 lines, each through
+    ``mark_repeated_keys``. The upstream server is a child with its own pipes, so it never reads this stdin."""
+    return _MarkedLines(anyio.wrap_file(_AgentText(sys.stdin.buffer, encoding="utf-8", errors="replace")))
 
 
 def _wire(model: Any) -> dict:
@@ -104,6 +159,8 @@ def build_server(core: ProxyCore) -> Server:
         return listed
 
     async def on_call_tool(ctx, params) -> types.CallToolResult:
+        if (params.meta or {}).get(REPEATED_KEY_MARK):
+            return _result(await anyio.to_thread.run_sync(core.refuse_duplicate_keys, params.name))
         # authorize and the judges are blocking calls: they run in a worker thread, and the gateway's tool
         # calls back into this event loop for the upstream request.
         outcome = await anyio.to_thread.run_sync(core.call_tool, params.name, params.arguments)
@@ -194,7 +251,7 @@ async def serve(config: ProxyConfig, *, two_key: Any = None) -> None:
         print(f"two-key: mcp-proxy: serving {len(core.selection.views)} signed tool(s) "
               f"{sorted(core.selection.views)}", file=sys.stderr)
         try:
-            async with stdio_server() as (read, write):
+            async with stdio_server(stdin=agent_stdin()) as (read, write):
                 await server.run(read, write, server.create_initialization_options())
         finally:
             # Give the SIEM sender its last pass (0.7.0). What has not gone out is still in the ledger,

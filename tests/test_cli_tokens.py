@@ -253,5 +253,16 @@ class LibraryRecord(unittest.TestCase):
         self.assertIsNone(Decision(False, "no", None, {}, {}, 3, None).to_record()["token_digest"])
 
 
+class Version(unittest.TestCase):
+    def test_version_prints_the_package_version(self):
+        """Run 13: ``two-key --version`` was a usage error ("the following arguments are required: cmd")."""
+        from two_key import __version__
+        out = io.StringIO()
+        with redirect_stdout(out), self.assertRaises(SystemExit) as stopped:
+            main(["--version"])
+        self.assertEqual(stopped.exception.code, 0)
+        self.assertEqual(out.getvalue().strip(), f"two-key {__version__}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

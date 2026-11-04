@@ -15,3 +15,5 @@ __pycache__/
 /constitution/
 /RESULTS.md
 /results.json
+# A pass holds these while it runs, so a second pass on the same ports or folder is refused (run 13).
+/.harness-*.lock

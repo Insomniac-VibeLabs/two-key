@@ -21,8 +21,9 @@ after ``keys_upgraded`` is written and before the head that covers it, leaves a 
 4. Sign the constitution again with the hybrid key; the signed body, so its digest, is unchanged.
 5. Record ``keys_upgraded`` (``Ledger.upgrade_keys``), signed by the old and new principal and witness keys,
    with the new capability and stamp key fingerprints; the head and the anchor are hybrid from then on.
-6. Leave ``backup-due`` beside the ledger key. Every start says to back up until ``two-key backup-export``
-   removes it: a backup from before the upgrade restores the old keys.
+6. Leave ``backup-due`` beside the ledger key (written just before step 5, so a kill after step 5 keeps it). Every
+   start says to back up until ``two-key backup-export`` removes it: a backup from before the upgrade restores the
+   old keys. Until then a start after the upgrade also says it is complete, with the ``keys_upgraded`` seq.
 
 The automatic upgrade refuses (``keys_upgrade_needed``) where it cannot do all of it alone: when the witness
 public key is also pinned outside the ledger (``witness_public_key``), which the operator has to replace by hand.
@@ -88,6 +89,21 @@ def backup_made(ledger_key_path: Path | str) -> None:
 
 def _temp_name(path: Path) -> Path:
     return path.with_name(f".{path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
+
+
+_TEMP = re.compile(r"\.(?P<key>.+)\.\d+\.[0-9a-f]{8}\.tmp")
+
+
+def _unwritable(filename) -> str:
+    """The folder and key file a refused write was for. A key is written to a temporary file beside it first, and
+    that file's name means nothing to the operator (run 13, B7)."""
+    if not filename:
+        return "a key file's folder"
+    path = Path(filename)
+    temp = _TEMP.fullmatch(path.name)
+    if temp is None:
+        return str(path)
+    return f"the folder {path.parent} (to replace {path.parent / temp.group('key')})"
 
 
 def _sweep_temps(paths) -> None:
@@ -195,7 +211,7 @@ def open_upgraded(principal_path: Path | str, passphrase: Passphrase, ledger_pat
     if principal is None:
         principal = load_private_key_file(principal_path, passphrase)
     pin = load_public_key(witness_public_key) if witness_public_key else None
-    ledger = Ledger(ledger_path, principal, witness_public_key=pin, anchor_path=anchor_path)
+    ledger = _open_ledger(ledger_path, principal, pin, anchor_path, principal_path, passphrase)
     result = Upgrade(principal, ledger)
     if is_hybrid(principal) and not ledger.upgrade_pending:
         _already_upgraded(result, None if automatic else constitution, out)
@@ -219,20 +235,36 @@ def open_upgraded(principal_path: Path | str, passphrase: Passphrase, ledger_pat
     return result
 
 
+def _open_ledger(ledger_path, principal, pin, anchor_path, principal_path: Path, passphrase: Passphrase) -> Ledger:
+    """The ledger, opened with ``principal``. A start that lost the race before it opened the ledger finds another
+    start's ``keys_upgraded`` there, naming the hybrid key: ``keys_upgraded_elsewhere`` (run 13, B6)."""
+    try:
+        return Ledger(ledger_path, principal, witness_public_key=pin, anchor_path=anchor_path)
+    except LedgerError:
+        _raise_if_upgraded_elsewhere(principal, principal_path, passphrase)
+        raise
+
+
 def _upgrade_locked(result: Upgrade, principal_path: Path, passphrase: Passphrase, constitution: Path | None) -> None:
     """``_upgrade`` under the ledger's lock, with the two stops an operator can act on named (live run 12)."""
     try:
         with result.ledger.exclusive():
             _upgrade(result, principal_path, passphrase, constitution)
     except PermissionError as e:
-        raise UpgradeError(f"keys_upgrade_stopped: this account cannot write {e.filename}; the key upgrade "
-                           "replaces the key files, so their folders must be writable by Two-Key's account. What "
-                           "was written is safe: make them writable and start again (docs/UPGRADING.md)") from None
+        raise UpgradeError(f"keys_upgrade_stopped: this account cannot write {_unwritable(e.filename)}; the key "
+                           "upgrade replaces the key files, so their folders must be writable by Two-Key's account "
+                           "(owner rwx, 0700). What was written is safe: make them writable and start again "
+                           "(docs/UPGRADING.md)") from None
     except LedgerError:
-        if not is_hybrid(result.principal) and _upgraded_elsewhere(principal_path, passphrase):
-            raise UpgradeError("keys_upgraded_elsewhere: another process upgraded the keys while this one waited "
-                               "for the ledger; start again, which opens the upgraded keys") from None
+        _raise_if_upgraded_elsewhere(result.principal, principal_path, passphrase)
         raise
+
+
+def _raise_if_upgraded_elsewhere(principal, principal_path: Path, passphrase: Passphrase) -> None:
+    """``keys_upgraded_elsewhere`` when this start holds the 0.8.0 key but the file on disk is hybrid now."""
+    if not is_hybrid(principal) and _upgraded_elsewhere(principal_path, passphrase):
+        raise UpgradeError("keys_upgraded_elsewhere: another process upgraded the keys while this one waited "
+                           "for the ledger; start again, which opens the upgraded keys") from None
 
 
 def _upgraded_elsewhere(principal_path: Path, passphrase: Passphrase) -> bool:
@@ -247,7 +279,13 @@ def _already_upgraded(result: Upgrade, constitution: Path | str | None, out: Tex
     """Nothing to upgrade. ``two-key keys upgrade --constitution FILE`` (never a start) signs that file again."""
     if constitution:
         _resign_constitution(Path(constitution), result.principal, result.replaced)
-    _remind(result.ledger, out)
+    ledger = result.ledger
+    upgraded = ledger.last_before(ledger.size(), "keys_upgraded")
+    if upgraded is not None and os.path.lexists(backup_due_path(ledger)):
+        # A start killed after the upgrade never printed what it did (run 13, B5): say it is complete, until the backup.
+        print(f"two-key: the key upgrade to hybrid {HYBRID_ALG} is complete (keys_upgraded at seq {upgraded.seq})",
+              file=out)
+    _remind(ledger, out)
 
 
 def _upgrade(result: Upgrade, principal_path: Path, passphrase: Passphrase, constitution: Path | None) -> None:
@@ -261,15 +299,16 @@ def _upgrade(result: Upgrade, principal_path: Path, passphrase: Passphrase, cons
     capability = _upgrade_file(capability_path, result.replaced)
     stamp = _upgrade_file(capability_path.with_name("stamp.pem"), result.replaced)
     _resign_constitution(constitution, result.principal, result.replaced)
+    # Before keys_upgraded, so a kill right after it still leaves every later start saying to back up (run 13, B5).
+    marker = backup_due_path(ledger)
+    if not os.path.lexists(marker):
+        os.close(_platform.create_new(marker))
     try:
         result.entry = ledger.upgrade_keys(None if ledger.upgrade_pending else result.principal,
                                            capability_key_fingerprint=_fingerprint_of(capability),
                                            stamp_key_fingerprint=_fingerprint_of(stamp))
     except LedgerError as e:
         raise UpgradeError(f"keys_upgrade_stopped: {e}") from None
-    marker = backup_due_path(ledger)
-    if not os.path.lexists(marker):
-        os.close(_platform.create_new(marker))
 
 
 def _upgrade_principal(path: Path, principal, passphrase: Passphrase, replaced: list[str]):

@@ -295,13 +295,19 @@ exactly what it does). A new deployment made by 0.9.0 is hybrid from the start, 
    ```
 
    Let it finish. The account that runs it must be able to write the key folders (it replaces each key file);
-   otherwise it stops with `keys_upgrade_stopped: this account cannot write ...`. What it wrote is safe: fix
-   the modes and start again. Each `.pub.pem` file keeps its mode. If two first starts race, the
-   one that waited says `keys_upgraded_elsewhere` and the next start opens the upgraded keys. If the start is
-   killed part way, the next start goes on from there, with one exception: killed after `keys_upgraded` is
-   written and before the head that covers it, the next start refuses with `signed head does not match the
-   chain`. Run `two-key recover` (HOWTO, "If the ledger will not open after a crash"), then start again; it
-   records `ledger_recovered` and finishes the upgrade. A temporary key file a kill left beside a key
+   otherwise it stops with `keys_upgrade_stopped: this account cannot write the folder <folder> (to replace
+   <key file>)`. What it wrote is safe: make that folder writable by the account (0700) and start again. Each
+   `.pub.pem` file keeps its mode. If two first starts race, every one that lost says `keys_upgraded_elsewhere:
+   ... start again` (or `agent_already_connected`, when another proxy for the agent is already serving), and
+   the next start opens the upgraded keys.
+
+   If the start is killed part way, just start again: the next start goes on from there. A start killed after
+   the upgrade was recorded does not print the "keys upgraded" lines; the next start says `the key upgrade to
+   hybrid ed25519+ml-dsa-65 is complete (keys_upgraded at seq N)` instead, with `back up now`, until the backup
+   in step 5. Run `two-key recover` only if that start refuses with `signed head does not match the chain`,
+   which happens when the kill lands in the instant between the `keys_upgraded` entry and the head that covers
+   it (HOWTO, "If the ledger will not open after a crash"); then start again, and it records
+   `ledger_recovered` and finishes the upgrade. A temporary key file a kill left beside a key
    (`.principal.pem.<pid>.<hex>.tmp`) is removed by the next upgrade.
 5. **Back up again, at once.** Export and verify into a new folder, as in step 6 above. The `back up now` line
    comes back at every start until `two-key backup-export` succeeds. `backup-verify` checks a bundle set by

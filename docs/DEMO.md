@@ -315,10 +315,12 @@ list of tools, and starts a new ledger. It checks its own work and prints one li
 The one `WARN` line is expected. It says one judge decides every call. That is fine for a demo; a real
 setup would add a second judge from another maker.
 
-A small model on a CPU is slow, so give each vote round more time (3 minutes instead of 45 seconds):
+A small model on a CPU is slow, so give each vote round more time (3 minutes instead of 45 seconds), and the
+judge's own request too (it is 30 seconds by default, and a judge not done by then does not vote):
 
 ```bash
 two-key config set --config /opt/two-key/demo/proxy.yaml quorum.timeout_seconds 180
+two-key config set --config /opt/two-key/demo/proxy.yaml judges[0].timeout 170
 ```
 
 Then ask Two-Key whether everything is ready:
@@ -497,14 +499,16 @@ startup file. Two-Key refuses any path with `..` in it: `derive_failed:field_unr
 **More you can show:**
 
 - Ask `Move /srv/notes/todo.txt to /srv/notes/old.txt.` The agent cannot: Two-Key never showed it the
-  `move_file` tool.
+  `move_file` tool. A small model may try something else instead, such as writing `/srv/notes/old.txt`. When
+  ollmcp shows a call you did not ask for, type `n`. The judge sees only the call, not what you typed, so it
+  cannot tell that the call is not what you wanted.
 - Ask `Read /srv/notes/todo.txt.` The judge allows it, and the agent reads the list back.
 
 Small models sometimes get the words wrong, for example by writing `todo.txt` instead of `/srv/notes/todo.txt`.
 Two-Key refuses a path that does not start with `/`, which is the safe result. Just ask again, with the full
 path.
 
-To leave ollmcp, type `quit`.
+To leave ollmcp, type `/quit`.
 
 Finally, show what is in the notes folder. Switch to the `twokey` account (type `exit`, then `sudo -iu twokey`)
 and look:
@@ -605,11 +609,14 @@ When you are done, remove the demo. On Ubuntu, from your own account:
 ```bash
 sudo rm /etc/sudoers.d/two-key-demo
 sudo rm -rf /opt/two-key /opt/notes-mcp /opt/node24 /srv/notes /tmp/two-key-files
-sudo deluser --remove-home twokey
-sudo deluser --remove-home agent
+sudo deluser twokey && sudo rm -rf /home/twokey
+sudo deluser agent && sudo rm -rf /home/agent
+rm -f node-v24.22.2-linux-x64.tar.xz
 ```
 
-This deletes the demo's private key, its ledger and the notes too. Nothing else uses them. To remove the models,
+Run the last line in the folder you downloaded Node.js in. `deluser --remove-home` can stop with "invalid
+characters in input string" on a file a Python 3.14 virtual environment makes (named `𝜋thon`), so the home
+folders are removed with `rm -rf` instead. This deletes the demo's private key, its ledger and the notes too. Nothing else uses them. To remove the models,
 run `ollama rm llama3.2:3b` on Ubuntu, and delete the model in LM Studio's **My Models** tab on Windows. Close the
 tunnel window.
 

@@ -340,6 +340,15 @@ check box on the setup window's Proxy page, or by answering yes when
 `two-key setup` asks on the terminal; turning it off again counts as weaker
 and needs the typed yes.
 
+A hold is its own ledger entry, written just after the `tool_receipt_invalid`
+that calls for it. If the proxy is killed between the two, the next decision
+or call to that tool writes the hold it missed before going on (run 13): a
+bad receipt under `high_assurance` with no redemption after it holds the tool
+until `two-key tool release`, and unanswered calls that reached a count hold
+it until 15 minutes after the last of them (nothing is written if that time is
+already past). Under `high_assurance` the hold for a bad receipt is written
+before the redemption entry.
+
 Other refusals at the gateway, before anything is ledgered as started:
 `tool_args_mismatch` (the token's `tool_args_hash` is not the hash of what
 the gateway would send), `tool_check_needs_proxy`, `stamp_key_missing`.
