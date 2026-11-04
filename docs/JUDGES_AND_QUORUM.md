@@ -234,8 +234,10 @@ What the summary holds:
   `history_basis` names (none means v1).
 - **For the agent**: its recent *attempt episodes*, bursts of at least `burst_denies` (5) denied calls within
   `burst_minutes` (10). The agent is named only when its id is one the operator configured (`agent_id` in
-  `proxy.yaml`, or a monitored agent's id); any other agent is `unnamed`. Each episode is also written to the
-  ledger as `attempt_episode` and sent to the SIEM, so an operator sees it without the judges.
+  `proxy.yaml`, or a monitored agent's id); any other agent is `unnamed`. Each such id still has its own episodes:
+  on a shared ledger, a proxy with no `agent_id` is never shown another agent's bursts as its own (v2; a v1
+  summary filed them all under one `unnamed`). Each episode is also written to the ledger as `attempt_episode` and
+  sent to the SIEM, so an operator sees it without the judges.
 - `now`, and `history_starts`, the time of the oldest dated decision, so a judge can tell "nothing in 90 days" from
   "history began yesterday". A ledger upgraded from 0.7.3 shows its older decisions with `"age": "before_upgrade"`;
   they count in no window, which fill up over the next 90 days.

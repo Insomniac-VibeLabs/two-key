@@ -507,6 +507,36 @@ class FailureAndEpisodes(Base):
         self.run_call(tk, pay(), agent_id=f"{INJECT}-agent")
         self.assertEqual(self.judge.last["agent"], {"agent": "unnamed", "episodes": [], "episodes_90d": 0})
 
+    def test_d4_another_agents_episodes_are_not_shown_as_unnamed(self):
+        """Two proxies on one ledger, one with no agent_id and one for agent-2 (2026-11-04). Each is told only its
+        own id, so agent-2 is an id the first one does not know: its bursts were filed as "unnamed" and shown to the
+        first proxy's judges as that agent's own. v2 keeps each unlisted id apart and still never shows it."""
+        tk = self.start()                       # the proxy with no agent_id: knows no ids
+        for i in range(6):
+            tk.authorize(*pay(f"{INJECT}-{i}"), "x", agent_id="agent-2")
+            self.clock.now += 30
+        self.run_call(tk, pay())
+        self.assertEqual(self.judge.last["agent"], {"agent": "unnamed", "episodes": [], "episodes_90d": 0})
+        # agent-2's own calls still see its burst, under the name a judge may see: "unnamed", never the id.
+        self.run_call(tk, pay(), agent_id="agent-2")
+        agent = self.judge.last["agent"]
+        self.assertEqual((agent["agent"], agent["episodes_90d"]), ("unnamed", 1))
+        self.assertNotIn("agent-2", json.dumps(self.judge.last))
+        # The episode is ledgered once, under the shown name, as before.
+        self.assertEqual([e["agent_id"] for e in self.entries(tk, "attempt_episode")], ["unnamed"])
+
+    def test_d4_v1_still_files_unlisted_ids_as_unnamed(self):
+        """A v1 summary is rebuilt by the audit exactly as 0.8.0 built it."""
+        def v1(*a):
+            return history.HistoryIndex(*a, history.FORMAT_V1)
+        with mock.patch("two_key.core.HistoryIndex", side_effect=v1):
+            tk = self.start()
+        for i in range(6):
+            tk.authorize(*pay(f"{INJECT}-{i}"), "x", agent_id="agent-2")
+            self.clock.now += 30
+        self.run_call(tk, pay())
+        self.assertEqual(self.judge.last["agent"]["episodes_90d"], 1)
+
     def test_d4_a_restart_does_not_ledger_an_episode_again(self):
         ledger = self.ledger()
         tk = self.start(ledger=ledger)

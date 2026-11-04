@@ -192,6 +192,7 @@ SPDX-License-Identifier: Apache-2.0
 - [A checked tool that leaves a call unanswered — 2026-11-03](#a-checked-tool-that-leaves-a-call-unanswered--2026-11-03)
 - [Regression test of the unanswered-call hold — 2026-11-03](#regression-test-of-the-unanswered-call-hold--2026-11-03)
 - [Fixes from GrokBot's run 13 — 2026-11-04](#fixes-from-grokbots-run-13--2026-11-04)
+- [Judge history: one agent's bursts are never shown as another's — 2026-11-04](#judge-history-one-agents-bursts-are-never-shown-as-anothers--2026-11-04)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5594,3 +5595,13 @@ GrokBot's live run 13, the 0.9.0 release gate, at 340c876. Nothing it tried let 
   2026-11-04); `two-key tool release` starts the count from zero.
 - Tests in `tests/test_toolcheck.py`, `tests/test_key_upgrade.py`, `tests/test_mcp_proxy_sdk.py`,
   `tests/test_cli_tokens.py`, `tests/test_path_fields.py` and `tests/test_siem.py`. 1528 tests.
+
+## Judge history: one agent's bursts are never shown as another's — 2026-11-04
+
+- **Judge history v2, agents kept apart** (maintainer's decision, 2026-11-04): each proxy is told only its own
+  `agent_id`, so on a shared ledger every other agent's id was one it did not know, and v1 filed those decisions
+  under `unnamed`, beside the calls that carry no id. A proxy with no `agent_id` then showed its judges another
+  agent's bursts of denied calls as its own agent's attempt episodes. v2 counts each id the operator did not
+  configure in bursts of its own; it is still shown to judges, and ledgered in `attempt_episode`, only as
+  `unnamed`. `audit --check-history` still rebuilds a v1 summary as 0.8.0 built it. Docs: JUDGES_AND_QUORUM.
+  Tests in `tests/test_judge_history.py`. 1539 tests.
