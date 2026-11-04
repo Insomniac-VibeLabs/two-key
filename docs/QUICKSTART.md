@@ -137,7 +137,9 @@ two-key authorize --key principal.pem --ledger ledger --constitution constitutio
   --proposal "Wire the funds"
 ```
 
-The decision says `"allowed": false` and `"reason": "rule_denied:tools"`, and no token is issued.
+The decision says `"allowed": false` and `"reason": "rule_denied:tools"`, and no token is issued. The judge is
+still asked, and its vote is in the decision as a second opinion: it shows whether the judge would have caught the
+call too. It cannot change the answer. Only a call Path A cannot read at all (`derive_failed:`) skips the judges.
 
 ## 6. Look at both in the ledger
 
