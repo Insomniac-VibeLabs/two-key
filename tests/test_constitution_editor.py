@@ -42,7 +42,7 @@ def draft_with_tools() -> ce.Draft:
 class Drafts(unittest.TestCase):
     def test_a_new_draft_has_the_starter_prose_and_needs_a_tool(self):
         draft = ce.new_draft()
-        self.assertIn("Vote yes only when", draft.prose)
+        self.assertIn("Vote yes when the call is an ordinary use", draft.prose)
         self.assertEqual(draft.serial, 1)
         report = ce.check(draft)
         self.assertFalse(report.ok)
@@ -373,7 +373,7 @@ class TryingACall(unittest.TestCase):
         trial = ce.try_call(draft_with_tools(), "pay_vendor", {"amount": 500, "to": "power-co.example"})
         self.assertIs(trial.path_a_allowed, False)
         self.assertEqual(trial.path_a_reason, "rule_denied:spend-cap")
-        self.assertIn("<principal_constitution>\nVote yes only when", trial.user_prompt)
+        self.assertIn("<principal_constitution>\nVote yes when the call is an ordinary use", trial.user_prompt)
         self.assertIn('"amount_usd":500.0', trial.user_prompt)
         self.assertIn("Path B judge", trial.system_prompt)
         text = trial.text()
