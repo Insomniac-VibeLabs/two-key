@@ -210,7 +210,7 @@ class ProxyStart(Base):
         refused = [e.body for e in Ledger(ledger.path, self.key).entries if e.kind == "agent_refused"]
         self.assertEqual(refused[0]["reason"], "agent_account_unlisted")
         self.assertEqual(refused[0]["account"]["uid"], uid)
-        self.assertEqual(project("agent_refused", refused[0]).get("account"), None)
+        self.assertIsNone(project("agent_refused", refused[0]).get("account"))
 
     def test_agent_id_naming_another_entry_is_refused(self):
         from two_key.mcp_proxy.core import served_agent

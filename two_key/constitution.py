@@ -299,6 +299,14 @@ def _field_mappings(tool: str, mapped: Any, registry: Mapping, control_paths: li
     return out
 
 
+def _tool_agents(tool: str, spec: Mapping, agents: list | None) -> dict:
+    """A tool's ``agents`` (two_key/roster.py), canonical; empty when the spec sets none."""
+    if "agents" not in spec:
+        return {}
+    roster_ids = None if agents is None else [a["id"] for a in agents]
+    return {"agents": validate_tool_agents(tool, spec["agents"], roster_ids)}
+
+
 def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None,
                         agents: list | None = None) -> dict:
     """Canonical tool specs. Every allow-listed tool must have one.
@@ -324,7 +332,6 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None,
     needs the canonical roster, passed as ``agents``.
     """
     registry = fields or {}
-    roster_ids = None if agents is None else [a["id"] for a in agents]
     if not isinstance(specs, Mapping):
         raise ConstitutionError("tool_specs must be a mapping")
     allowed_keys = set(TOOL_SPEC_KEYS)
@@ -443,8 +450,7 @@ def validate_tool_specs(specs: Any, rules: list, fields: Mapping | None = None,
         if fields_out:      # absent for a tool with no custom fields, so its spec hashes as before
             out[tool]["fields"] = fields_out
         out[tool].update(_tool_check(tool, spec))      # absent unless set, for the same reason
-        if "agents" in spec:                            # absent unless set: no roster means every caller
-            out[tool]["agents"] = validate_tool_agents(tool, spec["agents"], roster_ids)
+        out[tool].update(_tool_agents(tool, spec, agents))      # absent unless set: no roster means any caller
     allow = _allow_listed(rules)
     missing = [tool for tool in allow if tool not in out]
     if missing:
