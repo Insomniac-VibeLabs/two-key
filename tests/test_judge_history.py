@@ -335,6 +335,23 @@ class AcceptanceCases(Base):
         self.assertEqual(len(problems), 1)
         self.assertIn("does not match", problems[0])
 
+    def test_12b_the_audit_rebuilds_a_0_8_0_history_as_v1(self):
+        """A decision before 0.9.0 has no format in its history_basis and was built as v1; it still checks."""
+        def v1(*a):
+            return history.HistoryIndex(*a, history.FORMAT_V1)
+        with mock.patch("two_key.core.HistoryIndex", side_effect=v1):
+            tk = self.start()
+        self.run_call(tk, pay())
+        tk.authorize({"tool": "wire_money"}, {}, "x")
+        self.run_call(tk, pay())
+        entries = []
+        for e in tk.ledger.entries:
+            basis = e.body.get("history_basis") if e.kind == "decision" else None
+            if basis:
+                self.assertEqual(basis.pop("format"), history.FORMAT_V1)
+            entries.append(e)
+        self.assertEqual(check_history_digests(SimpleNamespace(entries=entries), self.con), [])
+
     def test_13_the_audit_checks_two_processes_on_one_ledger(self):
         # Two proxies on one ledger, each for its own agent, load with different agent ids; a decision does not say
         # which process made it. Live run (2026-10-27): a third load after both made the audit pick the wrong one.
@@ -528,6 +545,89 @@ class FailureAndEpisodes(Base):
         mine_ledger = Ledger(self.dir / "ledger", self.key)
         mine = self.start([Recording(hook=lambda: other.authorize(*pay("beta-corp"), "x"))], ledger=mine_ledger)
         self.assertTrue(mine.authorize(*pay(), "pay it").allowed)
+
+
+class HeldRefusals(unittest.TestCase):
+    """History v2 (run 13, maintainer's decision 2026-11-04): a call refused because its tool is held shows to the
+    judges apart from the agent's denies, and the burst count takes the first one per hold; ten more within ten
+    minutes are an episode of their own."""
+
+    @staticmethod
+    def entries(plan):
+        """``plan``: ("hold", until) / ("release",) / ("deny", reason, at offset)."""
+        out = []
+        for step in plan:
+            if step[0] == "hold":
+                body = {"tool": "pay", "jti": "j", "why": "missing", **({"until": step[1]} if step[1] else {})}
+                out.append(SimpleNamespace(seq=len(out), kind="tool_held", body=body))
+            elif step[0] == "release":
+                out.append(SimpleNamespace(seq=len(out), kind="tool_released", body={"tool": "pay", "reason": "r"}))
+            else:
+                body = {"allowed": False, "reason": step[1], "at": history.format_time(T0 + step[2]),
+                        "subject": {"tool": "pay", "counterparties": [], "amount_usd": None},
+                        "agent": {"id": "grok"}}
+                out.append(SimpleNamespace(seq=len(out), kind="decision", body=body))
+        return out
+
+    def index(self, plan, fmt=history.FORMAT):
+        index = history.HistoryIndex(history.JudgeHistoryPolicy(), {"pay": {}}, (), ("grok",), fmt)
+        found = index.sync(self.entries(plan))
+        return index, found
+
+    def test_judges_see_held_refusals_apart_from_denies(self):
+        index, found = self.index([("hold", None)] + [("deny", "tool_held", i) for i in range(3)]
+                                  + [("deny", "rule_denied:cap", 5)])
+        summary = index.summary(T0 + 10, tool="pay", agent={"id": "grok"})
+        self.assertEqual(summary["format"], "two-key-judge-history-v2")
+        tool = summary["this_tool"]
+        self.assertIs(tool["held_now"], True)
+        self.assertEqual(tool["held_refusals"], {"1h": 3, "24h": 3})
+        self.assertEqual(tool["denied_1h"], {"rule_denied:cap": 1})
+        self.assertEqual([d["reason"] for d in tool["last_decisions"]], ["rule_denied:cap"])
+        self.assertEqual(summary["all_tools"]["1h"]["held_refusals"], 3)
+        self.assertEqual(summary["all_tools"]["1h"]["denied"], {"rule_denied:cap": 1})
+        self.assertEqual(found, [])
+
+    def test_a_release_ends_held_now(self):
+        index, _ = self.index([("hold", None), ("deny", "tool_held", 0), ("release",)])
+        self.assertIs(index.summary(T0 + 1, tool="pay")["this_tool"]["held_now"], False)
+
+    def test_a_timed_hold_ends_at_until(self):
+        index, _ = self.index([("hold", int(T0) + 60), ("deny", "tool_held", 0)])
+        self.assertIs(index.summary(T0 + 59, tool="pay")["this_tool"]["held_now"], True)
+        self.assertIs(index.summary(T0 + 60, tool="pay")["this_tool"]["held_now"], False)
+
+    def test_only_the_first_refusal_per_hold_counts_towards_a_burst(self):
+        plan = [("hold", None)] + [("deny", "tool_held", i) for i in range(9)]
+        _, found = self.index(plan + [("deny", "rule_denied:cap", 10 + i) for i in range(3)])
+        self.assertEqual(found, [])          # 1 held + 3 rule denies: under 5
+        _, found = self.index(plan + [("deny", "rule_denied:cap", 10 + i) for i in range(4)])
+        self.assertEqual([e.reasons for e in found], [{"rule_denied:cap": 4, "tool_held": 1}])
+
+    def test_ten_more_refusals_in_ten_minutes_are_their_own_episode(self):
+        _, found = self.index([("hold", None)] + [("deny", "tool_held", i * 30) for i in range(11)])
+        self.assertEqual([(e.reasons, e.denies) for e in found], [({"held_retries": 10}, 10)])
+        _, found = self.index([("hold", None)] + [("deny", "tool_held", i * 70) for i in range(11)])
+        self.assertEqual(found, [])          # spread over more than ten minutes
+
+    def test_a_new_hold_counts_its_first_refusal_again(self):
+        plan = [("hold", None), ("deny", "tool_held", 0), ("release",), ("hold", None), ("deny", "tool_held", 1)]
+        plan += [("deny", "rule_denied:cap", 2 + i) for i in range(3)]
+        _, found = self.index(plan)
+        self.assertEqual([e.reasons for e in found], [{"rule_denied:cap": 3, "tool_held": 2}])
+
+    def test_v1_is_unchanged(self):
+        index, _ = self.index([("hold", None)] + [("deny", "tool_held", i) for i in range(3)], history.FORMAT_V1)
+        summary = index.summary(T0 + 10, tool="pay")
+        self.assertEqual(summary["format"], "two-key-judge-history-v1")
+        self.assertNotIn("held_refusals", summary["this_tool"])
+        self.assertEqual(summary["this_tool"]["denied_1h"], {"other": 3})
+        self.assertNotIn("held_refusals", summary["all_tools"]["1h"])
+
+    def test_an_unknown_format_is_refused(self):
+        policy = history.JudgeHistoryPolicy()
+        with self.assertRaisesRegex(history.HistoryConfigError, "unknown judge history format"):
+            history.HistoryIndex(policy, {}, (), (), "two-key-judge-history-v9")
 
 
 class OneProxyPerAgent(Base):

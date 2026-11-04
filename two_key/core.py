@@ -972,7 +972,8 @@ class TwoKey:
                                                 amount_mapped=amount_mapped, agent=agent, in_flight=in_flight,
                                                 scanned=scanned)
             canonical_bytes(summary)      # what the judges and the digest read; it must encode
-            return summary, {"now": now, "ledger_size": built, "in_flight": in_flight}, None
+            return summary, {"now": now, "ledger_size": built, "in_flight": in_flight,
+                             "format": self._history.format}, None
         except Exception as e:      # deny, or judge without it (on_failure); recorded either way
             return None, None, _history_error(e)
 

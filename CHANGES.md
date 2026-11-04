@@ -5579,6 +5579,11 @@ GrokBot's live run 13, the 0.9.0 release gate, at 340c876. Nothing it tried let 
   insensitive`, a local judge's 30-second `timeout`), SETUP (a one-account starter-tool test needs weaker
   settings), DEMO (`judges[0].timeout` beside the round's, answer `n` to a call you did not ask for, `/quit`, a
   clean-up that works with Python 3.14 venvs and removes the Node.js download).
+- **Judge history v2** (`two-key-judge-history-v2`; maintainer's decision, 2026-11-04): calls refused because the
+  tool is held are shown to the judges apart, as `held_now` and `held_refusals`, never among the denies or the last
+  decisions. The attempt-episode count takes the agent's first refusal under each hold; 10 more within 10 minutes
+  are their own episode, reason `held_retries`. `history_basis` records the format, and `audit --check-history`
+  rebuilds older decisions as v1. Tests in `tests/test_judge_history.py`.
 - **Starter prose** (new setups only; a signed constitution does not change): the judge now votes on whether the
   call is an ordinary use of its tool with arguments that look right, and fits the reason given for it when one is
   shown (judges see the proposal only with `receives_proposal`). The old text asked about the operator's request, which the

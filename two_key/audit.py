@@ -159,7 +159,7 @@ class _HistoryRebuild:
 
     def check(self, entry, start, constitution_digest: str) -> str | None:
         """Why one decision's ``history_digest`` was not confirmed, or None when the rebuilt summary matches."""
-        from .history import HistoryIndex, digest
+        from .history import FORMAT_V1, FORMATS, HistoryIndex, digest
         body, basis = entry.body, entry.body.get("history_basis")
         problem = _history_basis_problem(start, basis, entry.seq, constitution_digest)
         if problem is not None:
@@ -168,10 +168,13 @@ class _HistoryRebuild:
         if policy is None:
             return "constitution_loaded judge_history settings do not load"
         ids = tuple(start.get("history_agent_ids") or ())
-        key = canonical_hash({"policy": policy.to_record(), "ids": list(ids)})
+        fmt = basis.get("format", FORMAT_V1)          # a decision before 0.9.0 has no format: v1
+        if fmt not in FORMATS:
+            return f"history_basis names an unknown history format {fmt!r}"
+        key = canonical_hash({"policy": policy.to_record(), "ids": list(ids), "format": fmt})
         index = self.indexes.get(key)
         if index is None or index.seen > basis["ledger_size"]:
-            index = self.indexes[key] = HistoryIndex(policy, self.specs, self.blocked, ids)
+            index = self.indexes[key] = HistoryIndex(policy, self.specs, self.blocked, ids, fmt)
         index.sync(self.entries[:basis["ledger_size"]])
         if digest(_rebuilt_summary(index, body, basis, self.specs, "scanner" in start)) != body["history_digest"]:
             return "history_digest does not match the summary rebuilt from the ledger"

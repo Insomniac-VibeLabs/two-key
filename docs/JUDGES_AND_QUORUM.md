@@ -223,6 +223,15 @@ What the summary holds:
   with every call to the tool (`"counterparty": null`). Amounts appear only for a tool whose spec maps one.
 - **For all tools**: allowed calls, denies by reason code, abstaining ballots, declines and malformed calls over
   the last hour and the last day.
+- **Calls to a held tool** (format `two-key-judge-history-v2`, 0.9.0): a call refused `tool_held` is the tool's
+  state, not the agent's choice, so it is never among the denies or the last decisions. The tool part shows
+  `held_now` (whether the tool is held now) and `held_refusals` (such refusals in the last hour and day), and the
+  all-tools counts show `held_refusals` too. The judge weighs them: a few tries during an outage are normal, dozens
+  are not. In the attempt-episode count only the agent's first refusal under each hold is a deny; 10 more within
+  10 minutes make an episode of their own, with reason `held_retries`, ledgered as `attempt_episode` and sent to the
+  SIEM. A tool's own failures (`tool_error:`) count as before, since an agent's input can cause them. A decision
+  made before 0.9.0 recorded a v1 summary; `audit --check-history` rebuilds each one in the format its
+  `history_basis` names (none means v1).
 - **For the agent**: its recent *attempt episodes*, bursts of at least `burst_denies` (5) denied calls within
   `burst_minutes` (10). The agent is named only when its id is one the operator configured (`agent_id` in
   `proxy.yaml`, or a monitored agent's id); any other agent is `unnamed`. Each episode is also written to the

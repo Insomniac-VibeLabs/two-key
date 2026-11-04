@@ -62,7 +62,8 @@ class RepeatedKeys(unittest.TestCase):
 
     CALL = '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"write_file","arguments":%s}}\n'
 
-    def marked(self, line):
+    @staticmethod
+    def marked(line):
         params = json.loads(sdk.mark_repeated_keys(line)).get("params") or {}
         return (params.get("_meta") or {}).get(sdk.REPEATED_KEY_MARK, False)
 
