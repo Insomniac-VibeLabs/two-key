@@ -169,6 +169,8 @@ class ToolAccess(Base):
         d = tk.authorize(*self.CALL, "pay it", agent_id="public")
         self.assertFalse(d.allowed)
         self.assertEqual(d.reason, "tool_not_for_agent")
+        refused = [e.body for e in tk.ledger.entries if e.kind == "decision"][-1]
+        self.assertEqual((refused["tool"], refused["subject"]["tool"]), ("pay", "pay"))   # the audit sees which tool
         self.assertFalse(tk.authorize(*self.CALL, "pay it").allowed)        # no agent at all
         d = tk.authorize(*self.CALL, "pay it", agent_id="billing", agent_account="tk-billing")
         self.assertTrue(d.allowed, d.reason)
@@ -252,6 +254,22 @@ class ProxyStart(Base):
         hold_agent_lock(tk, self.config())
         self.assertIsNotNone(tk.agent_lock_fd)
 
+
+    def test_a_second_proxy_for_a_roster_agent_is_told_the_roster_way_out(self):
+        from two_key.mcp_proxy.config import ProxyConfigError
+        from two_key.mcp_proxy.core import hold_agent_lock
+        first = self.start(agents())
+        first.served_agent = roster.ServedAgent("billing", 1, "tk-billing", "roster")
+        hold_agent_lock(first, self.config())
+        second = self.start(agents())
+        second.served_agent = roster.ServedAgent("billing", 1, "tk-billing", "roster")
+        config = self.config()
+        with self.assertRaises(ProxyConfigError) as caught:
+            quiet(hold_agent_lock, second, config)
+        message = str(caught.exception)
+        self.assertIn("agent_already_connected", message)
+        self.assertIn("shared: true", message)
+        self.assertNotIn("its own agent_id", message)        # with a roster, a second agent_id is a mismatch
 
 class Diversity(Base):
     CALL = ({"tool": "note", "data_class": "public"}, {"memo": "x"})

@@ -622,9 +622,12 @@ def hold_agent_lock(tk: Any, config: ProxyConfig) -> None:
         tk.ledger.record("agent_already_connected", {"agent_id": agent, "origin": ORIGIN})
     finally:
         tk.close()
+    # With a signed roster the account picks the agent, so a second agent_id is no way out (agent_account_mismatch).
+    other = ("give that agent a second roster entry on its own account, or mark its entry shared: true"
+             if served is not None and served.source == "roster" else "give each session its own agent_id")
     raise ProxyConfigError(f"agent_already_connected: another two-key mcp-proxy is serving agent {agent!r} on this "
                            "ledger; stop it first (a dead SSH session's proxy goes with sshd ClientAliveInterval), "
-                           "or give each session its own agent_id, or set one_proxy_per_agent: false")
+                           f"or {other}, or set one_proxy_per_agent: false")
 
 
 def _program(name: str) -> str | None:

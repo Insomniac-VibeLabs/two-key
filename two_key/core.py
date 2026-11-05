@@ -678,7 +678,8 @@ class TwoKey:
             spec = self.compiled.tool_specs.get(normalized.tool)
         if spec is not None and not tool_allows(spec, (agent or {}).get("id")):
             # The signed roster gives this tool to other agents (two_key/roster.py): no judge sees the call.
-            return self._deny(origin, "tool_not_for_agent", agent, None, None)
+            return self._deny(origin, "tool_not_for_agent", agent, None, None, {"tool": normalized.tool},
+                              subject_tool=normalized.tool)
         held = self._held_deny(spec, normalized.tool, origin, agent)
         if held:
             return held

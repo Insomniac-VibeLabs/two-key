@@ -104,8 +104,9 @@ With a roster, the MCP proxy:
 
 1. Reads the account of the process that started it, as it has since 0.7.0 (`on_agent_access`), and still
    refuses root, Two-Key's own account, and an account that can change Two-Key's files.
-2. Finds the roster entry whose account has the same number (uid). Names are looked up when the proxy starts,
-   so a renamed account still matches.
+2. Finds the roster entry whose account has the same number (uid). Each roster name is looked up when the proxy
+   starts, and the numbers are compared. After you rename an account, put the new name in the roster and sign it
+   again; until then that agent's proxy refuses to start (`agent_account_unlisted`).
 3. Refuses to start when no entry has that account (`agent_account_unlisted`), or when `proxy.yaml` sets an
    `agent_id` that names another entry (`agent_account_mismatch`). Each refusal is recorded in the ledger as
    `agent_refused` with its reason, and goes to the SIEM.

@@ -194,6 +194,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Fixes from GrokBot's run 13 — 2026-11-04](#fixes-from-grokbots-run-13--2026-11-04)
 - [Judge history: one agent's bursts are never shown as another's — 2026-11-04](#judge-history-one-agents-bursts-are-never-shown-as-anothers--2026-11-04)
 - [Agents told apart by the account they run as — 2026-11-04](#agents-told-apart-by-the-account-they-run-as--2026-11-04)
+- [Regression test of the agent roster — 2026-11-05](#regression-test-of-the-agent-roster--2026-11-05)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5648,3 +5649,19 @@ Three more run 13 items, decided 2026-11-05:
 - `validate_tool_specs` is split into one small helper per part of a spec (amount, counterparties, payload, and the
   rest), with the same checks in the same order and the same signed output, so SonarCloud's complexity rule
   passes (it was 102 against a limit of 15).
+
+## Regression test of the agent roster — 2026-11-05
+
+Claude ran the roster live on Linux before the 0.9.0 release: three real agent accounts started one
+`proxy.yaml` through the sudo wrapper, in the default profile and under `high_assurance`. Each account got its
+own agent, its own tools and its own judge history; an unlisted account, a renamed account and a mismatched
+`agent_id` were refused and ledgered; a second proxy for one agent was refused; `require_other_maker` refused to
+start with only a same-maker judge; and `audit` passed. Three fixes:
+
+- A call denied `tool_not_for_agent` now records the tool (`tool` and `subject.tool`), as `tool_held` does. Before,
+  the decision said which agent but not which tool, and the judges' history showed the attempt episode with no
+  tools.
+- `agent_already_connected` no longer tells a roster agent to give each session its own `agent_id`, which the
+  roster refuses (`agent_account_mismatch`). It points to a second roster entry or `shared: true`.
+- AGENT_ROSTER said a renamed account still matches. It does not: the roster's names are looked up when the
+  proxy starts, so after a rename, put the new name in the roster and sign it again.
