@@ -5422,10 +5422,21 @@ detail.
 - **Folder-path rules for key one** (`type: path`): a custom field that admits any file inside signed folders,
   cleaned as text only, with `..` and relative paths refused, and a link check just before the tool runs
   ("Folder-path fields for Path A" below).
-- **Live testing**: GrokBot's run 12 tested the key upgrade on copies of a 0.8.0 deployment, hybrid signatures,
-  the tool check and the setup window. Nothing it found let a forbidden call run; its live cases that did not
-  pass were stale or too narrow, and its findings are fixed ("Live run 12 findings").
-- 1502 tests.
+- **A checked tool that leaves calls unanswered** can be held for 15 minutes (`unanswered_hold` in `proxy.yaml`,
+  always on under `high_assurance`), and the Python helper signs ordinary tool errors ("A checked tool that leaves
+  a call unanswered" below).
+- **A signed agent roster** (`agents:` in the rules file): each agent is tied to the account it runs as, the proxy
+  serves the entry for the account that started it and refuses any other, every decision records the account,
+  and each tool can name the agents that may use it. Required under `high_assurance`. Opt-in
+  `quorum.require_other_maker` needs a yes from a judge of another maker. docs/AGENT_ROSTER.md ("Agents told
+  apart by the account they run as" below).
+- **Judge history v2**: held-tool refusals are shown to the judges apart and counted once per hold, and each
+  agent's bursts are kept apart.
+- **Live testing**: GrokBot's runs 12 and 13 tested the key upgrade on copies of a 0.8.0 deployment, hybrid
+  signatures, the tool check, the setup window and the release as a whole. Nothing either found let a forbidden
+  call run, and their findings are fixed ("Live run 12 findings", "Fixes from GrokBot's run 13"). Claude also
+  ran the agent roster live with real accounts ("Regression test of the agent roster").
+- 1576 tests.
 
 ### Upgrading from 0.8.0
 
