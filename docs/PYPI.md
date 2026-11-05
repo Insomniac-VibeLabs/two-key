@@ -14,7 +14,7 @@ registered. It does not change what Two-Key does.
 `0.7.2` are packaging releases of the 0.7.0 code, made from the `PyPI` branch,
 which swaps the Mermaid diagrams for pictures (PyPI shows the README and
 nothing under `docs/`) and names its own version in the install lines.
-`0.7.3` was the next release of the code, tag `v0.7.3` on `main`, `0.8.0`, tag `v0.8.0`, followed it, and `0.9.0`, tag `v0.9.0`, is next. PyPI treats `two-key`, `two_key`, and `two.key` as the same
+`0.7.3` was the next release of the code, tag `v0.7.3` on `main`, `0.8.0`, tag `v0.8.0`, followed it, and `0.9.0`, tag `v0.9.0`, followed that. PyPI treats `two-key`, `two_key`, and `two.key` as the same
 project. The import name stays `two_key`. The public 1.0 review in
 [ROADMAP.md](../ROADMAP.md) is still ahead.
 
