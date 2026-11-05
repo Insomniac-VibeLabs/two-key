@@ -196,6 +196,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Agents told apart by the account they run as — 2026-11-04](#agents-told-apart-by-the-account-they-run-as--2026-11-04)
 - [Regression test of the agent roster — 2026-11-05](#regression-test-of-the-agent-roster--2026-11-05)
 - [Roadmap: the SSH live run and the 1.0 freeze before 1.0.0 — 2026-11-05](#roadmap-the-ssh-live-run-and-the-10-freeze-before-100--2026-11-05)
+- [PYPI.md after the 0.9.0 release — 2026-11-05](#pypimd-after-the-090-release--2026-11-05)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5692,3 +5693,9 @@ README and ROADMAP mark 0.9.0 released with what it ships. Two items planned for
 maintainer's decisions of 2026-11-05: the live run with the agent on another machine over SSH, and the 1.0
 freeze (what 1.0 keeps stable, written in UPGRADING.md). Both are now 1.0.0 criteria. 0.9.1 is the TypeScript
 tool-check helper and fixes from the 0.9.0 review.
+
+## PYPI.md after the 0.9.0 release — 2026-11-05
+
+PYPI.md no longer calls 0.9.0 the next release; it followed 0.8.0. DeepSource's PTC-W6004 on
+`config_cmd.py` (the constitution's mode check opens the operator's own configured file, already read) was
+audited as a false positive and gets a file-level ignore rule in DeepSource, not a code suppression.
