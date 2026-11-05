@@ -195,6 +195,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Judge history: one agent's bursts are never shown as another's — 2026-11-04](#judge-history-one-agents-bursts-are-never-shown-as-anothers--2026-11-04)
 - [Agents told apart by the account they run as — 2026-11-04](#agents-told-apart-by-the-account-they-run-as--2026-11-04)
 - [Regression test of the agent roster — 2026-11-05](#regression-test-of-the-agent-roster--2026-11-05)
+- [Roadmap: the SSH live run and the 1.0 freeze before 1.0.0 — 2026-11-05](#roadmap-the-ssh-live-run-and-the-10-freeze-before-100--2026-11-05)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5684,3 +5685,10 @@ start with only a same-maker judge; and `audit` passed. Three fixes:
   roster refuses (`agent_account_mismatch`). It points to a second roster entry or `shared: true`.
 - AGENT_ROSTER said a renamed account still matches. It does not: the roster's names are looked up when the
   proxy starts, so after a rename, put the new name in the roster and sign it again.
+
+## Roadmap: the SSH live run and the 1.0 freeze before 1.0.0 — 2026-11-05
+
+README and ROADMAP mark 0.9.0 released with what it ships. Two items planned for 0.9.0 move, by the
+maintainer's decisions of 2026-11-05: the live run with the agent on another machine over SSH, and the 1.0
+freeze (what 1.0 keeps stable, written in UPGRADING.md). Both are now 1.0.0 criteria. 0.9.1 is the TypeScript
+tool-check helper and fixes from the 0.9.0 review.

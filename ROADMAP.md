@@ -17,7 +17,7 @@ promise: the order may change, and version numbers are targets, not dates.
 - [Ground rules](#ground-rules)
 - [0.8.0: Judge history and ballot records](#080-judge-history-and-ballot-records)
 - [0.9.0: Tool check, agent roster and hybrid signatures](#090-tool-check-agent-roster-and-hybrid-signatures)
-- [0.9.1: The 1.0 freeze and a TypeScript helper](#091-the-10-freeze-and-a-typescript-helper)
+- [0.9.1: A TypeScript helper](#091-a-typescript-helper)
 - [1.0.0: First stable release](#100-first-stable-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
   - [PKI and certificate recovery](#pki-and-certificate-recovery)
@@ -48,7 +48,7 @@ flowchart TD
   end
   subgraph next["Next: 0.9.1, then 1.0.0"]
     direction LR
-    r091["0.9.1<br/>1.0 freeze,<br/>TS helper"] --> r10["1.0.0<br/>SSH live run,<br/>stable release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
+    r091["0.9.1<br/>TS helper,<br/>fixes"] --> r10["1.0.0<br/>SSH live run,<br/>1.0 freeze,<br/>stable release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
   end
   done --> next
 ```
@@ -64,8 +64,8 @@ flowchart TD
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a signed agent roster, a quickstart and a real-MCP-server demo, folder-path rules for key one, and a setup window | Released, tag `v0.9.0` |
-| 0.9.1 | The 1.0 freeze written in UPGRADING.md, a TypeScript tool-check helper as its own npm package, and fixes from the 0.9.0 review | Planned |
-| 1.0.0 | The first stable release, after a live run with the agent on another machine over SSH and a public community review of 0.9.0 | Planned |
+| 0.9.1 | A TypeScript tool-check helper as its own npm package, and fixes from the 0.9.0 review | Planned |
+| 1.0.0 | The first stable release, after a live run with the agent on another machine over SSH, a public community review of 0.9.0, and the 1.0 freeze written in UPGRADING.md | Planned |
 | After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
@@ -91,7 +91,7 @@ in the same release.
   as, key one gets folder-path rules, and setup has a window. Live runs 12 and
   13 checked it with real judges and found no forbidden call that ran; their
   findings are fixed. The SSH live run is now required before 1.0.0, not
-  0.9.0, and the 1.0 freeze moved to 0.9.1 (maintainer's decision, 2026-11-05).
+  0.9.0, and the 1.0 freeze is now a 1.0.0 criterion (maintainer's decisions, 2026-11-05).
 - **0.8.0** (tag `v0.8.0`): Judges get a
   summary of recent decisions from the ledger (#1), each judge's ballot is
   recorded without its rationale text, one proxy serves each agent on a
@@ -201,7 +201,7 @@ CHANGES.md "Release v0.8.0" lists what shipped.
 
 Version 0.9.0, the last beta: released, tag `v0.9.0` on `main`, and on PyPI. CHANGES.md "Release v0.9.0"
 lists what ships. The SSH live run, planned here, is now required before 1.0.0 instead, and the 1.0 freeze
-moved to 0.9.1 (maintainer's decision, 2026-11-05).
+is now a 1.0.0 criterion (maintainer's decisions, 2026-11-05).
 
 - An optional tool-side token check (#28): a way for a tool, or a thin
   wrapper in front of it, to check that a call was authorized. Off by
@@ -227,22 +227,22 @@ moved to 0.9.1 (maintainer's decision, 2026-11-05).
 - Before release: a live round across the full case list plus the new
   cases (runs 12 and 13).
 
-## 0.9.1: The 1.0 freeze and a TypeScript helper
+## 0.9.1: A TypeScript helper
 
-Planned (maintainer's decisions, 2026-11-03 and 2026-11-05), after 0.9.0 ships:
+Planned (maintainer's decision, 2026-11-03), after 0.9.0 ships:
 
-- A freeze for 1.0: what 1.0 keeps stable (constitution, rules and judge configuration shapes, the ledger and
-  token formats, the SIEM schema, the CLI and its exit codes, the public Python API), written in
-  [UPGRADING.md](docs/UPGRADING.md). Moved from 0.9.0.
 - A TypeScript helper for the tool check (#28), so an MCP server on the TypeScript SDK can check the token and
   sign its receipt as `two_key.toolcheck` does for Python. It is its own npm package with its own release, so
-  the Python package and its 1.0 freeze do not change; the wire format and test vectors in
+  the Python package does not change; the wire format and test vectors in
   docs/TOOL_CHECK.md are what it must match. Like the Python helper, it signs an ordinary tool error rather
   than sending no receipt.
 - Fixes from the 0.9.0 review, as for any 0.9.x.
 
 ## 1.0.0: First stable release
 
+- The 1.0 freeze: what 1.0 keeps stable (constitution, rules and judge configuration shapes, the ledger and
+  token formats, the SIEM schema, the CLI and its exit codes, the public Python API), written in
+  [UPGRADING.md](docs/UPGRADING.md). A 1.0.0 criterion, not a 0.9.x one (maintainer's decision, 2026-11-05).
 - A live run with the agent on another machine over SSH ("Where we are" above), on machines the maintainer
   sets up. The network transport question is answered with the standing decision: stdio only, remote agents
   over SSH. Required before 1.0.0, not 0.9.0 (maintainer's decision, 2026-11-05).
