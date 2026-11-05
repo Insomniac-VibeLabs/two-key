@@ -42,7 +42,7 @@ def draft_with_tools() -> ce.Draft:
 class Drafts(unittest.TestCase):
     def test_a_new_draft_has_the_starter_prose_and_needs_a_tool(self):
         draft = ce.new_draft()
-        self.assertIn("Vote yes only when", draft.prose)
+        self.assertIn("Vote yes when the call is an ordinary use", draft.prose)
         self.assertEqual(draft.serial, 1)
         report = ce.check(draft)
         self.assertFalse(report.ok)
@@ -274,6 +274,17 @@ class Signing(unittest.TestCase):
         if os.name == "posix":
             self.assertEqual(os.stat(saved.rules).st_mode & 0o077, 0)
 
+    @unittest.skipIf(os.name != "posix", "POSIX modes")
+    def test_the_signed_constitution_is_owner_only_whatever_the_umask(self):
+        """GUI guide run: constitution.signed.json came out 0644 under umask 022, beside setup's 0600 files."""
+        old = os.umask(0o022)
+        try:
+            saved = ce.sign_and_save(draft_with_tools(), self.key, self.dir)
+        finally:
+            os.umask(old)
+        for path in (saved.prose, saved.rules, saved.signed):
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600, path)
+
     def test_a_json_rules_file(self):
         saved = ce.sign_and_save(draft_with_tools(), self.key, self.dir, {"rules": "rules.json"})
         self.assertEqual(json.loads(Path(saved.rules).read_text(encoding="utf-8"))["serial"], 1)
@@ -357,12 +368,49 @@ class Signing(unittest.TestCase):
         self.assertEqual(len(ce.save_sources(ce.new_draft(), self.dir, overwrite=True)), 2)
 
 
+def roster_draft() -> ce.Draft:
+    draft = draft_with_tools()
+    draft.agents = [{"id": "coder", "account": "tk-coder"}, {"id": "billing", "account": "tk-billing"}]
+    draft.tool_specs["pay_vendor"]["agents"] = ["billing"]
+    return draft
+
+
+class Roster(unittest.TestCase):
+    """The signed agent roster (0.9.0) goes through the editor: checked, signed, written, and opened again."""
+
+    def test_the_roster_is_signed_and_reads_back(self):
+        report = ce.check(roster_draft())
+        self.assertTrue(report.ok, report.error)
+        self.assertEqual([a["id"] for a in report.body["agents"]], ["billing", "coder"])
+        with tempfile.TemporaryDirectory() as tmp:
+            key = generate_private_key()
+            saved = ce.sign_and_save(roster_draft(), key, tmp)
+            again, _ = ce.open_signed(saved.signed, key.public_key())
+            self.assertEqual([a["id"] for a in again.agents], ["billing", "coder"])
+            self.assertEqual(ce.check(again).body["agents"], report.body["agents"])
+            self.assertEqual(ce.check(ce.open_sources(saved.prose, saved.rules)).digest, saved.digest)
+
+    def test_a_bad_roster_does_not_sign(self):
+        draft = roster_draft()
+        draft.agents.append({"id": "other", "account": "tk-coder"})
+        self.assertIn("share the account", ce.check(draft).error)
+        draft = draft_with_tools()
+        draft.tool_specs["pay_vendor"]["agents"] = ["billing"]
+        self.assertIn("needs an agents: roster", ce.check(draft).error)
+
+    def test_a_trial_comes_from_an_agent_the_tool_names(self):
+        trial = ce.try_call(roster_draft(), "pay_vendor", {"amount": 50, "to": "power-co.example"})
+        self.assertEqual(trial.decision_reason, "both_paths_allow")
+        trial = ce.try_call(roster_draft(), "pay_vendor", {"amount": 50, "to": "power-co.example"}, agent="coder")
+        self.assertEqual(trial.decision_reason, "tool_not_for_agent")
+
+
 class TryingACall(unittest.TestCase):
     def test_path_a_denies_and_the_judge_prompt_is_shown(self):
         trial = ce.try_call(draft_with_tools(), "pay_vendor", {"amount": 500, "to": "power-co.example"})
         self.assertIs(trial.path_a_allowed, False)
         self.assertEqual(trial.path_a_reason, "rule_denied:spend-cap")
-        self.assertIn("<principal_constitution>\nVote yes only when", trial.user_prompt)
+        self.assertIn("<principal_constitution>\nVote yes when the call is an ordinary use", trial.user_prompt)
         self.assertIn('"amount_usd":500.0', trial.user_prompt)
         self.assertIn("Path B judge", trial.system_prompt)
         text = trial.text()

@@ -14,7 +14,7 @@ registered. It does not change what Two-Key does.
 `0.7.2` are packaging releases of the 0.7.0 code, made from the `PyPI` branch,
 which swaps the Mermaid diagrams for pictures (PyPI shows the README and
 nothing under `docs/`) and names its own version in the install lines.
-`0.7.3` was the next release of the code, tag `v0.7.3` on `main`, and `0.8.0`, tag `v0.8.0`, followed it. PyPI treats `two-key`, `two_key`, and `two.key` as the same
+`0.7.3` was the next release of the code, tag `v0.7.3` on `main`, `0.8.0`, tag `v0.8.0`, followed it, and `0.9.0`, tag `v0.9.0`, is next. PyPI treats `two-key`, `two_key`, and `two.key` as the same
 project. The import name stays `two_key`. The public 1.0 review in
 [ROADMAP.md](../ROADMAP.md) is still ahead.
 
@@ -27,16 +27,16 @@ pip install "two-key[mcp]==X.Y.Z"
 ```
 
 `X.Y.Z` is a version listed on the [project page](https://pypi.org/project/two-key/#history).
-The tag `v0.8.0` on `main` is the git snapshot of `0.8.0`, and can be installed
+The tag `v0.9.0` on `main` is the git snapshot of `0.9.0`, and can be installed
 directly:
 
 ```bash
-pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.8.0"
+pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.9.0"
 ```
 
 | Extra | Pulls in | Needed for |
 | --- | --- | --- |
-| (none) | `cryptography>=41` | The library and the `two-key` command |
+| (none) | `cryptography>=48` (ML-DSA-65) | The library and the `two-key` command |
 | `yaml` | PyYAML | YAML constitutions, rules, and judge files |
 | `mcp` | `mcp>=2.2,<3` and PyYAML | `two-key mcp-proxy` and `two-key mcp-draft-specs` |
 
@@ -65,8 +65,8 @@ set beside it: current build tools may reject the pair.
 
 ## What the workflow does
 
-It runs only from this branch (`refs/heads/PyPI`) or from a tag whose name
-starts with `v`. A pull request does not publish.
+It runs only from this branch (`refs/heads/PyPI`), and only when started
+by hand (**Run workflow**). A tag push and a pull request do not publish.
 
 1. Build an sdist and a wheel with `build==1.6.1` and the setuptools
    backend, both from `.github/requirements/publish.txt` with their hashes
@@ -85,14 +85,13 @@ starts with `v`. A pull request does not publish.
    (pinned by commit) signs each file with Sigstore and uploads the
    [PEP 740](https://peps.python.org/pep-0740/) attestations with it.
 
-A tag push always targets PyPI, and only when the tag is `v` plus the
-version in `pyproject.toml`. `v0.7.1` on a tree that still says `0.7.0`
-fails before the upload. A manual run defaults to TestPyPI.
+A manual run defaults to TestPyPI.
 
 `v0.7.0` and later tags point at `main` and must not be moved. A release gets a
-new version in both `pyproject.toml` and `two_key.__version__`, then a new
-signed tag `vX.Y.Z` on a commit that contains this workflow, or a manual
-run of this workflow on the `PyPI` branch. PyPI never replaces a version.
+new version in both `pyproject.toml` and `two_key.__version__`, a signed tag
+`vX.Y.Z` on `main`, and then a manual run of this workflow on the `PyPI`
+branch once that branch carries the release. The tag is the git snapshot;
+it does not publish. PyPI never replaces a version.
 A metadata fix after the upload needs a new version number.
 
 ## Register the name
@@ -163,19 +162,18 @@ create an environment with no reviewer the first time the job asks for it.
 
 ## Tags and `main`
 
-- Do not move `v0.8.0`, `v0.7.3`, `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, or any older tag. A
+- Do not move `v0.9.0`, `v0.8.0`, `v0.7.3`, `v0.7.0`, `v0.6.0`, `v0.5.0`, `v0.4.0`, or any older tag. A
   fix to what is on the index is a new version, never a retag.
 - Do not choose branch `main` in **Run workflow**. The workflow file is on
   `main`, which is why GitHub lists it. The jobs still refuse every ref
-  except `refs/heads/PyPI` and a `vX.Y.Z` tag. A GitHub Release is not a
-  trigger. A later release is a signed tag on a commit that already
-  contains this workflow, and that tag push publishes to PyPI only when
-  the tag matches the version in `pyproject.toml`.
-- A later tag must be on a commit that already contains
-  `pypi-publish.yml`. The tag push runs the workflow from that commit.
+  except `refs/heads/PyPI`. Neither a tag push nor a GitHub Release is a
+  trigger. (Until 0.8.0 a `vX.Y.Z` tag push also started the workflow;
+  the `pypi` environment only allows the `PyPI` branch, so that run
+  failed. Every release, 0.8.0 included, is published from the `PyPI`
+  branch.)
 - Sign the tag (`git tag -s vX.Y.Z`). The workflow does not create the tag
   and does not check the signature. The signature is the maintainer's.
-- The SBOM for a tag run is the `sbom` artifact on that workflow run.
+- The SBOM for a release is the `sbom` artifact on that workflow run.
   Attach it to the GitHub release if you cut one. It is not inside the
   wheel.
 
@@ -218,14 +216,29 @@ nobody expects tools of its own.
   PyPI. Bump all three together. `tests/test_mcp_registry.py` fails if they
   differ or the README line is missing.
 
-After the release is on PyPI, from a clone of the release commit:
+After the release is on PyPI, once the `PyPI` branch carries it: Actions,
+workflow `mcp-registry`, **Run workflow**, branch `PyPI`, then approve the
+`pypi` environment prompt. The workflow
+([mcp-registry.yml](../.github/workflows/mcp-registry.yml)) checks that
+`server.json` names the version in `pyproject.toml` and that the version
+is on PyPI, installs `mcp-publisher` v1.8.6 by its checksum, signs in with
+GitHub Actions OIDC (no token), and publishes. Like `publish`, it refuses
+every branch except `PyPI`.
+
+By hand instead, from a clone of the release commit:
 
 ```bash
 brew install mcp-publisher        # or the release download from github.com/modelcontextprotocol/registry
-mcp-publisher login github        # as an Owner of Insomniac-VibeLabs
+mcp-publisher login github --token <classic PAT, read:org only, short expiry>   # an Owner of Insomniac-VibeLabs
 mcp-publisher publish
 curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Insomniac-VibeLabs/two-key"
 ```
+
+The plain `mcp-publisher login github` (browser sign-in) cannot read an
+organization role, so it is refused with 403 for this name; a classic
+personal access token with only `read:org`, deleted afterwards, works. No
+local tools are needed: a GitHub Codespace on `main` runs these commands in
+the browser (0.8.0 was listed this way on 2026-10-28).
 
 Each later release is published the same way, after its upload to PyPI.
 A listing cannot be changed for a version already published; a fix is a

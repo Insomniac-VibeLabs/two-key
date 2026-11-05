@@ -102,6 +102,11 @@ class Rows(unittest.TestCase):
         names = ["seq", "kind", "agent.id", "agent_id", "denies"]
         self.assertEqual(default_columns(names), ["seq", "kind", "agent.id", "agent_id"])
 
+    def test_the_account_that_started_the_proxy_is_shown_by_default(self):
+        row = flatten({"seq": 3, "kind": "decision", "body": {"agent": {"id": "coder", "account": {
+            "uid": 1001, "name": "tk-coder"}}}})
+        self.assertEqual(default_columns(list(row.values)), ["seq", "kind", "agent.id", "agent.account.name"])
+
     def test_text_of(self):
         self.assertEqual([text_of(v) for v in (None, True, False, 3, 0.5, "x")],
                          ["null", "true", "false", "3", "0.5", "x"])

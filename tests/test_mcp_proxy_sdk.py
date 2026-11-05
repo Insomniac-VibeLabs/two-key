@@ -13,6 +13,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+import unittest.mock
 from contextlib import AsyncExitStack
 from pathlib import Path
 
@@ -53,6 +54,44 @@ async def pinned_digest(tmp, variant=""):
     async with AsyncExitStack() as stack:
         client = await sdk.connect_upstream(stack, proxy_config(tmp, variant=variant))
         return select_tools(await sdk.list_upstream_tools(client), SPECS, {}).digest
+
+
+@unittest.skipIf(sdk is None, "needs the mcp extra")
+class RepeatedKeys(unittest.TestCase):
+    """What the agent's host sends is read once more, strictly, for a repeated key in a ``tools/call`` (run 13, D2)."""
+
+    CALL = '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"write_file","arguments":%s}}\n'
+
+    @staticmethod
+    def marked(line):
+        params = json.loads(sdk.mark_repeated_keys(line)).get("params") or {}
+        return (params.get("_meta") or {}).get(sdk.REPEATED_KEY_MARK, False)
+
+    def test_a_repeated_key_anywhere_in_a_call_marks_it(self):
+        for arguments in ('{"path":"/srv/notes/a","path":"/etc/x"}', '{"a":{"b":1,"b":2}}', '{"a":[{"k":1,"k":1}]}'):
+            with self.subTest(arguments=arguments):
+                self.assertIs(self.marked(self.CALL % arguments), True)
+        repeated_meta = self.CALL.replace('"arguments"', '"_meta":{"x":1},"_meta":{"y":2},"arguments"') % "{}"
+        self.assertIs(self.marked(repeated_meta), True)
+
+    def test_other_lines_are_passed_on_unchanged(self):
+        clean = self.CALL % '{"path":"/srv/notes/a"}'
+        other = '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"a":1,"a":2}}\n'
+        for line in (clean, other, "not json\n", "[1, 1]\n", '{"a": NaN}\n'):
+            with self.subTest(line=line):
+                self.assertEqual(sdk.mark_repeated_keys(line), line)
+
+    def test_the_agents_stdin_is_read_through_it(self):
+        lines = [self.CALL % '{"path":"a","path":"b"}', self.CALL % '{"path":"a"}']
+        stdin = io.TextIOWrapper(io.BytesIO("".join(lines).encode()), encoding="utf-8")
+
+        async def read():
+            with unittest.mock.patch.object(sys, "stdin", stdin):
+                return [line async for line in sdk.agent_stdin()]
+        got = anyio.run(read)
+        self.assertEqual(len(got), 2)
+        self.assertIs(self.marked(got[0]), True)
+        self.assertEqual(got[1], lines[1])
 
 
 @unittest.skipIf(sdk is None, "needs the mcp extra")
@@ -109,6 +148,19 @@ class ThroughTheSdk(unittest.TestCase):
                 self.assertNotIn("delete_all", [c["tool"] for c in upstream_calls(self.tmp)])
                 self.assertEqual([e.kind for e in tk.ledger.entries].count("redemption"), 1)
                 Path(self.tmp, "calls.jsonl").unlink()
+
+    def test_a_call_marked_for_a_repeated_key_is_refused_and_ledgered(self):
+        """Run 13, D2: raw JSON with two ``path`` keys was accepted, the last one winning."""
+        async def body(client):
+            return await client.call_tool("pay_vendor", {"vendor": "ada", "amount": 1},
+                                          meta={sdk.REPEATED_KEY_MARK: True})
+        refused, tk = self.run_client(body)
+        self.assertTrue(refused.is_error)
+        self.assertEqual(refused.content[0].text, DENY_PREFIX + "duplicate_keys")
+        self.assertEqual(upstream_calls(self.tmp), [])
+        entry = tk.ledger.entries[-1]
+        self.assertEqual((entry.kind, entry.body), ("tool_call_refused",
+                                                    {"origin": "mcp-proxy", "why": "duplicate_keys", "tool": "pay_vendor"}))
 
     def test_the_upstream_gets_only_its_declared_environment(self):
         os.environ["TWO_KEY_TEST_JUDGE_SECRET"] = "judge-key"

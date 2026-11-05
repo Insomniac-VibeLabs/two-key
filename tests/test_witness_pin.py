@@ -177,8 +177,9 @@ class ConfiguredPin(unittest.TestCase):
         self.assertEqual(led.entries[0].body["source"], "new_ledger")
 
     def test_configured_pin_must_be_a_public_key(self):
-        with self.assertRaisesRegex(LedgerError, "Ed25519 public key"):
-            Ledger(self.path, self.key, witness_public_key=public_raw(self.witness))
+        raw = public_raw(self.witness)
+        with self.assertRaisesRegex(LedgerError, "must be a Two-Key public key"):
+            Ledger(self.path, self.key, witness_public_key=raw)
 
 
 def _old_ledger(path: Path, key, notes: int = 2) -> Ledger:
@@ -293,8 +294,9 @@ class Rotation(unittest.TestCase):
             self.led.rotate_witness(self.old)
         with self.assertRaisesRegex(LedgerError, "must not be the principal key"):
             self.led.rotate_witness(self.key)
-        with self.assertRaisesRegex(LedgerError, "Ed25519 private key"):
-            self.led.rotate_witness(self.key.public_key())
+        public = self.key.public_key()
+        with self.assertRaisesRegex(LedgerError, r"must be a hybrid Ed25519 \+ ML-DSA-65 private key"):
+            self.led.rotate_witness(public)
         with self.assertRaisesRegex(LedgerError, "at most 200"):
             self.led.rotate_witness(reason="x" * 201)
         with self.assertRaisesRegex(LedgerError, "principal key mismatch"):

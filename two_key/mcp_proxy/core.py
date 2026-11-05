@@ -30,8 +30,11 @@ from ..action import MAX_TOOL_NAME_CHARS
 from ..canonical import canonical_hash
 from ..derive import size_record
 from ..fields import field_mappings
+from .. import _platform
 from ..guard import Guard, GuardConfigError, GuardedTool
-from .config import ProxyConfig, ProxyConfigError, ToolPolicy, UpstreamConfig
+from ..roster import ANY, RosterError, ServedAgent, account_name, resolve, tool_allows
+from ..toolcheck import META_KEY, mcp_receipt
+from .config import ProxyConfig, ProxyConfigError, ToolPolicy, UpstreamConfig, unanswered_hold_problem
 
 _NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
@@ -361,6 +364,7 @@ def _ledger_name(name: Any) -> dict:
 
 
 UpstreamCall = Callable[[str, dict], Any]
+DUPLICATE_KEYS = "duplicate_keys"
 
 
 class ProxyCore:
@@ -383,8 +387,19 @@ class ProxyCore:
             raise ProxyConfigError(f"tools: fact hooks for {unused}, which the proxy does not offer")
         specs = two_key.compiled.tool_specs
         self._specs = {tool_id: specs[tool_id] for tool_id in selection.views}
-        self.guard = Guard(two_key, origin=ORIGIN, agent_id=config.agent_id, hosting=config.hosting)
+        unchecked = tool_check_missing(two_key, self._specs)
+        if unchecked:
+            raise ProxyConfigError(unchecked)
+        # The agent this proxy serves: the signed roster's entry for the account that started it, or proxy.yaml's
+        # agent_id without a roster (build_two_key, two_key/roster.py).
+        served = getattr(two_key, "served_agent", None)
+        self.served = served if served is not None else ServedAgent(config.agent_id, None, None, "proxy_yaml",
+                                                                    hosting=config.hosting)
+        self.guard = Guard(two_key, origin=ORIGIN, agent_id=self.served.id,
+                           hosting=self.served.hosting or config.hosting, agent_account=self.served.account)
         self.gateway = self.guard.gateway
+        # The tool check (#28) is for upstream tools only: the receipt comes back in the result's _meta.
+        self.gateway.receipt_reader = mcp_receipt
         for tool_id, name in selection.upstream_names.items():
             policy = config.tool_policy(tool_id)
             try:
@@ -394,15 +409,20 @@ class ProxyCore:
                 raise ProxyConfigError(f"tools.{tool_id}: {e}") from None
 
     @staticmethod
-    def _tool(upstream_call: UpstreamCall, name: str) -> Callable[[dict], Any]:
-        def run(arguments: dict) -> Any:
-            return upstream_call(name, arguments)
+    def _tool(upstream_call: UpstreamCall, name: str) -> Callable[..., Any]:
+        def run(arguments: dict, check: dict | None = None) -> Any:
+            if check is None:
+                return upstream_call(name, arguments)
+            # A checked tool: the spent token and its redeem stamp go in the request's _meta (#28).
+            return upstream_call(name, arguments, {META_KEY: check})
         return run
 
     def list_tools(self) -> list[dict]:
         """The signed tools, with every caller-supplied field hidden from the input schema the agent sees."""
         out = []
         for tool in agent_tools(self.selection):
+            if not tool_allows(self._specs[tool["name"]], self.served.id):
+                continue        # the signed roster gives this tool to other agents; a call is tool_not_for_agent
             hidden = caller_paths(self._specs[tool["name"]])
             if hidden and isinstance(tool.get("inputSchema"), dict):
                 tool = dict(tool, inputSchema=_hide(tool["inputSchema"], hidden))
@@ -413,7 +433,9 @@ class ProxyCore:
         """Ledger ``mcp_proxy_started``: what this proxy serves, so an audit can tie decisions to a setup."""
         command = list(self.config.upstream.command)
         # The agent this proxy serves, as one_proxy_per_agent counts it: the operator's agent_id, or "unnamed".
-        body = {"agent_id": self.config.agent_id or "unnamed",
+        body = {"agent_id": self.served.id or "unnamed",
+                # The account that started this proxy (0.9.0) and whether the signed roster named the agent.
+                "account": self.served.account_record(), "agent_source": self.served.source,
                 "upstream_program": Path(command[0]).name[:128],
                 "upstream_command_digest": "sha256:" + canonical_hash(command),
                 "schema_digest_pinned": self.config.upstream.schema_digest,
@@ -430,6 +452,16 @@ class ProxyCore:
             self.guard.record("tool_not_offered", {"origin": ORIGIN, **_ledger_name(name)})
         except Exception as e:      # still refused; the ledger write failing is reported, never an allow
             print(f"two-key: mcp-proxy: could not record tool_not_offered: {type(e).__name__}", file=sys.stderr)
+
+    def refuse_duplicate_keys(self, name: Any) -> CallOutcome:
+        """A ``tools/call`` whose JSON repeats a key (run 13, D2). The SDK keeps the last one, which is the value
+        Two-Key checks and the tool gets; refused anyway, as ``two-key authorize`` and agent proposals refuse it."""
+        print("two-key: mcp-proxy: refused a call whose JSON repeats a key", file=sys.stderr)
+        try:
+            self.guard.record("tool_call_refused", {"origin": ORIGIN, "why": DUPLICATE_KEYS, **_ledger_name(name)})
+        except Exception as e:      # still refused; the ledger write failing is reported, never an allow
+            print(f"two-key: mcp-proxy: could not record tool_call_refused: {type(e).__name__}", file=sys.stderr)
+        return CallOutcome(False, DUPLICATE_KEYS, stage="proxy")
 
     def call_tool(self, name: Any, arguments: Any) -> CallOutcome:
         if not isinstance(name, str) or name not in self._specs:
@@ -449,12 +481,13 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
     from ..core import TwoKey, TwoKeyConfigError
     from ..identity import IdentityError, load_monitored_agent_file
     from ..judges.config import JudgeConfigError, load_config_file
-    from ..keys import load_public_key
-    from ..ledger import Ledger, LedgerError
+    from ..keys import passphrase_source
+    from ..ledger import LedgerError
     from ..scan import ScanConfigError
     from ..scanners import scanner_from_config
     from ..siem import SiemConfigError
     from ..siem_sinks import siem_from_config
+    from ..upgrade import open_upgraded
     try:
         scanner = None
         if config.scan is not None:
@@ -466,19 +499,32 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
         if missing:
             raise ProxyConfigError(f"{missing}; the proxy refuses to start")
         high = bool(getattr(policy, "is_high_assurance", False))
+        problem = unanswered_hold_problem(config, high)
+        if problem:
+            raise ProxyConfigError(problem)
         check_upstream_paths(config.upstream, high)
         paths = startup_paths(config)
         agent_access.check(paths, agent_access.resolve_mode(config.on_agent_access, high),
                            why="high_assurance" if high else
                            f"on_agent_access: {config.on_agent_access or 'refuse (the default)'}")
         agent = load_monitored_agent_file(config.judges)
-        witness = load_public_key(config.witness_public_key) if config.witness_public_key else None
         siem = siem_from_config(config.siem, config.path.parent) if config.siem is not None else None
-        ledger = Ledger(config.ledger, key, witness_public_key=witness, anchor_path=config.head_anchor)
+        # The first start of 0.9.0 upgrades a 0.8.0 deployment's keys to hybrid, once (two_key/upgrade.py).
+        opened = open_upgraded(config.principal_key, passphrase_source(config.principal_passphrase_file, prompt=False),
+                               config.ledger, constitution=config.constitution,
+                               witness_public_key=config.witness_public_key, anchor_path=config.head_anchor,
+                               principal=key)
+        key, ledger = opened.principal, opened.ledger
         tk = TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
                          private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
                          scanner=scanner, on_writable_paths=config.on_writable_paths,
+                         unanswered_hold=bool(config.unanswered_hold),
                          check_paths=paths, siem=siem, known_agent_ids=[config.agent_id] if config.agent_id else ())
+        parent = _platform.parent_account()
+        try:
+            tk.served_agent = served_agent(tk, config, high, parent=parent)
+        except (RosterError, ProxyConfigError) as e:
+            refuse_agent(tk, e, parent[0])
         hold_agent_lock(tk, config)
         return tk
     except ProxyConfigError:
@@ -486,6 +532,19 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
     except (OSError, ValueError, JudgeConfigError, IdentityError, LedgerError, ConstitutionError,
             ConstitutionSignatureError, TwoKeyConfigError, ScanConfigError, SiemConfigError) as e:
         raise ProxyConfigError(f"{type(e).__name__}: {e}") from None
+
+
+def tool_check_missing(two_key: Any, specs: Mapping[str, Mapping[str, Any]]) -> str | None:
+    """Under ``high_assurance`` every tool the proxy offers has its tool check on, or is ``exempt`` (a weaker
+    setting, confirmed when it was signed). Why the proxy refuses to start, or None (#28, Q1)."""
+    if not getattr(getattr(two_key, "quorum", None), "is_high_assurance", False):
+        return None
+    missing = sorted(tool for tool, spec in specs.items() if "tool_check" not in spec)
+    if not missing:
+        return None
+    return (f"tool_check_required: high_assurance needs the tool check for {missing}; give each a receipt key "
+            "(two-key tool-key new, then tool_specs.<tool>.tool_check.key) or mark it exempt, and re-sign "
+            "(docs/TOOL_CHECK.md)")
 
 
 def cloud_session_missing(config: ProxyConfig, judges: Any) -> str | None:
@@ -503,6 +562,40 @@ def cloud_session_missing(config: ProxyConfig, judges: Any) -> str | None:
             "name of the variable that holds the agent's session (docs/CONNECTING.md)")
 
 
+def served_agent(tk: Any, config: ProxyConfig, high: bool, *, parent=None) -> ServedAgent:
+    """The agent this proxy serves (0.9.0, two_key/roster.py). With a signed roster, the entry for the account that
+    started the proxy; without one, proxy.yaml's ``agent_id``, unchecked. Raises ``RosterError``, or
+    ``ProxyConfigError`` under ``high_assurance`` without a roster or with a tool open to any agent."""
+    uid, label = parent if parent is not None else _platform.parent_account()
+    roster = tk.constitution.agents
+    if not roster:
+        if high:
+            raise ProxyConfigError("agent_roster_required: high_assurance needs a signed agent roster (agents: in the "
+                                   "rules file, each agent with its account), so the proxy knows which agent started "
+                                   "it; add one and re-sign (docs/CONNECTING.md)")
+        return ServedAgent(config.agent_id, uid, account_name(uid), "proxy_yaml", hosting=config.hosting)
+    if high:
+        open_tools = sorted(t for t, spec in tk.compiled.tool_specs.items() if spec.get("agents", ANY) == ANY)
+        if open_tools:
+            raise ProxyConfigError(f"agent_list_required: high_assurance needs each tool to name its agents; "
+                                   f"{open_tools} are open to any listed agent; set tool_specs.<tool>.agents to a "
+                                   "list of agent ids and re-sign")
+    entry = resolve(roster, uid, label, config.agent_id)
+    return ServedAgent(entry.id, uid, account_name(uid) or entry.account, "roster", entry.shared,
+                       entry.hosting or config.hosting)
+
+
+def refuse_agent(tk: Any, error: Exception, uid: int | None) -> None:
+    """Ledger why the proxy refuses the account that started it, close, and raise ``ProxyConfigError``."""
+    code = getattr(error, "code", None) or str(error).split(":", 1)[0]
+    try:
+        tk.ledger.record("agent_refused", {"reason": code, "origin": ORIGIN,
+                                           "account": {"uid": uid, "name": account_name(uid)}})
+    finally:
+        tk.close()
+    raise ProxyConfigError(str(error)) from None
+
+
 def hold_agent_lock(tk: Any, config: ProxyConfig) -> None:
     """One proxy per agent on a ledger (0.8.0, D10). Take this agent's lock and keep it for the life of the
     process; if another running proxy holds it, ledger ``agent_already_connected`` (sent to the SIEM) and refuse.
@@ -510,7 +603,11 @@ def hold_agent_lock(tk: Any, config: ProxyConfig) -> None:
     The lock goes when the process exits, however it exits. A proxy with no ``agent_id`` counts as one agent,
     ``unnamed``. With ``one_proxy_per_agent: false`` nothing is taken and a warning says so."""
     from .. import _platform
-    agent = config.agent_id or "unnamed"
+    served = getattr(tk, "served_agent", None)
+    agent = (served.id if served is not None else config.agent_id) or "unnamed"
+    if served is not None and served.shared:
+        # A shared group (roster shared: true) is many callers on one account: one proxy each, no lock.
+        return
     if not config.one_proxy_per_agent:
         print("two-key: WARNING: one_proxy_per_agent: false: more than one proxy may serve this agent on this "
               "ledger at once; only the re-check at mint (history_changed) keeps their judges' history in step",
@@ -525,9 +622,12 @@ def hold_agent_lock(tk: Any, config: ProxyConfig) -> None:
         tk.ledger.record("agent_already_connected", {"agent_id": agent, "origin": ORIGIN})
     finally:
         tk.close()
+    # With a signed roster the account picks the agent, so a second agent_id is no way out (agent_account_mismatch).
+    other = ("give that agent a second roster entry on its own account, or mark its entry shared: true"
+             if served is not None and served.source == "roster" else "give each session its own agent_id")
     raise ProxyConfigError(f"agent_already_connected: another two-key mcp-proxy is serving agent {agent!r} on this "
                            "ledger; stop it first (a dead SSH session's proxy goes with sshd ClientAliveInterval), "
-                           "or give each session its own agent_id, or set one_proxy_per_agent: false")
+                           f"or {other}, or set one_proxy_per_agent: false")
 
 
 def _program(name: str) -> str | None:

@@ -68,6 +68,8 @@ _FIELD_HINTS = {
     "enum": "one of the operator's values, given in the instruction or the constitution",
     "integer": "a JSON integer, given in the instruction or the constitution",
     "boolean": "JSON true or false",
+    "path": ("a full absolute file path starting with /, given in the instruction or the constitution; "
+             "a relative path, ~ or .. is refused"),
 }
 
 

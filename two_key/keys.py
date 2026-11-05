@@ -1,20 +1,31 @@
 # Copyright 2026 Insomniac-VibeLabs
 # Author: Stephan Busch
 # SPDX-License-Identifier: Apache-2.0
-"""Ed25519 principal keys. Hybrid ML-DSA is not implemented yet (ROADMAP).
+"""Two-Key's signing keys: hybrid Ed25519 + ML-DSA-65 (FIPS 204) from 0.9.0, and the Ed25519 keys of 0.8.0.
 
-A principal key file is either an unencrypted PKCS8 PEM (``BEGIN PRIVATE KEY``) or, with a passphrase,
-Two-Key's own encrypted form (``BEGIN TWO-KEY ENCRYPTED PRIVATE KEY``): the PKCS8 DER sealed with
-AES-256-GCM under a key from PBKDF2-SHA256 at 600,000 iterations, the construction ``backup.py`` uses,
-with every header field bound in as associated data. A passphrase comes from a file only its owner can
-read, or from a prompt on a terminal; never from the command line or the environment (docs/SETUP.md).
+Every key Two-Key makes is a hybrid: an Ed25519 key and an ML-DSA-65 key that sign together. A hybrid
+signature is both signatures over the same labelled message (``hybrid_message``), and it verifies only when
+both do, so a forger has to break both algorithms. A classical (Ed25519-only) key is read only to upgrade a
+0.8.0 deployment (``two_key/upgrade.py``); a hybrid public key never accepts a classical signature.
+
+All signing and verifying goes through this module (``sign``, ``verify``), so a later backend (FIPS 140-3
+mode, 1.0.0) changes one place.
+
+A key file is unencrypted PEM, or, with a passphrase, Two-Key's own encrypted form (``BEGIN TWO-KEY
+ENCRYPTED PRIVATE KEY``): the key sealed with AES-256-GCM under a key from PBKDF2-SHA256 at 600,000
+iterations, the construction ``backup.py`` uses, with every header field bound in as associated data. A
+hybrid key file holds two standard PKCS8 blocks, the Ed25519 key then the ML-DSA-65 key (seed form); its
+encrypted form seals both (format ``two-key-encrypted-key/2``). A passphrase comes from a file only its owner
+can read, or from a prompt on a terminal; never from the command line or the environment (docs/SETUP.md).
 """
 
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
+import re
 import stat
 import sys
 from pathlib import Path
@@ -23,13 +34,18 @@ from typing import Callable, Union
 from cryptography.exceptions import InvalidSignature, InvalidTag, UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+try:
+    from cryptography.hazmat.primitives.asymmetric.mldsa import MLDSA65PrivateKey, MLDSA65PublicKey
+except ImportError:                 # cryptography before 48, or one built against an OpenSSL before 3.5
+    MLDSA65PrivateKey = MLDSA65PublicKey = None
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from . import _platform
 
-ENCRYPTED_FORMAT = "two-key-encrypted-key/1"
+ENCRYPTED_FORMAT = "two-key-encrypted-key/1"          # a classical key (0.8.0): the PKCS8 DER
+HYBRID_ENCRYPTED_FORMAT = "two-key-encrypted-key/2"   # a hybrid key: its two PKCS8 PEM blocks
 KDF_NAME = "pbkdf2-sha256"
 ENC_NAME = "aes-256-gcm"
 KDF_ITERATIONS = 600_000            # NIST SP 800-132, as backup.py; a file asking for fewer is refused
@@ -39,8 +55,19 @@ SALT_BYTES = 16
 NONCE_BYTES = 12
 MIN_PASSPHRASE_BYTES = 12           # for a new passphrase; shorter is refused
 MAX_PASSPHRASE_BYTES = 1024
-NOT_ED25519 = "principal key must be Ed25519"
+NOT_ED25519 = "key_file_invalid: a Two-Key key is a hybrid Ed25519 + ML-DSA-65 key (or a 0.8.0 Ed25519 key)"
+# The suites, as signed objects and fingerprints name them.
+HYBRID_ALG = "ed25519+ml-dsa-65"
+CLASSICAL_ALG = "ed25519"
+HYBRID_LABEL = b"two-key-hybrid/1"
+ML_DSA_CONTEXT = b"two-key"                 # the FIPS 204 context string
+ED_SIG_BYTES, ML_SIG_BYTES = 64, 3309
+ED_PUB_BYTES, ML_PUB_BYTES = 32, 1952
+ML_DSA_UNAVAILABLE = ("ml_dsa_unavailable: this Python's cryptography package cannot make ML-DSA-65 signatures "
+                      "(it needs cryptography 48 or later, built with OpenSSL 3.5 or later, as the PyPI wheels are); "
+                      "install it with pip install --upgrade 'cryptography>=48'")
 MAX_KEY_FILE_BYTES = 64 * 1024
+_KEY_FILE = "the key file"               # what a message calls a key file when it has no name
 _ENCRYPTED_BEGIN = b"-----BEGIN TWO-KEY ENCRYPTED PRIVATE KEY-----"
 _ENCRYPTED_END = b"-----END TWO-KEY ENCRYPTED PRIVATE KEY-----"
 _OPENSSL_ENCRYPTED = b"-----BEGIN ENCRYPTED PRIVATE KEY-----"
@@ -53,21 +80,119 @@ _ENC_FIELDS = ("name", "nonce")
 Passphrase = Union[bytes, Callable[[str], bytes], None]
 
 
-def generate_private_key() -> Ed25519PrivateKey:
-    return Ed25519PrivateKey.generate()
+class HybridPublicKey:
+    """The public half of a hybrid key: an Ed25519 public key and an ML-DSA-65 public key."""
+
+    __slots__ = ("ed", "ml")
+
+    def __init__(self, ed: Ed25519PublicKey, ml):
+        self.ed, self.ml = ed, ml
+
+    def raw(self) -> bytes:
+        """The 32-byte Ed25519 key then the 1,952-byte ML-DSA-65 key: what fingerprints and pins hash."""
+        return self.ed.public_bytes_raw() + self.ml.public_bytes_raw()
+
+    def public_bytes(self, encoding, fmt) -> bytes:
+        """``Raw``/``Raw`` is ``raw()``; PEM is the two SubjectPublicKeyInfo blocks, Ed25519 first."""
+        if encoding == serialization.Encoding.Raw:
+            return self.raw()
+        return self.ed.public_bytes(encoding, fmt) + self.ml.public_bytes(encoding, fmt)
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, HybridPublicKey) and other.raw() == self.raw()
+
+    def __hash__(self) -> int:
+        return hash(self.raw())
 
 
-def public_key(private_key: Ed25519PrivateKey) -> Ed25519PublicKey:
+class HybridPrivateKey:
+    """A hybrid signing key: an Ed25519 key and an ML-DSA-65 key, kept and used as one."""
+
+    __slots__ = ("ed", "ml")
+
+    def __init__(self, ed: Ed25519PrivateKey, ml):
+        self.ed, self.ml = ed, ml
+
+    def public_key(self) -> HybridPublicKey:
+        return HybridPublicKey(self.ed.public_key(), self.ml.public_key())
+
+    def private_bytes(self, encoding, fmt, encryption) -> bytes:
+        """The two PKCS8 blocks, Ed25519 first: the hybrid key file's content."""
+        return self.ed.private_bytes(encoding, fmt, encryption) + self.ml.private_bytes(encoding, fmt, encryption)
+
+
+def ml_dsa_available() -> bool:
+    """Whether this Python can make and check ML-DSA-65 signatures."""
+    if MLDSA65PrivateKey is None:
+        return False
+    try:
+        MLDSA65PrivateKey.from_seed_bytes(bytes(32))
+    except (UnsupportedAlgorithm, ValueError, TypeError):
+        return False
+    return True
+
+
+def require_ml_dsa() -> None:
+    """Refuse (``ml_dsa_unavailable``) where ML-DSA-65 is missing. Two-Key never falls back to Ed25519 alone."""
+    if not ml_dsa_available():
+        raise ValueError(ML_DSA_UNAVAILABLE)
+
+
+def generate_private_key() -> HybridPrivateKey:
+    """A new hybrid key. Where ML-DSA-65 is missing this refuses (``ml_dsa_unavailable``)."""
+    require_ml_dsa()
+    return HybridPrivateKey(Ed25519PrivateKey.generate(), MLDSA65PrivateKey.generate())
+
+
+def add_ml_dsa(private_key) -> HybridPrivateKey:
+    """A 0.8.0 Ed25519 key made hybrid: the same Ed25519 key, with a new ML-DSA-65 key beside it."""
+    require_ml_dsa()
+    if isinstance(private_key, HybridPrivateKey):
+        return private_key
+    if not isinstance(private_key, Ed25519PrivateKey):
+        raise ValueError(NOT_ED25519)
+    return HybridPrivateKey(private_key, MLDSA65PrivateKey.generate())
+
+
+def is_hybrid(key) -> bool:
+    """Whether ``key`` (private or public) is a hybrid key."""
+    return isinstance(key, (HybridPrivateKey, HybridPublicKey))
+
+
+def classical_half(key):
+    """The Ed25519 half of a hybrid key (private or public): the 0.8.0 key it was made from by ``add_ml_dsa``.
+    A classical key is returned as it is."""
+    return key.ed if is_hybrid(key) else key
+
+
+def key_alg(key) -> str:
+    """The suite ``key`` (private or public) signs with: ``HYBRID_ALG`` or ``CLASSICAL_ALG``."""
+    return HYBRID_ALG if is_hybrid(key) else CLASSICAL_ALG
+
+
+def public_key(private_key):
     return private_key.public_key()
 
 
-def fingerprint(public: Ed25519PublicKey) -> str:
-    raw = public.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-    import hashlib
-    return hashlib.sha256(raw).hexdigest()[:16]
+def _raw_public(public) -> bytes:
+    if isinstance(public, HybridPublicKey):
+        return public.raw()
+    return public.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
 
 
-def save_private_key(path: Path | str, private_key: Ed25519PrivateKey, *, private_dir: bool = False,
+def fingerprint(public) -> str:
+    """A short form for messages: the first 16 hex digits of the SHA-256 of the raw public key."""
+    return hashlib.sha256(_raw_public(public)).hexdigest()[:16]
+
+
+def key_fingerprint(public) -> str:
+    """The pin of a public key: ``hybrid-sha256:<hex>`` for a hybrid key (both halves, one value), or
+    ``sha256:<hex>`` for an Ed25519 key, so a fingerprint always says which kind of key it is."""
+    prefix = "hybrid-sha256:" if isinstance(public, HybridPublicKey) else "sha256:"
+    return prefix + hashlib.sha256(_raw_public(public)).hexdigest()
+
+
+def save_private_key(path: Path | str, private_key, *, private_dir: bool = False,
                      passphrase: bytes | None = None) -> None:
     """Create a new key file, mode 0600 from the first byte. Never overwrite one.
 
@@ -91,7 +216,7 @@ def save_private_key(path: Path | str, private_key: Ed25519PrivateKey, *, privat
         os.fsync(fh.fileno())
 
 
-def private_key_bytes(private_key: Ed25519PrivateKey, passphrase: bytes | None = None) -> bytes:
+def private_key_bytes(private_key, passphrase: bytes | None = None) -> bytes:
     """What a key file holds: unencrypted PKCS8 PEM, or the encrypted form when there is a passphrase."""
     if passphrase is not None:
         return encrypt_private_key(private_key, passphrase)
@@ -129,13 +254,15 @@ def check_new_passphrase(passphrase: bytes) -> bytes:
     return passphrase
 
 
-def encrypt_private_key(private_key: Ed25519PrivateKey, passphrase: bytes) -> bytes:
-    """The encrypted key file: PKCS8 DER under AES-256-GCM, its key from PBKDF2-SHA256, the header as AAD."""
+def encrypt_private_key(private_key, passphrase: bytes) -> bytes:
+    """The encrypted key file: the key under AES-256-GCM, its key from PBKDF2-SHA256, the header as AAD. A hybrid
+    key seals its two PKCS8 PEM blocks (format /2); a 0.8.0 Ed25519 key its PKCS8 DER (format /1)."""
     check_new_passphrase(passphrase)
-    plain = private_key.private_bytes(serialization.Encoding.DER, serialization.PrivateFormat.PKCS8,
-                                      serialization.NoEncryption())
+    hybrid = isinstance(private_key, HybridPrivateKey)
+    plain = private_key.private_bytes(serialization.Encoding.PEM if hybrid else serialization.Encoding.DER,
+                                      serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
     salt, nonce = os.urandom(SALT_BYTES), os.urandom(NONCE_BYTES)
-    header = {"format": ENCRYPTED_FORMAT,
+    header = {"format": HYBRID_ENCRYPTED_FORMAT if hybrid else ENCRYPTED_FORMAT,
               "kdf": {"name": KDF_NAME, "iterations": KDF_ITERATIONS, "salt": _b64e(salt), "length": KDF_LENGTH},
               "enc": {"name": ENC_NAME, "nonce": _b64e(nonce)}}
     ciphertext = AESGCM(_derive(passphrase, salt, KDF_ITERATIONS)).encrypt(nonce, plain, _canonical(header))
@@ -149,7 +276,7 @@ def is_encrypted(data: bytes) -> bool:
     return data.lstrip().startswith(_ENCRYPTED_BEGIN)
 
 
-def encrypted_header(data: bytes, what: str = "the key file") -> dict:
+def encrypted_header(data: bytes, what: str = _KEY_FILE) -> dict:
     """The parsed header of an encrypted key file, every field checked, nothing decrypted. A file that
     is not exactly that form is ``key_file_invalid``."""
     bad = ValueError(f"key_file_invalid: {what} is not a Two-Key encrypted private key")
@@ -162,7 +289,7 @@ def encrypted_header(data: bytes, what: str = "the key file") -> dict:
         if not isinstance(header, dict) or set(header) != set(_HEADER_FIELDS):
             raise ValueError
         kdf, enc = header["kdf"], header["enc"]
-        if (header["format"] != ENCRYPTED_FORMAT or not isinstance(kdf, dict) or set(kdf) != set(_KDF_FIELDS)
+        if (header["format"] not in (ENCRYPTED_FORMAT, HYBRID_ENCRYPTED_FORMAT) or not isinstance(kdf, dict) or set(kdf) != set(_KDF_FIELDS)
                 or not isinstance(enc, dict) or set(enc) != set(_ENC_FIELDS) or kdf["name"] != KDF_NAME
                 or kdf["length"] != KDF_LENGTH or enc["name"] != ENC_NAME):
             raise ValueError
@@ -177,7 +304,7 @@ def encrypted_header(data: bytes, what: str = "the key file") -> dict:
     return header
 
 
-def decrypt_private_key(data: bytes, passphrase: bytes, what: str = "the key file") -> Ed25519PrivateKey:
+def decrypt_private_key(data: bytes, passphrase: bytes, what: str = _KEY_FILE):
     """Open the encrypted form. A wrong passphrase, or a file changed by one bit, is ``key_passphrase_wrong``."""
     header = encrypted_header(data, what)
     if not isinstance(passphrase, bytes) or not passphrase or len(passphrase) > MAX_PASSPHRASE_BYTES:
@@ -190,6 +317,8 @@ def decrypt_private_key(data: bytes, passphrase: bytes, what: str = "the key fil
     except InvalidTag:
         raise ValueError(f"key_passphrase_wrong: the passphrase does not open {what} (or the file was "
                          "changed)") from None
+    if header["format"] == HYBRID_ENCRYPTED_FORMAT:
+        return private_key_from_pem(plain, what)
     try:
         key = serialization.load_der_private_key(plain, password=None)
     except (TypeError, ValueError, UnsupportedAlgorithm):
@@ -197,6 +326,65 @@ def decrypt_private_key(data: bytes, passphrase: bytes, what: str = "the key fil
     if not isinstance(key, Ed25519PrivateKey):
         raise ValueError(NOT_ED25519)
     return key
+
+
+_PEM_BLOCK = re.compile(rb"-----BEGIN ([A-Z ]+)-----\r?\n.*?-----END \1-----\r?\n?", re.S)
+
+
+def _pem_blocks(data: bytes, label: bytes) -> list[bytes] | None:
+    """The PEM blocks of ``data`` when it is nothing but blocks with this label (blank space between is
+    fine); else None."""
+    blocks, at = [], 0
+    for match in _PEM_BLOCK.finditer(data):
+        if data[at:match.start()].strip() or match.group(1) != label:
+            return None
+        blocks.append(match.group(0))
+        at = match.end()
+    return blocks if blocks and not data[at:].strip() else None
+
+
+def private_key_from_pem(data: bytes, what: str = _KEY_FILE):
+    """A key from unencrypted PEM: one Ed25519 block (a 0.8.0 key), or an Ed25519 block then an ML-DSA-65
+    block (a hybrid key). Anything else is ``key_file_invalid``."""
+    blocks = _pem_blocks(data, b"PRIVATE KEY")
+    invalid = ValueError(f"key_file_invalid: {what} is not an unencrypted PEM private key, or Two-Key's encrypted "
+                         "form")
+    if blocks is None or len(blocks) > 2:
+        raise invalid
+    if len(blocks) == 2:
+        require_ml_dsa()
+    try:
+        keys = [serialization.load_pem_private_key(block, password=None) for block in blocks]
+    except (TypeError, ValueError, UnsupportedAlgorithm):
+        raise invalid from None
+    if not isinstance(keys[0], Ed25519PrivateKey):
+        raise ValueError(NOT_ED25519)
+    if len(keys) == 1:
+        return keys[0]
+    if MLDSA65PrivateKey is None or not isinstance(keys[1], MLDSA65PrivateKey):
+        raise ValueError(NOT_ED25519)
+    return HybridPrivateKey(keys[0], keys[1])
+
+
+def public_key_from_pem(data: bytes, what: str = "the public key file"):
+    """A public key from PEM: one Ed25519 block, or an Ed25519 block then an ML-DSA-65 block (hybrid)."""
+    blocks = _pem_blocks(data, b"PUBLIC KEY")
+    invalid = ValueError(f"public_key_invalid: {what} is not a Two-Key public key (PEM: Ed25519, then ML-DSA-65)")
+    if blocks is None or len(blocks) > 2:
+        raise invalid
+    if len(blocks) == 2:
+        require_ml_dsa()
+    try:
+        keys = [serialization.load_pem_public_key(block) for block in blocks]
+    except (TypeError, ValueError, UnsupportedAlgorithm):
+        raise invalid from None
+    if not isinstance(keys[0], Ed25519PublicKey):
+        raise invalid
+    if len(keys) == 1:
+        return keys[0]
+    if MLDSA65PublicKey is None or not isinstance(keys[1], MLDSA65PublicKey):
+        raise invalid
+    return HybridPublicKey(keys[0], keys[1])
 
 
 def _read_owner_only(path, code: str, limit: int) -> tuple[bytes, str | None, int]:
@@ -293,12 +481,8 @@ def key_file_is_encrypted(path: Path | str) -> bool:
     return is_encrypted(data)
 
 
-def load_private_key(path: Path | str) -> Ed25519PrivateKey:
-    data = Path(path).read_bytes()
-    key = serialization.load_pem_private_key(data, password=None)
-    if not isinstance(key, Ed25519PrivateKey):
-        raise ValueError(NOT_ED25519)
-    return key
+def load_private_key(path: Path | str):
+    return private_key_from_pem(Path(path).read_bytes(), str(path))
 
 
 _PUBLIC_PEM = b"-----BEGIN PUBLIC KEY-----"
@@ -309,7 +493,7 @@ def _public_key_given(path) -> ValueError:
                       f"(init-key writes principal.pem, mode 0600, next to principal.pub.pem)")
 
 
-def load_private_key_file(path: Path | str, passphrase: Passphrase = None) -> Ed25519PrivateKey:
+def load_private_key_file(path: Path | str, passphrase: Passphrase = None):
     """The safe loader for a key file named by an operator, as on the command line.
 
     It refuses a symlink (O_NOFOLLOW), anything that is not a regular file, and a file
@@ -338,44 +522,68 @@ def load_private_key_file(path: Path | str, passphrase: Passphrase = None) -> Ed
     if data.lstrip().startswith(_OPENSSL_ENCRYPTED):
         raise ValueError(f"key_file_invalid: {path} is encrypted by another tool; Two-Key opens only its own "
                          "encrypted form (two-key config key-passphrase, docs/SETUP.md)")
-    try:
-        key = serialization.load_pem_private_key(data, password=None)
-    except (TypeError, ValueError, UnsupportedAlgorithm):
-        raise ValueError(f"key_file_invalid: {path} is not an unencrypted PEM private key, or Two-Key's "
-                         "encrypted form") from None
-    if not isinstance(key, Ed25519PrivateKey):
-        raise ValueError(NOT_ED25519)
-    return key
+    return private_key_from_pem(data, str(path))
 
 
-def save_public_key(path: Path | str, public: Ed25519PublicKey) -> None:
+def save_public_key(path: Path | str, public) -> None:
     Path(path).write_bytes(public.public_bytes(
         serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo))
 
 
-def load_public_key(path: Path | str) -> Ed25519PublicKey:
-    key = serialization.load_pem_public_key(Path(path).read_bytes())
-    if not isinstance(key, Ed25519PublicKey):
-        raise ValueError("public key must be Ed25519")
-    return key
+def load_public_key(path: Path | str):
+    """A public key file: a hybrid key (two PEM blocks) or a 0.8.0 Ed25519 key (one)."""
+    return public_key_from_pem(Path(path).read_bytes(), str(path))
 
 
-def public_raw(public: Ed25519PublicKey) -> str:
-    return base64.b64encode(public.public_bytes(
-        serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode("ascii")
+def public_raw(public) -> str:
+    """Base64 of the raw public key: 32 bytes for Ed25519, 1,984 for a hybrid key (Ed25519 then ML-DSA-65)."""
+    return base64.b64encode(_raw_public(public)).decode("ascii")
 
 
-def public_from_raw(raw: str) -> Ed25519PublicKey:
-    return Ed25519PublicKey.from_public_bytes(base64.b64decode(raw))
+def public_from_raw(raw: str):
+    """The key ``public_raw`` wrote; its length says which kind. Anything else raises ``ValueError``."""
+    data = base64.b64decode(raw, validate=True)
+    if len(data) == ED_PUB_BYTES:
+        return Ed25519PublicKey.from_public_bytes(data)
+    if len(data) == ED_PUB_BYTES + ML_PUB_BYTES:
+        require_ml_dsa()
+        return HybridPublicKey(Ed25519PublicKey.from_public_bytes(data[:ED_PUB_BYTES]),
+                               MLDSA65PublicKey.from_public_bytes(data[ED_PUB_BYTES:]))
+    raise ValueError("public_key_invalid: not an Ed25519 or hybrid Ed25519 + ML-DSA-65 public key")
 
 
-def sign(private_key: Ed25519PrivateKey, message: bytes) -> str:
-    return base64.b64encode(private_key.sign(message)).decode("ascii")
+def hybrid_message(message: bytes) -> bytes:
+    """What both halves of a hybrid signature sign: the label, the suite, then the message, NUL-separated. Neither
+    half is a signature over ``message`` itself, so neither can be passed off as a classical signature."""
+    return HYBRID_LABEL + b"\0" + HYBRID_ALG.encode("ascii") + b"\0" + message
 
 
-def verify(public: Ed25519PublicKey, message: bytes, signature: str) -> bool:
+def sign(private_key, message: bytes) -> str:
+    """Base64 of the signature: for a hybrid key, the Ed25519 signature then the ML-DSA-65 signature (3,373
+    bytes), both over ``hybrid_message(message)``; for a 0.8.0 Ed25519 key, its 64-byte signature."""
+    if isinstance(private_key, HybridPrivateKey):
+        signed = hybrid_message(message)
+        data = private_key.ed.sign(signed) + private_key.ml.sign(signed, ML_DSA_CONTEXT)
+    else:
+        data = private_key.sign(message)
+    return base64.b64encode(data).decode("ascii")
+
+
+def verify(public, message: bytes, signature: str) -> bool:
+    """True only for a signature by ``public``'s kind: a hybrid key needs both halves, and refuses a classical
+    signature (a downgrade); an Ed25519 key takes only its own 64-byte signature."""
     try:
-        public.verify(base64.b64decode(signature), message)
+        data = base64.b64decode(signature, validate=True)
+        if isinstance(public, HybridPublicKey):
+            if len(data) != ED_SIG_BYTES + ML_SIG_BYTES:
+                return False
+            signed = hybrid_message(message)
+            public.ed.verify(data[:ED_SIG_BYTES], signed)
+            public.ml.verify(data[ED_SIG_BYTES:], signed, ML_DSA_CONTEXT)
+            return True
+        if len(data) != ED_SIG_BYTES:
+            return False
+        public.verify(data, message)
         return True
-    except (InvalidSignature, ValueError):
+    except (InvalidSignature, ValueError, TypeError):
         return False

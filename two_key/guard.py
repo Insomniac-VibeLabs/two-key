@@ -88,9 +88,10 @@ class Guard:
     """Authorize and redeem calls to guarded tools in the ``TwoKey`` process, one call at a time."""
 
     def __init__(self, two_key: Any, tools: Iterable[GuardedTool] = (), *, origin: str = "guard",
-                 agent_id: str | None = None, hosting: str | None = None):
+                 agent_id: str | None = None, hosting: str | None = None, agent_account: str | None = None):
         self.two_key = two_key
         self.origin, self.agent_id, self.hosting = origin, agent_id, hosting
+        self.agent_account = agent_account      # the account the proxy checked against the roster, if any
         self.gateway = two_key.gateway(tools={})
         self._tools: dict[str, GuardedTool] = {}
         # TwoKey and the ledger are used by one call at a time; a judge round ends by the quorum deadline.
@@ -197,7 +198,8 @@ class Guard:
         with self._lock:
             decision = self.two_key.authorize(
                 self.claim(name), arguments, self.proposal(name), agent_id=self.agent_id, hosting=self.hosting,
-                agent_session=agent_session, origin=self.origin, facts=self.resolve_facts(name, plain))
+                agent_session=agent_session, origin=self.origin, facts=self.resolve_facts(name, plain),
+                **({"agent_account": self.agent_account} if self.agent_account else {}))
             if not decision.allowed or not decision.token:
                 return GuardResult(False, decision.reason, stage="authorize")
             # The facts are looked up again just before the tool runs: one that changed is fact_mismatch.

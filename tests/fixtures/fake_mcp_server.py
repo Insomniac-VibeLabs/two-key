@@ -8,6 +8,8 @@ Environment:
 - ``FAKE_MCP_LOG``: a file; each ``tools/call`` appends one JSON line ``{"tool": ..., "arguments": ...}``.
 - ``FAKE_MCP_VARIANT``: ``changed`` rewrites the ``pay_vendor`` description (a poisoned update),
   ``dupe`` lists ``pay_vendor`` twice, ``paged`` lists one tool per page, ``fail`` makes ``pay_vendor`` raise.
+- ``FAKE_MCP_TOOL_CHECK``: a tool check config (docs/TOOL_CHECK.md); ``pay_vendor`` then runs only through
+  ``two_key.toolcheck.ToolChecker.mcp_call``, as a server using the helper would.
 """
 
 import json
@@ -51,7 +53,19 @@ async def list_tools(ctx, params):
     return types.ListToolsResult(tools=[TOOLS[index]], next_cursor=nxt)
 
 
+CHECKER = None
+if os.environ.get("FAKE_MCP_TOOL_CHECK"):
+    from two_key.toolcheck import ToolCheckConfig, ToolChecker
+    CHECKER = ToolChecker(ToolCheckConfig.load(os.environ["FAKE_MCP_TOOL_CHECK"]))
+
+
 async def call_tool(ctx, params):
+    if CHECKER is not None and params.name == "pay_vendor":
+        return await CHECKER.mcp_call(params.arguments, params.meta, lambda arguments: run_tool(params))
+    return await run_tool(params)
+
+
+async def run_tool(params):
     log = os.environ.get("FAKE_MCP_LOG")
     if log:
         with open(log, "a", encoding="utf-8") as fh:

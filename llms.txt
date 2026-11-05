@@ -6,10 +6,10 @@ testing and automated scanners, not independently audited. Apache-2.0.
 
 Package: two-key
 Import: two_key
-Package version: 0.8.0 (a judge history summary from the ledger, per-judge ballot records, one proxy per agent, the ledger-view audit window and the constitution editor). Tag v0.8.0 is on main; so are v0.7.3 (two-key setup and config set, get, undo, show and check; a principal key with a passphrase; a signed constitution serial against older rules; the upstream server's files in the start-up checks), v0.7.0 (the SIEM export, a start-up check for the account the monitored agent runs as, a count of refused gateway tokens), v0.6.0 (Windows support, content scanning through your antivirus or DLP product, a start-up check for writable paths), v0.5.0 (MCP proxy, caller-supplied facts, constitution v3) and v0.4.0 (package renamed from two-key-concept). Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
+Package version: 0.9.0 (hybrid Ed25519 + ML-DSA-65 signatures and a one-time key upgrade of a 0.8.0 deployment, the tool check, a tool error spends its token, the setup window). Tag v0.9.0 goes on main after the merge; v0.8.0 (a judge history summary from the ledger, per-judge ballot records, one proxy per agent, the ledger-view audit window and the constitution editor) is there, and so are v0.7.3 (two-key setup and config set, get, undo, show and check; a principal key with a passphrase; a signed constitution serial against older rules; the upstream server's files in the start-up checks), v0.7.0 (the SIEM export, a start-up check for the account the monitored agent runs as, a count of refused gateway tokens), v0.6.0 (Windows support, content scanning through your antivirus or DLP product, a start-up check for writable paths), v0.5.0 (MCP proxy, caller-supplied facts, constitution v3) and v0.4.0 (package renamed from two-key-concept). Tags v0.3.1 and earlier are in the archived two-key-concept repository; there v0.3.0 stays on e44be56. Tag v0.2.4 stays on fc836bb. Tag v0.2.3 stays on 4a4352e.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-0.8.0 is on PyPI (0.7.1 and 0.7.2 are the 0.7.0 code, repackaged). Distribution name two-key, import two_key, extras yaml and mcp. Install two-key[yaml]==0.8.0, or two-key[mcp]==0.8.0 for the proxy. Tags are not moved. docs/PYPI.md is the release process: trusted publishing, no token in the repo. server.json lists the proxy on the official MCP Registry as io.github.Insomniac-VibeLabs/two-key (docs/PYPI.md).
-uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml ranges are unchanged. CI tools (uv, build, coverage, bandit, twine, cyclonedx-bom) are hash-pinned in .github/requirements/.
+0.9.0 is the version to publish; 0.8.0 is on PyPI (0.7.1 and 0.7.2 are the 0.7.0 code, repackaged). Distribution name two-key, import two_key, extras yaml and mcp. Install two-key[yaml]==0.9.0, or two-key[mcp]==0.9.0 for the proxy. Tags are not moved. docs/PYPI.md is the release process: trusted publishing, no token in the repo. server.json lists the proxy on the official MCP Registry as io.github.Insomniac-VibeLabs/two-key (docs/PYPI.md).
+uv.lock pins cryptography and PyYAML for CI (wheels only). pyproject.toml needs cryptography>=48 (from 0.9.0, for ML-DSA-65). CI tools (uv, build, coverage, bandit, twine, cyclonedx-bom) are hash-pinned in .github/requirements/.
 0.2.3 refuses vendor:/min_vendors:, refuses a judge holding the agent's credential even unsent or as
 user:pass, and pins each ledger's witness key on first open: CHANGES.md
 "Upgrading from 0.2.2" (then "Upgrading from 0.2.1" and "Upgrading from 0.1.12" for older).
@@ -74,6 +74,27 @@ one row per entry in a read-only tkinter window: every field (seq, kind, and eac
 lists as name[]) searchable, filterable (contains, equals, starts-with, ends-with, regex, gt/ge/lt/le, empty, and
 negations; all or any), and sortable on several keys. --print writes the matches as JSON Lines; --fields lists the
 names. No network port, no export, never appends (docs/LEDGER_VIEW.md).
+Quickstart (0.9.0, docs/QUICKSTART.md): pip install, a local Ollama judge, two-key setup --answers, one allowed
+and one refused two-key authorize, then ledger-view. Every command on the page runs in CI (tests/quickstart_run.py).
+Demo walkthrough (docs/DEMO.md, files in examples/demo/): a plain-language first-time demo with screenshots. The
+official MCP filesystem server behind two-key mcp-proxy, its paths held inside /srv/notes by a path field; an LM
+Studio judge on Windows through an SSH tunnel; an ollmcp agent with Ollama on Ubuntu. One write allowed, one
+refused by the rules, one by the judge, one with .. refused, then the ledger view.
+The tool check (0.9.0, #28; two_key/toolcheck.py, docs/TOOL_CHECK.md): a tool behind two-key mcp-proxy whose signed
+spec has tool_check {key: hybrid-sha256:...} runs a call only with the spent token and a redeem stamp the proxy sends in MCP
+_meta, refuses replays through a SQLite seen record, and signs a receipt the gateway checks and ledgers;
+high_assurance requires it (or exempt, weaker) and holds a tool after a bad receipt until two-key tool release.
+two-key tool-key new makes a tool's key; two-key tool-key trust writes Two-Key's two public keys. A tool error
+spends the token (already_attempted on a retry).
+Hybrid signatures (0.9.0, two_key/keys.py, two_key/upgrade.py): every key is an Ed25519 key and an ML-DSA-65 key that
+always sign together (fingerprints hybrid-sha256:...), for the constitution, the ledger head and anchor, the witness,
+tk2 tokens, and the tool check's stamps and receipts; there is no Ed25519-only fallback (ml_dsa_unavailable). A 0.8.0
+deployment's keys are upgraded once at the first start (two-key mcp-proxy, authorize, config set) or by two-key keys
+upgrade, recorded as keys_upgraded; TwoKey from Python refuses a 0.8.0 key (keys_upgrade_needed). Back up again after;
+the principal backup bundle also holds stamp.pem (docs/UPGRADING.md).
+two-key setup --window (two_key/setup_form.py, two_key/setup_gui.py) asks setup's questions in a tkinter window instead
+of on the terminal and runs the same build, so the files and refusals are the same; a High assurance switch locks the
+profile's settings and makes its quorum numbers minimums; Save answers file writes JSON for setup --answers.
 two-key constitution-editor (two_key/constitution_editor.py, two_key/constitution_gui.py) writes, checks, and signs a
 constitution in a tkinter window: prose, tools and specs, hard rules, custom fields, serial. It checks with the code
 sign_constitution runs, tries one call on a throwaway key and ledger with a stand-in judge (Path A's decision and the
@@ -149,8 +170,13 @@ does not read the contents. Omit shape and the value's children are copied
 unread. After a derive deny, tool_args are withheld from
 judges unless tool_args_on_derive_deny is set. A derive_failed call (unreadable under its spec)
 then reaches no judge (0.5.0); amount/counterparty/irreversible mismatches and rule denies still do.
-Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer, enum, or
-string; up to 64), each with a signed default and an optional description. A tool spec maps
+Custom Path A fields (0.3.0): a rules file may declare fields: (boolean, integer, enum,
+string, or path; up to 64), each with a signed default and an optional description. A path field
+(0.9.0, v3) admits an absolute file path inside one of its signed under: folders, compared whole segment
+by segment; it is cleaned as text only (repeated slashes and . dropped) and refuses .., relative paths
+and ~, backslashes and non-ASCII; the tool gets the cleaned path; ops add under and not_under; the gateway
+refuses a link below the folder just before the tool runs (path_symlink:<field>). Not a sandbox: the
+tool's own folder limit and its account stop a swap after that check. A tool spec maps
 a field to an argument path; a mapped field is required. A counterparty allow entry "@example.org"
 (0.5.0, v3) admits any plain email address at exactly that ASCII domain (no subdomains, no lookalike
 letters, no header-carrying local parts; never in deny_counterparties; no wildcards); signing warns when

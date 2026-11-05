@@ -4,9 +4,8 @@
 name: publish
 
 # Trusted publishing only. No PyPI token lives in this repository.
-# Tag pushes publish to PyPI when the tag is v<version in pyproject.toml>.
+# A release is a manual run on the PyPI branch. A tag push does not publish.
 # A manual run defaults to TestPyPI. docs/PYPI.md is the operator procedure.
-# This file is on the PyPI branch. GitHub reads a tag's workflow from the tagged commit.
 
 on:
   workflow_dispatch:
@@ -18,9 +17,6 @@ on:
           - testpypi
           - pypi
         default: testpypi
-  push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
   contents: read
@@ -31,7 +27,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/PyPI' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/PyPI'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -42,16 +38,6 @@ jobs:
       - name: Install build tools
         run: |
           pip install --require-hashes --only-binary :all: -r .github/requirements/publish.txt -r .github/requirements/uv.txt
-      - name: Tag must be this version
-        if: github.ref_type == 'tag'
-        run: |
-          version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
-          tag="${GITHUB_REF_NAME#v}"
-          if [ "$tag" != "$version" ]; then
-            echo "Refusing to publish: tag v${tag} is not project version ${version}." >&2
-            echo "Do not move an existing tag. Bump pyproject.toml and two_key.__version__ together, then tag that commit." >&2
-            exit 1
-          fi
       - name: Build sdist and wheel
         # No isolated build environment: the backend (setuptools) is the hashed one from publish.txt.
         run: python -m build --no-isolation
@@ -85,7 +71,7 @@ jobs:
 
   publish:
     needs: build
-    if: github.ref == 'refs/heads/PyPI' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/PyPI'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:

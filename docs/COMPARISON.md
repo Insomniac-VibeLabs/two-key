@@ -35,7 +35,8 @@ substitute for a password manager.
 - a DLP or antivirus product (0.6.0 can call yours; it does not replace it)
 - a SIEM, log management, or alerting product (0.7.0 can feed yours; it does
   not replace it)
-- a FIPS 140-3 validated module
+- a FIPS 140-3 validated module (its algorithms are FIPS-approved; an approved mode on a validated module comes
+  once one offers ML-DSA-65)
 
 Path A is only as good as the fields the signed tool spec can read. Those
 fields, the built-in ones and any custom fields the principal declares,

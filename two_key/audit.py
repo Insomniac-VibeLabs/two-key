@@ -81,7 +81,8 @@ def _decision_digest_problems(body: Mapping[str, Any], current) -> list[str]:
 
 
 def witness_pins(ledger) -> list[dict]:
-    """The ``witness_pinned`` and ``witness_rotated`` entries, oldest first, with key fingerprints.
+    """The ``witness_pinned``, ``witness_rotated`` and ``keys_upgraded`` entries, oldest first, with key
+    fingerprints.
 
     Read from the entries as loaded. ``Ledger`` checks them when it opens: one ``witness_pinned``, and each
     rotation starts from the pinned key and carries the principal, old witness, and new witness signatures.
@@ -96,8 +97,9 @@ def witness_pins(ledger) -> list[dict]:
             if "head_size" in body:
                 pin["head_size"] = body["head_size"]
             pins.append(pin)
-        elif entry.kind == "witness_rotated":
-            pins.append({"seq": entry.seq, "kind": entry.kind, "reason": body.get("reason"),
+        elif entry.kind in ("witness_rotated", "keys_upgraded"):
+            pins.append({"seq": entry.seq, "kind": entry.kind,
+                         "reason": body.get("reason") if entry.kind == "witness_rotated" else "key upgrade",
                          "old_fingerprint": witness_key_fingerprint(body["old_witness_public_key"]),
                          "fingerprint": witness_key_fingerprint(body["new_witness_public_key"])})
     return pins
@@ -118,7 +120,8 @@ def check_history_digests(ledger, constitution) -> list[str]:
     from .compiler import compile_both
     from .derive import blocked_from_rules
     compiled = compile_both(constitution.prose, constitution.hard_rules, constitution.tool_specs,
-                            specs_enforced=True, fields=constitution.fields)
+                            specs_enforced=True, fields=constitution.fields,
+                            agents=constitution.document["signed"].get("agents"))
     rebuild = _HistoryRebuild(ledger.entries, compiled.tool_specs, blocked_from_rules(compiled.rules))
     problems: list[str] = []
     # policy_digest -> each distinct constitution_loaded with it, by the settings a rebuild reads
@@ -157,7 +160,7 @@ class _HistoryRebuild:
 
     def check(self, entry, start, constitution_digest: str) -> str | None:
         """Why one decision's ``history_digest`` was not confirmed, or None when the rebuilt summary matches."""
-        from .history import HistoryIndex, digest
+        from .history import FORMAT_V1, FORMATS, HistoryIndex, digest
         body, basis = entry.body, entry.body.get("history_basis")
         problem = _history_basis_problem(start, basis, entry.seq, constitution_digest)
         if problem is not None:
@@ -166,10 +169,13 @@ class _HistoryRebuild:
         if policy is None:
             return "constitution_loaded judge_history settings do not load"
         ids = tuple(start.get("history_agent_ids") or ())
-        key = canonical_hash({"policy": policy.to_record(), "ids": list(ids)})
+        fmt = basis.get("format", FORMAT_V1)          # a decision before 0.9.0 has no format: v1
+        if fmt not in FORMATS:
+            return f"history_basis names an unknown history format {fmt!r}"
+        key = canonical_hash({"policy": policy.to_record(), "ids": list(ids), "format": fmt})
         index = self.indexes.get(key)
         if index is None or index.seen > basis["ledger_size"]:
-            index = self.indexes[key] = HistoryIndex(policy, self.specs, self.blocked, ids)
+            index = self.indexes[key] = HistoryIndex(policy, self.specs, self.blocked, ids, fmt)
         index.sync(self.entries[:basis["ledger_size"]])
         if digest(_rebuilt_summary(index, body, basis, self.specs, "scanner" in start)) != body["history_digest"]:
             return "history_digest does not match the summary rebuilt from the ledger"

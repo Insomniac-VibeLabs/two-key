@@ -1,0 +1,30 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
+# The rules Path A checks in the Two-Key demo (docs/DEMO.md), for the MCP filesystem server
+# (@modelcontextprotocol/server-filesystem 2.1.0). Three of its tools are signed; the rest, such as
+# move_file and edit_file, are left out, so the agent never sees them. Every path must be inside
+# /srv/notes (a path field, docs/HOWTO.md "File paths inside a folder").
+serial: 1
+fields:
+  note_path:
+    type: path
+    under: [/srv/notes]
+    default: /srv/notes
+    description: The file or folder the tool works on. It must be inside /srv/notes.
+hard_rules:
+  - {id: tools, allow_only_tools: ["write_file", "read_text_file", "list_directory"]}
+tool_specs:
+  write_file:
+    irreversible: true
+    data_class_floor: "personal"
+    fields: {note_path: {json_path: path}}
+    payload: [{"json_path": "content", "shape": "string", "max_length": 4000}]
+  read_text_file:
+    irreversible: false
+    data_class_floor: "personal"
+    fields: {note_path: {json_path: path}}
+  list_directory:
+    irreversible: false
+    data_class_floor: "personal"
+    fields: {note_path: {json_path: path}}

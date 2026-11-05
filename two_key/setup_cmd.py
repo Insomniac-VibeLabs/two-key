@@ -36,6 +36,8 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from . import _platform, writable
+from .constitution import TOOL_CHECK_KEY
+from .toolcheck import EXEMPT
 from .config_set import (CONSTITUTION, JUDGES, PROXY, RULES, Confirm, ConfigChangeError, LEDGER_KIND,
                          account_label, dump, refuse_root, sha256, terminal_confirm, weaker_quorum)
 
@@ -43,8 +45,10 @@ ROUTES = ("proxy", "guard", "library")
 PROFILES = ("default", "high_assurance")
 JUDGE_TYPES = ("openai_compatible", "anthropic", "gemini", "ollama")
 DATA_CLASSES = ("public", "personal", "medical", "financial", "classified")
+UTF8 = "utf-8"
 ANSWER_KEYS = {"route", "profile", "judges", "quorum", "monitored_agent", "rules_file", "prose_file", "tools",
-               "upstream", "agent_session_env", "key_passphrase_file", "judge_history", "one_proxy_per_agent"}
+               "upstream", "agent_session_env", "key_passphrase_file", "judge_history", "one_proxy_per_agent",
+               "unanswered_hold", "agents"}
 # The quorum numbers setup asks for; the other quorum settings keep their defaults until `config set`.
 QUORUM_COUNTS = ("required_yes", "min_responding", "min_distinct_providers", "min_makers", "min_local_judges")
 QUORUM_QUESTIONS = {
@@ -56,10 +60,14 @@ QUORUM_QUESTIONS = {
 }
 
 # Use-case agnostic on purpose: what a call may do is the rules' business, and the principal writes the rest.
+# Judged only on what the judge sees: the call, its arguments, and the reason given for it when the judge has
+# receives_proposal (off by default). The operator's own request is never shown to the judge, so a prose that
+# asked about it made a careful judge vote no every time (run 13, C8; maintainer's decision, 2026-11-04).
 STARTER_PROSE = """\
-Vote yes only when the call is something the operator asked the agent to do, its arguments fit that
-request, and nothing in it is a surprise. Vote no when the call goes beyond the request, when its
-arguments look wrong for it, or when you are not sure.
+Vote yes when the call is an ordinary use of its tool, its arguments look right for that tool, and
+nothing in it looks harmful or out of place. When a reason for the call is shown, the call must also
+fit that reason. Vote no when the arguments look wrong for the tool, when the call does not fit a reason
+that is shown, or when the call could cause harm.
 """
 
 FILES = {"key": "principal.pem", "public": "principal.pub.pem", "prose": "constitution.md",
@@ -109,14 +117,18 @@ def interview(ask: Ask = input) -> dict:
         judges.append(_ask_judge(ask, len(judges) + 1))
     out["judges"] = judges
     out["quorum"] = _ask_quorum(ask, out["profile"], judges)
-    out["monitored_agent"] = _ask_agent(ask)
+    out["monitored_agent"] = _ask_agent(ask, out["profile"])
+    more = _ask_more_agents(ask, out["monitored_agent"])
+    if more:
+        out["agents"] = more
     out["judge_history"] = _ask_history(ask)
     _optional(out, "key_passphrase_file", ask,
               "Principal key: absolute path of a file only this account can read, holding a passphrase to "
               "encrypt the key with (blank: not encrypted): ")
     if not _optional(out, "rules_file", ask, "Rules to sign: a reviewed rules file (for the proxy, rules.draft.yaml "
                      "from two-key mcp-draft-specs), or blank for a starter: "):
-        out["tools"] = _ask_tools(ask)
+        out["tools"] = _ask_tools(ask, out["profile"] if out["route"] == "proxy" else None,
+                                  [a["id"] for a in roster_entries(out) or []])
     _optional(out, "prose_file", ask, "The prose the judges read: a file, or blank for a starter you edit later: ")
     if out["route"] == "proxy":
         command = shlex.split(_ask(ask, "Upstream MCP server: the command that starts it"))
@@ -126,6 +138,11 @@ def interview(ask: Ask = input) -> dict:
         _ask_session(out, ask, cloud_judges(judges))
         out["one_proxy_per_agent"] = _yes(ask, "Let only one proxy at a time serve this agent on this ledger? "
                                           "(no is weaker)", True)
+        # high_assurance always holds, so it is not asked; a no is left out, as the setup window does.
+        if out["profile"] != "high_assurance" and _yes(
+                ask, "Hold a checked tool for 15 minutes when it leaves 3 calls unanswered in a row or within 10 "
+                "minutes?", False):
+            out["unanswered_hold"] = True
     return out
 
 
@@ -151,11 +168,16 @@ def _ask_judge(ask: Ask, n: int) -> dict:
     return judge
 
 
-def _ask_upstream(spec: dict, ask: Ask, who: str) -> None:
-    """``upstream`` for a judge or the agent whose address and model do not say who serves it (a local proxy, an
-    unrecognized host): without it the proxy refuses to start with ``unresolved_identity`` (live run 11, D1)."""
+def needs_upstream(spec: Mapping) -> bool:
+    """True when a judge's or the agent's address and model do not say who serves it (a local proxy, an
+    unrecognized host): without ``upstream`` the proxy refuses to start with ``unresolved_identity``."""
     from .identity import resolve_upstream_info
-    if not spec.get("base_url") or resolve_upstream_info(spec["base_url"], spec.get("model", ""))[0]:
+    return bool(spec.get("base_url")) and not resolve_upstream_info(spec["base_url"], spec.get("model", ""))[0]
+
+
+def _ask_upstream(spec: dict, ask: Ask, who: str) -> None:
+    """``upstream`` for a judge or the agent that :func:`needs_upstream` (live run 11, D1)."""
+    if not needs_upstream(spec):
         return
     _optional(spec, "upstream", ask, f"{who}: Two-Key cannot tell who serves {spec.get('model')} at "
                                      f"{spec['base_url']}; where does that address forward the calls (a host "
@@ -170,7 +192,7 @@ def _ask_quorum(ask: Ask, profile: str, judges: list[dict]) -> dict:
     while True:
         counts = {name: _ask_count(ask, f"Quorum: {name}, {QUORUM_QUESTIONS[name]}", defaults[name])
                   for name in QUORUM_COUNTS}
-        problem, lenient = _quorum_findings(profile, judges, counts)
+        problem, lenient = quorum_findings(profile, judges, counts)
         for line in lenient:
             print(f"  WARN  {line}", file=sys.stderr)
         if problem:
@@ -198,7 +220,7 @@ def _typed_yes(ask: Ask, reasons: list[str]) -> bool:
                "them again: ").strip() == "yes"
 
 
-def _quorum_findings(profile: str, judges: list[dict], counts: Mapping) -> tuple[str | None, list[str]]:
+def quorum_findings(profile: str, judges: list[dict], counts: Mapping) -> tuple[str | None, list[str]]:
     """Why the judges' loader would refuse these numbers for these judges (None when it would not, or when a
     judge itself does not load: ``build`` reports that one), and the warnings ``config check`` would print about
     a quorum that could be too lenient."""
@@ -228,7 +250,7 @@ def _ask_session(out: dict, ask: Ask, cloud: list[str]) -> None:
     out["agent_session_env"] = _ask(ask, question)
 
 
-def _ask_agent(ask: Ask) -> dict:
+def _ask_agent(ask: Ask, profile: str = "default") -> dict:
     agent: dict[str, Any] = {"id": _ask(ask, "Monitored agent: id", "monitored-agent"),
                              "model": _ask(ask, "Monitored agent: model"),
                              "provider": _ask(ask, "Monitored agent: provider (a label)"),
@@ -236,7 +258,29 @@ def _ask_agent(ask: Ask) -> dict:
     _ask_upstream(agent, ask, "Monitored agent")
     env = ask("Monitored agent: name of the environment variable holding its credential (blank: none): ").strip()
     agent["credential_env" if env else "credential"] = env or "none"
+    question = ("Monitored agent: the account it runs as, which starts the proxy (a local account, or its SSH "
+                "login on this machine)")
+    if profile == "high_assurance":
+        agent["account"] = _ask(ask, question)       # high_assurance needs the signed roster
+    else:
+        _optional(agent, "account", ask, question + "; blank: no signed roster, agent_id is not checked: ")
     return agent
+
+
+def _ask_more_agents(ask: Ask, first: Mapping) -> list[dict]:
+    """More agents for the signed roster, each with its own account; a shared group is many callers on one
+    account (for example public agents through one gateway), judged as one agent."""
+    if not first.get("account"):
+        return []
+    more: list[dict] = []
+    while _yes(ask, "Add another agent to the signed roster (its own account)?", False):
+        n = len(more) + 2
+        entry: dict[str, Any] = {"id": _ask(ask, f"Agent {n}: id", f"agent{n}"),
+                                 "account": _ask(ask, f"Agent {n}: the account it runs as")}
+        if _yes(ask, f"Agent {n}: a shared group of callers Two-Key cannot tell apart, judged as one?", False):
+            entry["shared"] = True
+        more.append(entry)
+    return more
 
 
 def _ask_history(ask: Ask) -> dict:
@@ -253,12 +297,51 @@ def _ask_history(ask: Ask) -> dict:
         raise SetupError("judge_history: the episode counts are whole numbers") from None
 
 
-def _ask_tools(ask: Ask) -> list[dict]:
-    """The starter rules' tools: each id, whether a call can be undone, and its lowest data class."""
-    return [{"id": tool,
-             "irreversible": _yes(ask, f"Tool {tool}: can a call not be undone?", True),
-             "data_class_floor": _ask(ask, f"Tool {tool}: lowest data class", "classified", DATA_CLASSES)}
-            for tool in shlex.split(_ask(ask, "Starter: the tool ids to allow, separated by spaces"))]
+def _ask_tools(ask: Ask, profile: str | None, agent_ids: list[str] | None = None) -> list[dict]:
+    """The starter rules' tools: each id, whether a call can be undone, and its lowest data class; behind the
+    proxy (``profile`` given), also its tool check (#28); with a signed roster, which agents may call it."""
+    tools = []
+    for tool in shlex.split(_ask(ask, "Starter: the tool ids to allow, separated by spaces")):
+        entry = {"id": tool,
+                 "irreversible": _yes(ask, f"Tool {tool}: can a call not be undone?", True),
+                 "data_class_floor": _ask(ask, f"Tool {tool}: lowest data class", "classified", DATA_CLASSES)}
+        if profile is not None:
+            _ask_tool_check(entry, ask, profile)
+        if agent_ids:
+            _ask_tool_agents(entry, ask, agent_ids, profile == "high_assurance")
+        tools.append(entry)
+    return tools
+
+
+def _ask_tool_agents(entry: dict, ask: Ask, agent_ids: list[str], high: bool) -> None:
+    """``agents`` for one starter tool: ``any`` listed agent (not under high_assurance), or some of their ids."""
+    default = " ".join(agent_ids) if high else ANY_AGENT
+    while True:
+        answer = _ask(ask, f"Tool {entry['id']}: which agents may call it: "
+                      + ("" if high else "any, or ") + f"ids from {agent_ids} separated by spaces", default)
+        if answer == ANY_AGENT and not high:
+            return      # any is the default; nothing is written
+        ids = shlex.split(answer)
+        if ids and not set(ids) - set(agent_ids):
+            entry["agents"] = ids
+            return
+        print(f"  ids from {agent_ids}" + ("" if high else ", or any"), file=sys.stderr)
+
+
+def _ask_tool_check(entry: dict, ask: Ask, profile: str) -> None:
+    """The tool check: the fingerprint of the tool's receipt key, ``exempt``, or (not under high_assurance) off."""
+    needed = profile == "high_assurance"
+    question = (f"Tool {entry['id']}: tool check (docs/TOOL_CHECK.md): the receipt key's fingerprint "
+                "(hybrid-sha256:..., from two-key tool-key new), or exempt" + ("" if needed else ", or blank for off"))
+    while True:
+        answer = ask(question + ": ").strip()
+        if not answer and not needed:
+            return
+        value = answer if answer == EXEMPT else {"key": answer}
+        if not tool_check_problems({"route": "proxy", "profile": profile, "tools": [dict(entry, tool_check=value)]}):
+            entry["tool_check"] = value
+            return
+        print("  give hybrid-sha256: and 64 hex digits, or exempt" + ("" if needed else ", or leave it blank"))
 
 
 def cloud_judges(judges: Any) -> list[str]:
@@ -306,14 +389,72 @@ def _quorum_answer(answers: Mapping) -> dict:
 
 
 def weaker_reasons(answers: Mapping) -> list[str]:
-    """Why the answers' quorum enforces less than the profile's own, one line each (as ``config set`` words it)."""
+    """Why the answers enforce less than the profile's own, one line each (as ``config set`` words it): a lower
+    quorum number, or under ``high_assurance`` a tool exempt from the tool check."""
+    profile = answers.get("profile", "default")
+    exempt = [f"tool_specs.{t['id']}.tool_check: exempt" for t in _tools(answers)
+              if profile == "high_assurance" and t.get("tool_check") == EXEMPT]
     counts = _quorum_answer(answers)
     if not counts:
-        return []
-    profile = answers.get("profile", "default")
+        return exempt
     judges = answers.get("judges")
     n_judges = len(judges) if isinstance(judges, list) else 0
-    return weaker_quorum(_policy(profile, {}, n_judges), _policy(profile, counts, n_judges))
+    return weaker_quorum(_policy(profile, {}, n_judges), _policy(profile, counts, n_judges)) + exempt
+
+
+ANY_AGENT = "any"
+SETUP_AGENT_KEYS = ("account",)        # monitored_agent keys setup reads for the roster, not for judges.yaml
+
+
+def roster_entries(answers: Mapping) -> list[dict] | None:
+    """The signed agent roster the answers give (two_key/roster.py): the monitored agent with its ``account``,
+    then each of ``agents``; None without an account."""
+    agent = answers.get("monitored_agent")
+    first = agent if isinstance(agent, Mapping) else {}
+    more = answers.get("agents")
+    if more is not None and (not isinstance(more, list) or not all(isinstance(a, Mapping) for a in more)):
+        raise SetupError("agents: expected a list of {id, account, shared?, hosting?}")
+    if not first.get("account"):
+        if more:
+            raise SetupError("agents: give monitored_agent.account first; the roster starts with the monitored agent")
+        return None
+    entries = [{"id": str(first.get("id") or "monitored-agent"), "account": first["account"]}]
+    entries += [dict(a) for a in more or []]
+    from .constitution import ConstitutionError
+    from .roster import validate_agents
+    try:
+        validate_agents(entries)
+    except ConstitutionError as e:
+        raise SetupError(str(e)) from None
+    return entries
+
+
+def _tools(answers: Mapping) -> list[Mapping]:
+    tools = answers.get("tools")
+    return [t for t in tools if isinstance(t, Mapping) and isinstance(t.get("id"), str)] \
+        if isinstance(tools, list) else []
+
+
+def tool_check_problems(answers: Mapping) -> list[str]:
+    """What is wrong with the starter tools' tool checks (#28): only behind the proxy, a fingerprint or
+    ``exempt``, and under ``high_assurance`` one or the other for every tool (the proxy refuses to start). A
+    reviewed rules file is checked by ``config check`` instead."""
+    if answers.get("rules_file"):
+        return []
+    out = []
+    proxy = answers.get("route", "proxy") == "proxy"
+    for tool in _tools(answers):
+        value = tool.get("tool_check")
+        if value is None:
+            if proxy and answers.get("profile") == "high_assurance":
+                out.append(f"tool {tool['id']}: high_assurance needs the tool check: a receipt key's fingerprint "
+                           "(two-key tool-key new) or exempt")
+        elif not proxy:
+            out.append(f"tool {tool['id']}: the tool check is only for tools behind two-key mcp-proxy")
+        elif value != EXEMPT and not (isinstance(value, Mapping) and set(value) == {"key"}
+                                      and isinstance(value["key"], str) and TOOL_CHECK_KEY.fullmatch(value["key"])):
+            out.append(f"tool {tool['id']}: tool_check is exempt or {{key: hybrid-sha256:<64 hex digits>}}")
+    return out
 
 
 def load_answers(path: str) -> dict:
@@ -352,7 +493,8 @@ def judges_doc(answers: Mapping) -> dict:
         if not isinstance(history, Mapping):
             raise SetupError("judge_history: expected a mapping (enabled, on_failure, burst_denies, ...)")
         quorum["judge_history"] = dict(history)
-    return {"monitored_agent": dict(answers.get("monitored_agent") or {}),
+    agent = {k: v for k, v in dict(answers.get("monitored_agent") or {}).items() if k not in SETUP_AGENT_KEYS}
+    return {"monitored_agent": agent,
             "judges": [_judge(j) for j in judges],
             "quorum": quorum}
 
@@ -361,17 +503,37 @@ NO_SERIAL = ("until a constitution with a serial runs, this ledger accepts any c
              "an older one too (docs/HOWTO.md, The serial)")
 
 
-def starter_rules(tools: Any) -> dict:
+def _starter_spec(tool: Any, roster: list | None, high: bool) -> dict:
+    if not isinstance(tool, Mapping) or not isinstance(tool.get("id"), str):
+        raise SetupError("tools: each tool is a mapping with an id")
+    spec = {"irreversible": tool.get("irreversible", True),
+            "data_class_floor": tool.get("data_class_floor", "classified")}
+    if tool.get("tool_check") is not None:
+        spec["tool_check"] = tool["tool_check"]
+    agents = tool.get("agents")
+    if agents is not None and not roster:
+        raise SetupError(f"tools: {tool['id']}: agents needs monitored_agent.account (a signed roster)")
+    if agents is None and roster and high:
+        agents = [a["id"] for a in roster]
+    if agents is not None:
+        spec["agents"] = agents
+    return spec
+
+
+def starter_rules(tools: Any, roster: list | None = None, high: bool = False) -> dict:
+    """The starter rules file. With a roster, ``agents:`` and each tool's ``agents`` (every listed id under
+    ``high_assurance`` when the answers name none, since it needs named agents; otherwise ``any``)."""
     if not isinstance(tools, list) or not tools:
         raise SetupError("tools: name at least one tool, or give rules_file")
     specs = {}
     for tool in tools:
-        if not isinstance(tool, Mapping) or not isinstance(tool.get("id"), str):
-            raise SetupError("tools: each tool is a mapping with an id")
-        specs[tool["id"]] = {"irreversible": tool.get("irreversible", True),
-                             "data_class_floor": tool.get("data_class_floor", "classified")}
+        spec = _starter_spec(tool, roster, high)
+        specs[tool["id"]] = spec
     # serial 1: every later change signs a higher one, and the ledger refuses to go back (live run 9x, C44)
-    return {"serial": 1, "hard_rules": [{"id": "tools", "allow_only_tools": list(specs)}], "tool_specs": specs}
+    doc = {"serial": 1, "hard_rules": [{"id": "tools", "allow_only_tools": list(specs)}], "tool_specs": specs}
+    if roster:
+        doc["agents"] = roster
+    return doc
 
 
 def proxy_doc(answers: Mapping, digest: str) -> dict:
@@ -393,7 +555,9 @@ def proxy_doc(answers: Mapping, digest: str) -> dict:
     if answers.get("agent_session_env"):
         doc["agent_session_env"] = answers["agent_session_env"]
     agent = answers.get("monitored_agent")
-    if isinstance(agent, Mapping) and agent.get("id"):
+    if isinstance(agent, Mapping) and agent.get("id") and not agent.get("account"):
+        # With a signed roster the account that starts the proxy picks the agent, so one proxy.yaml serves each
+        # listed agent and names none.
         # The ledger names the agent by the proxy's agent_id; without it every decision records no agent and
         # the judges' history calls it "unnamed" (live walkthrough, 2026-10-27).
         doc["agent_id"] = str(agent["id"])
@@ -401,7 +565,19 @@ def proxy_doc(answers: Mapping, digest: str) -> dict:
         if not isinstance(answers["one_proxy_per_agent"], bool):
             raise SetupError("one_proxy_per_agent: expected true or false")
         doc["one_proxy_per_agent"] = answers["one_proxy_per_agent"]
+    _unanswered_hold(doc, answers.get("unanswered_hold"), high)
     return doc
+
+
+def _unanswered_hold(doc: dict, value: Any, high: bool) -> None:
+    """``unanswered_hold``: on or off for the default profile; ``high_assurance`` always holds and refuses false."""
+    if value is None:
+        return
+    if not isinstance(value, bool):
+        raise SetupError("unanswered_hold: expected true or false")
+    if high and not value:
+        raise SetupError("unanswered_hold: high_assurance always holds a checked tool that keeps leaving calls unanswered")
+    doc["unanswered_hold"] = value
 
 
 def _write(path: Path, data: bytes) -> None:
@@ -474,6 +650,12 @@ def _build(answers: Mapping, target: Path | str, *, environ: Mapping[str, str] |
         raise SetupError(f"route: expected one of {list(ROUTES)}")
     if answers.get("profile", "default") not in PROFILES:
         raise SetupError(f"profile: expected one of {list(PROFILES)}")
+    problems = tool_check_problems(answers)
+    if problems:
+        raise SetupError("tools: " + "; ".join(problems))
+    if route == "proxy" and answers.get("profile") == "high_assurance" and not roster_entries(answers):
+        raise SetupError("agent_account_required: high_assurance needs a signed agent roster: give "
+                         "monitored_agent.account, the account the agent runs as (docs/CONNECTING.md)")
     weaker = _confirmed_weaker(answers, confirm_weaker, confirm, out)
     passphrase = _new_passphrase(answers.get("key_passphrase_file"))
     target = Path(os.path.abspath(target))
@@ -551,26 +733,44 @@ def _staging(target: Path) -> Path:
 
 def _write_constitution(staging: Path, answers: Mapping, key):
     """The prose, the rules, and the constitution signed from them. Returns the envelope and what verified."""
-    from .constitution import load_serial, load_unsigned_with_fields, sign_constitution, verify_signed
+    from .constitution import load_agents, load_serial, load_unsigned_with_fields, sign_constitution, verify_signed
     prose = _read_source(answers["prose_file"], "prose_file") if answers.get("prose_file") else \
-        STARTER_PROSE.encode("utf-8")
+        STARTER_PROSE.encode(UTF8)
     _write(staging / FILES["prose"], prose)
+    roster = roster_entries(answers)
     if answers.get("rules_file"):
-        rules_bytes = _read_source(answers["rules_file"], "rules_file")
+        rules_bytes = _with_roster(_read_source(answers["rules_file"], "rules_file"), roster,
+                                   staging / FILES["rules"])
     else:
-        rules_bytes = dump(starter_rules(answers.get("tools")), staging / FILES["rules"], "setup")
+        rules_bytes = dump(starter_rules(answers.get("tools"), roster, answers.get("profile") == "high_assurance"),
+                           staging / FILES["rules"], "setup")
     _write(staging / FILES["rules"], rules_bytes)
     try:
         text, rules, specs, fields = load_unsigned_with_fields(staging / FILES["prose"], staging / FILES["rules"])
         serial = load_serial(staging / FILES["rules"])
-        envelope = sign_constitution(text, rules, key, specs, fields=fields, serial=serial)
+        envelope = sign_constitution(text, rules, key, specs, fields=fields, serial=serial,
+                                     agents=load_agents(staging / FILES["rules"]))
         signed = verify_signed(json.loads(json.dumps(envelope)), key.public_key())
     except (ValueError, TypeError) as e:
         raise SetupError(f"rules: {e}") from None
-    _write(staging / FILES["constitution"], (json.dumps(envelope, indent=2) + "\n").encode("utf-8"))
+    _write(staging / FILES["constitution"], (json.dumps(envelope, indent=2) + "\n").encode(UTF8))
     if serial is None:      # an operator's rules file; the starter has serial 1 (run 9y, S8)
         print(f"two-key: setup: WARNING: rules_file has no serial: {NO_SERIAL}", file=sys.stderr)
     return envelope, signed
+
+
+def _with_roster(rules_bytes: bytes, roster: list | None, path: Path) -> bytes:
+    """An operator's rules file, with the answers' roster added when the file declares none."""
+    if not roster:
+        return rules_bytes
+    from .strict import StrictParseError, load_yaml
+    try:
+        doc = load_yaml(rules_bytes.decode(UTF8))      # JSON reads as YAML too
+    except (StrictParseError, UnicodeDecodeError) as e:
+        raise SetupError(f"rules_file: {e}") from None
+    if not isinstance(doc, dict) or "agents" in doc:
+        return rules_bytes      # its own roster (or a shape the signer refuses with its own message)
+    return dump({**doc, "agents": roster}, path, "setup")
 
 
 def _write_proxy_and_check(staging: Path, target: Path, answers: Mapping, envelope, key,
@@ -595,7 +795,7 @@ def _write_proxy_and_check(staging: Path, target: Path, answers: Mapping, envelo
 
 def _check_library(staging: Path, key) -> list[tuple[str, str]]:
     """The guard and library routes have no proxy.yaml: load the judges and verify the constitution."""
-    from .config_cmd import FAIL, OK
+    from .config_cmd import FAIL, OK, agent_declaration_problem
     from .constitution import load_envelope, verify_signed
     from .identity import load_monitored_agent_file
     from .judges.config import load_config_file
@@ -605,8 +805,9 @@ def _check_library(staging: Path, key) -> list[tuple[str, str]]:
         found.append((OK, f"constitution: signed by the principal key, digest {signed.digest}"))
         judges, policy = load_config_file(staging / FILES["judges"])
         found.append((OK, f"judges: {len(judges)} load; required_yes {policy.required_yes}"))
-        load_monitored_agent_file(staging / FILES["judges"])
-        found.append((OK, "monitored_agent: declared"))
+        agent = load_monitored_agent_file(staging / FILES["judges"])
+        problem = agent_declaration_problem(agent) if agent is not None else None
+        found.append((FAIL, problem) if problem else (OK, "monitored_agent: declared"))
     except Exception as e:      # every loader's own error, reported as a refusal
         found.append((FAIL, f"{type(e).__name__}: {e}"))
     return found

@@ -99,6 +99,7 @@ Sent, where the entry has it:
 | `*_size`, `*_digest` | the size and digest of an argument set, a proposal, or a revocation reason |
 | `verdict`, `categories`, `scanner`, `stance`, `elapsed_ms`, `parts[]` | the content scan: its verdict and each part's size and digest |
 | `witness_fingerprint`, `source` | the witness key pinned or rotated, as a fingerprint |
+| `from_alg`, `to_alg`, `old_principal_fingerprint`, `new_principal_fingerprint`, `old_witness_fingerprint`, `new_witness_fingerprint`, `capability_key_fingerprint`, `stamp_key_fingerprint` | the key upgrade (`keys_upgraded`, 0.9.0): the suites, and each key before and after, as fingerprints; never a key or a signature |
 | `origin` | `library`, `cli`, `mcp-proxy`, or whatever the integration declared |
 | `at`, `history_digest` | when a decision was made (UTC, to the second), and the digest of the judge history summary the judges saw (0.8.0; `null` when none was sent) |
 | `error_class`, `on_failure` | `judge_history_failed` (0.8.0): why the summary could not be built, as a class, and whether the call was denied or judged without it |
@@ -226,8 +227,8 @@ event as the message:
 ```
 
 Severity: an allow is informational (6), a deny, a gateway refusal, or a
-refused-token count is warning (4), and a witness pin or rotation, a recovery,
-or a revocation is notice (5).
+refused-token count is warning (4), and a witness pin or rotation, the key
+upgrade, a recovery, or a revocation is notice (5).
 
 Webhook settings: `auth_header` (default `Authorization` when
 `auth_value_file` is set) with `auth_value_file`, `hmac_key_file` (adds
@@ -367,7 +368,7 @@ but not tested in CI.
 
 ## Reason codes you will see
 
-These are the start-up refusals and warnings this feature adds, and the WARNING kinds that 0.8.0 adds.
+These are the start-up refusals and warnings this feature adds, and the WARNING kinds that 0.8.0 and 0.9.0 add.
 
 | Code or line | What it means |
 | --- | --- |
@@ -381,4 +382,5 @@ These are the start-up refusals and warnings this feature adds, and the WARNING 
 | `judge_history_failed` | the judge history summary could not be built; with `on_failure: deny` (the default) the call was denied `internal_error:history` |
 | `attempt_episode` | one agent reached `burst_denies` denies within `burst_minutes`; the agent id is the operator's, or `unnamed` |
 | `agent_already_connected` | a second MCP proxy for an agent already connected to this ledger refused to start (`one_proxy_per_agent`) |
+| `agent_refused` | an MCP proxy refused to start because the account that started it is not on the signed agent roster (`agent_account_unlisted`), or is another agent's (`agent_account_mismatch`); the account itself stays in the ledger ([AGENT_ROSTER](AGENT_ROSTER.md)) |
 | `two-key: gateway refused N token(s) that did not verify in T s: ...` | the refused-token count, also sent as `gateway_token_refused` |

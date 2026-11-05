@@ -70,7 +70,9 @@ constitution does not yet state a minimum profile.
 | `quorum.require_local_yes` | false | true |
 | `on_writable_paths` | `warn` | always refuses; `warn` is refused |
 | `on_agent_access` | `refuse` | always refuses; `warn` is refused |
+| `unanswered_hold` | `false` | always on; `false` is refused |
 | a plaintext SIEM sink (`udp`, `tcp`, `http://`) | allowed, with a start-up warning | refused (`siem_plaintext_refused`) |
+| a tool behind the proxy with no `tool_check` | allowed: the tool check is off | refused (`tool_check_required`); `exempt` is allowed and weaker |
 | a scan stance other than `strict` (set by the signed `scan` rule) | allowed | allowed, with a start-up warning |
 | one judge with `required_yes: 1` | `lone_judge_warning` | not reachable: two makers are needed |
 | a quorum that could be too lenient (one judge, a minority approving, one provider or maker) | a `WARN` in `config check` and `setup` | the same, where it can still apply |
@@ -97,6 +99,7 @@ Tier: operator config. The MCP proxy's own settings (`two-key mcp-proxy --config
 | `on_writable_paths` | warn | always refuses; `warn` is refused | `warn` names each file or folder the proxy runs or reads that another account could change, and starts. `refuse` does not start. |
 | `on_agent_access` | refuse | always refuses; `warn` is refused | `refuse` does not start when the account that started the proxy is Two-Key's own, is root, cannot be told, or can change a path the proxy runs or reads. `warn` names it and starts, for a test on one machine. |
 | `one_proxy_per_agent` | true |  | `true` lets one running proxy serve this `agent_id` (or, with none, the `unnamed` agent) on this ledger: a second refuses to start with `agent_already_connected`, ledgered and sent to the SIEM. `false` lets several run at once and warns at start; it counts as weaker in `config set`. Since 0.8.0. |
+| `unanswered_hold` | false | always on; `false` is refused | `true` holds a checked tool that keeps leaving calls unanswered (an error or a timeout): 3 unanswered calls in a row with no verified receipt between, or 3 within 10 minutes, hold it for 15 minutes, and then the hold ends by itself (TOOL_CHECK, "When the tool does not answer"). `false` only ledgers each unanswered call and sends it to the SIEM. Turning it off counts as weaker in `config set`. Since 0.9.0. |
 | `upstream` | required |  | The MCP server the proxy starts and forwards signed calls to. |
 | `upstream.command` | required |  | Program and arguments, as a list. Run without a shell. |
 | `upstream.env` | none |  | Variables for the child: a literal, or `{env: NAME}` read from the proxy's environment (unset refuses to start). No other variable is passed. `config show` never prints a literal. |
@@ -216,6 +219,7 @@ Tier: operator config. The judges, the quorum policy, and the `monitored_agent:`
 | `quorum.require_path_a_first` | false |  | Stored, not enforced: `authorize` runs both paths either way. |
 | `quorum.tool_args_on_derive_deny` | false |  | Send the arguments to judges, and ask them, after a derive deny. |
 | `quorum.tool_args_on_scan_flag` | false |  | Send the arguments and the proposal to judges when the scanner flagged the call. |
+| `quorum.require_other_maker` | false |  | Judge diversity (0.9.0, opt-in): an allow needs a yes from a judge whose model maker is not a monitored agent's (`other_maker_yes_required`); refused at start when no judge is (`judge_diversity_unmet`). Turning it off is weaker. |
 | `quorum.allow_same_provider_judge` | false |  | Deprecated and ignored: the same provider is allowed. |
 | `quorum.allow_same_model_distinct_tenant` | false |  | Deprecated and ignored. |
 | `quorum.judge_history` | on, with the defaults below |  | The decision history summary judges get with each call (0.8.0): recent decisions for the same signed tool and allow-listed counterparty, counts for all tools, and the agent's bursts of denied calls. Built from signed names and reason codes only, never from the agent's text. |
@@ -276,6 +280,11 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `tool_specs` | required |  | Where Path A reads each value, per tool. Every allow-listed tool needs one. |
 | `fields` | none |  | The custom Path A fields, up to 64. A rules file with `fields:` signs as a v2 constitution. |
 | `serial` | none |  | A positive integer: the principal's order of constitutions. A ledger that has run serial N refuses a lower one, and N again with other rules (`constitution_rollback`, `constitution_serial_reused`); once a ledger has run one with a serial, one without is refused too. Signs as a v3 constitution. `two-key setup` writes `serial: 1`; `config set` on a signed setting raises it by one. |
+| `agents` | none | required (`agent_roster_required`) | The signed agent roster (0.9.0): the agents that may connect, each with the account it runs as. With one, `two-key mcp-proxy` serves the entry for the account that started it and refuses any other account (`agent_account_unlisted`). Signs as a v3 constitution. |
+| `agents[].id` | required |  | The agent's name in the ledger and to the judges. Letters, digits, `.`, `_`, `-`, at most 128; `unnamed` and `any` are reserved. |
+| `agents[].account` | required |  | The local account, or the SSH login account, the agent runs as. Each entry has its own account. |
+| `agents[].shared` | false |  | `true` marks a group of callers Two-Key cannot tell apart (for example public agents through one gateway account), judged as one agent; `one_proxy_per_agent` does not apply to it. |
+| `agents[].hosting` | none |  | Where the agent runs, as ledger metadata. |
 | `hard_rules[].id` | `rule[i]:type` |  | The rule's name in the ledger. Unique. |
 | `hard_rules[].allow_only_tools` | one rule type per rule |  | A list of tool ids; any other tool is denied. |
 | `hard_rules[].deny_counterparties` | one rule type per rule |  | A list of blocked parties, each exact. No `@domain` entries. |
@@ -300,11 +309,14 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `tool_specs.<tool>.payload[].shape` | none |  | `string`, `number`, or `list`. |
 | `tool_specs.<tool>.payload[].max_length` | none |  | A positive integer, for a `string` or `list`. |
 | `tool_specs.<tool>.deny_unmapped` | false |  | `true` denies an argument the spec does not name, instead of dropping it. |
+| `tool_specs.<tool>.tool_check` | none (off) |  | The tool check (docs/TOOL_CHECK.md), for a tool behind `two-key mcp-proxy`: `{key: hybrid-sha256:...}` turns it on, `exempt` leaves it off. `high_assurance` refuses to start with a tool that has neither; `exempt` and turning it off are weaker. |
+| `tool_specs.<tool>.tool_check.key` | required with a mapping |  | The fingerprint of the key that signs the tool's receipts, as `two-key tool-key new` prints it. |
+| `tool_specs.<tool>.agents` | any | a list of ids (`agent_list_required`) | The roster agents that may call the tool: `any`, or a list of agent ids. Another agent does not see the tool and a call is denied `tool_not_for_agent`. Needs `agents:`. `any` is weaker. |
 | `tool_specs.<tool>.fields` | none |  | Maps each custom field to an argument, or marks it `not_applicable`. |
 | `tool_specs.<tool>.fields.<name>.json_path` | none |  | The argument that holds the field's value. |
 | `tool_specs.<tool>.fields.<name>.source` | the arguments |  | `caller` for a fact the proxy's hook supplies. |
 | `tool_specs.<tool>.fields.<name>.encrypted` | none |  | `pass`, only on the `scan` field: an encrypted file reaches the tool without a look inside. |
-| `fields.<name>.type` | required |  | `boolean`, `integer`, `enum`, or `string`. |
+| `fields.<name>.type` | required |  | `boolean`, `integer`, `enum`, `string`, or `path`. |
 | `fields.<name>.default` | required |  | The value a tool that does not map the field gets. |
 | `fields.<name>.description` | none |  | Text for the signer and the judges. Never an authorization rule. |
 | `fields.<name>.source` | the arguments |  | `caller`: the value comes from the caller (the proxy's fact hook, or `facts=` in code), never from the agent. |
@@ -314,4 +326,5 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `fields.<name>.charset` | ascii |  | `ascii` or `unicode`, for `enum` and `string`. |
 | `fields.<name>.scripts` | required with `charset: unicode` |  | The one writing system allowed, such as `latin`, `cyrillic` or `arabic`. Not valid with `ascii`. |
 | `fields.<name>.max_length` | required for `string` |  | Longest value. |
-| `fields.<name>.case` | case-insensitive |  | `exact`, for `string`. |
+| `fields.<name>.case` | case-insensitive for `string`, exact for `path` |  | `exact`, for `string`; `insensitive`, for `path`. |
+| `fields.<name>.under` | required for `path` |  | The folders a path must be inside, absolute and in clean form; not `/`, and none inside another. |

@@ -53,7 +53,8 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
     """``check`` for a config already read. ``config set`` runs it on the staged files before it writes."""
     environ = os.environ if environ is None else environ
     found: list[tuple[str, str]] = [(OK, f"config: {config.path} reads cleanly")]
-    found += _constitution(config)
+    constitution_found, signed = _constitution(config)
+    found += constitution_found
     loaded, bad = _judges(config)
     high = False
     judges, agent = [], None
@@ -72,18 +73,102 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
     found += _writable(config, high)
     found += _siem(config, high)
     found += _agent_access(config, high)
+    found += _unanswered_hold(config, high)
+    if signed is not None:
+        found += _tool_checks(signed, high)
+        found += _roster(config, signed, high, agent)
     return found
 
 
-def _constitution(config) -> list[tuple[str, str]]:
+def _roster_entry(entry, signed, lookup, declared: set, judges) -> list[tuple[str, str]]:
+    """The config-check lines for one roster entry."""
+    from .roster import tool_allows
+    tools = sorted(t for t, spec in signed.tool_specs.items() if tool_allows(spec, entry.id))
+    kind = "shared group" if entry.shared else "agent"
+    uid = lookup(entry.account)
+    if uid is None:
+        return [(WARN, f"agents: {kind} {entry.id!r}: account {entry.account!r} does not exist on this machine, so "
+                       f"a proxy for it cannot start here; tools: {tools or 'none'}")]
+    level, note = OK, f"uid {uid}"
+    if uid == 0 or (hasattr(os, "geteuid") and uid == os.geteuid()):
+        level, note = FAIL, f"uid {uid}, which is root or two-key's own account (the proxy refuses it)"
+    out = [(level, f"agents: {kind} {entry.id!r}: account {entry.account!r} ({note}); tools: {tools or 'none'}")]
+    if declared and entry.id not in declared:
+        out.append((WARN, f"agents: {entry.id!r} has no monitored_agent declaration with that id in {judges}, so "
+                          "judges are checked against the declared agents only"))
+    return out
+
+
+def _roster(config, signed, high: bool, agent=None, *, lookup=None) -> list[tuple[str, str]]:
+    """The signed agent roster (two_key/roster.py): one line per agent with its account, whether this machine has
+    that account and whether it passes the agent-access checks, and its tools. It cannot read the sudoers file or
+    ``authorized_keys``, so it does not say which account a wrapper or a forced command starts the proxy as."""
+    from .identity import declarations
+    from .roster import ANY, uid_of
+    lookup = uid_of if lookup is None else lookup
+    entries = signed.agents
+    if not entries:
+        if high:
+            return [(FAIL, "agent_roster_required: high_assurance needs a signed agent roster (agents: in the rules "
+                           "file); the proxy refuses to start without one (docs/CONNECTING.md)")]
+        return [(OK, f"agents: no signed roster; the proxy serves agent_id {config.agent_id or 'unnamed'!r} from "
+                     "proxy.yaml, unchecked, and records the account that started it")]
+    declared = {d.id for d in declarations(agent)}
+    out = []
+    for entry in entries:
+        out += _roster_entry(entry, signed, lookup, declared, config.judges)
+    if config.agent_id is not None and config.agent_id not in {e.id for e in entries}:
+        out.append((FAIL, f"agent_account_mismatch: proxy.yaml's agent_id {config.agent_id!r} is not on the signed "
+                          "roster; remove it (the account that starts the proxy picks the agent)"))
+    open_tools = sorted(t for t, spec in signed.tool_specs.items() if spec.get("agents", ANY) == ANY)
+    if high and open_tools:
+        out.append((FAIL, f"agent_list_required: high_assurance needs each tool to name its agents; {open_tools} "
+                          "are open to any listed agent"))
+    return out
+
+
+def _unanswered_hold(config, high: bool) -> list[tuple[str, str]]:
+    """``unanswered_hold`` (docs/TOOL_CHECK.md): a FAIL when ``high_assurance`` is told not to hold."""
+    from .mcp_proxy.config import unanswered_hold_problem
+    problem = unanswered_hold_problem(config, high)
+    if problem:
+        return [(FAIL, problem)]
+    return [(OK, f"unanswered_hold: {'on' if config.unanswered_hold or high else 'off'}")]
+
+
+def _tool_checks(signed, high: bool) -> list[tuple[str, str]]:
+    """Each signed tool's tool check (#28, docs/TOOL_CHECK.md). Under ``high_assurance`` a tool with neither a
+    receipt key nor ``exempt`` is a FAIL, as the proxy refuses to start; otherwise one OK line lists them."""
+    from .toolcheck import checked
+    on = sorted(t for t, spec in signed.tool_specs.items() if checked(spec))
+    exempt = sorted(t for t, spec in signed.tool_specs.items() if spec.get("tool_check") == "exempt")
+    off = sorted(t for t, spec in signed.tool_specs.items() if "tool_check" not in spec)
+    out = [(OK, f"tool_check: on for {on or 'no tool'}; exempt: {exempt or 'none'}; off: {off or 'none'}")]
+    if high and off:
+        out.append((FAIL, f"tool_check_required: high_assurance needs the tool check for {off}; give each a "
+                          "receipt key (two-key tool-key new) or mark it exempt (docs/TOOL_CHECK.md)"))
+    return out
+
+
+def _upgrade_line(config) -> tuple[str, str]:
+    """A 0.8.0 principal key: the proxy's first start upgrades the keys, unless the witness is pinned outside."""
+    if config.witness_public_key is not None:
+        return (FAIL, "principal_key: a 0.8.0 Ed25519 key, and witness_public_key pins the witness outside the "
+                      "ledger, so the proxy will not upgrade the keys by itself; run two-key keys upgrade --config "
+                      "FILE (docs/UPGRADING.md)")
+    return (WARN, "principal_key: a 0.8.0 Ed25519 key; the proxy's first start upgrades every key to hybrid "
+                  "Ed25519 + ML-DSA-65 and signs the constitution again (docs/UPGRADING.md)")
+
+
+def _constitution(config) -> tuple[list[tuple[str, str]], Any]:
     from .constitution import load_envelope, verify_signed
-    from .keys import key_file_is_encrypted
+    from .keys import is_hybrid, key_file_is_encrypted
     try:
         # As the proxy opens it: with keys.passphrase_file when it is encrypted, never a prompt.
         public = config.load_principal_key(prompt=False).public_key()
         encrypted = key_file_is_encrypted(config.principal_key)
     except (OSError, ValueError) as e:
-        return [(FAIL, f"principal_key: {config.principal_key}: {e}")]
+        return [(FAIL, f"principal_key: {config.principal_key}: {e}")], None
     if encrypted:
         key_line = (OK, "principal_key: encrypted; keys.passphrase_file opens it")
     elif config.principal_passphrase_file is not None:
@@ -95,13 +180,32 @@ def _constitution(config) -> list[tuple[str, str]]:
     try:
         signed = verify_signed(load_envelope(config.constitution), public)
     except (OSError, ValueError) as e:
-        return [(FAIL, f"constitution: {config.constitution}: {e}")]
+        return [(FAIL, f"constitution: {config.constitution}: {e}")], None
     out = [key_line, (OK, f"constitution: signed by the principal key, digest {signed.digest}")]
+    out += _constitution_access(config.constitution)
+    if not is_hybrid(public):
+        out.insert(1, _upgrade_line(config))
     unknown = sorted(set(config.tools) - set(signed.tool_specs))
     if unknown:
         out.append((FAIL, f"tools: {unknown} are not tools in the signed constitution"))
     out += _unset_claims(config, signed)
-    return out
+    return out, signed
+
+
+def _constitution_access(path) -> list[tuple[str, str]]:
+    """A WARN when the signed constitution is readable beyond its owner (run 13 #29, decision 2026-11-05). Its
+    signature stops a change, not a read: a reader learns every rule and what each judge is told. Nothing is
+    refused, because the proxy only reads the file; the key upgrade keeps the mode the file has."""
+    from . import _platform
+    try:
+        with open(path, "rb") as fh:
+            problem = _platform.access_problem(fh.fileno())
+    except OSError:
+        return []           # it was just read; a file that went away is the next start's error
+    if problem is None:
+        return []
+    return [(WARN, f"constitution_readable: {path} is {problem}, so they can read every rule and what the judges "
+                   f"are told; run {_platform.fix_hint(path)} (two-key setup writes it owner-only)")]
 
 
 def _blanket_class_rules(rules) -> list[tuple[str, str | None]]:
@@ -158,7 +262,24 @@ def _agent(config):
     if agent is None:
         return [(WARN, "monitored_agent: none declared, so judges are not checked against the agent's "
                        "own model and credential")], None
+    problem = agent_declaration_problem(agent)
+    if problem:
+        return [(FAIL, problem)], None
     return [(OK, "monitored_agent: declared")], agent
+
+
+def agent_declaration_problem(agent) -> str | None:
+    """Why the proxy and the library refuse this ``monitored_agent`` declaration (or each one of a roster's list) when
+    they resolve it, or None. Loading checks only the keys; a missing ``base_url``, or ``credential: none`` for an
+    agent that is not on this host or its network, passed setup and config check and then stopped the proxy at its
+    start (cloud re-test of run 13, 2026-11-05)."""
+    for one in agent if isinstance(agent, list) else [agent]:
+        try:
+            one.validate()
+        except ValueError as e:     # IdentityError
+            text = str(e)
+            return text if text.startswith("monitored_agent") else f"monitored_agent: {text}"
+    return None
 
 
 def _unresolved(model: Any, base_url: Any, upstream: Any) -> bool:
@@ -179,8 +300,10 @@ def _identities(config, judges, agent) -> list[tuple[str, str]]:
     not a FAIL, so ``setup`` and ``config set`` still write a deployment that names its upstream later."""
     sides = [f"judge {j.judge_id!r}" for j in judges
              if _unresolved(getattr(j, "model", None), getattr(j, "base_url", None), getattr(j, "upstream", None))]
-    if agent is not None and _unresolved(agent.model, agent.base_url, agent.upstream):
-        sides.append(f"agent {agent.id!r}")
+    from .identity import declarations
+    for one in declarations(agent):
+        if _unresolved(one.model, one.base_url, one.upstream):
+            sides.append(f"agent {one.id!r}")
     if not sides:
         return []
     what = (f"Two-Key cannot resolve who serves {', '.join(sides)} (a local proxy or an unrecognized host, and a "
@@ -207,10 +330,10 @@ def judge_variables(judge) -> list[tuple[str, str]]:
 
 
 def _agent_variables(agent) -> list[tuple[str, str]]:
-    if agent is None:
-        return []
-    return [(name, getattr(agent, name)) for name in ("credential_env", "username_env", "password_env")
-            if isinstance(getattr(agent, name, None), str)]
+    from .identity import declarations
+    return [(name, getattr(one, name)) for one in declarations(agent)
+            for name in ("credential_env", "username_env", "password_env")
+            if isinstance(getattr(one, name, None), str)]
 
 
 def _named_variables(config, judges, agent) -> list[tuple[str, str, str]]:
@@ -335,6 +458,7 @@ def show(path: Path | str) -> dict[str, Any]:
         "allow_unresolved_identity": config.allow_unresolved_identity,
         "on_writable_paths": writable.resolve_mode(config.on_writable_paths, high),
         "on_agent_access": agent_access.resolve_mode(config.on_agent_access, high),
+        "unanswered_hold": bool(config.unanswered_hold) or high,
         "high_assurance": high,
         "upstream": {
             "command": list(config.upstream.command),
