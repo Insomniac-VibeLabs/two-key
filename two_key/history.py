@@ -35,11 +35,21 @@ import re
 import time
 from collections import deque
 from dataclasses import dataclass, field, fields
-from typing import Any, Iterable, Mapping
+from typing import Any, Hashable, Iterable, Mapping
 
 from .canonical import canonical_hash
 
-FORMAT = "two-key-judge-history-v1"
+FORMAT_V1 = "two-key-judge-history-v1"
+# v2 (0.9.0, run 13): a call refused because its tool is held is the tool's state, not the agent's choice. Judges see
+# those refusals apart (held_refusals, held_now), never among the denies; the burst count takes the first one per
+# hold, and HELD_RETRIES more within HELD_RETRY_SECONDS make an episode of their own (held_retries). v2 also keeps
+# each agent id the operator did not configure apart: it is still shown as "unnamed", but its bursts are its own,
+# never another agent's (v1 filed every such id, and the calls with none, under one "unnamed").
+FORMAT = "two-key-judge-history-v2"
+FORMATS = (FORMAT_V1, FORMAT)
+HELD = "tool_held"
+HELD_RETRIES = 10
+HELD_RETRY_SECONDS = 600.0
 WINDOWS = (7, 30, 90)
 ON_FAILURE = ("deny", "judge_without_history")
 # An approved call whose token has not been redeemed is shown as approved_not_run for at most this long: the
@@ -65,6 +75,7 @@ MALFORMED = frozenset({"malformed_action", "malformed_proposal", "invalid_call"}
 SCAN_VERDICTS = ("clean", "flagged", "unavailable", "encrypted")
 _RULE_ID = re.compile(r"[A-Za-z0-9_.:/-]{1,64}")
 UNNAMED = "unnamed"
+UNLISTED = "unlisted"     # v2: the runs key of an agent id the operator did not configure (never shown)
 
 
 class HistoryConfigError(ValueError):
@@ -209,6 +220,7 @@ class _Record:
     ran: bool = False
     started: bool = False
     aborted: bool = False
+    runs: Hashable = UNNAMED    # the agent whose bursts this counts in (HistoryIndex.runs_key); never shown
 
     @property
     def run(self) -> bool:
@@ -241,6 +253,8 @@ class _AgentRuns:
         self.recent: deque = deque()          # (at, code, tool) of the denies inside the burst window
         self.open: Episode | None = None
         self.episodes: list[Episode] = []
+        self.holds_seen: set = set()          # v2: (tool, hold seq) whose first refusal was counted
+        self.held_recent: deque = deque()     # v2: times of the later refusals of held tools
 
 
 class HistoryIndex:
@@ -251,7 +265,12 @@ class HistoryIndex:
     """
 
     def __init__(self, policy: JudgeHistoryPolicy, tool_specs: Mapping[str, Any], blocked: Iterable[str] = (),
-                 agent_ids: Iterable[str] = ()):
+                 agent_ids: Iterable[str] = (), history_format: str = FORMAT):
+        if history_format not in FORMATS:
+            raise HistoryConfigError(f"unknown judge history format {history_format!r}")
+        self.format = history_format
+        self.v2 = history_format != FORMAT_V1
+        self.holds: dict[str, tuple[int, Any]] = {}     # tool -> (seq, until) of its hold, as the ledger tracks it
         self.policy = policy
         self.specs = tool_specs
         self.blocked = frozenset(blocked)
@@ -260,7 +279,7 @@ class HistoryIndex:
         self.by_tool: dict[str, list[_Record]] = {}
         self.recent: deque = deque()          # dated records of the last day, for all_tools
         self.by_jti: dict[str, _Record] = {}
-        self.agents: dict[str, _AgentRuns] = {}
+        self.agents: dict[Hashable, _AgentRuns] = {}
         self.history_starts: float | None = None
         self.latest: float | None = None
         self.pending: dict[str, Any] = {}
@@ -271,6 +290,16 @@ class HistoryIndex:
     def agent_key(self, agent: Any) -> str:
         aid = agent.get("id") if isinstance(agent, Mapping) else None
         return aid if isinstance(aid, str) and aid in self.agent_ids else UNNAMED
+
+    def runs_key(self, agent: Any) -> Hashable:
+        """Whose bursts a decision counts in: a configured id, ``unnamed`` for none, and in v2 an id the operator did
+        not configure kept apart under a key no configured id can equal. Only ``agent_key`` is ever shown."""
+        aid = agent.get("id") if isinstance(agent, Mapping) else None
+        if isinstance(aid, str) and aid in self.agent_ids:
+            return aid
+        if self.v2 and isinstance(aid, str) and aid:
+            return (UNLISTED, aid)
+        return UNNAMED
 
     def sync(self, entries: list) -> list[Episode]:
         """Read the entries added since the last call. Returns the episodes those entries started."""
@@ -302,7 +331,25 @@ class HistoryIndex:
         elif kind == "decision":
             pending, self.pending = self.pending, {}
             return self._add(self._record(entry.seq, body, pending))
+        elif kind in ("tool_held", "tool_released") and isinstance(body.get("tool"), str):
+            self._track_hold(entry.seq, kind, body)
         return None
+
+    def _track_hold(self, seq: int, kind: str, body: Mapping) -> None:
+        """A tool's hold, as ``Ledger._track_hold`` keeps it: a hold with no ``until`` is not cut short by a timed one."""
+        tool = body["tool"]
+        if kind == "tool_released":
+            self.holds.pop(tool, None)
+            return
+        until = body.get("until")
+        until = until if isinstance(until, int) and not isinstance(until, bool) else None
+        earlier = self.holds.get(tool)
+        if until is None or earlier is None or earlier[1] is not None:
+            self.holds[tool] = (seq, until)
+
+    def held_now(self, tool: str, now: float) -> bool:
+        hold = self.holds.get(tool)
+        return hold is not None and (hold[1] is None or now < hold[1])
 
     def _record(self, seq: int, body: Mapping, pending: Mapping) -> _Record:
         tool, parties, amount = self._subject(body, pending)
@@ -310,9 +357,12 @@ class HistoryIndex:
         jti = _part(pending, "capability_issued").get("jti")
         verdict = _part(pending, "scan").get("verdict")
         allowed = body.get("allowed") is True
+        code = "allowed" if allowed else reason_code(body.get("reason"))
+        if self.v2 and not allowed and body.get("reason") == HELD:
+            code = HELD
         return _Record(seq=seq, at=parse_time(body.get("at")), allowed=allowed,
-                       code="allowed" if allowed else reason_code(body.get("reason")), tool=tool, parties=parties,
-                       amount=amount, agent=self.agent_key(body.get("agent")),
+                       code=code, tool=tool, parties=parties,
+                       amount=amount, agent=self.agent_key(body.get("agent")), runs=self.runs_key(body.get("agent")),
                        abstains=abstains if isinstance(abstains, int) and not isinstance(abstains, bool) else 0,
                        jti=jti if allowed and isinstance(jti, str) else None,
                        verdict=verdict if verdict in SCAN_VERDICTS else None)
@@ -362,15 +412,13 @@ class HistoryIndex:
         """Track runs of denies by agent; return an episode the moment ``rec`` makes one."""
         if rec.allowed or rec.at is None:
             return None
-        runs = self.agents.setdefault(rec.agent, _AgentRuns())
+        runs = self.agents.setdefault(rec.runs, _AgentRuns())
+        if rec.code == HELD and not self._first_held(runs, rec):
+            return self._held_retry(runs, rec)
         span = self.policy.burst_minutes * 60.0
         ep = runs.open
         if ep is not None and rec.at - ep.ended <= span:
-            ep.ended = max(ep.ended, rec.at)
-            ep.denies += 1
-            ep.reasons[rec.code] = ep.reasons.get(rec.code, 0) + 1
-            if rec.tool:
-                ep.tools.add(rec.tool)
+            _extend(ep, rec)
             return None
         runs.open = None
         runs.recent.append((rec.at, rec.code, rec.tool))
@@ -386,6 +434,30 @@ class HistoryIndex:
                 ep.tools.add(tool)
         runs.recent.clear()
         runs.open = ep
+        runs.episodes.append(ep)
+        return ep
+
+    def _first_held(self, runs: _AgentRuns, rec: _Record) -> bool:
+        """v2: whether ``rec`` is this agent's first refusal under the tool's current hold (it counts as a deny)."""
+        key = (rec.tool, self.holds.get(rec.tool, (None,))[0])
+        if key in runs.holds_seen:
+            return False
+        runs.holds_seen.add(key)
+        return True
+
+    @staticmethod
+    def _held_retry(runs: _AgentRuns, rec: _Record) -> Episode | None:
+        """v2: a later refusal of a held tool. ``HELD_RETRIES`` within ``HELD_RETRY_SECONDS`` are an episode of
+        their own, ``held_retries``: an agent that keeps calling a tool it was told is held."""
+        runs.held_recent.append(rec.at)
+        while runs.held_recent and rec.at - runs.held_recent[0] > HELD_RETRY_SECONDS:
+            runs.held_recent.popleft()
+        if len(runs.held_recent) < HELD_RETRIES:
+            return None
+        count = len(runs.held_recent)
+        ep = Episode(rec.agent, started=runs.held_recent[0], ended=rec.at, denies=count,
+                     reasons={"held_retries": count}, tools={rec.tool} if rec.tool else set(), seq=rec.seq)
+        runs.held_recent.clear()
         runs.episodes.append(ep)
         return ep
 
@@ -410,7 +482,7 @@ class HistoryIndex:
                 agent: Any = None, in_flight: int = 0, scanned: bool = False) -> dict:
         """The summary a judge sees for one call. Built from the index only; see the module docstring."""
         parties = frozenset(parties)
-        out: dict[str, Any] = {"format": FORMAT, "now": format_time(now),
+        out: dict[str, Any] = {"format": self.format, "now": format_time(now),
                                "history_starts": None if self.history_starts is None
                                else format_time(self.history_starts)}
         back = any(r.at is not None and r.at > now for r in self.recent) or (
@@ -420,7 +492,7 @@ class HistoryIndex:
         if tool is not None and tool in self.specs:
             out["this_tool"] = self._this_tool(now, tool, parties, amount_mapped, in_flight, scanned)
         out["all_tools"] = {"1h": self._counts(now, HOUR), "24h": self._counts(now, DAY)}
-        out["agent"] = self._agent(now, self.agent_key(agent))
+        out["agent"] = self._agent(now, self.agent_key(agent), self.runs_key(agent))
         return out
 
     def matching(self, tool: str, parties: frozenset) -> list[_Record]:
@@ -434,6 +506,9 @@ class HistoryIndex:
     def _this_tool(self, now: float, tool: str, parties: frozenset, amount_mapped: bool, in_flight: int,
                    scanned: bool) -> dict:
         recs = self.matching(tool, parties)
+        held = [r for r in recs if r.code == HELD]
+        if held:
+            recs = [r for r in recs if r.code != HELD]
         last = [_last_item(r, now, amount_mapped) for r in reversed(recs[-self.policy.max_items:])]
         if not parties:
             shown = None
@@ -461,17 +536,25 @@ class HistoryIndex:
         }
         if scanned:
             out["scan_verdicts_7d"] = _scan_counts(recs, now)
+        if self.v2:
+            out["held_now"] = self.held_now(tool, now)
+            out["held_refusals"] = {"1h": _count(held, now, HOUR), "24h": _count(held, now, DAY)}
         return out
 
     def _counts(self, now: float, span: float) -> dict:
         inside = [r for r in self.recent if _within(now, r.at, span)]
-        return {"allowed": sum(1 for r in inside if r.allowed), "denied": _denied(inside, now, span),
-                "abstains": sum(r.abstains for r in inside),
-                "declined": sum(1 for r in inside if r.code == "agent_declined"),
-                "malformed": sum(1 for r in inside if r.code in MALFORMED)}
+        held = sum(1 for r in inside if r.code == HELD)
+        out = {"allowed": sum(1 for r in inside if r.allowed),
+               "denied": _denied((r for r in inside if r.code != HELD), now, span),
+               "abstains": sum(r.abstains for r in inside),
+               "declined": sum(1 for r in inside if r.code == "agent_declined"),
+               "malformed": sum(1 for r in inside if r.code in MALFORMED)}
+        if self.v2:
+            out["held_refusals"] = held
+        return out
 
-    def _agent(self, now: float, key: str) -> dict:
-        runs = self.agents.get(key)
+    def _agent(self, now: float, key: str, runs_key: Hashable) -> dict:
+        runs = self.agents.get(runs_key)
         horizon = self.policy.window_days * DAY
         episodes = [e for e in (runs.episodes if runs else ()) if _within(now, e.ended, horizon)]
         span = 90 * DAY
@@ -545,6 +628,19 @@ def _total(recs: list[_Record], amount_mapped: bool) -> dict:
     if amount_mapped:
         out["amount_usd"] = round(sum(r.amount or 0.0 for r in recs), 2)
     return out
+
+
+def _extend(ep: Episode, rec: _Record) -> None:
+    """Add one more deny to an episode still open."""
+    ep.ended = max(ep.ended, rec.at)
+    ep.denies += 1
+    ep.reasons[rec.code] = ep.reasons.get(rec.code, 0) + 1
+    if rec.tool:
+        ep.tools.add(rec.tool)
+
+
+def _count(recs: Iterable[_Record], now: float, span: float) -> int:
+    return sum(1 for r in recs if _within(now, r.at, span))
 
 
 def _denied(recs: Iterable[_Record], now: float, span: float) -> dict:

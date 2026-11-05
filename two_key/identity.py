@@ -1093,11 +1093,28 @@ def warn_allow_same_provider_judge() -> None:
           "by default; a judge is refused only when it is the same agent", file=sys.stderr)
 
 
-def load_monitored_agent(data: Mapping[str, Any] | None) -> AgentDeclaration | None:
-    """The ``monitored_agent:`` block of a judges config, if present."""
+def load_monitored_agent(data: Mapping[str, Any] | None) -> AgentDeclaration | list[AgentDeclaration] | None:
+    """The ``monitored_agent:`` block of a judges config, if present: one declaration, or (0.9.0, for a signed
+    agent roster) a list of them, each with its own ``id``. No judge may be any of them."""
     if not isinstance(data, Mapping) or data.get("monitored_agent") is None:
         return None
-    return AgentDeclaration.from_mapping(data["monitored_agent"])
+    value = data["monitored_agent"]
+    if isinstance(value, list):
+        if not value:
+            raise IdentityError("monitored_agent: an empty list declares no agent")
+        decls = [AgentDeclaration.from_mapping(item) for item in value]
+        ids = [d.id for d in decls]
+        if len(set(ids)) != len(ids):
+            raise IdentityError("monitored_agent: give each agent in the list its own id")
+        return decls
+    return AgentDeclaration.from_mapping(value)
+
+
+def declarations(agent: Any) -> list:
+    """``load_monitored_agent``'s result as a list (empty for None)."""
+    if agent is None:
+        return []
+    return list(agent) if isinstance(agent, (list, tuple)) else [agent]
 
 
 def load_monitored_agent_file(path) -> AgentDeclaration | None:

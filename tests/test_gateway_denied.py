@@ -55,7 +55,7 @@ class GatewayDenied(unittest.TestCase):
 
     def test_unauthenticated_tokens_write_nothing(self):
         before = self.tk.ledger.size()
-        for token in ("garbage", "tk1.e30.AAAA", self.token[:-4] + "AAAA", None):
+        for token in ("garbage", "tk2.e30.AAAA", self.token[:-4] + "AAAA", None):
             self.assertFalse(self.gw.invoke(token, "search", {"q": "x"}).allowed)
         self.assertEqual(self.tk.ledger.size(), before)
 

@@ -25,6 +25,7 @@ from two_key.constitution import load_envelope, verify_signed
 from two_key.keys import generate_private_key, load_private_key_file, save_private_key
 from two_key.ledger import Ledger
 from two_key.siem import project
+from two_key.strict import load_yaml
 
 POSIX = not _platform.WINDOWS
 DIGEST = "sha256:" + "0" * 64
@@ -43,6 +44,11 @@ ANSWERS = {
     "tools": [{"id": "tool_a", "irreversible": False, "data_class_floor": "personal"}],
     "upstream": {"command": ["server"], "schema_digest": DIGEST},
 }
+# Under high_assurance the agent is on a signed roster, with the account it runs as (0.9.0); this one does not exist
+# here, which config check only warns about.
+HA_AGENT = dict(ANSWERS["monitored_agent"], account="tk-agent")
+# Under high_assurance every tool behind the proxy has the tool check on (#28).
+CHECKED_TOOLS = [dict(ANSWERS["tools"][0], tool_check={"key": "hybrid-sha256:" + "1" * 64})]
 NO_RUNTIME = mock.patch("two_key.writable.runtime_targets", return_value=[])
 
 
@@ -145,15 +151,110 @@ class Setup(Deployment):
 
     def test_high_assurance_with_one_judge_is_refused(self):
         with self.assertRaisesRegex(setup_cmd.SetupError, "too_few_judges"):
-            quiet(setup_cmd.build, dict(ANSWERS, profile="high_assurance"), self.base / "ha", environ={})
+            quiet(setup_cmd.build, dict(ANSWERS, profile="high_assurance", monitored_agent=HA_AGENT,
+                                        tools=CHECKED_TOOLS), self.base / "ha",
+                  environ={})
         self.assertFalse((self.base / "ha").exists())
 
     def test_high_assurance_writes_refuse_for_the_writable_path_check(self):
-        answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR")
+        answers = dict(ANSWERS, profile="high_assurance", monitored_agent=HA_AGENT,
+                       judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                   tools=CHECKED_TOOLS)
         quiet(setup_cmd.build, answers, self.base / "ha", environ={})
         text = (self.base / "ha" / "proxy.yaml").read_text(encoding="utf-8")
         self.assertIn("on_writable_paths: refuse", text)
         self.assertIn("var: JUDGE_KEY_VAR", (self.base / "ha" / "judges.yaml").read_text(encoding="utf-8"))
+
+    def test_high_assurance_needs_a_signed_roster(self):
+        """0.9.0: the agent's account, so the proxy can tell which agent started it; each tool names its agents."""
+        answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                       tools=CHECKED_TOOLS)
+        with self.assertRaisesRegex(setup_cmd.SetupError, "agent_account_required"):
+            quiet(setup_cmd.build, answers, self.base / "ha", environ={})
+        _, out, _ = quiet(setup_cmd.build, dict(answers, monitored_agent=HA_AGENT), self.base / "ha", environ={})
+        rules = load_yaml((self.base / "ha" / "hard_rules.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(rules["agents"], [{"id": "agent", "account": "tk-agent"}])
+        self.assertEqual(rules["tool_specs"]["tool_a"]["agents"], ["agent"])
+        proxy = (self.base / "ha" / "proxy.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("agent_id", proxy)          # the account picks the agent
+        self.assertIn("account 'tk-agent' does not exist on this machine", out)
+        judges = (self.base / "ha" / "judges.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("account", judges)
+
+    def test_a_roster_with_more_agents_and_tool_lists(self):
+        answers = dict(ANSWERS, monitored_agent=HA_AGENT,
+                       agents=[{"id": "public", "account": "tk-gateway", "shared": True}],
+                       tools=[dict(ANSWERS["tools"][0], agents=["public"]),
+                              {"id": "tool_b", "irreversible": False, "data_class_floor": "public"}])
+        quiet(setup_cmd.build, answers, self.base / "two", environ={})
+        rules = load_yaml((self.base / "two" / "hard_rules.yaml").read_text(encoding="utf-8"))
+        self.assertEqual([a["id"] for a in rules["agents"]], ["agent", "public"])
+        self.assertEqual(rules["tool_specs"]["tool_a"]["agents"], ["public"])
+        self.assertNotIn("agents", rules["tool_specs"]["tool_b"])        # any listed agent
+        for bad, why in ((dict(answers, agents=[{"id": "x", "account": "tk-agent"}]), "share the account"),
+                         (dict(ANSWERS, tools=[dict(ANSWERS["tools"][0], agents=["agent"])]),
+                          "agents needs monitored_agent.account"),
+                         (dict(ANSWERS, agents=[{"id": "x", "account": "y"}]), "give monitored_agent.account")):
+            with self.subTest(why), self.assertRaisesRegex(setup_cmd.SetupError, why):
+                quiet(setup_cmd.build, bad, self.base / "bad", environ={})
+            self.assertFalse((self.base / "bad").exists())
+
+    def test_the_interview_asks_for_the_roster(self):
+        given = {"Monitored agent: id": "agent", ": model": "some-model", "provider (": "other",
+                 "base URL": "http://127.0.0.1:11434/v1", "account it runs as": "tk-agent", "tool ids": "tool_a",
+                 "the command": "server", "schema digest": DIGEST}
+        more = iter(["yes", "no"])
+
+        def ask(prompt):
+            if "Add another agent" in prompt:
+                return next(more, "no")
+            if "Agent 2: id" in prompt:
+                return "public"
+            if "Agent 2: the account" in prompt:
+                return "tk-gateway"
+            if "shared group" in prompt:
+                return "yes"
+            if "which agents may call it" in prompt:
+                return "public"
+            return next((v for k, v in given.items() if k in prompt), "")
+        answers, _, _ = quiet(setup_cmd.interview, ask)
+        self.assertEqual(answers["monitored_agent"]["account"], "tk-agent")
+        self.assertEqual(answers["agents"], [{"id": "public", "account": "tk-gateway", "shared": True}])
+        self.assertEqual(answers["tools"][0]["agents"], ["public"])
+
+    def test_high_assurance_needs_the_tool_check_on_each_tool(self):
+        answers = dict(ANSWERS, profile="high_assurance", monitored_agent=HA_AGENT,
+                       judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR")
+        with self.assertRaisesRegex(setup_cmd.SetupError, "tool tool_a: high_assurance needs the tool check"):
+            quiet(setup_cmd.build, answers, self.base / "ha", environ={})
+        exempt = dict(answers, tools=[dict(ANSWERS["tools"][0], tool_check="exempt")])
+        with self.assertRaisesRegex(setup_cmd.SetupError, "weaker: tool_specs.tool_a.tool_check: exempt"):
+            quiet(setup_cmd.build, exempt, self.base / "ha", environ={})
+        result = quiet(setup_cmd.build, exempt, self.base / "ha", environ={}, confirm_weaker=True,
+                       confirm=lambda _p: True)[0]
+        self.assertEqual(result["weaker"], ["tool_specs.tool_a.tool_check: exempt"])
+
+    def test_an_agent_the_proxy_would_refuse_is_refused_at_setup(self):
+        """Cloud re-test of run 13, 2026-11-05: an answers file whose agent had no base_url (and credential: none)
+        passed setup and config check, and then the proxy refused to start with `declare base_url`."""
+        agent = {k: v for k, v in ANSWERS["monitored_agent"].items() if k != "base_url"}
+        for route in ("proxy", "library"):
+            with self.subTest(route=route), self.assertRaisesRegex(
+                    setup_cmd.SetupError, "config_check_failed: monitored_agent 'agent': declare base_url"):
+                quiet(setup_cmd.build, dict(ANSWERS, route=route, monitored_agent=agent), self.base / route,
+                      environ={})
+            self.assertFalse((self.base / route).exists())
+        keyless = {k: v for k, v in ANSWERS["monitored_agent"].items() if k != "credential_env"}
+        with self.assertRaisesRegex(setup_cmd.SetupError, "credential: none is only for a loopback"):
+            quiet(setup_cmd.build, dict(ANSWERS, monitored_agent=dict(keyless, credential="none")),
+                  self.base / "keyless", environ={})
+
+    def test_the_tool_check_is_only_for_the_proxy(self):
+        with self.assertRaisesRegex(setup_cmd.SetupError, "only for tools behind two-key mcp-proxy"):
+            quiet(setup_cmd.build, dict(ANSWERS, route="guard", tools=CHECKED_TOOLS), self.base / "g", environ={})
+        with self.assertRaisesRegex(setup_cmd.SetupError, "exempt or"):
+            quiet(setup_cmd.build, dict(ANSWERS, tools=[dict(ANSWERS["tools"][0], tool_check={"key": "x"})]),
+                  self.base / "g", environ={})
 
     def test_a_rules_file_without_a_serial_is_signed_with_a_warning(self):
         """Run 9y, S8: the starter rules have serial 1; a rules file without one is signed as it is, with a warning
@@ -208,9 +309,11 @@ class Setup(Deployment):
         replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "", "",
                    "no", "", "", "", "", "",    # the quorum: the default profile's numbers for one judge
                    "agent", "some-model", "other", "https://agent.example/v1", "", "AGENT_KEY_VAR",
+                   "",                      # the agent's account: none, so no signed roster
                    "", "", "", "",          # judge history: on, deny on failure, 5 denies, 10 minutes
-                   "", "", "tool_a", "no", "public", "", "server --stdio", DIGEST, "",
-                   ""]                      # one proxy per agent: yes
+                   "", "", "tool_a", "no", "public", "", "", "server --stdio", DIGEST, "",
+                   "",                      # one proxy per agent: yes
+                   "yes"]                   # hold a tool that leaves calls unanswered: yes
         asked = []
 
         def ask(prompt):
@@ -223,6 +326,7 @@ class Setup(Deployment):
         self.assertEqual(answers["judge_history"], {"enabled": True, "on_failure": "deny", "burst_denies": 5,
                                                     "burst_minutes": 10})
         self.assertIs(answers["one_proxy_per_agent"], True)
+        self.assertIs(answers["unanswered_hold"], True)
         self.assertEqual(answers["quorum"], {"required_yes": 1, "min_responding": 1, "min_distinct_providers": 1,
                                              "min_makers": 1, "min_local_judges": 0})
         for q in asked:
@@ -232,7 +336,9 @@ class Setup(Deployment):
             if re.search(r"api key|credential|session", q.lower()):
                 self.assertIn("name of the environment variable", q.lower())
         quiet(setup_cmd.build, answers, self.base / "asked", environ={})
-        self.assertIn("one_proxy_per_agent: true", (self.base / "asked" / "proxy.yaml").read_text(encoding="utf-8"))
+        proxy_yaml = (self.base / "asked" / "proxy.yaml").read_text(encoding="utf-8")
+        self.assertIn("one_proxy_per_agent: true", proxy_yaml)
+        self.assertIn("unanswered_hold: true", proxy_yaml)
         self.assertIn("on_failure: deny", (self.base / "asked" / "judges.yaml").read_text(encoding="utf-8"))
 
     def test_the_interview_asks_where_an_unresolved_judge_forwards(self):
@@ -241,8 +347,8 @@ class Setup(Deployment):
         asks for it then, and only then."""
         replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:8081/v1", "", "api.x.ai",
                    "", "no", "", "", "", "", "",
-                   "agent", "claude-sonnet", "anthropic", "https://api.anthropic.com", "AGENT_KEY_VAR",
-                   "", "", "", "", "", "", "tool_a", "no", "public", "", "server --stdio", DIGEST, "", ""]
+                   "agent", "claude-sonnet", "anthropic", "https://api.anthropic.com", "AGENT_KEY_VAR", "",
+                   "", "", "", "", "", "", "tool_a", "no", "public", "", "", "server --stdio", DIGEST, "", "", ""]
         asked = []
 
         def ask(prompt):
@@ -268,6 +374,19 @@ class Setup(Deployment):
         self.assertFalse(load_proxy_config(self.base / "less" / "proxy.yaml").one_proxy_per_agent)
         with self.assertRaisesRegex(setup_cmd.SetupError, "one_proxy_per_agent"):
             quiet(setup_cmd.build, dict(ANSWERS, one_proxy_per_agent="yes"), self.base / "bad", environ={})
+
+    def test_setup_writes_unanswered_hold(self):
+        from two_key.mcp_proxy.config import load_proxy_config
+        self.assertIsNone(load_proxy_config(self.proxy).unanswered_hold)        # off unless asked for
+        quiet(setup_cmd.build, dict(ANSWERS, unanswered_hold=True), self.base / "held", environ={})
+        self.assertIs(load_proxy_config(self.base / "held" / "proxy.yaml").unanswered_hold, True)
+        high = dict(ANSWERS, profile="high_assurance", monitored_agent=HA_AGENT,
+                    judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                    tools=CHECKED_TOOLS)
+        for answers, why in ((dict(ANSWERS, unanswered_hold="yes"), "expected true or false"),
+                             (dict(high, unanswered_hold=False), "high_assurance always holds")):
+            with self.subTest(why=why), self.assertRaisesRegex(setup_cmd.SetupError, f"unanswered_hold: {why}"):
+                quiet(setup_cmd.build, answers, self.base / "bad", environ={})
 
 
 class SetupQuorum(unittest.TestCase):
@@ -325,7 +444,9 @@ class SetupQuorum(unittest.TestCase):
         self.assertIs(entry.body["confirmed"], True)
 
     def test_lowering_a_high_assurance_floor_turns_it_off(self):
-        answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+        answers = dict(ANSWERS, profile="high_assurance", monitored_agent=HA_AGENT,
+                       judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                   tools=CHECKED_TOOLS,
                        quorum={"min_makers": 1})
         self.refused("weaker: quorum: high_assurance turned off; quorum.min_makers: lowered", answers)
 
@@ -371,15 +492,16 @@ class SetupQuorum(unittest.TestCase):
     # Each blank after a judge's maker, and after the agent's base URL, is its upstream: neither address says who
     # serves the model.
     START = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "", ""]
-    AGENT = ["agent", "some-model", "other", "https://agent.example/v1", "", "AGENT_KEY_VAR", "", "", "", "", "", "",
-             "tool_a", "no", "public", "", "server", DIGEST]
+    AGENT = ["agent", "some-model", "other", "https://agent.example/v1", "", "AGENT_KEY_VAR", "", "", "", "",
+             "", "", "",
+             "tool_a", "no", "public", "", "", "server", DIGEST]
 
     def test_the_interview_keeps_a_lower_number_only_after_a_typed_yes(self):
         second = ["yes", "openai_compatible", "j2", "m2", "http://127.0.0.1:11435/v1", "maker2", "", "", "no"]
         replies = (self.START + second
                    + ["1", "1", "", "", "", "no"]       # required_yes 1 of 2: weaker, not kept
                    + ["1", "2", "", "", "", "yes"]      # again, with every judge answering: kept
-                   + self.AGENT + ["", ""])
+                   + self.AGENT + ["", "", ""])
         answers, asked, err = self.interview(replies)
         self.assertEqual(answers["quorum"]["required_yes"], 1)
         self.assertEqual(answers["quorum"]["min_responding"], 2)
@@ -390,16 +512,34 @@ class SetupQuorum(unittest.TestCase):
         self.assertIn("Quorum: required_yes, yes votes a call needs [2]: ", asked)
 
     def test_the_interview_asks_again_for_numbers_the_judges_cannot_meet(self):
-        replies = self.START + ["no", "2", "", "", "", "", "yes", "", "", "", "", ""] + self.AGENT + ["", ""]
+        replies = self.START + ["no", "2", "", "", "", "", "yes", "", "", "", "", ""] + self.AGENT + ["", "", ""]
         answers, _, err = self.interview(replies)
         self.assertIn("too_few_judges_configured:1<2", err)
         self.assertEqual(answers["quorum"]["required_yes"], 1)
         self.assertIn("one judge decides every call", err)
 
+    def test_the_interview_asks_about_unanswered_calls_only_in_the_default_profile(self):
+        """high_assurance always holds a checked tool that keeps leaving calls unanswered, so it is not asked."""
+        given = {"Profile": "high_assurance", ": model": "m", "base URL": "http://127.0.0.1:11434/v1",
+                 "who made": "maker", "provider (": "other", "numbers again": "no", "tool ids": "tool_a",
+                 "tool check": "exempt", "the command": "server", "schema digest": DIGEST,
+                 "name of the environment variable": "VAR", "account it runs as": "tk-agent"}
+        asked = []
+
+        def ask(prompt):
+            asked.append(prompt)
+            self.assertLess(len(asked), 80, "the interview did not end")
+            return next((v for k, v in given.items() if k in prompt), "")
+        answers, _, _ = quiet(setup_cmd.interview, ask)
+        self.assertEqual((answers["profile"], answers["upstream"]["command"]), ("high_assurance", ["server"]))
+        self.assertIs(answers["one_proxy_per_agent"], True)       # the question just before it was asked
+        self.assertNotIn("unanswered_hold", answers)
+        self.assertFalse([q for q in asked if "unanswered" in q], asked)
+
     def test_the_interview_needs_the_session_with_a_cloud_judge(self):
         cloud = ["proxy", "default", "openai_compatible", "j1", "m", "https://judge.example/v1", "", "", "JUDGE_KEY_VAR",
                  "no", "", "", "", "", ""]
-        replies = cloud + self.AGENT + ["", "SESSION_VAR", ""]
+        replies = cloud + self.AGENT + ["", "SESSION_VAR", "", ""]
         answers, _, err = self.interview(replies)
         self.assertEqual(answers["agent_session_env"], "SESSION_VAR")
         self.assertIn("Judge(s) j1 are not on this machine", err)
@@ -595,6 +735,8 @@ class Weaker(Deployment):
                  ("monitored_agent.model", "another-agent-model", "monitored_agent: changed"),
                  ("siem", {"sinks": [{"type": "syslog", "host": "127.0.0.1", "transport": "udp"}]}, "in the clear")]
         self.set("upstream.check_paths", [str(self.dir)])
+        self.set("unanswered_hold", True)
+        cases.append(("unanswered_hold", False, "unanswered_hold: turned off"))
         for name, value, why in cases:
             with self.subTest(name=name):
                 self.refused(f"weaker: .*{why}", name, value, unset=value is None)
@@ -609,15 +751,81 @@ class Weaker(Deployment):
         self.assertEqual(self.answered, [])
 
 
+class EveryTool(Deployment):
+    """``tools[*].claim``: one setting on every tool, as one change with one confirmation (live run 11, C1)."""
+    answers = dict(ANSWERS, tools=[{"id": "tool_a", "irreversible": False, "data_class_floor": "personal"},
+                                   {"id": "tool_b", "irreversible": False, "data_class_floor": "personal"}])
+
+    def test_every_tool_one_confirm_one_entry(self):
+        before = len(self._changes())
+        result, out, _ = self.set("tools[*].claim", "public", confirm_weaker=True)
+        self.assertEqual(result["settings"], ["tools.tool_a.claim", "tools.tool_b.claim"])
+        self.assertEqual(len(result["weaker"]), 2)
+        self.assertEqual(len(self.answered), 1, "one typed yes covers every tool")
+        self.assertIn("tools.tool_b.claim in proxy.yaml: (not set) -> \"public\"", out)
+        changes = self._changes()
+        self.assertEqual(len(changes), before + 1)
+        self.assertEqual(changes[-1].body["settings"], ["tools.tool_a.claim", "tools.tool_b.claim"])
+        got = config_set.get(self.proxy, "tools[*].claim")
+        self.assertEqual(got["values"], {"tool_a": "public", "tool_b": "public"})
+
+    def test_weaker_for_every_tool_needs_the_flag(self):
+        self.refused("weaker: tools.tool_a.claim.*tools.tool_b.claim", "tools[*].claim", "public")
+
+    def test_undo_puts_every_tool_back(self):
+        first = self.proxy.read_bytes()
+        self.set("tools[*].claim", "floor", confirm_weaker=True)
+        quiet(config_set.undo, self.proxy, confirm=self.confirm(), confirm_weaker=True, environ={})
+        self.assertEqual(self.proxy.read_bytes(), first)
+
+    def test_unset_skips_a_tool_that_does_not_set_it(self):
+        self.set("tools.tool_a.claim", "floor", confirm_weaker=True)
+        result, _, _ = self.set("tools[*].claim", unset=True)
+        self.assertEqual(result["settings"], ["tools.tool_a.claim"])
+        self.refused("unchanged: no tool sets tools\\[\\*\\]\\.claim", "tools[*].claim", unset=True)
+
+    def test_star_only_stands_for_a_tool(self):
+        for name in ("siem.sinks[*].port", "judges[*].timeout", "tools[*]", "tools[*].files[*].kind",
+                     "tool_specs.tool_a.fields[*].type"):
+            with self.subTest(name=name):
+                self.refused("every_tool", name, 1, key_path=str(self.key), rules_path=str(self.rules))
+
+    def test_signed_every_tool(self):
+        result, out, _ = self.set("tool_specs[*].irreversible", True, key_path=str(self.key),
+                                  rules_path=str(self.rules))
+        self.assertTrue(result["signed"])
+        self.assertEqual(result["settings"], ["tool_specs.tool_a.irreversible", "tool_specs.tool_b.irreversible"])
+        self.assertEqual(len(self.answered), 1)
+        signed = verify_signed(load_envelope(self.dir / "constitution.signed.json"),
+                               load_private_key_file(self.key).public_key())
+        self.assertIs(signed.tool_specs["tool_a"]["irreversible"], True)
+        self.assertIs(signed.tool_specs["tool_b"]["irreversible"], True)
+        self.assertIn("tool_specs.tool_b.irreversible (signed): false -> true", out)
+
+
 class HighAssurance(Deployment):
-    answers = dict(ANSWERS, profile="high_assurance", judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR")
+    answers = dict(ANSWERS, profile="high_assurance", monitored_agent=HA_AGENT,
+                   judges=[LOCAL, CLOUD], agent_session_env="SESSION_VAR",
+                   tools=CHECKED_TOOLS)
 
     def test_what_the_profile_forbids_stays_forbidden(self):
         self.refused("config_check_failed: on_agent_access: high_assurance", "on_agent_access", "warn",
                      confirm_weaker=True)
         self.refused("config_check_failed: on_writable_paths", "on_writable_paths", "warn", confirm_weaker=True)
+        self.refused("config_check_failed: unanswered_hold: high_assurance", "unanswered_hold", False, confirm_weaker=True)
         self.refused("config_check_failed: siem_plaintext_refused", "siem",
                      {"sinks": [{"type": "syslog", "host": "127.0.0.1", "transport": "tcp"}]}, confirm_weaker=True)
+
+    def test_config_check_lists_the_tool_checks(self):
+        from two_key import config_cmd
+        found = config_cmd.check(self.proxy, {"AGENT_KEY_VAR": "set", "JUDGE_KEY_VAR": "set", "SESSION_VAR": "s"})
+        self.assertIn((config_cmd.OK, "tool_check: on for ['tool_a']; exempt: none; off: none"), found)
+
+    def test_turning_the_tool_check_off_is_weaker(self):
+        kw = {"key_path": str(self.key), "rules_path": str(self.rules)}
+        self.refused(r"weaker: tool_specs.tool_a.tool_check: exempt \(the check is turned off\)",
+                     "tool_specs.tool_a.tool_check", "exempt", **kw)
+        self.refused("tool_check_required", "tool_specs.tool_a.tool_check", unset=True, confirm_weaker=True, **kw)
 
     def test_turning_it_off_is_weaker(self):
         self.refused("weaker: quorum: high_assurance turned off", "quorum.profile", "default")
@@ -647,6 +855,14 @@ class Signed(Deployment):
         self.rules.write_bytes(text.encode("utf-8"))
         self.refused("rules_source_differs", "tool_specs.tool_a.irreversible", True, key_path=str(self.key),
                      rules_path=str(self.rules))
+
+    def test_another_rules_file_is_refused_naming_the_one_setup_kept(self):
+        """Run 12: rules.yaml, the setup input, was given in place of hard_rules.yaml, and nothing said which."""
+        other = self.base / "rules.yaml"
+        other.write_text(self.rules.read_text(encoding="utf-8").replace("data_class_floor: personal",
+                                                                         "data_class_floor: public"), encoding="utf-8")
+        self.refused(f"rules_source_differs: .*setup keeps the signed source as .*{self.rules.name}",
+                     "tool_specs.tool_a.irreversible", True, key_path=str(self.key), rules_path=str(other))
 
     def test_a_signed_change_is_shown_confirmed_signed_and_verified(self):
         result, out, _ = self.signed("tool_specs.tool_a.irreversible", True)

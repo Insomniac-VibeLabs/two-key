@@ -133,10 +133,17 @@ def normalize_origin(origin: Any = None) -> str:
     return normalized or "library"
 
 
-def ledger_agent_record(agent_id: Any = None, hosting: Any = None) -> dict | None:
-    """Build the ledger ``agent`` dict, or ``None`` when both fields are omitted."""
+def ledger_agent_record(agent_id: Any = None, hosting: Any = None, account: Any = None) -> dict | None:
+    """Build the ledger ``agent`` dict, or ``None`` when both fields are omitted.
+
+    ``account`` (0.9.0) is the account the MCP proxy checked against the signed roster; present only when given,
+    so a decision without one records as before."""
     aid = check_agent_meta_field("agent_id", agent_id)
     host = check_agent_meta_field("hosting", hosting)
+    acct = check_agent_meta_field("account", account) if account is not None else None
     if aid or host:
-        return {"id": aid, "hosting": host or "unspecified", "trusted": False}
+        out = {"id": aid, "hosting": host or "unspecified", "trusted": False}
+        if acct:
+            out["account"] = acct
+        return out
     return None

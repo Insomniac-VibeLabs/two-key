@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Judges and quorum
 
-This document describes judge and quorum behavior in `two-key` 0.8.0 (tag `v0.8.0` on `main`). It is not an independent review or a claim of formal verification. If this document disagrees with the implementation, the code wins; correct the document after verifying the intended behavior.
+This document describes judge and quorum behavior in `two-key` 0.8.0 (tag `v0.8.0` on `main`); 0.9.0 does not change it. It is not an independent review or a claim of formal verification. If this document disagrees with the implementation, the code wins; correct the document after verifying the intended behavior.
 
 See [THREAT_MODEL.md](THREAT_MODEL.md) for the threat register, [SCOPE.md](SCOPE.md) for the project's boundaries, and [FIT.md](FIT.md) for when this package is or is not suitable.
 
@@ -160,6 +160,10 @@ These requirements do not prove that judges are independent:
 
 For high-impact tools, configure the judge set deliberately, check the actual endpoints and credentials, and choose thresholds according to the risk.
 
+### A judge from another maker (0.9.0)
+
+`require_other_maker: true` under `quorum:` makes an allow need a yes from at least one judge whose maker is not a monitored agent's, so one compromised or jailbroken model cannot pass a call alone. A judge's makers are its `maker` label (its provider by default) and the maker its model id names; an agent's are its provider and the maker its model id names. Two-Key does not start when no judge is from another maker (`judge_diversity_unmet`), and denies a call when none of those judges votes yes (`other_maker_yes_required`). It is off by default and `high_assurance` does not turn it on. `monitored_agent` may be a list, one declaration per agent with its own `id`, so that no judge may be any of them ([AGENT_ROSTER](AGENT_ROSTER.md#judges-from-another-maker)).
+
 ## How Path A and Path B combine
 
 Path A evaluates deterministic policy rules against the normalized structured action record. Path B evaluates the action using the configured judge quorum. Neither path alone is sufficient for authorization.
@@ -223,10 +227,21 @@ What the summary holds:
   with every call to the tool (`"counterparty": null`). Amounts appear only for a tool whose spec maps one.
 - **For all tools**: allowed calls, denies by reason code, abstaining ballots, declines and malformed calls over
   the last hour and the last day.
+- **Calls to a held tool** (format `two-key-judge-history-v2`, 0.9.0): a call refused `tool_held` is the tool's
+  state, not the agent's choice, so it is never among the denies or the last decisions. The tool part shows
+  `held_now` (whether the tool is held now) and `held_refusals` (such refusals in the last hour and day), and the
+  all-tools counts show `held_refusals` too. The judge weighs them: a few tries during an outage are normal, dozens
+  are not. In the attempt-episode count only the agent's first refusal under each hold is a deny; 10 more within
+  10 minutes make an episode of their own, with reason `held_retries`, ledgered as `attempt_episode` and sent to the
+  SIEM. A tool's own failures (`tool_error:`) count as before, since an agent's input can cause them. A decision
+  made before 0.9.0 recorded a v1 summary; `audit --check-history` rebuilds each one in the format its
+  `history_basis` names (none means v1).
 - **For the agent**: its recent *attempt episodes*, bursts of at least `burst_denies` (5) denied calls within
   `burst_minutes` (10). The agent is named only when its id is one the operator configured (`agent_id` in
-  `proxy.yaml`, or a monitored agent's id); any other agent is `unnamed`. Each episode is also written to the
-  ledger as `attempt_episode` and sent to the SIEM, so an operator sees it without the judges.
+  `proxy.yaml`, or a monitored agent's id); any other agent is `unnamed`. Each such id still has its own episodes:
+  on a shared ledger, a proxy with no `agent_id` is never shown another agent's bursts as its own (v2; a v1
+  summary filed them all under one `unnamed`). Each episode is also written to the ledger as `attempt_episode` and
+  sent to the SIEM, so an operator sees it without the judges.
 - `now`, and `history_starts`, the time of the oldest dated decision, so a judge can tell "nothing in 90 days" from
   "history began yesterday". A ledger upgraded from 0.7.3 shows its older decisions with `"age": "before_upgrade"`;
   they count in no window, which fill up over the next 90 days.
@@ -297,7 +312,7 @@ A quorum pass means the configured Path B requirements were met for that authori
 - The proposal or action is safe in every relevant context.
 - The payload has been scanned for malware, data loss, or sensitive information. That holds only for a tool the signed constitution marks for scanning with a content scanner configured (0.6.0), and then the judges were told the verdict, not shown the content; see [SCANNERS.md](SCANNERS.md).
 - The deployment has been independently audited or formally verified.
-- The package is a FIPS 140-3 validated cryptographic module.
+- The package runs on a FIPS 140-3 validated cryptographic module (its algorithms are FIPS-approved; the approved mode comes later).
 
 The capability and gateway controls add restrictions but do not eliminate these limitations. The capability private key is separate from the gateway verifier's key, but the gateway shares the Two-Key process and ledger object; a gateway in another process or host is not supported, by design ([why](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)). There is no process-level isolation between them; see [THREAT_MODEL.md](THREAT_MODEL.md).
 

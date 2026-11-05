@@ -51,9 +51,10 @@ separate package (`apt install python3-tk`); without it, the command says so, an
 | Hard rules | **Rules** (the allow list comes from **Tools**) | Path A, in order; the first rule that denies is the reason |
 | Tool specs | **Tools** | Path A: whether a call can be undone, the lowest data class, and the argument paths it reads |
 | Custom fields | **Custom fields** | Path A, through the specs that map them and the `deny_if_fields` rules that test them |
+| Agent roster | **Agents** | The MCP proxy, which serves the entry for the account that started it, and each tool's `agents` list |
 | Serial | **Review and sign** | The ledger: a constitution with a lower serial than one it has run is refused |
 
-One signature covers all five. The judges' system prompt (the instructions before the constitution) is
+One signature covers all six. The judges' system prompt (the instructions before the constitution) is
 Two-Key's own and is not part of the constitution; **Try a call** shows it.
 
 ## The tabs
@@ -72,7 +73,10 @@ Two-Key's own and is not part of the constitution; **Try a call** shows it.
   body, edit it as YAML, and **Apply**. **Up** and **Down** change the order; the first rule that denies is
   the one the ledger names.
 - **Custom fields.** The field registry as YAML ([HOWTO, Custom Path A fields](HOWTO.md#custom-path-a-fields)).
-  **Insert an example** adds one enum field to change.
+- **Agents.** The signed agent roster as YAML: each agent's `id` and the `account` it runs as ([AGENT_ROSTER](AGENT_ROSTER.md)). A tool limits its callers with `agents: [ids]` in its argument mappings, and a trial call on such a tool comes from the first agent it names.
+  **Insert an example** adds one enum field to change. A `path` field (a file path inside signed folders,
+  [HOWTO](HOWTO.md#file-paths-inside-a-folder-type-path)) is written here the same way, and **Review and
+  sign** then notes each tool that maps one, with its folders.
 - **Try a call.** See below.
 - **Review and sign.** The serial, the envelope format (`auto` unless you need an older one), every check
   and note `sign-constitution` would print, the rules file exactly as it will be written, and the key and
@@ -111,7 +115,8 @@ file only you can read), and the folder. **Sign and save** then:
    each owner-only, beside its target and then renamed into place,
 4. reads those two files back the way `two-key sign-constitution` reads them, and refuses if they would not
    sign to the same body,
-5. writes the signed constitution (`constitution.signed.json`) last.
+5. writes the signed constitution (`constitution.signed.json`) last, owner-only like the other two (mode 0600,
+   as `two-key setup` writes it, whatever the shell's umask).
 
 It refuses, with nothing written, when a file is already there and **Replace files that are there** is not
 ticked (`sign-constitution`'s `--force`). A folder or file it cannot write is reported under the buttons, as

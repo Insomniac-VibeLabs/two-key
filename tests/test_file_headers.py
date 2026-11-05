@@ -20,6 +20,7 @@ SUFFIXES = {".py", ".md", ".txt", ".yml", ".yaml", ".toml", ".sh", ".in", ".giti
 EXEMPT = {
     "LICENSE": "the licence text itself",
     "examples/constitution.md": "constitution prose is signed and sent to the judges as written",
+    "examples/demo/constitution.md": "constitution prose is signed and sent to the judges as written",
     "tests/fixtures/v1_constitution.md": "an old-format constitution the tests load as written",
 }
 

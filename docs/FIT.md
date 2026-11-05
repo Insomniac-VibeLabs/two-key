@@ -6,9 +6,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Is this for you?
 
-Beta (pre-1.0), maintainer-reviewed, not independently audited. Not a FIPS 140-3 validated module.
-This page describes `two-key` 0.8.0, which is on PyPI (`pip install "two-key"`); the release steps are
-[PYPI.md](PYPI.md). 0.8.0 gives the judges a summary of recent decisions, records each judge's ballot, and
+Beta (pre-1.0), maintainer-reviewed, not yet independently audited. Every algorithm it uses is FIPS-approved; a FIPS
+140-3 approved mode follows once a validated module offers ML-DSA-65 ([ROADMAP](../ROADMAP.md#fips-approved-mode)).
+This page describes `two-key` 0.9.0, which is on PyPI (`pip install "two-key"`); the release steps are
+[PYPI.md](PYPI.md). 0.9.0 signs everything with hybrid Ed25519 + ML-DSA-65 keys, adds the tool check for a
+tool behind the proxy, and adds a setup window; 0.8.0 gave the judges a summary of recent decisions, records each judge's ballot, and
 adds a ledger audit window and a constitution editor; 0.7.3 added `two-key setup` and the `config` commands, a passphrase on the principal key,
 and a signed serial against older rules; 0.7.0 added the SIEM export and a start-up check for a monitored agent that runs as
 Two-Key's own account; 0.6.0 added Windows support, content scanning through your antivirus or DLP
@@ -17,7 +19,8 @@ stdio proxy, a spec drafter, caller-supplied facts, and a guard core for any age
 release shipped is under "Shipped" in [ROADMAP.md](../ROADMAP.md), and tags are in
 [AGENTS.md](../AGENTS.md).
 Apache-2.0.
-Crypto is Ed25519, SHA-256, and AES-256-GCM (the ledger's ciphertext).
+Crypto is hybrid Ed25519 + ML-DSA-65 signatures (from 0.9.0), SHA-256, and AES-256-GCM (the ledger's
+ciphertext).
 
 This package has a ledger, Path A, Path B, and judge and
 monitored-agent hooks. It has no scanning engine; from 0.6.0 it can call your antivirus or DLP product for the tools you
@@ -85,7 +88,7 @@ That backup is not a seed phrase.
 - You need a validated cryptographic module, or a control that has had an
   independent review. This release has not.
 - You need Two-Key itself to be the DLP or antivirus product, or the SIEM,
-  or you need PKI, permissioned anchoring, a seed phrase, or hybrid ML-DSA.
+  or you need PKI, permissioned anchoring, or a seed phrase.
   Those are not here. (0.6.0 can call a DLP or antivirus product you run,
   and 0.7.0 can feed a SIEM you run; neither stores, searches, or alerts.)
 

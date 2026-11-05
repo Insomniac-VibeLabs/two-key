@@ -161,9 +161,9 @@ class CoreTests(unittest.TestCase):
 
 
 
-    def test_tool_error_does_not_consume_token(self):
+    def test_tool_error_spends_the_token(self):
         with tempfile.TemporaryDirectory() as tmp:
-            _, tk = _engine(tmp)
+            key, tk = _engine(tmp)
             decision = tk.authorize(
                 {"tool": "email_draft", "amount_usd": 0, "data_class": "public", "irreversible": False},
                 {"to": "ada"}, "draft")
@@ -178,8 +178,11 @@ class CoreTests(unittest.TestCase):
             second = gw.invoke(decision.token, "email_draft", {"to": "ada"})
             self.assertFalse(first.allowed)
             self.assertTrue(first.reason.startswith("tool_error:"))
-            self.assertTrue(second.allowed)
-            self.assertEqual(calls["n"], 2)
+            self.assertFalse(second.allowed)
+            self.assertEqual(second.reason, "already_attempted")
+            self.assertEqual(calls["n"], 1)
+            jti = tk.issuer.verify(decision.token)["jti"]
+            self.assertTrue(Ledger(Path(tmp, "ledger"), key).redemption_started(jti))   # after a restart too
 
     def test_crash_after_intent_does_not_run_tool_again(self):
         with tempfile.TemporaryDirectory() as tmp:

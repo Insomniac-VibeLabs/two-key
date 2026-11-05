@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1002,7 +1002,7 @@ wheels = [
 
 [[package]]
 name = "two-key"
-version = "0.8.0"
+version = "0.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -1019,7 +1019,7 @@ yaml = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cryptography", specifier = ">=41" },
+    { name = "cryptography", specifier = ">=48" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.2,<3" },
     { name = "pyyaml", marker = "extra == 'mcp'", specifier = ">=6" },
     { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6" },

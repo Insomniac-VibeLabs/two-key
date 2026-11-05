@@ -1658,6 +1658,39 @@ def credential_scan(rnd):
         log("referee_incident", type="credential_in_run_files", files=sorted(found))
 
 
+_RUN_LOCKS = []
+
+
+def hold_run_locks():
+    """Run 13: two passes at once share the six ports, and two on one folder wipe each other's deployments. A pass
+    holds a lock on its port base and on its folder until it exits; a second one is refused at once."""
+    try:
+        import fcntl
+    except ImportError:         # pragma: no cover - the live harness runs on Linux and macOS
+        return
+    folder = str(BASE.relative_to(HERE)).replace(os.sep, "_")
+    for name in (f".harness-port-{PORT_BASE}.lock", f".harness-{folder}.lock"):
+        fh = (HERE / name).open("a")
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            fh.close()
+            raise SystemExit(f"another harness pass is running ({HERE / name} is locked): never run two passes at "
+                             "once on the same ports or folder; wait for it, or set LIVE_PORT_BASE and use another "
+                             "folder") from None
+        _RUN_LOCKS.append(fh)
+
+
+def check_python_on_path():
+    """Run 13: the launcher cases start `env python3 -m clinic_mcp_server`, the `python3` on PATH. Without the
+    venv on PATH that one lacks the MCP SDK, and six cases FAIL as if Two-Key had."""
+    found = subprocess.run(["python3", "-c", "import mcp_types"], capture_output=True, check=False,  # nosec B603 B607 - test only
+                           env=base_env(credentials=False))
+    if found.returncode:
+        raise SystemExit(f"the python3 on PATH ({shutil.which('python3')}) cannot import the MCP SDK; the launcher "
+                         f"cases need it: put this venv first on PATH ({Path(sys.executable).parent}) and start again")
+
+
 def sabotage_all():
     """`--sabotage all`: each patch in a pass of its own (a fresh process, as the globals are per pass). Up to
     --jobs passes run at once, each on its own six ports and its own selftest/sabotage_<name>/ directory."""
@@ -1689,6 +1722,11 @@ def sabotage_all():
     bad = [n for n, v, _ in rows if v in ("missed", "control_failed", "error")]
     if bad:
         raise SystemExit(f"SABOTAGE: the harness did not notice, or broke: {bad}")
+    blind = [n for n, v, _ in rows if v == "blind_spot"]
+    if blind:       # run 13: "ok" alone read as if every weakening had been caught
+        print(f"SABOTAGE: ok, but {len(blind)} weakening(s) are blind spots no live case can reach (stated in "
+              f"sabotage.py; unit tests cover them): {blind}; written to {out}")
+        return
     print(f"SABOTAGE: ok; written to {out}")
 
 
@@ -1715,6 +1753,8 @@ def main():
             raise SystemExit(f"--mask-run: {d} is not a directory")
         print(f"MASKED: {mask_run(d)} file(s) in {d}; see {d / 'MASKED.md'}")
         return
+    hold_run_locks()
+    check_python_on_path()
     if OPTS.sabotage:
         start_sabotage()
     for d in (OUT, INB, LOGS):
