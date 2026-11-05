@@ -262,7 +262,24 @@ def _agent(config):
     if agent is None:
         return [(WARN, "monitored_agent: none declared, so judges are not checked against the agent's "
                        "own model and credential")], None
+    problem = agent_declaration_problem(agent)
+    if problem:
+        return [(FAIL, problem)], None
     return [(OK, "monitored_agent: declared")], agent
+
+
+def agent_declaration_problem(agent) -> str | None:
+    """Why the proxy and the library refuse this ``monitored_agent`` declaration (or each one of a roster's list) when
+    they resolve it, or None. Loading checks only the keys; a missing ``base_url``, or ``credential: none`` for an
+    agent that is not on this host or its network, passed setup and config check and then stopped the proxy at its
+    start (cloud re-test of run 13, 2026-11-05)."""
+    for one in agent if isinstance(agent, list) else [agent]:
+        try:
+            one.validate()
+        except ValueError as e:     # IdentityError
+            text = str(e)
+            return text if text.startswith("monitored_agent") else f"monitored_agent: {text}"
+    return None
 
 
 def _unresolved(model: Any, base_url: Any, upstream: Any) -> bool:

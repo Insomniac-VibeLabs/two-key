@@ -234,6 +234,21 @@ class Setup(Deployment):
                        confirm=lambda _p: True)[0]
         self.assertEqual(result["weaker"], ["tool_specs.tool_a.tool_check: exempt"])
 
+    def test_an_agent_the_proxy_would_refuse_is_refused_at_setup(self):
+        """Cloud re-test of run 13, 2026-11-05: an answers file whose agent had no base_url (and credential: none)
+        passed setup and config check, and then the proxy refused to start with `declare base_url`."""
+        agent = {k: v for k, v in ANSWERS["monitored_agent"].items() if k != "base_url"}
+        for route in ("proxy", "library"):
+            with self.subTest(route=route), self.assertRaisesRegex(
+                    setup_cmd.SetupError, "config_check_failed: monitored_agent 'agent': declare base_url"):
+                quiet(setup_cmd.build, dict(ANSWERS, route=route, monitored_agent=agent), self.base / route,
+                      environ={})
+            self.assertFalse((self.base / route).exists())
+        keyless = {k: v for k, v in ANSWERS["monitored_agent"].items() if k != "credential_env"}
+        with self.assertRaisesRegex(setup_cmd.SetupError, "credential: none is only for a loopback"):
+            quiet(setup_cmd.build, dict(ANSWERS, monitored_agent=dict(keyless, credential="none")),
+                  self.base / "keyless", environ={})
+
     def test_the_tool_check_is_only_for_the_proxy(self):
         with self.assertRaisesRegex(setup_cmd.SetupError, "only for tools behind two-key mcp-proxy"):
             quiet(setup_cmd.build, dict(ANSWERS, route="guard", tools=CHECKED_TOOLS), self.base / "g", environ={})

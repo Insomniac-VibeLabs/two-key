@@ -795,7 +795,7 @@ def _write_proxy_and_check(staging: Path, target: Path, answers: Mapping, envelo
 
 def _check_library(staging: Path, key) -> list[tuple[str, str]]:
     """The guard and library routes have no proxy.yaml: load the judges and verify the constitution."""
-    from .config_cmd import FAIL, OK
+    from .config_cmd import FAIL, OK, agent_declaration_problem
     from .constitution import load_envelope, verify_signed
     from .identity import load_monitored_agent_file
     from .judges.config import load_config_file
@@ -805,8 +805,9 @@ def _check_library(staging: Path, key) -> list[tuple[str, str]]:
         found.append((OK, f"constitution: signed by the principal key, digest {signed.digest}"))
         judges, policy = load_config_file(staging / FILES["judges"])
         found.append((OK, f"judges: {len(judges)} load; required_yes {policy.required_yes}"))
-        load_monitored_agent_file(staging / FILES["judges"])
-        found.append((OK, "monitored_agent: declared"))
+        agent = load_monitored_agent_file(staging / FILES["judges"])
+        problem = agent_declaration_problem(agent) if agent is not None else None
+        found.append((FAIL, problem) if problem else (OK, "monitored_agent: declared"))
     except Exception as e:      # every loader's own error, reported as a refusal
         found.append((FAIL, f"{type(e).__name__}: {e}"))
     return found

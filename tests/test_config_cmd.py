@@ -147,6 +147,18 @@ class Check(Workspace):
         self.assertIn("allowed by allow_unresolved_identity: true", unresolved[0])
         self.assertNotIn("refuses to start", unresolved[0])
 
+    def test_an_agent_declaration_the_proxy_refuses_fails(self):
+        """Cloud re-test of run 13, 2026-11-05: config check said `monitored_agent: declared` for an agent with no
+        base_url, which the proxy refuses at its start."""
+        (self.dir / "judges.yaml").write_text(JUDGES.replace(' base_url: "https://agent.example/v1",', ""),
+                                              encoding="utf-8")
+        self.assertIn((config_cmd.FAIL, "monitored_agent 'agent': declare base_url"), self.check())
+        (self.dir / "judges.yaml").write_text(JUDGES.replace("credential_env: AGENT_KEY_VAR", "credential: none"),
+                                              encoding="utf-8")
+        failed = [text for level, text in self.check() if level == config_cmd.FAIL]
+        self.assertEqual(failed, ["monitored_agent 'agent': credential: none is only for a loopback or "
+                                  "private-address agent; declare credential_env"])
+
     def test_an_unset_agent_credential_fails(self):
         """Live run 9, finding 1: the proxy refuses to start without it, so check must not say all is set."""
         found = self.check({**SET, "AGENT_KEY_VAR": ""})

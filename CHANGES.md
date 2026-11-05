@@ -5608,6 +5608,14 @@ Three more run 13 items, decided 2026-11-05:
 - #34: kept as it is and documented in TOOL_CHECK. The Python `ToolGateway` holds under `high_assurance` even
   when passed `unanswered_hold=False`, with no error.
 
+Found in the cloud re-test of the changed run 13 cases (2026-11-05):
+
+- `two-key setup --answers` and `config check` accepted a `monitored_agent` the proxy refuses at its start (no
+  `base_url`, or `credential: none` for an agent that is not on this host or its network), so setup said `ok` and
+  the first start failed with `declare base_url`. Both now run the same check the proxy does: `config check`
+  fails with the proxy's own message, and setup refuses with `config_check_failed` and writes nothing, on every
+  route. Tests in `tests/test_config_cmd.py` and `tests/test_config_set.py`.
+
 ## Judge history: one agent's bursts are never shown as another's — 2026-11-04
 
 - **Judge history v2, agents kept apart** (maintainer's decision, 2026-11-04): each proxy is told only its own
