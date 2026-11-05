@@ -13,11 +13,11 @@ promise: the order may change, and version numbers are targets, not dates.
 
 <!-- toc -->
 - [The path to 1.0](#the-path-to-10)
-- [Where we are (2026-10-28)](#where-we-are-2026-10-28)
+- [Where we are (2026-11-05)](#where-we-are-2026-11-05)
 - [Ground rules](#ground-rules)
 - [0.8.0: Judge history and ballot records](#080-judge-history-and-ballot-records)
-- [0.9.0: Tool-side token check and remote agents](#090-tool-side-token-check-and-remote-agents)
-- [0.9.1: TypeScript tool-check helper](#091-typescript-tool-check-helper)
+- [0.9.0: Tool check, agent roster and hybrid signatures](#090-tool-check-agent-roster-and-hybrid-signatures)
+- [0.9.1: The 1.0 freeze and a TypeScript helper](#091-the-10-freeze-and-a-typescript-helper)
 - [1.0.0: First stable release](#100-first-stable-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
   - [PKI and certificate recovery](#pki-and-certificate-recovery)
@@ -44,11 +44,11 @@ promise: the order may change, and version numbers are targets, not dates.
 flowchart TD
   subgraph done["Released betas"]
     direction LR
-    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"]
+    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"] --> r09["0.9.0<br/>Tool check,<br/>agent roster,<br/>hybrid<br/>signatures"]
   end
-  subgraph next["Next: one beta, then 1.0.0"]
+  subgraph next["Next: 0.9.1, then 1.0.0"]
     direction LR
-    r09["0.9.0 beta<br/>Token check,<br/>remote agents,<br/>hybrid signatures"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
+    r091["0.9.1<br/>1.0 freeze,<br/>TS helper"] --> r10["1.0.0<br/>SSH live run,<br/>stable release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
   end
   done --> next
 ```
@@ -63,9 +63,9 @@ flowchart TD
 | 0.7.0 | Ledger export for a SIEM; a count of refused tokens outside the ledger; the proxy refuses an agent that shares or can change Two-Key's account | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
-| 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart and a real-MCP-server demo, folder-path rules for key one, and formats frozen for 1.0 | Planned |
-| 0.9.1 | A TypeScript tool-check helper as its own npm package, and fixes from the 0.9.0 review | Planned |
-| 1.0.0 | The first stable release, after a public community review of 0.9.0 | Planned |
+| 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a signed agent roster, a quickstart and a real-MCP-server demo, folder-path rules for key one, and a setup window | Released, tag `v0.9.0` |
+| 0.9.1 | The 1.0 freeze written in UPGRADING.md, a TypeScript tool-check helper as its own npm package, and fixes from the 0.9.0 review | Planned |
+| 1.0.0 | The first stable release, after a live run with the agent on another machine over SSH and a public community review of 0.9.0 | Planned |
 | After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
 On 2026-10-15 the maintainer set this order: the MCP adapter, then DLP and
@@ -83,9 +83,16 @@ Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
 in the same release.
 
-## Where we are (2026-10-28)
+## Where we are (2026-11-05)
 
-- **0.8.0 is released**: tag `v0.8.0` on `main`, and on PyPI. Judges get a
+- **0.9.0 is released**: tag `v0.9.0` on `main`, and on PyPI. Every signature
+  is hybrid Ed25519 plus ML-DSA-65, a tool behind the proxy can check its own
+  calls (#28), a signed agent roster ties each agent to the account it runs
+  as, key one gets folder-path rules, and setup has a window. Live runs 12 and
+  13 checked it with real judges and found no forbidden call that ran; their
+  findings are fixed. The SSH live run is now required before 1.0.0, not
+  0.9.0, and the 1.0 freeze moved to 0.9.1 (maintainer's decision, 2026-11-05).
+- **0.8.0** (tag `v0.8.0`): Judges get a
   summary of recent decisions from the ledger (#1), each judge's ballot is
   recorded without its rationale text, one proxy serves each agent on a
   ledger, and two windows arrive: `two-key ledger-view`, a read-only ledger
@@ -120,8 +127,8 @@ in the same release.
   never on `working` or `main`.
 - **Issues**: #13 and #27 shipped in 0.7.3, and #1 in 0.8.0. #3
   (repository setup after the move) has maintainer settings left to confirm.
-- **Next**: 0.9.0, the last beta, then the public review and the first
-  stable release, 1.0.
+- **Next**: 0.9.1, then the public review and the first stable release,
+  1.0.
 - **Not yet tested enough: agents on another machine.** The maintainer
   expects an agent connecting from another machine to be the normal case,
   and the same machine an edge case for testing (2026-10-16). Today the
@@ -135,7 +142,8 @@ in the same release.
   over SSH (connect, reconnect, a dropped connection, two agents at once,
   and the escape attempts `restrict` should stop: a shell, `sftp`, port
   forwarding, environment variables), the same on macOS and Windows hosts,
-  and a decision on a network transport. This is planned for 0.9.0.
+  and a decision on a network transport. This is required before 1.0.0
+  (maintainer's decision, 2026-11-05).
 
 ## Ground rules
 
@@ -189,11 +197,11 @@ CHANGES.md "Release v0.8.0" lists what shipped.
 - Done: live runs 10 and 11 with real judges covered the first three; the
   release follows [PYPI.md](docs/PYPI.md).
 
-## 0.9.0: Tool-side token check and remote agents
+## 0.9.0: Tool check, agent roster and hybrid signatures
 
-Version 0.9.0, the last beta: to be tagged `v0.9.0` on `main` and published after the merge. CHANGES.md
-"Release v0.9.0" lists what ships. Everything 1.0 will contain is in, tested on real deployments, and
-frozen, so the public review looks at the final shape.
+Version 0.9.0, the last beta: released, tag `v0.9.0` on `main`, and on PyPI. CHANGES.md "Release v0.9.0"
+lists what ships. The SSH live run, planned here, is now required before 1.0.0 instead, and the 1.0 freeze
+moved to 0.9.1 (maintainer's decision, 2026-11-05).
 
 - An optional tool-side token check (#28): a way for a tool, or a thin
   wrapper in front of it, to check that a call was authorized. Off by
@@ -201,10 +209,8 @@ frozen, so the public review looks at the final shape.
   only. Design note approved by the maintainer (2026-10-28); built for tools
   behind `two-key mcp-proxy`, required under `high_assurance`
   (docs/TOOL_CHECK.md). A tool error now spends the token for every tool.
-- A live run with the agent on another machine over SSH ("Where we are"
-  above), on machines the maintainer sets up. The network transport
-  question is answered with the standing decision: stdio only, remote
-  agents over SSH.
+- A signed agent roster (maintainer's decision, 2026-11-04): each agent tied to the account it runs as, the
+  tools each may use, and an opt-in rule for judges from another maker (docs/AGENT_ROSTER.md).
 - A ten-minute quickstart and a demo with a real MCP server.
 - `two-key config set 'tools[*].claim'`: one setting on every tool as one change, one confirmation and one
   ledger entry (live run 11).
@@ -218,17 +224,16 @@ frozen, so the public review looks at the final shape.
   signature is hybrid Ed25519 plus ML-DSA-65, and a 0.8.0 deployment's keys are upgraded once at its first
   start (`keys_upgraded`) ([Post-quantum signatures](#post-quantum-signatures)). FIPS 140-3
   approved mode follows once a validated module offers ML-DSA-65 ([FIPS approved mode](#fips-approved-mode)).
-- A freeze for 1.0: what 1.0 keeps stable (constitution, rules and judge
-  configuration shapes, the ledger and token formats, the SIEM schema, the
-  CLI and its exit codes, the public Python API) is written in
-  [UPGRADING.md](docs/UPGRADING.md).
 - Before release: a live round across the full case list plus the new
-  cases.
+  cases (runs 12 and 13).
 
-## 0.9.1: TypeScript tool-check helper
+## 0.9.1: The 1.0 freeze and a TypeScript helper
 
-Planned (maintainer's decision, 2026-11-03), after 0.9.0 ships:
+Planned (maintainer's decisions, 2026-11-03 and 2026-11-05), after 0.9.0 ships:
 
+- A freeze for 1.0: what 1.0 keeps stable (constitution, rules and judge configuration shapes, the ledger and
+  token formats, the SIEM schema, the CLI and its exit codes, the public Python API), written in
+  [UPGRADING.md](docs/UPGRADING.md). Moved from 0.9.0.
 - A TypeScript helper for the tool check (#28), so an MCP server on the TypeScript SDK can check the token and
   sign its receipt as `two_key.toolcheck` does for Python. It is its own npm package with its own release, so
   the Python package and its 1.0 freeze do not change; the wire format and test vectors in
@@ -238,6 +243,9 @@ Planned (maintainer's decision, 2026-11-03), after 0.9.0 ships:
 
 ## 1.0.0: First stable release
 
+- A live run with the agent on another machine over SSH ("Where we are" above), on machines the maintainer
+  sets up. The network transport question is answered with the standing decision: stdio only, remote agents
+  over SSH. Required before 1.0.0, not 0.9.0 (maintainer's decision, 2026-11-05).
 - A time-boxed, public community review with a stated scope. 0.9.0 is what
   is reviewed; fixes ship as 0.9.x.
 - Release only with no unresolved Medium or higher findings from that review.

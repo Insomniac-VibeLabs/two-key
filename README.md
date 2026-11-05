@@ -113,7 +113,7 @@ Install 0.9.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 pip install "two-key[yaml]==0.9.0"
 ```
 
-Tag `v0.8.0` on `main` is the same code.
+Tag `v0.9.0` on `main` is the same code.
 
 Or run the offline demo from a clone. It uses test-double judges, so it
 needs no API keys:
@@ -648,8 +648,9 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 The MCP adapter shipped in 0.5.0; Windows support, DLP and antivirus hooks,
 and judge connection reuse shipped in 0.6.0. The ledger export for a SIEM
 shipped in 0.7.0, and the setup and change commands and the signed serial
-in 0.7.3, and the judge history summary in 0.8.0. The last beta, 0.9.0, comes
-next; a public review and the first stable release, 1.0, come next.
+in 0.7.3, and the judge history summary in 0.8.0. The last beta, 0.9.0,
+brought hybrid signatures, the tool check and the signed agent roster. 0.9.1
+comes next, then a public review and the first stable release, 1.0.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
@@ -658,11 +659,11 @@ are targets, not dates. The detail, and what comes after 1.0, is in
 flowchart TD
   subgraph done["Released betas"]
     direction LR
-    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"]
+    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"] --> r09["0.9.0<br/>Tool check,<br/>agent roster,<br/>hybrid<br/>signatures"]
   end
-  subgraph next["Next: one beta, then 1.0.0"]
+  subgraph next["Next: 0.9.1, then 1.0.0"]
     direction LR
-    r09["0.9.0 beta<br/>Token check,<br/>remote agents,<br/>hybrid signatures"] --> r10["1.0.0<br/>Stable<br/>release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
+    r091["0.9.1<br/>1.0 freeze,<br/>TS helper"] --> r10["1.0.0<br/>SSH live run,<br/>stable release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
   end
   done --> next
 ```
@@ -675,8 +676,9 @@ flowchart TD
 | 0.7.0 | Ledger export for a SIEM: live syslog or webhook delivery and a verified file export, no argument values; a count of refused tokens kept outside the ledger | Released, tag `v0.7.0` |
 | 0.7.3 | `two-key setup` and `config set`, `get`, `undo`, `show` and `check`; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13) | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a ledger audit window and a constitution editor | Released, tag `v0.8.0` |
-| 0.9.0 | The last beta: an optional tool-side token check (#28), a live run with the agent on another machine, a quickstart, hybrid Ed25519 plus ML-DSA-65 signatures, and formats frozen for 1.0 | Planned |
-| 1.0.0 | The first stable release, after a public community review of 0.9.0. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
+| 0.9.0 | The last beta: hybrid Ed25519 plus ML-DSA-65 signatures, the optional tool check (#28), a signed agent roster, folder-path rules for key one, a setup window, and a quickstart | Released, tag `v0.9.0` |
+| 0.9.1 | What 1.0 keeps stable written in UPGRADING.md, a TypeScript tool-check helper, and fixes from the 0.9.0 review | Planned |
+| 1.0.0 | The first stable release, after a live run with the agent on another machine over SSH and a public community review of 0.9.0. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
 | After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window come before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
