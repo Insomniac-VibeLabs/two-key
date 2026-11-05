@@ -107,7 +107,8 @@ def write_answers(ctx, name, **over) -> Path:
 
 
 def checked_rules(ctx, work: Path) -> Path:
-    """The pass's rules with the tool check on for every tool (#28): high_assurance refuses to set up without it.
+    """The pass's rules with the tool check on for every tool (#28) and its agents named (the 0.9.0 roster):
+    high_assurance refuses to set up without either.
     One receipt key serves them all; deployment C never starts its proxy, so no tool has to hold it."""
     import yaml
     res = run_cli(ctx, ["tool-key", "new", "--out", work / "tool_c.pem"])
@@ -117,6 +118,7 @@ def checked_rules(ctx, work: Path) -> Path:
     doc = yaml.safe_load(Path(ctx["rules"]).read_text(encoding="utf-8"))
     for spec in doc["tool_specs"].values():
         spec["tool_check"] = check
+        spec["agents"] = ["test-monitored-agent"]     # high_assurance: each tool names its agents (0.9.0 roster)
     path = work / "rules_c.yaml"
     path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
     return path
@@ -305,7 +307,9 @@ def high_assurance_steps(ctx, out, step):
     judges = answers(ctx)["judges"]
     judges[0]["maker"] = "harness-a"
     judges[1].update(maker="harness-local", local_weights=True)
-    agent = dict(answers(ctx)["monitored_agent"])
+    # 0.9.0: high_assurance needs a signed agent roster, so the agent names the account it runs as (e095b42). The
+    # account need not exist here: config check only warns, and this deployment is never started.
+    agent = dict(answers(ctx)["monitored_agent"], account="two-key-live-agent")
     step("setup_high_assurance", ["setup", "--dir", c, "--answers",
                                   write_answers(ctx, "c", profile="high_assurance", judges=judges,
                                                 monitored_agent=agent, rules_file=str(checked_rules(ctx, work)))],
