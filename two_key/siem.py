@@ -343,7 +343,8 @@ KINDS: dict[str, KindSpec] = {
     # release); repeated unanswered calls hold it until ``until``, then it is released by itself.
     "tool_receipt_invalid": KindSpec(sent=("jti", "tool", "why", "at"), severity=WARNING),
     "tool_held": KindSpec(sent=("tool", "jti", "why", "until"), severity=WARNING),
-    "tool_released": KindSpec(sent=("tool",), hashed=("reason",), severity=NOTICE),
+    # ``by`` says how the hold ended: ``expiry`` (its time was up) or ``principal`` (two-key tool release); 0.9.0, #10.
+    "tool_released": KindSpec(sent=("tool", "by"), hashed=("reason",), severity=NOTICE),
     "redemption_aborted": KindSpec(sent=("jti", "tool"), severity=WARNING),
     "revocation": KindSpec(hashed=("reason",), severity=NOTICE),
     "mcp_proxy_started": KindSpec(

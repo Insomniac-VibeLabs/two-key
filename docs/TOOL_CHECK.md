@@ -308,7 +308,8 @@ the SIEM at once. The tool did run (or refused), so the token stays spent.
   two-key tool release pay_vendor --key principal.pem --ledger ledger --reason "clock fixed on the billing host"
   ```
 
-  The release is ledgered as `tool_released` with its reason. Under
+  The release is ledgered as `tool_released` with its reason and `by: principal`
+  (`by` is new in 0.9.0 and sent to the SIEM; it is `expiry` when a hold ran out). Under
   `high_assurance`, a refusal receipt most likely means a wrong key or a
   wrong clock, and the operator should look before releasing.
 
@@ -330,7 +331,7 @@ call. The tool is held when either count reaches 3 (decision 2026-11-03):
 
 This hold (`tool_held` with why `unanswered` and an `until` time) lasts 15
 minutes and then ends by itself: the next call or decision after `until`
-writes `tool_released` with reason `hold expired`, and counting
+writes `tool_released` with reason `hold expired` and `by: expiry`, and counting
 starts again. `two-key tool release` ends it earlier. A hold after a
 missing, forged or mismatched receipt has no `until` and still waits for
 the operator. With `unanswered_hold` off (the default profile's default),
@@ -339,6 +340,12 @@ on with `two-key config set --config proxy.yaml unanswered_hold true`, with the
 check box on the setup window's Proxy page, or by answering yes when
 `two-key setup` asks on the terminal; turning it off again counts as weaker
 and needs the typed yes.
+
+In Python, `ToolGateway(..., high_assurance=True, unanswered_hold=False)`
+still holds: under `high_assurance` the hold is on whatever is passed, and no
+error is raised, so code that passes `False` keeps working and keeps the
+stricter behaviour (maintainer's decision, 2026-11-05). Only `proxy.yaml`
+refuses the combination, because there an operator wrote it on purpose.
 
 The count looks back to the tool's last hold or release, not to when the
 hold was turned on (maintainer's decision, 2026-11-04). Unanswered calls

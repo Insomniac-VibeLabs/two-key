@@ -352,6 +352,7 @@ def _tool_release(args) -> int:
     reason = (args.reason or "").strip()
     if not reason:
         raise SystemExit("--reason: say why the tool can be trusted again; it is recorded in the ledger")
+    from .ledger import RELEASED_BY_PRINCIPAL
     ledger = _open_ledger(args, _principal_key(args))
     if ledger is None:
         return 1
@@ -359,7 +360,7 @@ def _tool_release(args) -> int:
     if not ledger.tool_held(args.tool):
         print(json.dumps({"ok": False, "error": f"{args.tool} is not held", "held": ledger.held_tools()}, indent=2))
         return 1
-    ledger.record("tool_released", {"tool": args.tool, "reason": reason[:200]})
+    ledger.record("tool_released", {"tool": args.tool, "by": RELEASED_BY_PRINCIPAL, "reason": reason[:200]})
     print(json.dumps({"ok": True, "released": args.tool, "held": ledger.held_tools()}, indent=2))
     return 0
 

@@ -181,6 +181,16 @@ class Check(Workspace):
         self.assertTrue(any("one judge approves a call alone" in text for text in warned), warned)
         self.assertTrue(any("every judge comes from one provider" in text for text in warned), warned)
 
+    @unittest.skipIf(os.name == "nt", "POSIX mode bits")
+    def test_a_constitution_readable_by_others_warns(self):
+        """Run 13 #29: a WARN, not a FAIL, naming the fix; an owner-only file has no such line."""
+        os.chmod(self.dir / "c.json", 0o644)
+        found = [(level, text) for level, text in self.check() if "constitution_readable" in text]
+        self.assertEqual([level for level, _ in found], [config_cmd.WARN], found)
+        self.assertIn(f"chmod 600 {self.dir / 'c.json'}", found[0][1])
+        os.chmod(self.dir / "c.json", 0o600)
+        self.assertFalse(any("constitution_readable" in text for _, text in self.check()))
+
     def test_a_constitution_signed_by_another_key_fails(self):
         other = generate_private_key()
         save_envelope(self.dir / "c.json", sign_constitution(

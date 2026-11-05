@@ -90,6 +90,9 @@ LEDGER_KEY_BYTES = 32
 
 WITNESS_ROTATION_FORMAT = "two-key-witness-rotation/1"
 KEYS_UPGRADE_FORMAT = "two-key-keys-upgraded/1"
+# How a hold ended, in tool_released ``by`` (0.9.0, #10). Entries written before 0.9.0 have no ``by``.
+RELEASED_BY_EXPIRY = "expiry"
+RELEASED_BY_PRINCIPAL = "principal"
 KEYS_UPGRADE_PENDING = ("keys_upgrade_pending: this ledger's key files are hybrid, and the ledger has not recorded the "
                         "key upgrade yet; run two-key keys upgrade (docs/UPGRADING.md)")
 # Formats written by the two-key-concept repository (before two-key 0.4.0). They are not read; a file in
@@ -1590,7 +1593,7 @@ class Ledger:
         with self._exclusive():
             held = self._held.get(tool)
             if held is not None and held[1] is not None and not self.tool_held(tool, now):
-                self.record("tool_released", {"tool": tool, "reason": "hold expired"})
+                self.record("tool_released", {"tool": tool, "by": RELEASED_BY_EXPIRY, "reason": "hold expired"})
 
     def _since_last_hold(self, tool: str):
         """``tool``'s receipt problems and redemptions, newest first, back to its last hold or release."""

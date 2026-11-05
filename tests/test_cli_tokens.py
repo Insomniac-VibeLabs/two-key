@@ -264,5 +264,23 @@ class Version(unittest.TestCase):
         self.assertEqual(out.getvalue().strip(), f"two-key {__version__}")
 
 
+class ToolRelease(unittest.TestCase):
+    def test_a_principal_release_is_ledgered_by_principal(self):
+        """Run 13 #10: ``tool_released`` says who ended the hold, and only a held tool can be released."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            private(base)
+            key = generate_private_key()
+            save_private_key(base / "k.pem", key)
+            Ledger(base / "ledger", key).record("tool_held", {"tool": "send", "jti": "j1", "why": "forged"})
+            argv = ["tool", "release", "send", "--key", str(base / "k.pem"), "--ledger", str(base / "ledger"),
+                    "--reason", "key fixed"]
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(argv), 0)
+                self.assertEqual(main(argv), 1)         # no longer held
+            released = [e.body for e in Ledger(base / "ledger", key).entries if e.kind == "tool_released"]
+        self.assertEqual(released, [{"tool": "send", "by": "principal", "reason": "key fixed"}])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

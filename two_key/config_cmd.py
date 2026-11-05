@@ -182,6 +182,7 @@ def _constitution(config) -> tuple[list[tuple[str, str]], Any]:
     except (OSError, ValueError) as e:
         return [(FAIL, f"constitution: {config.constitution}: {e}")], None
     out = [key_line, (OK, f"constitution: signed by the principal key, digest {signed.digest}")]
+    out += _constitution_access(config.constitution)
     if not is_hybrid(public):
         out.insert(1, _upgrade_line(config))
     unknown = sorted(set(config.tools) - set(signed.tool_specs))
@@ -189,6 +190,22 @@ def _constitution(config) -> tuple[list[tuple[str, str]], Any]:
         out.append((FAIL, f"tools: {unknown} are not tools in the signed constitution"))
     out += _unset_claims(config, signed)
     return out, signed
+
+
+def _constitution_access(path) -> list[tuple[str, str]]:
+    """A WARN when the signed constitution is readable beyond its owner (run 13 #29, decision 2026-11-05). Its
+    signature stops a change, not a read: a reader learns every rule and what each judge is told. Nothing is
+    refused, because the proxy only reads the file; the key upgrade keeps the mode the file has."""
+    from . import _platform
+    try:
+        with open(path, "rb") as fh:
+            problem = _platform.access_problem(fh.fileno())
+    except OSError:
+        return []           # it was just read; a file that went away is the next start's error
+    if problem is None:
+        return []
+    return [(WARN, f"constitution_readable: {path} is {problem}, so they can read every rule and what the judges "
+                   f"are told; run {_platform.fix_hint(path)} (two-key setup writes it owner-only)")]
 
 
 def _blanket_class_rules(rules) -> list[tuple[str, str | None]]:

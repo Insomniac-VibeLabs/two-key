@@ -82,7 +82,7 @@ SAMPLE_BODIES = {
     "tool_call_refused": {"origin": "mcp-proxy", "tool": "search", "why": "duplicate_keys"},
     "tool_receipt_invalid": {"jti": "j1", "tool": "search", "why": "bad_signature"},
     "tool_held": {"tool": "search", "jti": "j1", "why": "missing"},
-    "tool_released": {"tool": "search", "reason": REVOKE_SECRET},
+    "tool_released": {"tool": "search", "by": "principal", "reason": REVOKE_SECRET},
     "config_changed": {"command": "set", "settings": ["ttl_seconds"], "signed": False, "weaker": [],
                        "confirmed": False, "constitution_hash": None, "account": SECRET,
                        "files": [{"role": "proxy", "file": "proxy.yaml", "old_sha256": "sha256:" + "0" * 64,

@@ -5597,6 +5597,16 @@ GrokBot's live run 13, the 0.9.0 release gate, at 340c876. Nothing it tried let 
 - Tests in `tests/test_toolcheck.py`, `tests/test_key_upgrade.py`, `tests/test_mcp_proxy_sdk.py`,
   `tests/test_cli_tokens.py`, `tests/test_path_fields.py` and `tests/test_siem.py`. 1528 tests.
 
+
+Three more run 13 items, decided 2026-11-05:
+
+- #10: `tool_released` says how the hold ended, `by: expiry` (its 15 minutes were up) or `by: principal`
+  (`two-key tool release`), and the SIEM event carries `by`. Entries written before this have no `by`.
+- #29: `config check` warns `constitution_readable` when the signed constitution is readable beyond its owner,
+  with the `chmod 600` (or `icacls`) fix. Nothing is refused, and the key upgrade still keeps the file's mode.
+- #34: kept as it is and documented in TOOL_CHECK. The Python `ToolGateway` holds under `high_assurance` even
+  when passed `unanswered_hold=False`, with no error.
+
 ## Judge history: one agent's bursts are never shown as another's — 2026-11-04
 
 - **Judge history v2, agents kept apart** (maintainer's decision, 2026-11-04): each proxy is told only its own

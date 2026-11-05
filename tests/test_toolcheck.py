@@ -300,7 +300,7 @@ class Unanswered(Deployment):
         self.assertEqual(self.tk.authorize(CLAIM, ARGS, "send a note").reason, "tool_held")
         self.assertEqual(gw.invoke(earlier, "send", ARGS).reason, "tool_held")
         self.assertEqual(self.call(gw, fail=False, after=1), "redeemed")
-        self.assertEqual(self.bodies("tool_released")[-1], {"tool": "send", "reason": "hold expired"})
+        self.assertEqual(self.bodies("tool_released")[-1], {"tool": "send", "by": "expiry", "reason": "hold expired"})
         self.assertEqual(self.call(gw), "tool_error:TimeoutError")     # counting starts again after the hold
         self.assertEqual(len(self.bodies("tool_held")), 1)
 
