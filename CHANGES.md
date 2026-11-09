@@ -5729,3 +5729,4 @@ review (ROADMAP).
 - Docs: HOWTO says the 4,096-character limit counts the path as sent, before cleaning, and that Path A does no
   URL decoding (`%2e%2e` is a folder name), so a path field does not belong on a tool that decodes one;
   SETTINGS explains `tools[*]` and `tool_specs[*]` (run 13 #32).
+- Tests: the path-advice test indexes its two lines instead of unpacking them (DeepSource PYL-W0632).
