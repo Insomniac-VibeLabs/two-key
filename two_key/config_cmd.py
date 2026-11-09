@@ -497,6 +497,7 @@ def show(path: Path | str) -> dict[str, Any]:
         "on_writable_paths": writable.resolve_mode(config.on_writable_paths, high),
         "on_agent_access": agent_access.resolve_mode(config.on_agent_access, high),
         "unanswered_hold": bool(config.unanswered_hold) or high,
+        "ledger_rollover": _rollover_view(config.ledger_rollover),
         "high_assurance": high,
         "upstream": {
             "command": list(config.upstream.command),
@@ -529,6 +530,13 @@ def _judge_view(judge) -> dict[str, Any]:
             "auth": getattr(credential, "kind", None),
             "variables": dict(judge_variables(judge)),
             "ballot_key_env": getattr(judge, "ballot_key_env", None)}
+
+
+def _rollover_view(rollover) -> dict:
+    """``ledger_rollover`` as it applies, the hard limit worked out."""
+    return {"enabled": rollover.enabled, "segment_mb": rollover.segment_mb, "segment_days": rollover.segment_days,
+            "hard_limit_mb": rollover.hard_limit_bytes // (1024 * 1024), "compression": rollover.compression,
+            "keep_archives": rollover.keep_archives}
 
 
 def _scan_view(scan):

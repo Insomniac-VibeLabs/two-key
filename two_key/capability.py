@@ -81,10 +81,16 @@ def capability_key_fingerprint(public) -> str:
     return key_fingerprint(public)
 
 
+def _state(ledger) -> list:
+    """``Ledger.state_entries``: the active segment and what each rollover carried (every entry before one)."""
+    pick = getattr(ledger, "state_entries", None)
+    return pick() if callable(pick) else list(getattr(ledger, "entries", []))
+
+
 def _pinned(ledger) -> str | None:
     """The capability key fingerprint the last ``constitution_loaded`` entry pins, or the ``keys_upgraded`` entry
     when that is later (the key upgrade gives the key an ML-DSA-65 half, so a new fingerprint)."""
-    for entry in reversed(getattr(ledger, "entries", [])):
+    for entry in reversed(_state(ledger)):
         if entry.kind in ("constitution_loaded", "keys_upgraded"):
             return entry.body.get("capability_key_fingerprint")
     return None
@@ -105,7 +111,7 @@ def open_capability_key(ledger, principal_public=None):
     The gateway must not call this. It verifies with the public half only.
     """
     path = ledger.capability_key_path()
-    issued = any(e.kind == "capability_issued" for e in getattr(ledger, "entries", []))
+    issued = any(e.kind == "capability_issued" for e in _state(ledger))
     if path.exists():
         _platform.owner_only_dir(path.parent)
         try:   # the safe loader: no symlink, a regular file, no group or other access (#57)

@@ -55,6 +55,10 @@ the code wins, then this file should be corrected.
   supported, by design ([why](HOWTO.md#deployment-boundary-the-gateway-runs-in-the-twokey-process)).
 - The ledger key and the witness key, both outside the ledger directory
   (`<ledger>.ledger-key` and `<ledger>.witness`).
+- The ledger archives (`ledger/archive/segment-NNNNNN.tkla`, 0.9.1): sealed segments, encrypted under keys derived
+  from the ledger key, owner-only. Deleting or replacing one is detected (opening checks every archive's length and
+  the newest one's SHA-256; `two-key audit` checks every digest and every entry), but not repaired: only a backup
+  brings it back. Whoever reads the ledger key reads them, as with `entries.jsonl`.
 - The witness public key the operator keeps outside the ledger
   (`witness_public_key=`, `--witness-public-key`), when one is configured. It
   is not secret, but whoever can change it can make a forged head pass.
@@ -988,12 +992,17 @@ here.
 - `two_key/_platform.py`: POSIX does exactly what it did before 0.6.0 (mode 0600 and 0700, `O_NOFOLLOW`, `flock`, the same messages). On Windows a key is created with a protected access list for the current user only, in `CreateFileW` itself; a key is accepted only when its owner and every allow entry with more than metadata access are the current user, SYSTEM, Administrators, or OWNER RIGHTS; a reparse point as the last part is refused; locks are `LockFileEx`; descriptors are binary. Every key read and write in the package goes through it, and every text file Two-Key writes uses `newline="\n"` and a named encoding (`tests/test_text_io.py`).
 - `two_key/config_set.py`, `two_key/setup_cmd.py`: a change is refused as root, and when a file it writes or its folder can be changed by another account or is a link; the whole changed config passes `config check` before anything is written, so what `high_assurance` forbids stays forbidden; a weaker change needs `--confirm-weaker` and a typed yes on a terminal; a signed change needs the principal key and the exact signed rules file, and the new envelope is verified; `config_changed` (names and digests, never values) is ledgered before the files are renamed in. `config key-passphrase` keeps no plain copy of the key, and removing the passphrase counts as weaker.
 - `two_key/keys.py`: an encrypted principal key is PKCS8 under AES-256-GCM, its key from PBKDF2-SHA256 at 600,000 iterations (a file asking for fewer is refused), the header bound in as associated data. A passphrase comes from an owner-only file or a terminal prompt, never argv or the environment, and the proxy never prompts. PBKDF2 is not memory-hard, so a passphrase is only as good as its length: 12 bytes is the floor, and a generated one is advised. It does not stop an account that can write the files from editing them by hand, and it cannot tell an agent that runs as Two-Key's own account from the operator.
+- `two_key/ledger.py` and `two_key/ledger_archive.py` (rollover, 0.9.1): `ledger_sealed`, `ledger_continued` and `ledger_rollover_failed` are written by the ledger only, and `append` refuses them. One chain and one Merkle tree run across every segment: `ledger_continued` links to the seal's hash and carries the Merkle range, so the signed head covers archived entries. The archive is written to an owner-only temporary file and read back in full before the seal is appended. Archive chunks are AES-256-GCM under an HKDF key per segment, with a counter and last-chunk flag in the nonce and the header as associated data; reading stops at the recorded plaintext length (no decompression bomb), refuses anything after the last chunk, and refuses non-zero padding. Opening checks the catalogue's lengths and the newest digest; audit checks all. A token whose `ledger_size` is in an archive redeems only when `ledger_continued` carried it with the same `token_hash` (`ledger_size_archived` otherwise). Past `hard_limit_mb`, no token is issued (`ledger_rollover_overdue`). Only three interrupted states are finished on open; anything else refuses (`ledger_rollover_incomplete`).
 - `two_key/backup.py`: three bundles; the ledger key and the witness key are never in one file; a wrong passphrase or a tampered bundle is a refusal; restore writes `head.anchor` from the same moment as the ledger and does not delete it. `--replace-ledger` is the only path that overwrites a different ledger, and it also overwrites a key file that differs. A missing anchor on a newer ledger is left missing; the next open adopts that head.
 
 ## Changes by release
 
 What each release added to the model, newest first. Each is described where it applies below.
 
+- 0.9.1: ledger rollover (`two_key/ledger_archive.py`): sealed segments in encrypted, chunked, padded archives, one
+  chain and Merkle tree across them, open tokens carried across a seal, and the archives as a new asset; new records
+  are written as `two-key-ledger-enc/2` (base64). The TypeScript tool-check helper is a second implementation of
+  the tool check's stamp checks and receipt signing, outside this package.
 - 0.9.0: hybrid Ed25519 + ML-DSA-65 signatures for every key
   (`two_key/keys.py`) and the one-time key upgrade of a 0.8.0 deployment (`two_key/upgrade.py`,
   `keys_upgraded`); the tool check (`two_key/toolcheck.py`): redeem stamps signed by a stamp-only key,

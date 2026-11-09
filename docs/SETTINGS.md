@@ -105,6 +105,13 @@ Tier: operator config. The MCP proxy's own settings (`two-key mcp-proxy --config
 | `on_agent_access` | refuse | always refuses; `warn` is refused | `refuse` does not start when the account that started the proxy is Two-Key's own, is root, cannot be told, or can change a path the proxy runs or reads. `warn` names it and starts, for a test on one machine. |
 | `one_proxy_per_agent` | true |  | `true` lets one running proxy serve this `agent_id` (or, with none, the `unnamed` agent) on this ledger: a second refuses to start with `agent_already_connected`, ledgered and sent to the SIEM. `false` lets several run at once and warns at start; it counts as weaker in `config set`. Since 0.8.0. |
 | `unanswered_hold` | false | always on; `false` is refused | `true` holds a checked tool that keeps leaving calls unanswered (an error or a timeout): 3 unanswered calls in a row with no verified receipt between, or 3 within 10 minutes, hold it for 15 minutes, and then the hold ends by itself (TOOL_CHECK, "When the tool does not answer"). `false` only ledgers each unanswered call and sends it to the SIEM. Turning it off counts as weaker in `config set`. Since 0.9.0. |
+| `ledger_rollover` | on, at 64 MB |  | When the ledger seals its active segment into an encrypted archive (`ledger/archive/`), so the file read at every start stays small. Every value is checked at start. Since 0.9.1. |
+| `ledger_rollover.enabled` | true |  | `false` never rolls over automatically; `two-key ledger roll` still does. |
+| `ledger_rollover.segment_mb` | 64 |  | Seal once the active segment (`entries.jsonl`) reaches this many MB, 8 to 1024. |
+| `ledger_rollover.segment_days` | 0 (off) |  | Also seal once the active segment's first entry is this many days old, 0 to 3650. |
+| `ledger_rollover.hard_limit_mb` | 2 x `segment_mb` |  | Past this size, a rollover that was put off (low disk, more than 4,096 open tokens, a failed check) must run before another token is issued (`ledger_rollover_overdue`). From `segment_mb` to 4096. |
+| `ledger_rollover.compression` | zlib |  | `zlib`, or `none` (still encrypted and chunked, about twice as large). |
+| `ledger_rollover.keep_archives` | all |  | `all`: no archive is ever deleted. |
 | `upstream` | required |  | The MCP server the proxy starts and forwards signed calls to. |
 | `upstream.command` | required |  | Program and arguments, as a list. Run without a shell. |
 | `upstream.env` | none |  | Variables for the child: a literal, or `{env: NAME}` read from the proxy's environment (unset refuses to start). No other variable is passed. `config show` never prints a literal. |

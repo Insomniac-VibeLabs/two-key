@@ -77,10 +77,31 @@ def _require_hybrid(public_key) -> None:
         raise TwoKeyConfigError(KEYS_UPGRADE_NEEDED)
 
 
+def state_entries(ledger) -> list:
+    """The entries a start-up check reads: ``Ledger.state_entries`` (the active segment and what each rollover
+    carried), or every entry of a ledger-like object without it."""
+    pick = getattr(ledger, "state_entries", None)
+    return pick() if callable(pick) else list(getattr(ledger, "entries", ()))
+
+
+def _history_start(ledger, now: float, window_days: int) -> int:
+    """Where the judge history index starts reading: 0, or after a rollover the first archive sealed within the
+    window (the active segment when none is)."""
+    start = getattr(ledger, "segment_start", int)()
+    if not start:
+        return 0
+    horizon = now - window_days * 86400
+    for meta in reversed(ledger.catalogue()):
+        if meta["sealed_at"] < horizon:
+            break
+        start = meta["first_seq"]
+    return start
+
+
 def _pinned_stamp_key(ledger) -> str | None:
     """The stamp key fingerprint the last ``constitution_loaded`` or ``keys_upgraded`` entry that records one pins
     (#28), or None."""
-    for entry in reversed(getattr(ledger, "entries", [])):
+    for entry in reversed(state_entries(ledger)):
         if entry.kind in ("constitution_loaded", "keys_upgraded") and entry.body.get("stamp_key_fingerprint"):
             return entry.body["stamp_key_fingerprint"]
     return None
@@ -165,7 +186,7 @@ def _serial_history(ledger) -> tuple[str | None, int | None, set]:
     """From the ledger's ``constitution_loaded`` entries: the digest it last ran, the highest serial it has run
     (None if none had a serial), and every digest it ran under that serial."""
     last_digest, top, top_digests = None, None, set()
-    for entry in getattr(ledger, "entries", ()):
+    for entry in state_entries(ledger):
         if entry.kind != "constitution_loaded":
             continue
         last_digest = entry.body.get("digest")
@@ -325,6 +346,10 @@ class TwoKey:
             # added since. Episodes found in entries already on disk were ledgered when they were found.
             self._history = HistoryIndex(self.quorum.judge_history, self.compiled.tool_specs,
                                          blocked_from_rules(self.compiled.rules), self._history_agent_ids)
+            # After a rollover, only the archives sealed inside the window are read (0.9.1); every decision's
+            # history_basis says where the index began, so two-key audit --check-history starts there too.
+            self._history_from = self._history.seen = _history_start(self.ledger, self._now(),
+                                                                     self.quorum.judge_history.window_days)
             self._history.sync(self.ledger.entries)
         # Calls this process is still deciding, by (tool, counterparties), so a duplicate sent twice at once to
         # one proxy shows each copy to the other's judges as in_flight.
@@ -517,9 +542,18 @@ class TwoKey:
             return outcome, ("scanner_recovered", {"scanner": scanner.label})
         return outcome, None
 
+    def _issue_blocked(self, body_omitted: bool) -> str | None:
+        """Why an approved call gets no token: a ledger body that had to be cut, or a ledger past
+        ``ledger_rollover.hard_limit_mb`` whose put-off rollover must run first (0.9.1). None when neither."""
+        if body_omitted:
+            return REASON_LEDGER_BODY
+        if getattr(self.ledger, "over_hard_limit", bool)():
+            return "ledger_rollover_overdue"
+        return None
+
     @staticmethod
     def _has_capability_key(ledger) -> bool:
-        if any(e.kind == "capability_issued" for e in getattr(ledger, "entries", ())):
+        if any(e.kind == "capability_issued" for e in state_entries(ledger)):
             return True
         path_of = getattr(ledger, "capability_key_path", None)
         return callable(path_of) and os.path.lexists(path_of())
@@ -874,8 +908,9 @@ class TwoKey:
                                                       "tool": subject["tool"]})
                 # body_omitted is only for an already-decided DENY audit entry. If it would
                 # fire on a path about to issue a token, fail closed instead.
-                if allowed and body_omitted:
-                    allowed, reason = False, REASON_LEDGER_BODY
+                blocked = self._issue_blocked(body_omitted) if allowed else None
+                if blocked:
+                    allowed, reason = False, blocked
                 if allowed:
                     if self.issuer is None:
                         allowed, reason = False, "no_issuer_key"
@@ -890,9 +925,12 @@ class TwoKey:
                             scan=scanned.token_claim() if scanned is not None else None,
                             tool_args_digest=tool_args_digest)
                         token = issued.token
+                        # ledger_size and issued_at (0.9.1): what a rollover carries for a token still open at a seal.
                         _bounded("capability_issued", {"jti": issued.payload["jti"],
                                                        "token_hash": issued.token_hash,
-                                                       "ledger_root": issued.payload["ledger_root"]})
+                                                       "ledger_root": issued.payload["ledger_root"],
+                                                       "ledger_size": issued.payload["ledger_size"],
+                                                       "issued_at": int(issued.payload["iat"])})
                         if body_omitted:
                             allowed, reason, token = False, REASON_LEDGER_BODY, None
                 _bounded("decision", {"allowed": allowed, "reason": reason, "agent": agent,
@@ -988,8 +1026,10 @@ class TwoKey:
                                                 amount_mapped=amount_mapped, agent=agent, in_flight=in_flight,
                                                 scanned=scanned)
             canonical_bytes(summary)      # what the judges and the digest read; it must encode
-            return summary, {"now": now, "ledger_size": built, "in_flight": in_flight,
-                             "format": self._history.format}, None
+            basis = {"now": now, "ledger_size": built, "in_flight": in_flight, "format": self._history.format}
+            if self._history_from:
+                basis["from_seq"] = self._history_from
+            return summary, basis, None
         except Exception as e:      # deny, or judge without it (on_failure); recorded either way
             return None, None, _history_error(e)
 

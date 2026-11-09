@@ -38,11 +38,16 @@ def policy_digest(policy: Mapping[str, Any]) -> str:
     return canonical_hash(policy)
 
 
-def check_decision_digests(ledger) -> list[str]:
+def _entries(ledger, archives: bool):
+    """Every entry, or with ``archives`` False the active segment and what the rollovers carried."""
+    return ledger.entries if archives or not hasattr(ledger, "state_entries") else ledger.state_entries()
+
+
+def check_decision_digests(ledger, *, archives: bool = True) -> list[str]:
     """Return a list of problems; empty when every decision's digests match its constitution_loaded."""
     problems: list[str] = []
     current: tuple[str | None, str | None] | None = None
-    for entry in ledger.entries:
+    for entry in _entries(ledger, archives):
         if entry.kind == "constitution_loaded":
             current = _loaded_digests(entry.body)
             if current[0] is None or entry.body["judge_agent_separation"].get("identities_digest") != current[0]:
@@ -80,7 +85,7 @@ def _decision_digest_problems(body: Mapping[str, Any], current) -> list[str]:
     return problems
 
 
-def witness_pins(ledger) -> list[dict]:
+def witness_pins(ledger, *, archives: bool = True) -> list[dict]:
     """The ``witness_pinned``, ``witness_rotated`` and ``keys_upgraded`` entries, oldest first, with key
     fingerprints.
 
@@ -89,7 +94,7 @@ def witness_pins(ledger) -> list[dict]:
     """
     from .ledger import witness_key_fingerprint
     pins: list[dict] = []
-    for entry in ledger.entries:
+    for entry in _entries(ledger, archives):
         body = entry.body
         if entry.kind == "witness_pinned":
             pin = {"seq": entry.seq, "kind": entry.kind, "source": body.get("source"),
@@ -122,11 +127,12 @@ def check_history_digests(ledger, constitution) -> list[str]:
     compiled = compile_both(constitution.prose, constitution.hard_rules, constitution.tool_specs,
                             specs_enforced=True, fields=constitution.fields,
                             agents=constitution.document["signed"].get("agents"))
-    rebuild = _HistoryRebuild(ledger.entries, compiled.tool_specs, blocked_from_rules(compiled.rules))
+    rebuild = _HistoryRebuild(ledger, compiled.tool_specs, blocked_from_rules(compiled.rules))
     problems: list[str] = []
     # policy_digest -> each distinct constitution_loaded with it, by the settings a rebuild reads
     loaded: dict[str, dict[str, Mapping[str, Any]]] = {}
-    for entry in rebuild.entries:
+    for entry in ledger.entries:            # one pass, through every archive (0.9.1)
+        rebuild.read(entry)
         body = entry.body
         if entry.kind == "constitution_loaded" and isinstance(body.get("policy_digest"), str):
             starts = loaded.setdefault(body["policy_digest"], {})
@@ -140,12 +146,49 @@ def check_history_digests(ledger, constitution) -> list[str]:
     return problems
 
 
-class _HistoryRebuild:
-    """Rebuilds judge history summaries for ``check_history_digests``, one index per settings and agent ids."""
+class _Prefix:
+    """The first ``stop`` entries of the ledger, as ``HistoryIndex.sync`` reads them (``entries[seen:]`` and
+    ``len``): from the rebuild's buffer of recent entries, or from the ledger for anything older."""
 
-    def __init__(self, entries, specs: Mapping[str, Any], blocked) -> None:
-        self.entries, self.specs, self.blocked = entries, specs, blocked
+    def __init__(self, rebuild: "_HistoryRebuild", stop: int):
+        self.rebuild, self.stop = rebuild, stop
+
+    def __len__(self) -> int:
+        return self.stop
+
+    def __getitem__(self, part: slice) -> list:
+        start = part.start or 0
+        buffered, first = self.rebuild.buffer, self.rebuild.first
+        older = self.rebuild.older(start, min(first, self.stop)) if start < first else []
+        return older + buffered[max(start, first) - first:self.stop - first]
+
+
+class _HistoryRebuild:
+    """Rebuilds judge history summaries for ``check_history_digests``, one index per settings, agent ids and start.
+
+    The ledger is read once, in order (``read``); the entries since the oldest point an index has reached are kept,
+    so a ledger with archives is not read again for each decision."""
+
+    def __init__(self, ledger, specs: Mapping[str, Any], blocked) -> None:
+        self.ledger, self.specs, self.blocked = ledger, specs, blocked
         self.indexes: dict[str, Any] = {}
+        self.buffer: list = []
+        self.first = 0              # the seq of buffer[0]
+
+    def read(self, entry) -> None:
+        self.buffer.append(entry)
+        keep = min((index.seen for index in self.indexes.values()), default=entry.seq + 1)
+        if keep > self.first:
+            del self.buffer[:keep - self.first]
+            self.first = keep
+
+    def older(self, start: int, stop: int) -> list:
+        """Entries ``start`` to ``stop`` that the buffer no longer holds, read again from the ledger (and its
+        archives, when it has them)."""
+        reader = getattr(self.ledger, "iter_entries", None)
+        if reader is None:
+            return list(self.ledger.entries[start:stop])
+        return list(reader(start, stop))
 
     def check_any(self, entry, starts: Mapping[str, Mapping[str, Any]], constitution_digest: str) -> str | None:
         """None when the settings of any of ``starts`` (newest first) rebuild the decision's digest; otherwise the
@@ -172,11 +215,15 @@ class _HistoryRebuild:
         fmt = basis.get("format", FORMAT_V1)          # a decision before 0.9.0 has no format: v1
         if fmt not in FORMATS:
             return f"history_basis names an unknown history format {fmt!r}"
-        key = canonical_hash({"policy": policy.to_record(), "ids": list(ids), "format": fmt})
+        from_seq = basis.get("from_seq", 0)       # where the live index began, after a rollover (0.9.1)
+        if type(from_seq) is not int or not 0 <= from_seq <= basis["ledger_size"]:
+            return "history_digest without a usable history_basis"
+        key = canonical_hash({"policy": policy.to_record(), "ids": list(ids), "format": fmt, "from": from_seq})
         index = self.indexes.get(key)
         if index is None or index.seen > basis["ledger_size"]:
             index = self.indexes[key] = HistoryIndex(policy, self.specs, self.blocked, ids, fmt)
-        index.sync(self.entries[:basis["ledger_size"]])
+            index.seen = from_seq
+        index.sync(_Prefix(self, basis["ledger_size"]))
         if digest(_rebuilt_summary(index, body, basis, self.specs, "scanner" in start)) != body["history_digest"]:
             return "history_digest does not match the summary rebuilt from the ledger"
         return None

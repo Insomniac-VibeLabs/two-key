@@ -17,7 +17,7 @@ promise: the order may change, and version numbers are targets, not dates.
 - [Ground rules](#ground-rules)
 - [0.8.0: Judge history and ballot records](#080-judge-history-and-ballot-records)
 - [0.9.0: Tool check, agent roster and hybrid signatures](#090-tool-check-agent-roster-and-hybrid-signatures)
-- [0.9.1: A TypeScript helper](#091-a-typescript-helper)
+- [0.9.1: A TypeScript helper and ledger rollover](#091-a-typescript-helper-and-ledger-rollover)
 - [1.0.0: First stable release](#100-first-stable-release)
 - [After 1.0 (not scheduled)](#after-10-not-scheduled)
   - [PKI and certificate recovery](#pki-and-certificate-recovery)
@@ -48,7 +48,7 @@ flowchart TD
   end
   subgraph next["Next: 0.9.1, then 1.0.0"]
     direction LR
-    r091["0.9.1<br/>TS helper,<br/>fixes"] --> r10["1.0.0<br/>SSH live run,<br/>1.0 freeze,<br/>stable release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
+    r091["0.9.1<br/>TS helper,<br/>rollover, fixes"] --> r10["1.0.0<br/>SSH live run,<br/>1.0 freeze,<br/>stable release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
   end
   done --> next
 ```
@@ -64,7 +64,7 @@ flowchart TD
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a signed agent roster, a quickstart and a real-MCP-server demo, folder-path rules for key one, and a setup window | Released, tag `v0.9.0` |
-| 0.9.1 | A TypeScript tool-check helper as its own npm package, and fixes from the 0.9.0 review | In progress on `working` |
+| 0.9.1 | A TypeScript tool-check helper as its own npm package, ledger rollover, and fixes from the 0.9.0 review | In progress on `working` |
 | 1.0.0 | The first stable release, after a live run with the agent on another machine over SSH, a public community review of 0.9.0, and the 1.0 freeze written in UPGRADING.md | Planned |
 | After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
@@ -227,7 +227,7 @@ is now a 1.0.0 criterion (maintainer's decisions, 2026-11-05).
 - Before release: a live round across the full case list plus the new
   cases (runs 12 and 13).
 
-## 0.9.1: A TypeScript helper
+## 0.9.1: A TypeScript helper and ledger rollover
 
 In progress on `working` (maintainer's decision, 2026-11-03):
 
@@ -236,6 +236,12 @@ In progress on `working` (maintainer's decision, 2026-11-03):
   the Python package does not change; the wire format and test vectors in
   docs/TOOL_CHECK.md are what it must match. Like the Python helper, it signs an ordinary tool error rather
   than sending no receipt. Published to npm as `@insomniac-vibelabs/two-key-toolcheck` ([NPM.md](docs/NPM.md)).
+- Built: ledger rollover (design note approved by the maintainer, 2026-11-09). The active ledger file is sealed
+  into an encrypted, compressed archive at a size (64 MB by default) or an age, with one hash chain and one
+  Merkle tree across every segment, so opening stays fast and nothing is deleted. Open tokens are carried across
+  a seal. New records are written in base64 (`two-key-ledger-enc/2`), a third smaller than hex; this is the one
+  format change before the 1.0 freeze. 0.9.0 does not open a ledger 0.9.1 has written to
+  ([UPGRADING](docs/UPGRADING.md)).
 - Fixes from the 0.9.0 review, as for any 0.9.x.
 
 ## 1.0.0: First stable release

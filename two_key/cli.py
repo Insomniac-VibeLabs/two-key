@@ -365,6 +365,32 @@ def _tool_release(args) -> int:
     return 0
 
 
+def _ledger_roll(args) -> int:
+    """``two-key ledger roll``: seal the active segment into an archive now (docs/HOWTO.md)."""
+    from .ledger import LedgerError, RolloverSettings
+    ledger = _open_ledger(args, _principal_key(args))
+    if ledger is None:
+        return 1
+    ledger.rollover = RolloverSettings(compression=args.compression)
+    try:
+        result = ledger.roll(args.reason)
+    except LedgerError as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+        return 1
+    print(json.dumps({"ok": bool(result.get("rolled")), **result}, indent=2))
+    return 0 if result.get("rolled") else 1
+
+
+def _ledger_archives(args) -> int:
+    """``two-key ledger archives``: the catalogue of sealed segments the active segment names."""
+    ledger = _open_ledger(args, _principal_key(args))
+    if ledger is None:
+        return 1
+    print(json.dumps({"ok": True, "size": ledger.size(), "active_from_seq": ledger.segment_start(),
+                      "archives": ledger.catalogue()}, indent=2))
+    return 0
+
+
 def _rotate_witness(args) -> int:
     from .ledger import LedgerError
     key = _principal_key(args)
@@ -434,13 +460,26 @@ def _pin_path(args):
 
 def _audit(args) -> int:
     from .audit import check_decision_digests
+    from .ledger import LedgerError
     key = _principal_key(args)
     ledger = _open_ledger(args, key)
     if ledger is None:
         return 1
-    witness = ledger.witness_report()       # opening verified the chain, the head, and both pins
-    problems = check_decision_digests(ledger)
-    report = {"ok": not problems, "size": ledger.size(), "witness": witness, "decision_digest_problems": problems}
+    archives = not args.active_only
+    # Opening verified the active segment's chain, the head, and both pins; the archives are checked here.
+    report = {"ok": True, "size": ledger.size(), "active_from_seq": ledger.segment_start()}
+    if archives and ledger.segment_start():
+        try:
+            report["archives"] = ledger.audit_archives()
+        except LedgerError as e:
+            report.update(ok=False, archive_problem=str(e))
+            print(json.dumps(report, indent=2))
+            return 1
+    elif not archives:
+        report["archives"] = "not checked (--active-only)"
+    report["witness"] = ledger.witness_report(archives=archives)
+    problems = check_decision_digests(ledger, archives=archives)
+    report.update(ok=not problems, decision_digest_problems=problems)
     if args.check_history:
         from .audit import check_history_digests
         from .constitution import load_envelope, verify_signed
@@ -468,6 +507,7 @@ def _reopen_ledger(args, key):
 
 
 def _ledger_view(args) -> int:
+    from .ledger import LedgerError
     from .ledger_view import ViewError, field_names, integrity, print_rows, query_from_args, rows_from_entries, select
     try:
         query = query_from_args(args)
@@ -479,7 +519,10 @@ def _ledger_view(args) -> int:
     ledger = _open_ledger(args, key)        # opening verified the chain, the head, and both witness pins
     if ledger is None:
         return 1
-    rows = rows_from_entries(e.to_json() for e in ledger.entries)
+    try:
+        rows = rows_from_entries(e.to_json() for e in _view_entries(ledger, args.archives))
+    except LedgerError as e:                # an archive that does not read or check (--archives)
+        raise SystemExit(f"ledger-view: {e}") from None
     if args.fields:
         print("\n".join(field_names(rows)))
         return 0
@@ -496,11 +539,19 @@ def _ledger_view(args) -> int:
               "Ubuntu: apt install python3-tk); use --print to list the entries instead", file=sys.stderr)
         return 1
 
-    def reload():
+    def reload(archives: bool = args.archives):
         again = _reopen_ledger(args, key)
-        return rows_from_entries(e.to_json() for e in again.entries), integrity(again)
+        try:
+            return rows_from_entries(e.to_json() for e in _view_entries(again, archives)), integrity(again)
+        except LedgerError as e:
+            raise ViewError(str(e)) from None
     return show(rows, title=str(args.ledger), report=integrity(ledger), reload=reload, query=query,
-                max_rows=args.max_rows)
+                max_rows=args.max_rows, archives=args.archives if ledger.segment_start() else None)
+
+
+def _view_entries(ledger, archives: bool):
+    """The entries ledger-view shows: the active segment, or with ``archives`` every archive too (0.9.1)."""
+    return ledger.entries if archives else ledger.iter_entries(ledger.segment_start())
 
 
 def _editor_draft(args):
@@ -917,6 +968,7 @@ def _backup_restore(args) -> int:
 
 
 _CONSTITUTION_FLAG = "--constitution"
+_REASON_FLAG = "--reason"
 _PROXY_CONFIG_HELP = "the proxy config file (YAML or JSON)"
 _KEY_HELP = "the principal private key (principal.pem from init-key, mode 0600); not principal.pub.pem"
 _KEY_UNLOCK_HELP = ("for an encrypted --key: a file only you can read holding its passphrase; without it, "
@@ -994,7 +1046,7 @@ def main(argv: list[str] | None = None) -> int:
     rotate.add_argument("--ledger", required=True)
     rotate.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     rotate.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
-    rotate.add_argument("--reason", default="", help="recorded in the witness_rotated entry (at most 200 characters)")
+    rotate.add_argument(_REASON_FLAG, default="", help="recorded in the witness_rotated entry (at most 200 characters)")
     rotate.set_defaults(func=_rotate_witness)
     keys = sub.add_parser("keys", help="the key upgrade to hybrid Ed25519 + ML-DSA-65 (docs/UPGRADING.md)")
     keys_sub = keys.add_subparsers(dest="keys_cmd", required=True)
@@ -1016,7 +1068,23 @@ def main(argv: list[str] | None = None) -> int:
     audit.add_argument("--check-history", default=None, metavar="CONSTITUTION",
                        help="also rebuild every judge history summary from the ledger and check its history_digest; "
                             "CONSTITUTION is the signed constitution the decisions ran under")
+    audit.add_argument("--active-only", action="store_true",
+                       help="check only the active segment, not the archives of a ledger that has rolled over")
     audit.set_defaults(func=_audit)
+    ledger_cmd = sub.add_parser("ledger", help="the ledger's sealed segments and archives (docs/HOWTO.md)")
+    ledger_sub = ledger_cmd.add_subparsers(dest="ledger_cmd", required=True)
+    roller = ledger_sub.add_parser("roll", help="seal the active segment into an encrypted archive now")
+    lister = ledger_sub.add_parser("archives", help="list the archives the active segment names")
+    for part in (roller, lister):
+        _add_key(part)
+        part.add_argument("--ledger", required=True)
+        part.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+        part.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
+    roller.add_argument(_REASON_FLAG, default="manual", help="why, recorded in ledger_sealed (at most 200 characters)")
+    roller.add_argument("--compression", choices=("zlib", "none"), default="zlib",
+                        help="how the archive is compressed before it is encrypted (default zlib)")
+    roller.set_defaults(func=_ledger_roll)
+    lister.set_defaults(func=_ledger_archives)
     viewer = sub.add_parser("ledger-view", help="search, filter, and sort the ledger's entries in a window "
                                                 "(or print them); read-only")
     _add_key(viewer)
@@ -1039,6 +1107,9 @@ def main(argv: list[str] | None = None) -> int:
     shown.add_argument("--fields", action="store_true", help="list every field name a filter or sort can use")
     viewer.add_argument("--max-rows", type=int, default=10000, metavar="N",
                         help="list at most N matching entries in the window (default 10000); the count shows all")
+    viewer.add_argument("--archives", action="store_true",
+                        help="also show the archived segments of a ledger that has rolled over (default: the active "
+                             "segment only)")
     viewer.set_defaults(func=_ledger_view)
     editor = sub.add_parser("constitution-editor", help="write, check, try, and sign a constitution (prose, rules, "
                                                        "tool specs, fields, serial) in a window")
@@ -1141,7 +1212,7 @@ def main(argv: list[str] | None = None) -> int:
     releaser.add_argument("--ledger", required=True)
     releaser.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     releaser.add_argument("--head-anchor", default=None, metavar="PATH", help=_ANCHOR_HELP)
-    releaser.add_argument("--reason", required=True, help="why the tool can be trusted again (at most 200 characters)")
+    releaser.add_argument(_REASON_FLAG, required=True, help="why the tool can be trusted again (at most 200 characters)")
     releaser.set_defaults(func=_tool_release)
     proxy = sub.add_parser("mcp-proxy", help="serve an upstream MCP server's signed tools over stdio, through "
                                              "both keys (needs the mcp extra)")

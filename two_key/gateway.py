@@ -50,7 +50,7 @@ from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVe
                          capability_key_fingerprint)
 from .agent_meta import cap_ledger_text, type_tag
 from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
-from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, digest_hex, to_plain
+from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, canonical_hash, digest_hex, to_plain
 from .fields import path_fields, path_inside
 from .derive import (MAX_ARGS_BYTES, DeriveError, args_too_large, blocked_from_rules, caller_fields, canonical_too_large,
                      derive, dropped_keys, form_for, forms_match, project_arguments, size_record)
@@ -371,14 +371,11 @@ class ToolGateway:
                 return GatewayResult(False, "fact_mismatch")
             return GatewayResult(False, "derived_mismatch")
         size = payload["ledger_size"]
-        if not isinstance(size, int) or size < 0 or size > self.ledger.size():
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0 or size > self.ledger.size():
             return GatewayResult(False, "ledger_size_invalid")
-        if self.ledger.merkle_root(size) != payload["ledger_root"]:
-            return GatewayResult(False, "ledger_root_mismatch")
-        if self._pinned_at(size) != self._fingerprint:
-            return GatewayResult(False, "capability_key_mismatch")
-        if self.ledger.kinds_after(size, {"constitution_loaded", "revocation"}):
-            return GatewayResult(False, "revoked_or_reloaded")
+        problem = self._ledger_problem(payload, size, encoded.get("token"))
+        if problem:
+            return GatewayResult(False, problem)
         fn = self.tools.get(tool)
         if fn is None:
             return GatewayResult(False, "tool_not_registered")
@@ -515,6 +512,28 @@ class ToolGateway:
     def refused_token_counts(self) -> dict:
         """Tokens refused without a ledger entry since the last report, by class. Empty without a counter."""
         return {} if self.refused_tokens is None else self.refused_tokens.counts()
+
+    def _ledger_problem(self, payload: dict, size: int, token) -> str | None:
+        """The checks against the ledger at the token's size: its Merkle root, the capability key pinned there, and
+        no revocation or constitution_loaded after it. A size inside an archived segment (0.9.1) is taken only for a
+        token the rollover carried, and only this exact token (its hash); the root and key come from that record,
+        and the active segment is searched for a revocation or reload. Anything else is ``ledger_size_archived``."""
+        start = getattr(self.ledger, "segment_start", int)()
+        if start and size <= start:
+            carried = self.ledger.carried_token(payload["jti"])
+            if (carried is None or carried["ledger_size"] != size or not isinstance(token, str)
+                    or carried["token_hash"] != canonical_hash(token)):
+                return "ledger_size_archived"
+            root, pinned, after = carried["ledger_root"], carried["capability_key_fingerprint"], start
+        else:
+            root, pinned, after = self.ledger.merkle_root(size), self._pinned_at(size), size
+        if root != payload["ledger_root"]:
+            return "ledger_root_mismatch"
+        if pinned != self._fingerprint:
+            return "capability_key_mismatch"
+        if self.ledger.kinds_after(after, {"constitution_loaded", "revocation"}):
+            return "revoked_or_reloaded"
+        return None
 
     def _pinned_at(self, size: int) -> str | None:
         """The capability key fingerprint in the last ``constitution_loaded`` entry before ``size``."""

@@ -539,6 +539,7 @@ def build_two_key(config: ProxyConfig, *, judge_transport: Any = None) -> Any:
                                witness_public_key=config.witness_public_key, anchor_path=config.head_anchor,
                                principal=key)
         key, ledger = opened.principal, opened.ledger
+        ledger.rollover = config.ledger_rollover
         tk = TwoKey.load(ledger, key.public_key(), load_envelope(config.constitution), judges,
                          private_key=key, quorum=policy, monitored_agent=agent, ttl_seconds=config.ttl_seconds,
                          scanner=scanner, on_writable_paths=config.on_writable_paths,

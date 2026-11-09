@@ -87,9 +87,11 @@ class LedgerViewer:
     """The window's contents. ``reload`` returns fresh rows and a report, or raises ``ViewError``."""
 
     def __init__(self, root, rows: Sequence[Row], *, title: str = "", report: dict | None = None,
-                 reload: Callable[[], tuple[Sequence[Row], dict]] | None = None, query: Query | None = None,
-                 max_rows: int = 10000) -> None:
+                 reload: Callable[..., tuple[Sequence[Row], dict]] | None = None, query: Query | None = None,
+                 max_rows: int = 10000, archives: bool | None = None) -> None:
         query = query or Query()
+        # "Include archives" (0.9.1): shown for a ledger that has rolled over; None hides it.
+        self.include_archives = None if archives is None or reload is None else tk.BooleanVar(value=archives)
         self.root, self.rows, self.reload_rows, self.max_rows = root, list(rows), reload, max_rows
         self.fields = field_names(self.rows)
         self.columns = default_columns(self.fields)
@@ -136,6 +138,9 @@ class LedgerViewer:
         ttk.Button(bar, text="Columns", command=self.choose_columns).pack(side="left")
         if self.reload_rows is not None:
             ttk.Button(bar, text="Reload", command=self.reload).pack(side="left", padx=4)
+        if self.include_archives is not None:
+            ttk.Checkbutton(bar, text="Include archives", variable=self.include_archives,
+                            command=self.reload).pack(side="left", padx=4)
 
     def _build_banner(self) -> None:
         line = ttk.Frame(self.root, padding=(8, 4))
@@ -377,7 +382,10 @@ class LedgerViewer:
     def reload(self) -> None:
         """Open and verify the ledger again; the search, filters, sort, and columns stay."""
         try:
-            rows, report = self.reload_rows()
+            if self.include_archives is None:
+                rows, report = self.reload_rows()
+            else:
+                rows, report = self.reload_rows(archives=self.include_archives.get())
         except ViewError as e:
             self.show_report({"error": str(e)})
             return

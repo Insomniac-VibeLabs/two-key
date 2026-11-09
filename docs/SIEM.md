@@ -93,7 +93,7 @@ Sent, where the entry has it:
 | `ballots[]`, `ballot_digest_key_id` | each judge's ballot (0.8.0): `judge_id`, `vote`, `confidence`, `error_class`, `http_status` when there was one, and `rationale_digest`, an HMAC-SHA256 of the rationale under the install's fingerprint key, which `ballot_digest_key_id` names; never the rationale |
 | `tool` | the signed tool id (or `null` with a size and digest, when the caller sent something else) |
 | `data_class`, `irreversible` | the data class the call carries, and the signed irreversible flag |
-| `jti`, `token_hash`, `ledger_root` | the token's id and digest, and the root it was issued over |
+| `jti`, `token_hash`, `ledger_root`, `ledger_size`, `issued_at` | the token's id and digest, and the root and size it was issued over, and when (`ledger_size` and `issued_at` from 0.9.1) |
 | `agent_id`, `agent_hosting` | the operator's own agent metadata |
 | `policy_digest`, `identities_digest`, `digest`, `bytecode_hash`, `nl_hash`, `spec_hash` | which policy and which identities were in effect |
 | `*_size`, `*_digest` | the size and digest of an argument set, a proposal, or a revocation reason |
@@ -104,6 +104,7 @@ Sent, where the entry has it:
 | `at`, `history_digest` | when a decision was made (UTC, to the second), and the digest of the judge history summary the judges saw (0.8.0; `null` when none was sent) |
 | `error_class`, `on_failure` | `judge_history_failed` (0.8.0): why the summary could not be built, as a class, and whether the call was denied or judged without it |
 | `started`, `denies`, `reasons` | `attempt_episode` (0.8.0): a burst of denied calls from one agent, when it started, how many, and their reason codes |
+| `segment`, `first_seq`, `last_seq`, `opened_at`, `seal_seq`, `seal_hash`, `archive_name`, `archive_bytes`, `archive_sha256`, `carried_entries_count`, `carried_tokens_count` | a ledger rollover (0.9.1): `ledger_sealed` (the segment, its seq range and times, and the size and digest of the free-text reason), `ledger_continued` (the next segment, the seal it links to, the archive's name, size and SHA-256, and how many entries and open tokens were carried), and `ledger_rollover_failed` (WARNING: the segment, and the size and digest of the reason and error). Never the Merkle ranges, the catalogue, or the carried entries and tokens |
 | `command`, `settings`, `files[]`, `weaker`, `confirmed`, `constitution_hash` | a configuration change (`config_changed`, from `two-key setup`, `config set`, and `config undo`): the setting names, each file's role, name, and digests before and after, and why it is weaker; never a value, and not the account ([SETUP](SETUP.md#what-the-ledger-records)) |
 
 Never sent, and there is no setting that sends them:
@@ -383,4 +384,5 @@ These are the start-up refusals and warnings this feature adds, and the WARNING 
 | `attempt_episode` | one agent reached `burst_denies` denies within `burst_minutes`; the agent id is the operator's, or `unnamed` |
 | `agent_already_connected` | a second MCP proxy for an agent already connected to this ledger refused to start (`one_proxy_per_agent`) |
 | `agent_refused` | an MCP proxy refused to start because the account that started it is not on the signed agent roster (`agent_account_unlisted`), or is another agent's (`agent_account_mismatch`); the account itself stays in the ledger ([AGENT_ROSTER](AGENT_ROSTER.md)) |
+| `ledger_rollover_failed` | a ledger rollover stopped before its seal; the active segment is unchanged and it is tried again a minute later ([HOWTO](HOWTO.md#if-a-ledger-rollover-did-not-finish)) |
 | `two-key: gateway refused N token(s) that did not verify in T s: ...` | the refused-token count, also sent as `gateway_token_refused` |

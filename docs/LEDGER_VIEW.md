@@ -49,6 +49,11 @@ two-key ledger-view --key keys/principal.pem --ledger ledger \
   --where kind equals decision --where allowed equals false --sort at:desc
 ```
 
+After a ledger rollover (0.9.1, [HOWTO](HOWTO.md#ledger-rollover)) the table shows the active segment only, which
+starts with `ledger_continued`. `--archives`, or the window's "Include archives" box, reads every archive as well,
+so the table holds the whole ledger from seq 0. Each archive is decrypted and checked as it is read, and one that
+does not pass is named and nothing is shown. On a large ledger that read takes a while.
+
 ## What a row holds
 
 Each row is one ledger entry. Its fields are:

@@ -26,6 +26,7 @@ from ..fields import FIELD_NAME
 from ..guard import GuardConfigError
 from ..guard import valid_claim as _guard_claim
 from ..judges.config import HOOK
+from ..ledger import RolloverSettings
 from ..scan import FileArg, ScanConfigError, file_arg
 from ..scanners import check_scan_block
 from ..siem import SiemConfigError
@@ -43,7 +44,8 @@ UPSTREAM_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}")
 
 _TOP_KEYS = {"constitution", "keys", "ledger", "judges", "witness_public_key", "head_anchor", "ttl_seconds",
              "agent_session_env", "agent_id", "hosting", "allow_unresolved_identity", "upstream", "tools", "scan",
-             "on_writable_paths", "on_agent_access", "siem", "one_proxy_per_agent", "unanswered_hold"}
+             "on_writable_paths", "on_agent_access", "siem", "one_proxy_per_agent", "unanswered_hold",
+             "ledger_rollover"}
 _REQUIRED_TOP = ("constitution", "keys", "ledger", "judges", "upstream")
 _KEY_KEYS = {"principal", "passphrase_file"}
 _UPSTREAM_KEYS = {"command", "env", "cwd", "schema_digest", "on_schema_change", "call_timeout_seconds",
@@ -141,6 +143,8 @@ class ProxyConfig:
     # it for 15 minutes (two_key/gateway.py). None: off, except under high_assurance, which is always on and
     # refuses an explicit false.
     unanswered_hold: bool | None = None
+    # When the ledger seals its active segment into an archive (0.9.1, two_key.ledger.RolloverSettings).
+    ledger_rollover: RolloverSettings = field(default_factory=RolloverSettings)
 
     def tool_policy(self, tool: str) -> ToolPolicy:
         return self.tools.get(tool) or ToolPolicy()
@@ -435,8 +439,17 @@ def parse_proxy_config(data: Any, path: Path) -> ProxyConfig:
         on_agent_access=_agent_access_mode(top["on_agent_access"]) if "on_agent_access" in top else None,
         one_proxy_per_agent=_flag(top, "one_proxy_per_agent", True),
         unanswered_hold=_flag(top, "unanswered_hold", None),
+        ledger_rollover=_rollover(top.get("ledger_rollover")),
         **meta,
     )
+
+
+def _rollover(block: Any) -> RolloverSettings:
+    """The ``ledger_rollover:`` block, every value checked; an unknown key or a value out of range is refused."""
+    try:
+        return RolloverSettings.from_mapping(dict(block) if isinstance(block, Mapping) else block)
+    except (TypeError, ValueError) as e:
+        raise ProxyConfigError(str(e)) from None
 
 
 def _required(top: Mapping[str, Any]) -> Mapping[str, Any]:

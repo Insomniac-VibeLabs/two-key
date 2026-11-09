@@ -200,6 +200,7 @@ SPDX-License-Identifier: Apache-2.0
 - [0.9.1 in development — 2026-11-09](#091-in-development--2026-11-09)
 - [0.9.0 review fixes: a stale witness pin, path-field messages — 2026-11-09](#090-review-fixes-a-stale-witness-pin-path-field-messages--2026-11-09)
 - [The TypeScript tool-check helper — 2026-11-09](#the-typescript-tool-check-helper--2026-11-09)
+- [Ledger rollover — 2026-11-09](#ledger-rollover--2026-11-09)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5755,3 +5756,60 @@ review (ROADMAP).
 - CI: workflow `typescript` (audit, ESLint, tests, cross-language); SonarCloud reads the helper with its LCOV
   coverage; a manual `npm-publish` workflow on the `PyPI` branch publishes with npm trusted publishing (OIDC, no
   token) and provenance. docs/NPM.md is the procedure, including the one-time first publish from a Codespace.
+
+## Ledger rollover — 2026-11-09
+
+The ledger no longer grows in one file without end (design note approved by the maintainer, 2026-11-09; decisions
+D1 to D8 as recommended, except D3: open tokens are carried across a seal, not waited out).
+
+- **Sealed segments.** When `entries.jsonl` reaches `ledger_rollover.segment_mb` (64 MB by default, 8 to 1024), or
+  its first entry is `segment_days` old, the ledger appends `ledger_sealed`, writes the segment and its signed head
+  to `ledger/archive/segment-NNNNNN.tkla`, and starts a new `entries.jsonl` holding only `ledger_continued`. One hash
+  chain, one seq and one Merkle tree run across every segment, so the signed head still commits to every archived
+  entry. `ledger_continued` carries the archive's length and SHA-256, the catalogue of every archive, the Merkle
+  range, the witness pin, the state start-up checks read (the last `constitution_loaded`, `keys_upgraded` and
+  `capability_issued`, the top serials, tool holds and their trail), and the open tokens. Nothing deletes an
+  archive (`keep_archives: all`). The three kinds are written by the ledger only; `append` refuses them.
+- **The archive format, `two-key-ledger-archive/1`.** zlib, then AES-256-GCM in 1 MiB chunks under an HKDF-SHA256
+  key per segment from the ledger's data key; each nonce holds the chunk counter and a last-chunk flag, the header
+  is bound in as associated data, and the body is padded with zeros to a 64 KiB multiple inside the encryption.
+  The reader stops at the recorded plaintext length (no decompression bomb), and refuses a short, reordered or
+  extended file and non-zero padding. The folder and files are owner-only, and a link is refused.
+- **The order differs from the note in one place, on purpose:** the archive is written to a temporary file and
+  read back in full *before* the seal is appended, so a failure leaves the active segment untouched and records
+  `ledger_rollover_failed`. A crash after the seal is finished on the next open (three states, HOWTO "If a ledger
+  rollover did not finish"); anything else refuses `ledger_rollover_incomplete`.
+- **When.** After a call, under the ledger lock, never in the middle of a decision. Put off for a minute with less
+  than twice the segment free on disk, or more than 4,096 open tokens. Past `hard_limit_mb` (twice `segment_mb` by
+  default) no token is issued (`ledger_rollover_overdue`) until a rollover runs. `two-key ledger roll` seals now;
+  `two-key ledger archives` lists them.
+- **Tokens.** `capability_issued` now records `ledger_size` and `issued_at`. A token younger than 305 s, unspent and
+  not revoked, is carried into `ledger_continued`; the gateway takes a token that names an archived size only when
+  it was carried and its hash matches, and refuses any other `ledger_size_archived`. Redeem-lock files older than
+  300 s are pruned at each rollover.
+- **Records are written in base64** (`two-key-ledger-enc/2`), a third smaller than hex; `enc/1` is still read. This
+  is the one format change before the 1.0 freeze.
+- **Readers.** `ledger.entries` reaches every seq, streaming an archive when needed; `iter_entries` and
+  `state_entries` are the cheap paths. Opening reads only the active segment, checks every archive's length and the
+  newest one's SHA-256. `two-key audit` checks every archive (digest, chain, seal, Merkle range, signed head under
+  the witness key valid then, and each `ledger_continued` against the archive before it); `--active-only` skips
+  them. The judge history reads only the archives sealed inside `window_days`; a decision's `history_basis` gains
+  `from_seq`, and `audit --check-history` starts there, reading the ledger once. `ledger-view --archives` and the
+  window's "Include archives" box show archived entries. SIEM export and replay read through the archives; the
+  three new kinds are on the allowlist with their counts and digests, never the carried entries or tokens.
+- **Backups.** `backup export` copies the archives into `archive/` beside the bundles (they are already encrypted
+  under the ledger key, and bundles cap their plaintext at 45 MB); verify and restore read them from there and
+  check them.
+- **Settings.** The block is a top-level `ledger_rollover:` in proxy.yaml (`ledger:` is already the path), shown by
+  `config check` and in docs/SETTINGS.md.
+- **Fix found while building it:** a process that shares the ledger now tells a replaced `entries.jsonl` from the
+  old one by its first bytes as well as its inode; after two rollovers the file system may reuse the inode.
+- **Upgrading:** a ledger that 0.9.1 has written to does not open on 0.9.0 (UPGRADING). Back up first.
+- **Timings** (this build machine, decision-sized test entries): a 64 MB active segment (about 47,000 to 62,000
+  entries) took 1.9 s to open and 1.5 to 2.1 s to seal; after the seal, opening took 0.01 s. With ten 64 MB
+  segments archived (470,000 entries), opening still took 0.01 s, `audit_archives` 20 s, and the decision-digest
+  audit over every archive 16 s. The test entries repeat a long field, so each archive was 4.4 MB; real entries
+  compress less.
+- Tests: `tests/test_ledger_rollover.py` (51): one chain across segments, every crash point of the rollover,
+  tampered, truncated, reordered and padded archives, a decompression bomb, two processes, carried tokens, SIEM
+  export and verify, backup and restore, and `ledger-view --archives`.

@@ -70,6 +70,7 @@ REASON_CODES = frozenset({
     "cloud_judge_session_required", "cloud_judge_reused_agent_session", "too_few_judges_configured",
     "file_unreadable", "file_too_large", "too_many_files", "call_files_too_large", "history_changed",
     "invalid_agent_metadata", "agent_metadata_too_large", "ledger_body_too_large", "scan_mismatch",
+    "ledger_rollover_overdue",
 })
 MALFORMED = frozenset({"malformed_action", "malformed_proposal", "invalid_call"})
 SCAN_VERDICTS = ("clean", "flagged", "unavailable", "encrypted")

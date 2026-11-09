@@ -185,6 +185,9 @@ in the same release.
   ([JUDGES_AND_QUORUM.md](JUDGES_AND_QUORUM.md#judge-history)).
 
 - Hybrid post-quantum signatures (0.9.0): built (above).
+- Ledger rollover (0.9.1): built. The active segment is sealed into an
+  encrypted archive at a size or age, with one chain across segments
+  ([HOWTO](HOWTO.md#ledger-rollover)). Nothing deletes an archive.
 
 After 1.0, not scheduled:
 

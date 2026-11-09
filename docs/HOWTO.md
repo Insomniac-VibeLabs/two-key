@@ -86,6 +86,8 @@ route. The rest of the page is reference, for when a section above points to it.
 - [Search the ledger for an audit](#search-the-ledger-for-an-audit)
 - [Send the ledger to a SIEM](#send-the-ledger-to-a-siem)
 - [If the ledger will not open after a crash](#if-the-ledger-will-not-open-after-a-crash)
+- [Ledger rollover](#ledger-rollover)
+  - [If a ledger rollover did not finish](#if-a-ledger-rollover-did-not-finish)
 - [Back up the keys](#back-up-the-keys)
 - [Pin the witness key](#pin-the-witness-key)
   - [Rotate the witness key](#rotate-the-witness-key)
@@ -2171,6 +2173,7 @@ what `high_assurance` does to it, and which file tier it is in, is in
 | `tools.<id>.files` | no | Arguments that hold a file, for the content scanner: `[{path: "attachments[].content", kind: base64, max_bytes: 65536}]`, `kind: base64url`, or `{path: file_path, kind: path, folder: /srv/outbox, max_bytes: 20971520}`. `max_bytes` is required (base64 at most 196608, path at most 100 MiB). Needs `scan` (0.6.0) |
 | `scan` | no | The content scanner (antivirus or DLP): `type: clamd`, `icap`, `command`, or `python`, with `timeout_seconds` (default 15). The size limit is `max_bytes` on each declared file. See [docs/SCANNERS.md](SCANNERS.md) (0.6.0) |
 | `siem` | no | Send a copy of each ledger entry to a SIEM: `sinks:` (`type: syslog` with `transport: tls` (default), `tcp`, or `udp`, or `type: webhook` with an `https://` URL), with `schema` (`native`, `ecs`, `ocsf`), `format` (`json`, `cef`), and `replay_from`. No argument values. See [docs/SIEM.md](SIEM.md) (0.7.0) |
+| `ledger_rollover` | no | When the ledger seals its active segment into an encrypted archive: `enabled` (default `true`), `segment_mb` (8 to 1024, default 64), `segment_days` (default 0, off), `hard_limit_mb` (default twice `segment_mb`; past it no token is issued until a rollover runs), `compression` (`zlib` or `none`), `keep_archives` (`all`). See [If a ledger rollover did not finish](#if-a-ledger-rollover-did-not-finish) (0.9.1) |
 
 The claim is the only thing the proxy says about a call, and the agent
 writes none of it. Amount, counterparty, and irreversible are never
@@ -2487,11 +2490,10 @@ Appending checks the entries file's size instead of reading it again, and
 the Merkle root is extended one leaf at a time, so a long ledger does not
 re-read or re-hash its whole history on every call. A redemption does not
 copy or walk the entry list either: it uses the kind index built while the
-ledger was read. Opening a ledger still reads every entry, because that
-read is what checks the chain. There is no rotation, and there is no second
-copy of the plaintext. A few thousand entries is small next to judge
-latency; tens of thousands make opening the slow part. That open cost is
-the ceiling.
+ledger was read. Opening a ledger reads every entry of the active segment,
+because that read is what checks the chain. From 0.9.1 the active segment
+is sealed into an encrypted archive once it reaches `segment_mb` (64 MB by
+default), so the open cost stays bounded ([Ledger rollover](#ledger-rollover)).
 
 The head anchor, `<ledger>.ledger-key/head.anchor` unless you passed
 `--head-anchor`, records the newest signed head. Opening a ledger whose
@@ -2501,6 +2503,94 @@ head that verifies then. Deleting the anchor makes the next open accept the
 ledger as it stands. Copy the anchor whenever you copy the ledger. Someone
 who can write the anchor file can roll it back together with the ledger.
 Pass the same `--head-anchor` on every command if you move the file.
+
+## Ledger rollover
+
+From 0.9.1 the ledger does not grow without end in one file. When
+`entries.jsonl` reaches `ledger_rollover.segment_mb` (64 MB by default), or
+its first entry is `segment_days` old, the ledger seals it: it appends
+`ledger_sealed`, writes every entry of the segment and its signed head into
+`ledger/archive/segment-NNNNNN.tkla`, and starts a new `entries.jsonl` that
+holds only `ledger_continued`. The chain, the sequence numbers and the
+Merkle tree run on across the seal, so the signed head still commits to
+every archived entry. Nothing is deleted.
+
+An archive is `two-key-ledger-archive/1`: the entries compressed with zlib,
+then encrypted with AES-256-GCM in 1 MiB chunks, under a key derived from
+the ledger key for that segment, and padded to a 64 KiB multiple. Anyone
+with the ledger key can read it, as with `entries.jsonl`; nobody else can.
+The `archive/` folder and each archive are owner-only, and a link is refused
+(`ledger_archive_insecure`).
+
+The rollover runs after a call, under the ledger lock, so it never delays a
+decision already made. It is put off, and tried again a minute later, when
+free disk space is less than twice the segment (`ledger_rollover_low_disk`)
+or more than 4,096 tokens are open (`ledger_rollover_open_tokens`). Past
+`hard_limit_mb` (twice `segment_mb` by default), no token is issued until a
+rollover has run (`ledger_rollover_overdue`). A token issued just before a
+seal is carried into `ledger_continued` and redeems as before; any other
+token that names an archived ledger size is refused `ledger_size_archived`.
+
+```yaml
+# proxy.yaml
+ledger_rollover:
+  segment_mb: 64        # 8 to 1024
+  segment_days: 0       # 0 is off
+  compression: zlib     # or none (still encrypted and chunked)
+```
+
+To seal now, or to see the archives:
+
+```bash
+two-key ledger roll --key keys/principal.pem --ledger ledger --reason "before the audit"
+two-key ledger archives --key keys/principal.pem --ledger ledger
+```
+
+`two-key audit` reads every archive: each entry's hash and link, each seal's
+Merkle range, each archive's signed head against the witness key valid
+then, and each archive's SHA-256 against the catalogue the next segment
+carries. `--active-only` skips the archives on a large ledger. Opening a
+ledger checks that every archive in the catalogue is there with its
+recorded length, and that the newest matches its SHA-256. `ledger-view
+--archives` and the window's "Include archives" box show archived entries;
+the SIEM export and replay read through the archives. A backup copies the
+archives into `archive/` beside the bundles, and restore and verify read
+them from there.
+
+A ledger that has rolled over does not open on 0.9.0 or older, and neither
+does a ledger with records written by 0.9.1 (`two-key-ledger-enc/2`, base64
+instead of hex). See [UPGRADING](UPGRADING.md).
+
+### If a ledger rollover did not finish
+
+A process killed during a rollover leaves one of three states, and the next
+open finishes each one by itself:
+
+- The last entry is `ledger_sealed` and there is no archive: the archive is
+  written again from the segment, then the rollover goes on.
+- The last entry is `ledger_sealed` and the archive is there and holds
+  exactly this segment: the rollover goes on from the archive.
+- `entries.jsonl` holds only `ledger_continued` and the signed head ends at
+  the seal: the link and the archive digest are checked, then a checkpoint.
+
+A failure before the seal (the archive could not be written or did not read
+back) leaves the segment as it was and records `ledger_rollover_failed`.
+
+Anything else refuses to open with `ledger_rollover_incomplete` or
+`ledger_archive_invalid`, and nothing is changed:
+
+1. Stop every process that uses the ledger, and copy the ledger directory
+   and its siblings, as for a crash above.
+2. If the message names an archive that is missing or the wrong size,
+   restore that `archive/segment-NNNNNN.tkla` from the backup's `archive/`
+   folder (`two-key backup verify` reads them), with mode 0600.
+3. If it says an archive "does not hold this segment", that file is not the
+   one this seal wrote. Move it aside (do not delete it) and open the ledger
+   again: the archive is written again from the sealed segment.
+4. If it says the seal is not covered by the signed head, or names another
+   segment, the ledger directory is not the one the head and anchor were
+   written with. Restore the whole ledger directory, `archive/` included,
+   from the last backup, and report it.
 
 ## Back up the keys
 
