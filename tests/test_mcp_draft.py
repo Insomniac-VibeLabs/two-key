@@ -104,7 +104,9 @@ class Drafting(unittest.TestCase):
             "path": {"type": "string"}, "label": {"type": "string"}}}}]
         specs = {"read_note": {"fields": {"note": {"json_path": "path"}, "label": {"json_path": "label"}}}}
         registry = {"note": {"type": "path", "under": ["/srv/notes"]}, "label": {"type": "string"}}
-        label, note = undescribed_inputs(select_tools(upstream, specs, {}), specs, registry)
+        got = undescribed_inputs(select_tools(upstream, specs, {}), specs, registry)
+        self.assertEqual(len(got), 2, got)
+        label, note = got[0], got[1]
         self.assertIn("'Absolute path inside /srv/notes, such as /srv/notes/todo.txt'", note)
         self.assertNotIn("Folder id", note)
         self.assertIn("Folder id", label)
