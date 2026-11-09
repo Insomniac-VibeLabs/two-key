@@ -38,7 +38,9 @@ export function compareCodePoints(a: string, b: string): number {
 }
 
 function escapeChar(ch: string): string {
-  return String.raw`\u` + ch.charCodeAt(0).toString(16).padStart(4, "0");
+  // One UTF-16 code unit: the pattern has no "u" flag, so a surrogate pair is matched and escaped half by half,
+  // as Python writes it.
+  return String.raw`\u` + (ch.codePointAt(0) ?? 0).toString(16).padStart(4, "0");
 }
 
 /** A JSON string as Python's `json.dumps(..., ensure_ascii=True)` writes it: DEL (U+007F) and everything above

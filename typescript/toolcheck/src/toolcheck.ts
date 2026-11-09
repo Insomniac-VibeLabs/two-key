@@ -201,8 +201,14 @@ export function loadConfig(path: string): ToolCheckConfig {
   };
 }
 
-/** An MCP tool result, as the TypeScript SDK's `CallToolResult` and the wire carry it. */
-export type ToolResult = JsonObject;
+/** An MCP tool result, as the TypeScript SDK's `CallToolResult` and the wire carry it: its content, the two fields
+ * `wireResult` writes out, and anything else the tool returns. */
+export interface ToolResult {
+  [key: string]: unknown;
+  content?: unknown[];
+  isError?: boolean;
+  resultType?: string;
+}
 
 function errorName(error: unknown): string {
   const name = error instanceof Error ? error.constructor.name : "";
@@ -215,7 +221,10 @@ function errorName(error: unknown): string {
  * out, so a result that leaves them out would hash differently on each side. Send what this returns, and sign it.
  */
 export function wireResult(result: ToolResult): ToolResult {
-  const wire = JSON.parse(JSON.stringify(result)) as ToolResult;
+  // A JSON round trip on purpose, not structuredClone: the gateway hashes what the JSON on the wire holds, so what
+  // JSON.stringify drops or changes (undefined, functions, a Date's toJSON) must be dropped or changed here too.
+  const text = JSON.stringify(result);
+  const wire = JSON.parse(text) as ToolResult;
   return { ...wire, isError: wire.isError ?? false, resultType: wire.resultType ?? "complete" };
 }
 
