@@ -1,0 +1,72 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
+name: typescript
+
+# The TypeScript tool-check helper (typescript/toolcheck/, npm @insomniac-vibelabs/two-key-toolcheck): its own tests
+# on Node 22 and 24 on Linux, macOS and Windows, and the cross-language tests against the Python side
+# (tests/test_toolcheck_typescript.py: canonical JSON fuzz, cross-signing, a shared seen record, and a TypeScript SDK
+# server behind a real two-key mcp-proxy).
+
+on:
+  push:
+    branches: [main, PyPI, testpypi]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  helper:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: ["22.13", "22", "24"]
+    defaults:
+      run:
+        shell: bash
+        working-directory: typescript/toolcheck
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install from package-lock.json
+        run: npm ci --ignore-scripts
+      - name: Audit
+        run: npm audit --audit-level=low
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Tests
+        run: npm test
+
+  cross-language:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+      - name: Install from uv.lock and package-lock.json
+        run: |
+          pip install --require-hashes --only-binary :all: -r .github/requirements/uv.txt
+          uv sync --locked --no-build --extra yaml --extra mcp --no-dev --python python --no-managed-python --no-python-downloads
+          npm ci --ignore-scripts --prefix typescript/toolcheck
+          npm run build:test --prefix typescript/toolcheck
+      - name: Cross-language tests
+        run: |
+          uv run --no-sync --no-build python -X faulthandler -m unittest discover -s tests -p "test_toolcheck_typescript.py" -v 2>&1 | tee cross.log
+          if grep -q "skipped" cross.log; then echo "a cross-language test was skipped" >&2; exit 1; fi

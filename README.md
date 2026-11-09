@@ -202,6 +202,7 @@ root, or can change Two-Key's files (`on_agent_access`).
 | [SECURITY.md](SECURITY.md) | How to report a vulnerability |
 | [docs/UPGRADING.md](docs/UPGRADING.md) | Upgrading to a new version and keeping your keys and ledger |
 | [docs/PYPI.md](docs/PYPI.md) | Registering the package name and publishing a release |
+| [docs/NPM.md](docs/NPM.md) | Publishing the TypeScript tool-check helper on npm |
 
 ## Components
 
@@ -677,7 +678,7 @@ flowchart TD
 | 0.7.3 | `two-key setup` and `config set`, `get`, `undo`, `show` and `check`; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13) | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a ledger audit window and a constitution editor | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: hybrid Ed25519 plus ML-DSA-65 signatures, the optional tool check (#28), a signed agent roster, folder-path rules for key one, a setup window, and a quickstart | Released, tag `v0.9.0` |
-| 0.9.1 | A TypeScript tool-check helper and fixes from the 0.9.0 review | Planned |
+| 0.9.1 | A TypeScript tool-check helper and fixes from the 0.9.0 review | In progress |
 | 1.0.0 | The first stable release, after a live run with the agent on another machine over SSH and a public community review of 0.9.0, with what 1.0 keeps stable written in UPGRADING.md. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
 | After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window come before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 

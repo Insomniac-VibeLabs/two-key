@@ -199,6 +199,7 @@ SPDX-License-Identifier: Apache-2.0
 - [PYPI.md after the 0.9.0 release — 2026-11-05](#pypimd-after-the-090-release--2026-11-05)
 - [0.9.1 in development — 2026-11-09](#091-in-development--2026-11-09)
 - [0.9.0 review fixes: a stale witness pin, path-field messages — 2026-11-09](#090-review-fixes-a-stale-witness-pin-path-field-messages--2026-11-09)
+- [The TypeScript tool-check helper — 2026-11-09](#the-typescript-tool-check-helper--2026-11-09)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5730,3 +5731,27 @@ review (ROADMAP).
   URL decoding (`%2e%2e` is a folder name), so a path field does not belong on a tool that decodes one;
   SETTINGS explains `tools[*]` and `tool_specs[*]` (run 13 #32).
 - Tests: the path-advice test indexes its two lines instead of unpacking them (DeepSource PYL-W0632).
+
+## The TypeScript tool-check helper — 2026-11-09
+
+- **`@insomniac-vibelabs/two-key-toolcheck`** (new, `typescript/toolcheck/`): the tool check (#28) for MCP servers
+  on the TypeScript SDK. The same eight checks in the same order, the same refusals, the same receipt and the same
+  seen record (SQLite through Node's built-in `node:sqlite`) as `two_key.toolcheck`, from the same `check.json`.
+  `mcpCall(args, meta, run)` never calls `run` on a refusal, and signs a thrown error as `tool failed: <error
+  class>`. Hybrid Ed25519 (Node's `crypto`) + ML-DSA-65 (`@noble/post-quantum` 0.7.1, the one dependency, pinned
+  exactly), with the context string `two-key`. Node 22.13 or later, or 24. Its own version line, starting at
+  0.9.1, published to npm separately from PyPI (design note approved by the maintainer, 2026-11-09).
+- Canonical JSON matches Python byte for byte: keys sorted by code point, DEL and every non-ASCII character
+  escaped, numbers in Python's `repr` form. JavaScript reads Python's `12.0` as `12` and loses digits above 2^53,
+  so such arguments are refused `args_mismatch` (fail-closed); TOOL_CHECK says how to declare them.
+- The helper writes `isError` and `resultType` into the result it signs (`wireResult`). The gateway's MCP SDK fills
+  them in when they are missing, so a result without them hashed differently on the two sides and the receipt was
+  `mismatch`; the end-to-end test found it. TOOL_CHECK's "Write the check in another language" now says so.
+- Tests: the helper's own (the published vectors, each refusal, `mcpCall`, the key files and `check.json`, 98%
+  of lines) on Node 22.13, 22 and 24 on Linux, macOS and Windows; and `tests/test_toolcheck_typescript.py` on the
+  Python side: canonical JSON on 3,000 random values, a Python stamp passing the TypeScript checks, a TypeScript
+  receipt passing the gateway, a seen record shared by both helpers, and the proxy tests of
+  `test_toolcheck_mcp.py` run again against a TypeScript SDK server behind a real `two-key mcp-proxy`.
+- CI: workflow `typescript` (audit, ESLint, tests, cross-language); SonarCloud reads the helper with its LCOV
+  coverage; a manual `npm-publish` workflow on the `PyPI` branch publishes with npm trusted publishing (OIDC, no
+  token) and provenance. docs/NPM.md is the procedure, including the one-time first publish from a Codespace.

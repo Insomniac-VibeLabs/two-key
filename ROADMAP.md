@@ -64,7 +64,7 @@ flowchart TD
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a signed agent roster, a quickstart and a real-MCP-server demo, folder-path rules for key one, and a setup window | Released, tag `v0.9.0` |
-| 0.9.1 | A TypeScript tool-check helper as its own npm package, and fixes from the 0.9.0 review | Planned |
+| 0.9.1 | A TypeScript tool-check helper as its own npm package, and fixes from the 0.9.0 review | In progress on `working` |
 | 1.0.0 | The first stable release, after a live run with the agent on another machine over SSH, a public community review of 0.9.0, and the 1.0 freeze written in UPGRADING.md | Planned |
 | After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
@@ -229,13 +229,13 @@ is now a 1.0.0 criterion (maintainer's decisions, 2026-11-05).
 
 ## 0.9.1: A TypeScript helper
 
-Planned (maintainer's decision, 2026-11-03), after 0.9.0 ships:
+In progress on `working` (maintainer's decision, 2026-11-03):
 
-- A TypeScript helper for the tool check (#28), so an MCP server on the TypeScript SDK can check the token and
+- Built: a TypeScript helper for the tool check (#28), so an MCP server on the TypeScript SDK can check the token and
   sign its receipt as `two_key.toolcheck` does for Python. It is its own npm package with its own release, so
   the Python package does not change; the wire format and test vectors in
   docs/TOOL_CHECK.md are what it must match. Like the Python helper, it signs an ordinary tool error rather
-  than sending no receipt.
+  than sending no receipt. Published to npm as `@insomniac-vibelabs/two-key-toolcheck` ([NPM.md](docs/NPM.md)).
 - Fixes from the 0.9.0 review, as for any 0.9.x.
 
 ## 1.0.0: First stable release

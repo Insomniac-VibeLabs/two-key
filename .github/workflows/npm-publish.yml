@@ -1,0 +1,61 @@
+# Copyright 2026 Insomniac-VibeLabs
+# Author: Stephan Busch
+# SPDX-License-Identifier: Apache-2.0
+name: npm-publish
+
+# Publishes the TypeScript tool-check helper (typescript/toolcheck/) to npm as @insomniac-vibelabs/two-key-toolcheck.
+# A manual run on the PyPI branch only, in the npm environment. Trusted publishing: npm checks GitHub's signed
+# identity for this workflow run (OIDC), so no npm token lives in this repository, and the upload carries a provenance
+# statement naming the commit that built it. docs/NPM.md is the operator procedure.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/PyPI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@insomniac-vibelabs/two-key-toolcheck
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: typescript/toolcheck
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - name: npm can use trusted publishing (11.5.1 or later)
+        run: |
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); if (a*1e6+b*1e3+c < 11005001) { console.error(`npm ${process.argv[1]} is older than 11.5.1`); process.exit(1); }' "$(npm --version)"
+      - name: This version is not on npm yet
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if npm view "@insomniac-vibelabs/two-key-toolcheck@${version}" version >/dev/null 2>&1; then
+            echo "Refusing to publish: @insomniac-vibelabs/two-key-toolcheck ${version} is already on npm. Bump the version in typescript/toolcheck/package.json." >&2
+            exit 1
+          fi
+      - name: Install from package-lock.json
+        run: npm ci --ignore-scripts
+      - name: Audit, lint and test
+        run: |
+          npm audit --audit-level=low
+          npm run lint
+          npm test
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
