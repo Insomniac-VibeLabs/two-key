@@ -281,12 +281,24 @@ def _catalogue(raw, seal_seq: int, seal_hash: str) -> list[dict]:
     return raw
 
 
+def _archive_meta(segment: int, seal: Entry, stats: dict) -> dict:
+    """The catalogue record of one archive: its segment, seq range, seal, times, size and digest."""
+    return {"segment": segment, "name": archive.archive_name(segment), "first_seq": seal.body["first_seq"],
+            "last_seq": seal.seq, "last_hash": seal.entry_hash, "opened_at": seal.body["opened_at"],
+            "sealed_at": seal.body["at"], "bytes": stats["bytes"], "sha256": stats["sha256"],
+            "plain_bytes": stats["plain_bytes"], "compression": stats["compression"]}
+
+
+def _entry_hash(seq: int, prev: str, kind: str, body: dict) -> str:
+    """An entry's hash: the canonical hash of its seq, prev, kind and body."""
+    return canonical_hash({"seq": seq, "prev": prev, "kind": kind, "body": body})
+
+
 def _entry_from(raw) -> Entry:
     """An entry from its JSON form, its hash checked against its fields."""
     entry = Entry(raw["seq"], raw["prev"], raw["kind"], raw["body"], raw["entry_hash"])
     if (type(entry.seq) is not int or not isinstance(entry.kind, str) or not isinstance(entry.body, dict)
-            or not _is_hash(entry.prev) or entry.entry_hash != Ledger._hash(entry.seq, entry.prev, entry.kind,
-                                                                              entry.body)):
+            or not _is_hash(entry.prev) or entry.entry_hash != _entry_hash(entry.seq, entry.prev, entry.kind, entry.body)):
         raise ValueError(f"the entry at {raw.get('seq')!r} is not a ledger entry")
     return entry
 
@@ -1306,7 +1318,7 @@ class Ledger:
 
     @staticmethod
     def _hash(seq: int, prev: str, kind: str, body: dict) -> str:
-        return canonical_hash({"seq": seq, "prev": prev, "kind": kind, "body": body})
+        return _entry_hash(seq, prev, kind, body)
 
     def append_bounded(self, kind: str, body: dict) -> Entry:
         """``append``, except that a body the canonical encoder refuses (nested too deeply, a type JSON has
@@ -2234,7 +2246,7 @@ class Ledger:
             self._checkpoint_unlocked(witness)
             _platform.replace(tmp, final)
             _platform.fsync_dir(self.archive_dir())
-            meta = self._archive_meta(segment, written, stats)
+            meta = _archive_meta(segment, written, stats)
             return self._continue_after_seal(meta, now)
         finally:
             self._rolling = False
@@ -2292,12 +2304,6 @@ class Ledger:
                 os.unlink(tmp)
             raise
         return tmp, stats
-
-    def _archive_meta(self, segment: int, seal: Entry, stats: dict) -> dict:
-        return {"segment": segment, "name": archive.archive_name(segment), "first_seq": seal.body["first_seq"],
-                "last_seq": seal.seq, "last_hash": seal.entry_hash, "opened_at": seal.body["opened_at"],
-                "sealed_at": seal.body["at"], "bytes": stats["bytes"], "sha256": stats["sha256"],
-                "plain_bytes": stats["plain_bytes"], "compression": stats["compression"]}
 
     def _continue_after_seal(self, meta: dict, now: float) -> dict:
         """Steps 5 and 6: replace ``entries.jsonl`` with a file holding only ``ledger_continued``, then checkpoint.
@@ -2368,7 +2374,7 @@ class Ledger:
             tmp, stats = self._write_archive(segment, list(self._active), head)
             _platform.replace(tmp, final)
             _platform.fsync_dir(self.archive_dir())
-        self._continue_after_seal(self._archive_meta(segment, seal, stats), time.time())
+        self._continue_after_seal(_archive_meta(segment, seal, stats), time.time())
 
     def _archive_matches(self, path: Path, segment: int) -> dict:
         """The length, digest and plaintext length of an archive already in place, if it holds exactly the active

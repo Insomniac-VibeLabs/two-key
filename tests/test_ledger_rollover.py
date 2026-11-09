@@ -41,6 +41,20 @@ def quiet(fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
 
+def _checkpoint_once():
+    """A stand-in for Ledger._checkpoint_unlocked that fails the second time: the checkpoint after
+    ledger_continued."""
+    real = Ledger._checkpoint_unlocked
+    calls = {"n": 0}
+
+    def wrapped(led, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise OSError("stopped")
+        return real(led, *args, **kwargs)
+    return wrapped
+
+
 class LedgerCase(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -264,22 +278,11 @@ class Crashes(LedgerCase):
     def test_stopped_before_the_last_checkpoint(self):
         with mock.patch.object(Ledger, "_prune_redeem_locks", side_effect=OSError("stopped")), \
                 mock.patch.object(Ledger, "_checkpoint_unlocked", autospec=True,
-                                  side_effect=self._checkpoint_once()):
+                                  side_effect=_checkpoint_once()):
             with self.assertRaises(OSError):
                 self.led.roll("manual")
         again = self.assert_finished_or_untouched()
         self.assertGreater(again.segment_start(), 0)
-
-    def _checkpoint_once(self):
-        real = Ledger._checkpoint_unlocked
-        calls = {"n": 0}
-
-        def wrapped(led, *args, **kwargs):
-            calls["n"] += 1
-            if calls["n"] == 2:           # the checkpoint after ledger_continued
-                raise OSError("stopped")
-            return real(led, *args, **kwargs)
-        return wrapped
 
     def test_an_archive_that_is_not_this_segment_is_refused(self):
         from two_key import _platform
