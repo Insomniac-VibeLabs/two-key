@@ -137,17 +137,19 @@ def _schema_at(schema: Any, path: str) -> Mapping[str, Any] | None:
     return node
 
 
-def _read_paths(spec: Mapping[str, Any]) -> list[tuple[str, str]]:
-    """Every argument path Path A reads for a tool, with what it is: the amount and currency, each counterparty,
-    and each argument-mapped custom field. Payload paths are copied unread, and a caller-supplied fact is hidden
-    from the agent, so neither is listed."""
+def _read_paths(spec: Mapping[str, Any]) -> list[tuple[str, str, str]]:
+    """Every argument path Path A reads for a tool, with what it is and the field it fills (empty for the amount,
+    currency and counterparties): the amount and currency, each counterparty, and each argument-mapped custom
+    field. Payload paths are copied unread, and a caller-supplied fact is hidden from the agent, so neither is
+    listed."""
     out = []
     amount = spec.get("amount") or {}
     for key, what in (("json_path", "the amount"), ("currency_path", "the currency")):
         if isinstance(amount.get(key), str):
-            out.append((amount[key], what))
-    out += [(p["json_path"], "a counterparty") for p in spec.get("counterparties") or [] if isinstance(p, Mapping)]
-    out += [(entry["json_path"], f"the field {name}") for name, entry in sorted(field_mappings(spec).items())
+            out.append((amount[key], what, ""))
+    out += [(p["json_path"], "a counterparty", "") for p in spec.get("counterparties") or []
+            if isinstance(p, Mapping)]
+    out += [(entry["json_path"], f"the field {name}", name) for name, entry in sorted(field_mappings(spec).items())
             if entry.get("source") != "caller" and isinstance(entry.get("json_path"), str)]
     return out
 
@@ -162,12 +164,24 @@ _GENERIC_ADVICE = ("the agent sees only its name and type and guesses the format
                    "form Two-Key compares, e.g. 'Folder id, exactly as the directory shows it'")
 
 
-def undescribed_advice(what: str) -> str:
-    """The text after "<path> (<what>)": the same at draft time, at ``--constitution``, and at proxy start."""
+def _path_advice(defn: Mapping[str, Any]) -> str:
+    """Run 13 #32: a ``type: path`` field compares an absolute path inside its folders, not an id."""
+    roots = defn.get("under") if isinstance(defn.get("under"), list) else []
+    folder = str(roots[0]) if roots else "/srv/notes"
+    return ("the agent sees only its name and type and may write a relative path or a bare file name. Describe it "
+            f"in the server, e.g. 'Absolute path inside {folder}, such as {folder.rstrip('/')}/todo.txt'")
+
+
+def undescribed_advice(what: str, defn: Mapping[str, Any] | None = None) -> str:
+    """The text after "<path> (<what>)": the same at draft time, at ``--constitution``, and at proxy start.
+    ``defn`` is the custom field's registry entry, when the path fills one."""
+    if isinstance(defn, Mapping) and defn.get("type") == "path":
+        return "has no description in the upstream schema; " + _path_advice(defn)
     return "has no description in the upstream schema; " + _ADVICE.get(what, _GENERIC_ADVICE)
 
 
-def undescribed_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str, Any]]) -> list[str]:
+def undescribed_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str, Any]],
+                       registry: Mapping[str, Mapping[str, Any]] | None = None) -> list[str]:
     """One line per argument Path A reads that the upstream schema shows the agent with no ``description`` and no
     ``enum``. Behind the proxy that schema is the agent's only format guide, whatever the data: a payee, a folder
     id, an environment, a ticket. With nothing to go on the agent guesses, and an exact match then fails (live run
@@ -175,17 +189,27 @@ def undescribed_inputs(selection: ToolSelection, specs: Mapping[str, Mapping[str
     out = []
     for tool in sorted(selection.views):
         schema = selection.views[tool].get("inputSchema")
-        for path, what in _read_paths(specs.get(tool) or {}):
-            node = _schema_at(schema, path)
-            if node is None:
-                out.append(f"{tool}: {path} ({what}) is not declared in the upstream input schema, so the agent is "
-                           "not told it exists or how to write it")
-                continue
-            text = node.get("description")
-            if (isinstance(text, str) and text.strip()) or (isinstance(node.get("enum"), list) and node["enum"]):
-                continue
-            out.append(f"{tool}: {path} ({what}) {undescribed_advice(what)}")
+        for path, what, name in _read_paths(specs.get(tool) or {}):
+            line = _undescribed_line(schema, path, what, (registry or {}).get(name))
+            if line:
+                out.append(f"{tool}: {path} ({what}) {line}")
     return out
+
+
+def _has_format_guide(node: Mapping[str, Any]) -> bool:
+    """A description or a non-empty enum: something that tells the agent how to write the value."""
+    text = node.get("description")
+    return (isinstance(text, str) and bool(text.strip())) or (isinstance(node.get("enum"), list) and bool(node["enum"]))
+
+
+def _undescribed_line(schema: Any, path: str, what: str, defn: Mapping[str, Any] | None) -> str | None:
+    """What ``undescribed_inputs`` says after "<tool>: <path> (<what>)", or None for a described input."""
+    node = _schema_at(schema, path)
+    if node is None:
+        return "is not declared in the upstream input schema, so the agent is not told it exists or how to write it"
+    if _has_format_guide(node):
+        return None
+    return undescribed_advice(what, defn)
 
 
 # Names that suggest an input holds a file. A hint for the operator, never a decision: what is a file is declared.

@@ -478,6 +478,11 @@ variable or the path of an owner-only file; a loader refuses a secret written in
 A running proxy keeps the settings it started with. A change to an operator file takes effect at the next start,
 whether it was made by hand or with `config set`.
 
+The tables name a per-tool setting `tools.<tool>.<setting>` or `tool_specs.<tool>.<setting>`. In `config set` and
+`config get`, `[*]` in place of the tool, as in `tools[*].claim` or `tool_specs[*].irreversible`, stands for every
+signed tool: one change, one confirmation, one `config_changed` entry, and one `config undo`. `[*]` stands only for
+the tool there; anywhere else it is refused (`every_tool`). [SETUP](SETUP.md) has the details.
+
 `two-key config show` prints the effective value of every `proxy.yaml` setting, with defaults filled in. It
 does not say whether a value was set or defaulted. `two-key config get` prints one setting: its value, the file
 that holds it, its tier, and its default. `two-key config check` loads the files together and runs the start-up

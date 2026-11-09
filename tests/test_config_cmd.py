@@ -13,7 +13,7 @@ from pathlib import Path
 
 from two_key import cli, config_cmd
 from two_key.constitution import save_envelope, sign_constitution
-from two_key.keys import generate_private_key, save_private_key
+from two_key.keys import classical_half, generate_private_key, save_private_key, save_public_key
 
 DIGEST = "sha256:" + "0" * 64
 JUDGES = """\
@@ -258,6 +258,39 @@ class Check(Workspace):
                                              encoding="utf-8")
         self.assertTrue(any(level == config_cmd.WARN and text.startswith("upstream_paths_unchecked: ")
                             for level, text in self.check()))
+
+    def witness_lines(self):
+        return [(level, text) for level, text in self.check()
+                if text.startswith(("witness_public_key", "witness_key_changed"))]
+
+    def test_a_stale_witness_pin_fails_before_the_proxy_refuses(self):
+        """0.9.0 regression report, item 2: a pin left behind by rotate-witness passed config check, and then the
+        proxy refused witness_key_changed. config check compares it with witness.pem, reading no ledger."""
+        self.assertEqual(self.witness_lines(), [], "no pin, no line")
+        folder = self.dir / "ledger.witness"
+        folder.mkdir(mode=0o700)
+        witness = generate_private_key()
+        save_private_key(folder / "witness.pem", witness)
+        save_public_key(self.dir / "pin.pem", witness.public_key())
+        self.write_proxy("witness_public_key: pin.pem\n")
+        self.assertEqual(self.witness_lines(), [(config_cmd.OK, f"witness_public_key: matches {folder / 'witness.pem'}")])
+        (folder / "witness.pem").unlink()
+        save_private_key(folder / "witness.pem", generate_private_key())       # rotate-witness, pin not copied
+        [(level, text)] = self.witness_lines()
+        self.assertEqual(level, config_cmd.FAIL)
+        self.assertIn("rotate-witness or the key upgrade changed the witness key", text)
+        self.assertIn(str(folder / "witness.pub.pem"), text)
+
+    def test_a_0_8_0_witness_pin_after_the_key_upgrade_is_named(self):
+        folder = self.dir / "ledger.witness"
+        folder.mkdir(mode=0o700)
+        witness = generate_private_key()
+        save_private_key(folder / "witness.pem", witness)
+        save_public_key(self.dir / "pin.pem", classical_half(witness).public_key())
+        self.write_proxy("witness_public_key: pin.pem\n")
+        [(level, text)] = self.witness_lines()
+        self.assertEqual(level, config_cmd.FAIL)
+        self.assertIn("it is the 0.8.0 key", text)
 
     def test_cli_exit_code_follows_failures(self):
         code, out, _ = run("config", "check", "--config", str(self.dir / "missing.yaml"))

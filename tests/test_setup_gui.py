@@ -194,6 +194,18 @@ class Window(unittest.TestCase):
         self.assertFalse(window.unanswered_box.instate(["disabled"]))
         self.assertNotIn("unanswered_hold", window.answers())
 
+    def test_an_answers_files_false_under_high_assurance_is_explained(self):
+        """Unanswered-hold report: the box was locked on without saying the answers file had said false."""
+        window = self.window({"route": "proxy", "unanswered_hold": False})
+        self.assertEqual(window.unanswered_note_text.get(), "")
+        window.high.set(True)
+        self.top.update()
+        self.assertIn("said unanswered_hold: false", window.unanswered_note_text.get())
+        self.assertIs(window.answers()["unanswered_hold"], True)
+        window.high.set(False)
+        self.top.update()
+        self.assertEqual(window.unanswered_note_text.get(), "")
+
     def test_high_assurance_needs_each_tools_check(self):
         window = self.window()
         self.fill(window, judges=(LOCAL, dict(JUDGE, id="j2")))

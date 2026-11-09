@@ -55,6 +55,7 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
     found: list[tuple[str, str]] = [(OK, f"config: {config.path} reads cleanly")]
     constitution_found, signed = _constitution(config)
     found += constitution_found
+    found += _witness_pin(config)
     loaded, bad = _judges(config)
     high = False
     judges, agent = [], None
@@ -73,7 +74,7 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
     found += _writable(config, high)
     found += _siem(config, high)
     found += _agent_access(config, high)
-    found += _unanswered_hold(config, high)
+    found += _unanswered_hold(config, high, judges_read=not bad)
     if signed is not None:
         found += _tool_checks(signed, high)
         found += _roster(config, signed, high, agent)
@@ -127,13 +128,50 @@ def _roster(config, signed, high: bool, agent=None, *, lookup=None) -> list[tupl
     return out
 
 
-def _unanswered_hold(config, high: bool) -> list[tuple[str, str]]:
-    """``unanswered_hold`` (docs/TOOL_CHECK.md): a FAIL when ``high_assurance`` is told not to hold."""
+def _unanswered_hold(config, high: bool, *, judges_read: bool = True) -> list[tuple[str, str]]:
+    """``unanswered_hold`` (docs/TOOL_CHECK.md): a FAIL when ``high_assurance`` is told not to hold. When
+    ``judges.yaml`` could not be read, the profile is unknown, so a value that is not set is not called off
+    (run 13 G F6: the setup check printed ``off`` for a high_assurance deployment it had not written yet)."""
     from .mcp_proxy.config import unanswered_hold_problem
     problem = unanswered_hold_problem(config, high)
     if problem:
         return [(FAIL, problem)]
-    return [(OK, f"unanswered_hold: {'on' if config.unanswered_hold or high else 'off'}")]
+    if config.unanswered_hold or high:
+        return [(OK, "unanswered_hold: on" + (" (high_assurance)" if high else ""))]
+    if not judges_read:
+        return [(OK, "unanswered_hold: off, unless judges.yaml sets high_assurance, which always holds")]
+    return [(OK, "unanswered_hold: off")]
+
+
+def _witness_pin(config) -> list[tuple[str, str]]:
+    """``witness_public_key``, the witness pinned outside the ledger, against the ledger's ``witness.pem``. After
+    ``rotate-witness`` or the key upgrade the operator copies the new public key there by hand; a stale copy passed
+    ``config check`` and then the proxy refused ``witness_key_changed`` (0.9.0 regression report, item 2). This
+    reads key files only, never the ledger. A witness key that cannot be read here is left to the proxy."""
+    from .keys import classical_half, is_hybrid, load_private_key_file, load_public_key, public_raw
+    if config.witness_public_key is None:
+        return []
+    try:
+        pin = public_raw(load_public_key(config.witness_public_key))
+    except (OSError, ValueError) as e:
+        return [(FAIL, f"witness_public_key: {config.witness_public_key} cannot be read ({type(e).__name__})")]
+    ledger = Path(config.ledger)
+    witness_file = ledger.parent / f"{ledger.name}.witness" / "witness.pem"
+    if not witness_file.exists():
+        return []       # the first start makes it, and then checks the pin itself
+    try:
+        witness = load_private_key_file(witness_file)
+    except (OSError, ValueError):
+        return [(WARN, f"witness_public_key: {witness_file} could not be read here, so the pin was not compared; "
+                       "run config check as Two-Key's own account")]
+    if pin == public_raw(witness.public_key()):
+        return [(OK, f"witness_public_key: matches {witness_file}")]
+    why = ("it is the 0.8.0 key, and the key upgrade made a new hybrid witness key"
+           if is_hybrid(witness) and pin == public_raw(classical_half(witness).public_key())
+           else "rotate-witness or the key upgrade changed the witness key")
+    return [(FAIL, f"witness_key_changed: witness_public_key {config.witness_public_key} does not match "
+                   f"{witness_file}; {why}. Copy {witness_file.parent / 'witness.pub.pem'} over it (HOWTO \"Rotate the "
+                   "witness key\", UPGRADING), or the proxy refuses to start")]
 
 
 def _tool_checks(signed, high: bool) -> list[tuple[str, str]]:

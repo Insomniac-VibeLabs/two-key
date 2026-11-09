@@ -459,9 +459,14 @@ def _path_roots(out: dict, defn: Mapping[str, Any], where: str) -> None:
     cleaned = sorted(signed_path(out, root, f"{where}.under[{i}]") for i, root in enumerate(roots))
     if "/" in cleaned:
         raise FieldError(f"{where}.under: / admits every path; name the folder the tool may use")
+    twice = sorted({a for a in cleaned if cleaned.count(a) > 1})
+    if twice:
+        raise FieldError(f"{where}.under: {twice[0]!r} is listed twice")
     nested = [(a, b) for a in cleaned for b in cleaned if a != b and path_inside(a, b)]
-    if len(set(cleaned)) != len(cleaned) or nested:
-        raise FieldError(f"{where}.under: a folder is listed twice or inside another")
+    if nested:
+        # run 13 #32: name both folders, so the operator knows which line to drop
+        inner, outer = nested[0]
+        raise FieldError(f"{where}.under: {inner!r} is inside {outer!r}; list only {outer!r}")
     out["under"] = cleaned
 
 

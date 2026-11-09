@@ -592,13 +592,19 @@ hard_rules:
   (`field_unreadable`), rather than guesses at, anything else: a relative
   path (`todo.txt`, `./todo.txt`, `~/todo.txt`), a `..` segment, a
   backslash, a character outside printable ASCII, and a path over 4,096
-  characters, 64 segments, or 255 characters in one segment. `..` is
+  characters, 64 segments, or 255 characters in one segment. The 4,096
+  limit counts the value as the agent sent it, before cleaning, so a
+  4,097-character path that would clean to 4,096 is still refused. `..` is
   refused because on a disk `a/link/../b` follows `link` first, so the
   text answer could name another file than the tool opens. Relative paths
   are refused because they depend on the tool's working folder, which
   Two-Key does not know. Name the full path in the agent's instruction.
 - The tool receives the cleaned path Path A checked, not the agent's
   spelling.
+- Path A does no URL decoding: `%2e%2e` is a folder named `%2e%2e`, not
+  `..`. That is safe only if the tool does not decode it either. A file
+  server that URL-decodes a path it is given would open another file than
+  the one Path A checked; do not put a path field on such a tool.
 - Just before the tool runs, the gateway checks that no part of the path
   below its folder is a link or junction (`path_symlink:<field>`; the
   tool does not run). The folder itself and the folders above it may be
@@ -2696,7 +2702,8 @@ or `ledger.rotate_witness(reason="yearly rotation")` in Python. It writes a
 key, and the new one, signs a new head with the new key, and then moves the
 new key into `witness.pem` and its public half into `witness.pub.pem`. Then
 copy the new `witness.pub.pem` over your configured copy: the old copy no
-longer opens the ledger. Outstanding tokens are not affected.
+longer opens the ledger, and from 0.9.1 `two-key config check` fails until
+it is replaced. Outstanding tokens are not affected.
 
 A rotation needs the old witness key's signature. A lost witness key is
 restored from the witness bundle (see "Back up the keys"). Without that

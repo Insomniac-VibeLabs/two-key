@@ -125,6 +125,8 @@ class SetupWindow:
         self.history = tk.BooleanVar(master=root, value=True)
         self.one_proxy = tk.BooleanVar(master=root, value=True)
         self.unanswered_hold = tk.BooleanVar(master=root, value=False)
+        self.unanswered_note_text = tk.StringVar(master=root, value="")
+        self._hold_refused_in_answers = False       # the answers file said unanswered_hold: false
         self.judge_var = {k: tk.StringVar(master=root) for k in JUDGE_KEYS}
         self.agent_var = {k: tk.StringVar(master=root) for k in AGENT_KEYS}
         self.tool_var = {"id": tk.StringVar(master=root), "data_class_floor": tk.StringVar(master=root),
@@ -274,6 +276,8 @@ class SetupWindow:
                                          text="Hold a checked tool that leaves calls unanswered: 3 in a row or within "
                                               "10 minutes hold it for 15 minutes (always on under high assurance)")
         self.unanswered_box.pack(anchor="w")
+        self.unanswered_note = ttk.Label(tab, textvariable=self.unanswered_note_text, wraplength=640)
+        self.unanswered_note.pack(anchor="w", padx=22)
 
     def _build_review(self, tab) -> None:
         self.review_box = tk.Text(tab, height=22, wrap="word", state=SHOWN_ONLY)
@@ -394,6 +398,7 @@ class SetupWindow:
         self.var["schema_digest"].set(upstream.get("schema_digest") or "")
         self.one_proxy.set(answers.get("one_proxy_per_agent", True) is not False)
         self.unanswered_hold.set(answers.get("unanswered_hold") is True)
+        self._hold_refused_in_answers = answers.get("unanswered_hold") is False
 
     def _profile(self) -> str:
         return HIGH_ASSURANCE if self.high.get() else "default"
@@ -565,7 +570,12 @@ class SetupWindow:
         """High assurance always holds a tool that keeps leaving calls unanswered: the box shows it on and cannot be changed."""
         if self.high.get():
             self.unanswered_box.state(["disabled", "selected"])
+            # Unanswered-hold report: an answers file's false was turned on without a word.
+            self.unanswered_note_text.set(
+                "The answers file said unanswered_hold: false. High assurance always holds, so setup writes true."
+                if self._hold_refused_in_answers else "")
         else:
+            self.unanswered_note_text.set("")
             self.unanswered_box.state(["!disabled", "selected" if self.unanswered_hold.get() else "!selected"])
 
     def refresh(self) -> None:

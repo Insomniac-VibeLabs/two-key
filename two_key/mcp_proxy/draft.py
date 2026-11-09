@@ -304,4 +304,5 @@ def signed_check(upstream_tools: list[Mapping[str, Any]], envelope: Mapping[str,
         raise ValueError("not a signed constitution (no signed.tool_specs)")
     policies = {tool: ToolPolicy(upstream_name=name) for tool, name in (upstream_names or {}).items()}
     selection = select_tools(upstream_tools, specs, policies)
-    return selection.digest, selection.missing, undescribed_inputs(selection, specs)
+    registry = signed.get("fields") if isinstance(signed.get("fields"), Mapping) else None
+    return selection.digest, selection.missing, undescribed_inputs(selection, specs, registry)

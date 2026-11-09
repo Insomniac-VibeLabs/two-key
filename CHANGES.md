@@ -197,6 +197,8 @@ SPDX-License-Identifier: Apache-2.0
 - [Regression test of the agent roster — 2026-11-05](#regression-test-of-the-agent-roster--2026-11-05)
 - [Roadmap: the SSH live run and the 1.0 freeze before 1.0.0 — 2026-11-05](#roadmap-the-ssh-live-run-and-the-10-freeze-before-100--2026-11-05)
 - [PYPI.md after the 0.9.0 release — 2026-11-05](#pypimd-after-the-090-release--2026-11-05)
+- [0.9.1 in development — 2026-11-09](#091-in-development--2026-11-09)
+- [0.9.0 review fixes: a stale witness pin, path-field messages — 2026-11-09](#090-review-fixes-a-stale-witness-pin-path-field-messages--2026-11-09)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5699,3 +5701,31 @@ tool-check helper and fixes from the 0.9.0 review.
 PYPI.md no longer calls 0.9.0 the next release; it followed 0.8.0. DeepSource's PTC-W6004 on
 `config_cmd.py` (the constitution's mode check opens the operator's own configured file, already read) was
 audited as a false positive and gets a file-level ignore rule in DeepSource, not a code suppression.
+
+## 0.9.1 in development — 2026-11-09
+
+`working` moves to 0.9.1 (pyproject.toml, `two_key.__version__`, uv.lock, server.json). 0.9.0 stays the release
+on PyPI and `main` until 0.9.1 is released. 0.9.1 is the TypeScript tool-check helper and fixes from the 0.9.0
+review (ROADMAP).
+
+## 0.9.0 review fixes: a stale witness pin, path-field messages — 2026-11-09
+
+- **`config check` compares an out-of-ledger witness pin with `witness.pem`.** After `rotate-witness` or the key
+  upgrade, a `witness_public_key` the operator had not replaced passed `config check`, and then the proxy refused
+  to start (`witness_key_changed`). It is now a FAIL that names the file to copy, and says when the pin is the
+  0.8.0 key the upgrade replaced. It reads the two key files only, never the ledger; a `witness.pem` it cannot
+  read is a WARN, and none yet (before the first start) is no line.
+- **A path field's `under` folders**: a folder listed twice, or inside another, is named in the refusal
+  (`'/srv/notes/a' is inside '/srv/notes'; list only '/srv/notes'`), not "a folder is listed twice or inside
+  another" (run 13 #32).
+- **An undescribed path field gets path advice.** At `mcp-draft-specs --constitution` and proxy start, an
+  argument a `type: path` field reads with no description in the upstream schema now suggests "Absolute path
+  inside <folder>, such as <folder>/todo.txt", not "Folder id, exactly as the directory shows it" (run 13 #32).
+- **`config check` no longer says `unanswered_hold: off` when it could not read `judges.yaml`**, as during a
+  high_assurance terminal setup before the file is written; under `high_assurance` it says
+  `on (high_assurance)` (run 13 G, F6).
+- **The setup window says why the unanswered-hold box is on** when an answers file said
+  `unanswered_hold: false` and high assurance is switched on (unanswered-hold regression report).
+- Docs: HOWTO says the 4,096-character limit counts the path as sent, before cleaning, and that Path A does no
+  URL decoding (`%2e%2e` is a folder name), so a path field does not belong on a tool that decodes one;
+  SETTINGS explains `tools[*]` and `tool_specs[*]` (run 13 #32).

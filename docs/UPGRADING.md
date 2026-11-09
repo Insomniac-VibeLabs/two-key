@@ -421,6 +421,8 @@ It refuses, and changes nothing, in two cases:
   Until you replace the copy, the ledger refuses to open with it
   (`witness_key_changed`). `two-key config check` warns about a 0.8.0 key,
   and fails when the out-of-ledger pin means the proxy will not upgrade it.
+  From 0.9.1 it also fails while your copy does not match `witness.pem`, and
+  says when the copy is still the 0.8.0 key.
 - **`ml_dsa_unavailable`**: the `cryptography` package cannot make ML-DSA-65
   signatures (older than 48, or built against an OpenSSL before 3.5). Two-Key
   never falls back to Ed25519 alone. Install the PyPI wheel:
