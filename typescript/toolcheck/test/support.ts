@@ -66,7 +66,8 @@ export async function checker(dir: string, now: number = IAT + 2, tool = "pay_ve
 
 /** The published test vectors in docs/TOOL_CHECK.md. */
 export function vectors(): JsonObject {
-  const doc = readFileSync(join(process.cwd(), "..", "..", "docs", "TOOL_CHECK.md"), "utf8");
+  // A Windows checkout may have CRLF line ends.
+  const doc = readFileSync(join(process.cwd(), "..", "..", "docs", "TOOL_CHECK.md"), "utf8").replaceAll("\r\n", "\n");
   const start = doc.indexOf("<!-- vectors -->\n```json\n");
   const end = doc.indexOf("```\n<!-- /vectors -->");
   if (start < 0 || end < start) {
