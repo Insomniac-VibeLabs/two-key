@@ -433,7 +433,7 @@ def _ledger_layout(root: Path):
 # the ledger bundle can unwrap, and the catalogue in entries.jsonl pins each one's length and digest. They are
 # copied as they are into ``archive/`` beside the bundles, not into a bundle.
 ARCHIVE_DIR = "archive"
-_ARCHIVE_NAME = re.compile(r"segment-[0-9]{6}\.tkla")
+_ARCHIVE_NAME = re.compile(r"segment-\d{6}\.tkla", re.ASCII)
 
 
 def _archive_digest(path: Path) -> str:

@@ -620,7 +620,7 @@ class LedgerView(LedgerCase):
 
 class Backups(unittest.TestCase):
     def test_export_verify_and_restore_with_archives(self):
-        from two_key.backup import export_backup, restore_backup, verify_backup
+        from two_key.backup import BackupError, export_backup, restore_backup, verify_backup
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             key = generate_private_key()
@@ -640,8 +640,9 @@ class Backups(unittest.TestCase):
             self.assertEqual(sorted(result["archives"]), ["segment-000001.tkla", "segment-000002.tkla"])
             self.assertEqual(len(quiet(verify_backup, root / "out", phrases)["archives"]), 2)
             (root / "out" / "archive" / "segment-000001.tkla").unlink()
-            with self.assertRaises(Exception):
+            with self.assertRaises(BackupError) as raised:
                 quiet(verify_backup, root / "out", phrases)
+            self.assertIn("segment-000001.tkla", str(raised.exception))
             quiet(export_backup, root / "ledger", key_path, root / "out2", phrases, iterations=1000)
             restored = quiet(restore_backup, root / "new" / "ledger", root / "new" / "principal.pem", root / "out2",
                              phrases)
