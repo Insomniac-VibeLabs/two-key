@@ -210,7 +210,7 @@ and install it there:
 ```bash
 sudo install -d -o twokey -g twokey -m 755 /opt/two-key
 sudo -iu twokey sh -c 'umask 022 && python3 -m venv /opt/two-key/.venv'
-sudo -iu twokey sh -c 'umask 022 && /opt/two-key/.venv/bin/pip install "two-key[yaml,mcp]==0.9.0"'
+sudo -iu twokey sh -c 'umask 022 && /opt/two-key/.venv/bin/pip install "two-key[yaml,mcp]==0.9.1"'
 ```
 
 The `umask 022` makes the new files writable by `twokey` only. Ubuntu otherwise lets the account's own group
@@ -247,9 +247,9 @@ below. Both give you the same files.
 version as the Two-Key you just installed. This downloads the package without installing it, and unpacks it:
 
 ```bash
-/opt/two-key/.venv/bin/pip download --no-deps --no-binary :all: "two-key==0.9.0" -d /tmp/two-key-files
-tar -xzf /tmp/two-key-files/two_key-0.9.0.tar.gz -C /tmp/two-key-files
-ls /tmp/two-key-files/two_key-0.9.0/examples/demo
+/opt/two-key/.venv/bin/pip download --no-deps --no-binary :all: "two-key==0.9.1" -d /tmp/two-key-files
+tar -xzf /tmp/two-key-files/two_key-0.9.1.tar.gz -C /tmp/two-key-files
+ls /tmp/two-key-files/two_key-0.9.1/examples/demo
 ```
 
 *Way 2: from GitHub.* Download the three files one by one from the Two-Key repository:
@@ -283,7 +283,7 @@ Part 4, and only that one:
 
 ```bash
 mkdir -p ~/demo-files && cd ~/demo-files
-cp /tmp/two-key-files/two_key-0.9.0/examples/demo/* .   # Way 1, PyPI
+cp /tmp/two-key-files/two_key-0.9.1/examples/demo/* .   # Way 1, PyPI
 cp /tmp/two-key-files/demo/* .                          # Way 2, GitHub
 ls
 ```

@@ -70,8 +70,9 @@ What you get:
 - **Small on purpose.** Python 3.10 to 3.14, one required dependency
   (`cryptography`), Apache-2.0.
 
-**Status:** beta. 0.9.0 is the current release, the last beta before 1.0:
-every signature is hybrid Ed25519 + ML-DSA-65 (quantum-resistant), a 0.8.0
+**Status:** beta. 0.9.1 is the current release: ledger rollover into
+encrypted archives, a TypeScript tool-check helper, and fixes from the 0.9.0
+review. 0.9.0, the last beta before 1.0, made every signature is hybrid Ed25519 + ML-DSA-65 (quantum-resistant), a 0.8.0
 deployment's keys are upgraded once at the first start, a tool behind the
 proxy can check its own calls (the tool check), a tool error spends its
 token, and `two-key setup --window` sets up in a window. 0.8.0 added a
@@ -107,13 +108,13 @@ on it.
 
 ## Quick start
 
-Install 0.9.0 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
+Install 0.9.1 from PyPI ([docs/PYPI.md](docs/PYPI.md)):
 
 ```bash
-pip install "two-key[yaml]==0.9.0"
+pip install "two-key[yaml]==0.9.1"
 ```
 
-Tag `v0.9.0` on `main` is the same code.
+Tag `v0.9.1` on `main` is the same code.
 
 Or run the offline demo from a clone. It uses test-double judges, so it
 needs no API keys:
@@ -138,7 +139,7 @@ around Two-Key: [docs/CONNECTING.md](docs/CONNECTING.md).
 New in 0.5.0 ([#2](https://github.com/Insomniac-VibeLabs/two-key/issues/2)):
 
 ```bash
-pip install "two-key[mcp]==0.9.0"
+pip install "two-key[mcp]==0.9.1"
 ```
 
 An MCP client (a desktop assistant, an IDE, an agent framework) normally
@@ -650,8 +651,9 @@ The MCP adapter shipped in 0.5.0; Windows support, DLP and antivirus hooks,
 and judge connection reuse shipped in 0.6.0. The ledger export for a SIEM
 shipped in 0.7.0, and the setup and change commands and the signed serial
 in 0.7.3, and the judge history summary in 0.8.0. The last beta, 0.9.0,
-brought hybrid signatures, the tool check and the signed agent roster. 0.9.1
-comes next, then a public review and the first stable release, 1.0.
+brought hybrid signatures, the tool check and the signed agent roster, and
+0.9.1 ledger rollover and the TypeScript helper. A public review and the
+first stable release, 1.0, come next.
 It states intent, not a promise: the order may change, and version numbers
 are targets, not dates. The detail, and what comes after 1.0, is in
 [ROADMAP.md](ROADMAP.md).
@@ -660,11 +662,11 @@ are targets, not dates. The detail, and what comes after 1.0, is in
 flowchart TD
   subgraph done["Released betas"]
     direction LR
-    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"] --> r09["0.9.0<br/>Tool check,<br/>agent roster,<br/>hybrid<br/>signatures"]
+    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"] --> r09["0.9.0<br/>Tool check,<br/>agent roster,<br/>hybrid<br/>signatures"] --> r091["0.9.1<br/>Ledger<br/>rollover,<br/>TS helper"]
   end
-  subgraph next["Next: 0.9.1, then 1.0.0"]
+  subgraph next["Next: 1.0.0"]
     direction LR
-    r091["0.9.1<br/>TS helper,<br/>fixes"] --> r10["1.0.0<br/>SSH live run,<br/>1.0 freeze,<br/>stable release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
+    r10["1.0.0<br/>SSH live run,<br/>1.0 freeze,<br/>stable release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
   end
   done --> next
 ```
@@ -678,21 +680,23 @@ flowchart TD
 | 0.7.3 | `two-key setup` and `config set`, `get`, `undo`, `show` and `check`; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13) | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a ledger audit window and a constitution editor | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: hybrid Ed25519 plus ML-DSA-65 signatures, the optional tool check (#28), a signed agent roster, folder-path rules for key one, a setup window, and a quickstart | Released, tag `v0.9.0` |
-| 0.9.1 | A TypeScript tool-check helper and fixes from the 0.9.0 review | In progress |
+| 0.9.1 | Ledger rollover into encrypted archives, a TypeScript tool-check helper as its own npm package, and fixes from the 0.9.0 review | Released, tag `v0.9.1` |
 | 1.0.0 | The first stable release, after a live run with the agent on another machine over SSH and a public community review of 0.9.0, with what 1.0 keeps stable written in UPGRADING.md. Described as community-reviewed, not audited. The first PyPI upload is 0.7.0 | Planned |
 | After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window come before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
 ## Install and versions
 
 Two-Key runs on Linux, macOS, and, from 0.6.0, Windows, with CI on all
-three (HOWTO "Platforms"). Version 0.9.0 is on PyPI. It is this beta, not
+three (HOWTO "Platforms"). Version 0.9.1 is on PyPI. It is this beta, not
 the 1.0 community review. Tags are not moved.
 
 ```bash
-pip install "two-key[yaml]==0.9.0"
+pip install "two-key[yaml]==0.9.1"
 ```
 
-`v0.9.0` signs everything with hybrid Ed25519 + ML-DSA-65 keys and upgrades a
+`v0.9.1` seals the ledger into encrypted archives as it grows (ledger
+rollover) and adds the TypeScript tool-check helper; a ledger it has written
+does not open on 0.9.0. `@v0.9.0` signs everything with hybrid Ed25519 + ML-DSA-65 keys and upgrades a
 0.8.0 deployment's keys once, adds the tool check, spends a token on a tool
 error, and adds the setup window. `@v0.8.0` gives the judges a summary of recent decisions, keeps each judge's
 ballot in the ledger, lets one proxy serve each agent, and adds the ledger

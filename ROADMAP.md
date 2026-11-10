@@ -13,7 +13,7 @@ promise: the order may change, and version numbers are targets, not dates.
 
 <!-- toc -->
 - [The path to 1.0](#the-path-to-10)
-- [Where we are (2026-11-05)](#where-we-are-2026-11-05)
+- [Where we are (2026-11-10)](#where-we-are-2026-11-10)
 - [Ground rules](#ground-rules)
 - [0.8.0: Judge history and ballot records](#080-judge-history-and-ballot-records)
 - [0.9.0: Tool check, agent roster and hybrid signatures](#090-tool-check-agent-roster-and-hybrid-signatures)
@@ -44,11 +44,11 @@ promise: the order may change, and version numbers are targets, not dates.
 flowchart TD
   subgraph done["Released betas"]
     direction LR
-    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"] --> r09["0.9.0<br/>Tool check,<br/>agent roster,<br/>hybrid<br/>signatures"]
+    r04["0.4.0<br/>Package<br/>two-key"] --> r05["0.5.0<br/>MCP<br/>adapter"] --> r06["0.6.0<br/>DLP and AV<br/>hooks"] --> r07["0.7.0<br/>SIEM<br/>export"] --> r073["0.7.3<br/>Setup<br/>commands"] --> r08["0.8.0<br/>Judge<br/>history"] --> r09["0.9.0<br/>Tool check,<br/>agent roster,<br/>hybrid<br/>signatures"] --> r091["0.9.1<br/>Ledger<br/>rollover,<br/>TS helper"]
   end
-  subgraph next["Next: 0.9.1, then 1.0.0"]
+  subgraph next["Next: 1.0.0"]
     direction LR
-    r091["0.9.1<br/>TS helper,<br/>rollover, fixes"] --> r10["1.0.0<br/>SSH live run,<br/>1.0 freeze,<br/>stable release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
+    r10["1.0.0<br/>SSH live run,<br/>1.0 freeze,<br/>stable release"] -.-> after["After 1.0<br/>PKI, FIPS mode,<br/>more GUI"]
   end
   done --> next
 ```
@@ -64,7 +64,7 @@ flowchart TD
 | 0.7.3 | `two-key setup` and the `config` commands; a principal key with a passphrase; a signed serial against older rules; the upstream server's files behind a launcher (#13); Python 3.13 and 3.14 | Released, tag `v0.7.3` |
 | 0.8.0 | Judge history summary (#1), per-judge ballot records, one proxy per agent, a read-only ledger audit window (`two-key ledger-view`), and a constitution editor window (`two-key constitution-editor`) | Released, tag `v0.8.0` |
 | 0.9.0 | The last beta: hybrid Ed25519 + ML-DSA-65 signatures, an optional tool-side token check (#28), a signed agent roster, a quickstart and a real-MCP-server demo, folder-path rules for key one, and a setup window | Released, tag `v0.9.0` |
-| 0.9.1 | A TypeScript tool-check helper as its own npm package, ledger rollover, and fixes from the 0.9.0 review | In progress on `working` |
+| 0.9.1 | A TypeScript tool-check helper as its own npm package, ledger rollover, and fixes from the 0.9.0 review | Released, tag `v0.9.1` |
 | 1.0.0 | The first stable release, after a live run with the agent on another machine over SSH, a public community review of 0.9.0, and the 1.0 freeze written in UPGRADING.md | Planned |
 | After 1.0 | PKI and certificate recovery, a FIPS 140-3 approved mode once a validated module offers ML-DSA-65, the rest of the local GUI (the ledger view, the constitution editor and the setup window ship before 1.0), an optional reputation halt, more spec field types | Not scheduled |
 
@@ -83,9 +83,19 @@ Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
 in the same release.
 
-## Where we are (2026-11-05)
+## Where we are (2026-11-10)
 
-- **0.9.0 is released**: tag `v0.9.0` on `main`, and on PyPI. Every signature
+- **0.9.1 is released**: tag `v0.9.1` on `main`, and on PyPI. The ledger seals
+  its active segment into an encrypted, compressed archive as it grows (64 MB
+  by default) on the same hash chain, and the ledger view, audit, backups and
+  the SIEM export read the archives. The tool check has a TypeScript helper,
+  `@insomniac-vibelabs/two-key-toolcheck`, an npm package released on its own
+  ([NPM.md](docs/NPM.md)). A call
+  that carries a lone surrogate, or a NUL a tool's spec does not allow, is
+  refused before either path. Live run 14 checked it with real judges and
+  found no forbidden call that ran; its findings are fixed. A ledger 0.9.1 has
+  written does not open on 0.9.0.
+- **0.9.0** (tag `v0.9.0`): Every signature
   is hybrid Ed25519 plus ML-DSA-65, a tool behind the proxy can check its own
   calls (#28), a signed agent roster ties each agent to the account it runs
   as, key one gets folder-path rules, and setup has a window. Live runs 12 and
@@ -229,7 +239,7 @@ is now a 1.0.0 criterion (maintainer's decisions, 2026-11-05).
 
 ## 0.9.1: A TypeScript helper and ledger rollover
 
-In progress on `working` (maintainer's decision, 2026-11-03):
+Released, tag `v0.9.1` (maintainer's decision, 2026-11-03):
 
 - Built: a TypeScript helper for the tool check (#28), so an MCP server on the TypeScript SDK can check the token and
   sign its receipt as `two_key.toolcheck` does for Python. It is its own npm package with its own release, so

@@ -203,6 +203,7 @@ SPDX-License-Identifier: Apache-2.0
 - [Ledger rollover — 2026-11-09](#ledger-rollover--2026-11-09)
 - [GrokBot run 14 fixes — 2026-11-10](#grokbot-run-14-fixes--2026-11-10)
 - [The walkthrough for 0.9.1, and two fixes it found — 2026-11-10](#the-walkthrough-for-091-and-two-fixes-it-found--2026-11-10)
+- [Release v0.9.1: ledger rollover, the TypeScript helper — 2026-11-10](#release-v091-ledger-rollover-the-typescript-helper--2026-11-10)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5878,3 +5879,24 @@ unsaid.
 - The ledger's signed head (`head.json`) is written owner-only (0600) every time, whatever the umask
   (Stephan's decision 2026-11-10). Before, each write took the caller's umask, so `two-key ledger roll` from a
   022 shell left it 0644 inside the 0700 ledger folder (`tests/test_ledger_rollover.py`).
+
+## Release v0.9.1: ledger rollover, the TypeScript helper — 2026-11-10
+
+Package version 0.9.1 (`pyproject.toml`, `two_key.__version__`, `uv.lock`, `server.json`). To be tagged `v0.9.1`
+on `main` after the merge. The sections from "0.9.1 in development" on are the detail.
+
+- **Ledger rollover**: the active ledger file is sealed into an encrypted, compressed archive at 64 MB (or an age),
+  on one hash chain and one Merkle tree, so opening stays fast and nothing is deleted. Open tokens are carried
+  across a seal. Audit, backups, the ledger view (Include archives) and the SIEM export read the archives.
+  `two-key ledger roll` seals by hand. New records are `two-key-ledger-enc/2` (base64).
+- **The TypeScript tool-check helper**, `@insomniac-vibelabs/two-key-toolcheck` (`typescript/toolcheck/`), its own
+  npm package with its own release (docs/NPM.md): the same checks, refusals and receipts as `two_key.toolcheck`.
+- **Characters a tool call may not carry**: a lone surrogate in an argument is always `invalid_call:text_not_unicode`,
+  and a NUL is `invalid_call:nul_in_arguments` unless the tool's signed spec allows it (weaker), both before either
+  path.
+- **Fixes** from the 0.9.0 review and GrokBot run 14 (no forbidden call ran): `config check` catches a stale
+  witness pin and shows the rollover settings, `backup-restore --replace-ledger` refuses while a proxy is running,
+  ledger read errors name the line, the setup window explains the high-assurance overrides, and the head is always
+  owner-only.
+- **No way back to 0.9.0** once 0.9.1 has written to a ledger: back up first (UPGRADING). Constitutions and keys
+  load unchanged; nothing is re-signed. The walkthrough (docs/GUI_WALKTHROUGH.md) is redone on 0.9.1. 1,659 tests.
