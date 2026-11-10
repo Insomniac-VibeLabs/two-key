@@ -1426,6 +1426,7 @@ def run_set(args) -> int:
         print("two-key: config set: give exactly one of VALUE, --value-file FILE, --prompt, or --unset",
               file=sys.stderr)
         return 1
+    value, source = None, "argv"      # a value file or prompt refused below leaves nothing read (walkthrough, 0.9.1)
     try:
         if args.value_file is not None:
             value, source = read_value_file(args.value_file), "file"

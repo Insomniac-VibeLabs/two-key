@@ -373,6 +373,17 @@ class Window(unittest.TestCase):
                       "opened.", view.banner.cget("text"))
         self.assertEqual(view.shown_seqs(), [5, 4, 2])
 
+    def test_include_archives_fits_the_default_window(self):
+        # Walkthrough re-run for 0.9.1: at the window's own 1400 pixels the toolbar ran past the edge, hiding
+        # Include archives, and the archives note in the banner ran off it.
+        view = self.viewer(reload=lambda **_k: (self.rows, OK), archives=False)
+        self.assertLessEqual(view.search_entry.master.winfo_reqwidth(), 1400)
+        self.top.geometry("900x600")
+        view.show_report({"ok": True, "size": 14, "decision_digest_problems": [], "listed_from": 13})
+        self.top.update()
+        wrap = int(view.banner.cget("wraplength"))
+        self.assertTrue(0 < wrap <= view.banner.winfo_width(), wrap)
+
     def test_no_reload_button_without_a_reload(self):
         self.viewer()
         self.assertIsNone(_find(self.top, ttk.Button, "Reload"))

@@ -697,6 +697,14 @@ class Secrets(Deployment):
             with self.assertRaisesRegex(ConfigChangeError, "value_file_insecure"):
                 config_set.read_value_file(str(path))
 
+    def test_a_value_file_that_cannot_be_read_is_a_refusal(self):
+        # 0.9.1 walkthrough: `--value 32` abbreviates to --value-file, and the missing file ended in a traceback.
+        code, _, err = quiet(cli.main, ["config", "set", "--config", str(self.proxy), "ttl_seconds",
+                                        "--value-file", str(self.base / "no-such-file")])
+        self.assertEqual(code, 1)
+        self.assertIn("two-key: config set: refused: --value-file:", err)
+        self.assertNotIn("Traceback", err)
+
     def test_the_command_line_takes_one_source_of_value(self):
         code, _, err = quiet(cli.main, ["config", "set", "--config", str(self.proxy), "ttl_seconds", "60",
                                         "--unset"])

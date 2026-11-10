@@ -202,6 +202,7 @@ SPDX-License-Identifier: Apache-2.0
 - [The TypeScript tool-check helper — 2026-11-09](#the-typescript-tool-check-helper--2026-11-09)
 - [Ledger rollover — 2026-11-09](#ledger-rollover--2026-11-09)
 - [GrokBot run 14 fixes — 2026-11-10](#grokbot-run-14-fixes--2026-11-10)
+- [The walkthrough for 0.9.1, and two fixes it found — 2026-11-10](#the-walkthrough-for-091-and-two-fixes-it-found--2026-11-10)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5852,3 +5853,25 @@ docs findings.
   before either path, so no judge is asked. A spec without the key signs the same bytes as before.
 - Tests: `test_config_cmd`, `test_lone_judge`, `test_ledger_scale`, `test_key_backup`, `test_ledger_view`,
   `test_ledger_gui`, `test_setup_gui`, `test_args_text` (new); DeepSource PTC-W0063 in `test_config_cmd`.
+
+## The walkthrough for 0.9.1, and two fixes it found — 2026-11-10
+
+Run 14's K4 and U5 notes: the illustrated walkthrough still showed 0.9.0, and UPGRADING left three things
+unsaid.
+
+- `docs/GUI_WALKTHROUGH.md` is redone on 0.9.1 with 36 new pictures from one live run: the setup window's agent
+  account and roster table, the tool form's agents column and NUL box with their defaults, the high-assurance
+  lock box naming the `unanswered_hold` it overrides, the Quorum page's provider warning explained, and the
+  Review page after Set up (the `config check` log and next steps); the editor's Custom fields and Agents tabs
+  and New tool's defaults; `config check`'s `ledger_rollover` and `agents` lines; a new part that rolls the
+  ledger over and shows Include archives; and a 0.9.0 to 0.9.1 upgrade in place of 0.8.0 to 0.9.0. The page now
+  says how the windows were driven: a script filled each field through the window's own code.
+- The ledger window, at its own default 1400 pixels, ran the toolbar past the edge once a ledger had rolled
+  over, hiding **Include archives**, and the archives note ran off the banner. The search box starts narrower
+  (it still grows), and the banner wraps (`tests/test_ledger_gui.py`).
+- `two-key config set` ended in a traceback, not a refusal, when `--value-file` could not be read or `--prompt`
+  had no terminal (`--value 32` abbreviates to `--value-file`). It now refuses
+  (`tests/test_config_set.py`).
+- UPGRADING's 0.9.1 row: 0.9.0 refuses a ledger 0.9.1 wrote only with its own read error, not a message naming
+  0.9.1; coming straight from 0.8.0 still runs the key upgrade, which signs `constitution.signed.json` again; and
+  `backup-export` on a copy that has never started refuses until Two-Key has started once.

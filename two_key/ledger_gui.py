@@ -132,7 +132,7 @@ class LedgerViewer:
         bar = ttk.Frame(self.root, padding=8)
         bar.pack(fill="x")
         ttk.Label(bar, text="Search all fields:").pack(side="left")
-        self.search_entry = ttk.Entry(bar, textvariable=self.search, width=40)
+        self.search_entry = ttk.Entry(bar, textvariable=self.search, width=24)  # grows; 40 hid Include archives
         self.search_entry.pack(side="left", padx=4, fill="x", expand=True)
         ttk.Checkbutton(bar, text="Also match field names", variable=self.search_names).pack(
             side="left", padx=(0, 8))
@@ -152,6 +152,8 @@ class LedgerViewer:
         line.pack(fill="x")
         self.banner = tk.Label(line, anchor="w", justify="left")
         self.banner.pack(side="left", fill="x", expand=True)
+        # A long banner (the archives note) wraps instead of running off the window's edge.
+        self.banner.bind("<Configure>", lambda e: self.banner.configure(wraplength=max(200, e.width - 8)))
         self.problems_button = ttk.Button(line, text="Show problems", command=self.show_problems)
 
     def _build_panes(self) -> None:
