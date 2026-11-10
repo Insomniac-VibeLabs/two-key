@@ -265,6 +265,18 @@ def _is_hmac_digest(value: str) -> bool:
     return len(rest) == 64 and all(c in "0123456789abcdef" for c in rest)
 
 
+def _continued_fields(body: Mapping[str, Any]) -> dict:
+    """The sealed archive's name, size and digest, and how many entries and tokens were carried across the seal."""
+    meta = body.get("archive")
+    meta = meta if isinstance(meta, Mapping) else {}
+    out = {"archive_" + key: _scrub(meta.get(key)) for key in ("name", "bytes", "sha256") if key in meta}
+    for key in ("carried_entries", "carried_tokens"):
+        items = body.get(key)
+        if isinstance(items, list):
+            out[key + "_count"] = len(items)
+    return out
+
+
 @dataclass(frozen=True)
 class KindSpec:
     """What an event carries for one ledger kind, and what it never carries."""
@@ -297,6 +309,17 @@ KINDS: dict[str, KindSpec] = {
     "ledger_recovered": KindSpec(
         sent=("dropped_bytes", "dropped_sha256", "dropped_nonempty_lines", "tail_torn", "head_size"),
         excluded=("tail_file",), severity=NOTICE),
+    # Ledger rollover (0.9.1): a segment sealed, the next one started, or a rollover that did not happen. The reason
+    # and error are free text, so they are hashed; the Merkle ranges, catalogue and carried entries and tokens stay in
+    # the ledger, and only their counts and the archive's own digest are sent.
+    "ledger_sealed": KindSpec(sent=("segment", "first_seq", "last_seq", "at", "opened_at"), hashed=("reason",),
+                              excluded=("format", "merkle_range"), severity=NOTICE),
+    "ledger_continued": KindSpec(
+        sent=("segment", "seal_seq", "seal_hash", "at"),
+        excluded=("format", "archive", "catalogue", "merkle_range", "witness_pin", "upgraded_at",
+                  "carried_entries", "carried_tokens"),
+        extract=_continued_fields, severity=NOTICE),
+    "ledger_rollover_failed": KindSpec(sent=("segment",), hashed=("reason", "error"), severity=WARNING),
     "constitution_loaded": KindSpec(
         sent=("digest", "bytecode_hash", "nl_hash", "spec_hash", "policy_digest",
               "capability_key_fingerprint", "serial", "previous_digest", "stamp_key_fingerprint",
@@ -318,7 +341,9 @@ KINDS: dict[str, KindSpec] = {
     "path_a": KindSpec(sent=("allowed", "reason", "denied_by")),
     "path_b": KindSpec(sent=("passed", "reason", "yes", "no", "abstain", "skipped", "ballot_digest_key_id"),
                        excluded=("ballots",), extract=_ballot_fields),
-    "capability_issued": KindSpec(sent=("jti", "token_hash", "ledger_root")),
+    # ledger_size and issued_at (0.9.1) let the gateway tell a token carried across a seal from one that names an
+    # archived ledger size.
+    "capability_issued": KindSpec(sent=("jti", "token_hash", "ledger_root", "ledger_size", "issued_at")),
     # subject (0.8.0) holds the counterparties and the amount, so it stays in the ledger; history_basis is for
     # the audit rebuild of the summary (two_key.audit.check_history_digests).
     "decision": KindSpec(

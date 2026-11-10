@@ -34,7 +34,7 @@ so the result there doesn't depend on a model.
 ```bash
 python3 -m venv ~/two-key-quickstart
 . ~/two-key-quickstart/bin/activate
-pip install "two-key[yaml]==0.9.0"
+pip install "two-key[yaml]==0.9.1"
 ```
 
 ## 2. Start a local judge

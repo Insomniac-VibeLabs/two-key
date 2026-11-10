@@ -210,7 +210,7 @@ and install it there:
 ```bash
 sudo install -d -o twokey -g twokey -m 755 /opt/two-key
 sudo -iu twokey sh -c 'umask 022 && python3 -m venv /opt/two-key/.venv'
-sudo -iu twokey sh -c 'umask 022 && /opt/two-key/.venv/bin/pip install "two-key[yaml,mcp]==0.9.0"'
+sudo -iu twokey sh -c 'umask 022 && /opt/two-key/.venv/bin/pip install "two-key[yaml,mcp]==0.9.1"'
 ```
 
 The `umask 022` makes the new files writable by `twokey` only. Ubuntu otherwise lets the account's own group
@@ -247,9 +247,9 @@ below. Both give you the same files.
 version as the Two-Key you just installed. This downloads the package without installing it, and unpacks it:
 
 ```bash
-/opt/two-key/.venv/bin/pip download --no-deps --no-binary :all: "two-key==0.9.0" -d /tmp/two-key-files
-tar -xzf /tmp/two-key-files/two_key-0.9.0.tar.gz -C /tmp/two-key-files
-ls /tmp/two-key-files/two_key-0.9.0/examples/demo
+/opt/two-key/.venv/bin/pip download --no-deps --no-binary :all: "two-key==0.9.1" -d /tmp/two-key-files
+tar -xzf /tmp/two-key-files/two_key-0.9.1.tar.gz -C /tmp/two-key-files
+ls /tmp/two-key-files/two_key-0.9.1/examples/demo
 ```
 
 *Way 2: from GitHub.* Download the three files one by one from the Two-Key repository:
@@ -276,12 +276,14 @@ echo 'umask 022' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-The prompt now starts with `twokey@`. Copy in the three demo files. Use the line for the way you picked in
+The prompt now starts with `twokey@`. The `PATH` line is read by a shell you type in. A script, or
+`sudo -u twokey bash -lc '...'`, does not read `~/.bashrc`, so there use the full path,
+`/opt/two-key/.venv/bin/two-key`. Copy in the three demo files. Use the line for the way you picked in
 Part 4, and only that one:
 
 ```bash
 mkdir -p ~/demo-files && cd ~/demo-files
-cp /tmp/two-key-files/two_key-0.9.0/examples/demo/* .   # Way 1, PyPI
+cp /tmp/two-key-files/two_key-0.9.1/examples/demo/* .   # Way 1, PyPI
 cp /tmp/two-key-files/demo/* .                          # Way 2, GitHub
 ls
 ```
@@ -329,7 +331,9 @@ Then ask Two-Key whether everything is ready:
 two-key config check --config /opt/two-key/demo/proxy.yaml
 ```
 
-The last line should say `0 failure(s), 1 warning(s)`:
+Run it from the `twokey` home folder, where `sudo -iu twokey` starts. From a folder other accounts can write,
+such as `/tmp`, it can also warn `writable_path: /tmp` when Python looks for modules in the folder it started
+in (as `python -m two_key` does). The last line should say `0 failure(s), 1 warning(s)`:
 
 ![two-key config check printing ok on every line except the one-judge warning, then 0 failures and 1 warning](images/demo/02-config-check.png)
 
@@ -614,7 +618,9 @@ sudo deluser agent && sudo rm -rf /home/agent
 rm -f node-v24.22.2-linux-x64.tar.xz
 ```
 
-Run the last line in the folder you downloaded Node.js in. `deluser --remove-home` can stop with "invalid
+Run the last line in the folder you downloaded Node.js in. If you put anything else on the computer for the
+demo (another Python, a folder of wheels, a copy of the ledger), remove it too; the lines above do not know
+about it. `deluser --remove-home` can stop with "invalid
 characters in input string" on a file a Python 3.14 virtual environment makes (named `𝜋thon`), so the home
 folders are removed with `rm -rf` instead. This deletes the demo's private key, its ledger and the notes too. Nothing else uses them. To remove the models,
 run `ollama rm llama3.2:3b` on Ubuntu, and delete the model in LM Studio's **My Models** tab on Windows. Close the

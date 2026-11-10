@@ -205,7 +205,7 @@ async def start_core(stack: AsyncExitStack, config: ProxyConfig, *, two_key: Any
     selection: ToolSelection = select_tools(upstream, tk.compiled.tool_specs, config.tools)
     for line in schema_check(selection, config.upstream.schema_digest, config.upstream.on_schema_change):
         print(line, file=sys.stderr)
-    for line in undescribed_inputs(selection, tk.compiled.tool_specs):      # advice; it still starts
+    for line in undescribed_inputs(selection, tk.compiled.tool_specs, tk.compiled.fields):      # advice; it still starts
         print(f"two-key: WARNING: mcp-proxy: {line}", file=sys.stderr)
     for line in undeclared_file_inputs(selection, tk.compiled.tool_specs, getattr(tk, "scanner", None)):
         print(f"two-key: WARNING: mcp-proxy: {line}", file=sys.stderr)

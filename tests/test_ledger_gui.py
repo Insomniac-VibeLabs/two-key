@@ -347,6 +347,10 @@ class Window(unittest.TestCase):
         self.assertEqual(view.details_now(), "seq 2: one\nseq 4: two")
         self.assertEqual(report_text({"ok": False, "size": 1, "decision_digest_problems": ["x"]})[0],
                          "1 entries. Decision digest problem: x")
+        # Run 14 K3: without Include archives the banner says the table starts at the active segment.
+        rolled = report_text({"ok": True, "size": 14, "decision_digest_problems": [], "listed_from": 13})[0]
+        self.assertIn("14 entries, verified", rolled)
+        self.assertIn("from seq 13; tick Include archives to list the 13 archived entries too", rolled)
 
     def test_reload_keeps_the_view_and_reports_a_failure(self):
         more = rows_from_entries([*ENTRIES, entry(5, "decision", allowed=True, reason="both_paths_allow",
@@ -368,6 +372,17 @@ class Window(unittest.TestCase):
         self.assertIn("did not open again: ledger gone. The table still shows the entries from when it last "
                       "opened.", view.banner.cget("text"))
         self.assertEqual(view.shown_seqs(), [5, 4, 2])
+
+    def test_include_archives_fits_the_default_window(self):
+        # Walkthrough re-run for 0.9.1: at the window's own 1400 pixels the toolbar ran past the edge, hiding
+        # Include archives, and the archives note in the banner ran off it.
+        view = self.viewer(reload=lambda **_k: (self.rows, OK), archives=False)
+        self.assertLessEqual(view.search_entry.master.winfo_reqwidth(), 1400)
+        self.top.geometry("900x600")
+        view.show_report({"ok": True, "size": 14, "decision_digest_problems": [], "listed_from": 13})
+        self.top.update()
+        wrap = int(view.banner.cget("wraplength"))
+        self.assertTrue(0 < wrap <= view.banner.winfo_width(), wrap)
 
     def test_no_reload_button_without_a_reload(self):
         self.viewer()

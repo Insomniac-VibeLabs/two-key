@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 ENTRY_FIELDS = ("seq", "kind", "prev", "entry_hash")
@@ -131,6 +132,14 @@ def _walk(value: Any, path: str, out: dict[str, tuple]) -> None:
         out[path] = out.get(path, ()) + (value,)
 
 
+def _shown_time(value: Any) -> Any:
+    """``at`` as the table shows it. Decisions write ISO text; the rollover kinds write whole Unix seconds (run 14
+    K3: one column mixed both). Whole seconds are shown as the same UTC ISO text; the entry's JSON keeps them."""
+    if type(value) is not int or not 0 <= value < 253402300800:      # up to the year 9999
+        return value
+    return datetime.fromtimestamp(value, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def flatten(entry: Mapping[str, Any]) -> Row:
     """The row for one entry as ``Entry.to_json()`` gives it."""
     values: dict[str, tuple] = {name: (entry.get(name),) for name in ENTRY_FIELDS}
@@ -138,6 +147,8 @@ def flatten(entry: Mapping[str, Any]) -> Row:
     if isinstance(body, Mapping):
         for key, item in body.items():
             _walk(item, f"body.{key}" if key in ENTRY_FIELDS else str(key), values)
+    if "at" in values:
+        values["at"] = tuple(_shown_time(v) for v in values["at"])
     return Row(entry, values)
 
 
@@ -292,11 +303,18 @@ def query_from_args(args) -> Query:
                  search_names=args.search_names)
 
 
-def integrity(ledger) -> dict:
-    """What was checked when the ledger opened, and the decision digest check (``two-key audit``'s first part)."""
+def integrity(ledger, *, archives: bool = True) -> dict:
+    """What was checked when the ledger opened, and the decision digest check (``two-key audit``'s first part).
+
+    ``listed_from``: the first seq the table lists, when it lists only the active segment of a ledger that has
+    rolled over (run 14 K3: the banner counted every entry while the table showed the active segment's)."""
     from .audit import check_decision_digests
     problems = check_decision_digests(ledger)
-    return {"ok": not problems, "size": ledger.size(), "decision_digest_problems": problems}
+    out = {"ok": not problems, "size": ledger.size(), "decision_digest_problems": problems}
+    start = ledger.segment_start()
+    if start and not archives:
+        out["listed_from"] = start
+    return out
 
 
 def print_rows(rows: Sequence[Row], out) -> None:

@@ -49,6 +49,12 @@ two-key ledger-view --key keys/principal.pem --ledger ledger \
   --where kind equals decision --where allowed equals false --sort at:desc
 ```
 
+After a ledger rollover (0.9.1, [HOWTO](HOWTO.md#ledger-rollover)) the table shows the active segment only, which
+starts with `ledger_continued`. `--archives`, or the window's "Include archives" box, reads every archive as well,
+so the table holds the whole ledger from seq 0. Each archive is decrypted and checked as it is read, and one that
+does not pass is named and nothing is shown. On a large ledger that read takes a while. Without the box, the
+window's banner still counts every entry and says the table starts at the active segment.
+
 ## What a row holds
 
 Each row is one ledger entry. Its fields are:
@@ -64,7 +70,9 @@ Each row is one ledger entry. Its fields are:
 Different kinds of entry have different fields: a `decision` has `allowed`, `reason`, `agent.id`, `at`,
 `subject.*`, `history_digest` and `history_basis.*`; a `path_b` has `passed`, `yes`, `no`, `abstain` and
 `ballots[].*`; a `gateway_denied` has `jti`, `reason` and `tool_args_digest`. A row with no value for a field
-shows an empty cell.
+shows an empty cell. Many kinds record no time, so their `at` is empty. Decisions write `at` as ISO text and the
+rollover kinds as whole Unix seconds; the table and its filters show both as UTC ISO text (the entry's JSON keeps
+the number).
 
 The table starts with the fields most audits need (`seq`, `kind`, `at`, `agent.id`, `agent_id`, `tool`,
 `subject.tool`, `allowed`, `passed`, `reason`, `ballots[].judge_id`, `ballots[].vote`, `jti`, where the ledger

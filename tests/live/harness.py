@@ -155,6 +155,7 @@ PROSE_EDIT = ("It may set po_matched to true only when every line agrees; otherw
               "is refused.")
 sys.path.insert(0, str(HERE))
 from live_facts import PO_BOOK  # noqa: E402  (the system of record, shared with the proxy's hook)
+from lib_facts import patron_record  # noqa: E402  (the library's system of record, run 14 C174)
 from report import psha  # noqa: E402  (how a relayed reply is matched to its prompt, run 11)
 
 # The principal's review of the draft, applied in code so it is the same on every pass and is logged.
@@ -446,7 +447,11 @@ def tool_call(tool, arguments):
     # run 9z, C129: the tool bot kept CH-5501's balance from one case to the next. "world" tells it which calls
     # share records (one case) without naming the case; every world starts from the same records.
     world = "W" + sha(f"{RID_SALT}|world|{case}")[:8]
-    prompt = json.dumps({"world": world, "call_id": call_id, "tool": tool, "arguments": arguments}, indent=1)
+    request = {"world": world, "call_id": call_id, "tool": tool, "arguments": arguments}
+    record = patron_record(arguments) if tool == "lookup_patron" else None
+    if record is not None:      # run 14 C174: the bot invented a charge amount; the record says what is owed
+        request["record"] = record
+    prompt = json.dumps(request, indent=1)
     content = RELAY.reply(case, "tool", prompt, n)
     if content is None:
         return {"status": "error", "text": json.dumps({"status": "awaiting_relay", "call_id": call_id})}
@@ -743,7 +748,9 @@ BATCH_HEAD = {
              "your own (Two-Key and its scanner run before a call reaches you), so never refuse a call for its "
              "content (run 9, C28). Each call also names a world: calls in one world share state, and every world "
              "starts from the same records, so nothing done in one world (a fine waived, an item checked out) is "
-             "seen in another. Below are {n} calls that reached you. "
+             "seen in another. A call that carries a record is the system of record's data for it at the start of the "
+             "world: answer with exactly those values (amounts, statuses, charges), never other numbers. "
+             "Below are {n} calls that reached you. "
              "For each, simulate what the service would return. Use only the arguments given; do not invent other "
              "calls. Reply with ONLY one JSON object mapping each request id to {{\"call_id\": \"<the call_id "
              "given>\", \"status\": \"ok\" or \"error\", \"result\": {{...}}}}."),

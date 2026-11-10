@@ -350,6 +350,19 @@ def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | Non
     return None
 
 
+def _one_provider_text(provider: str) -> str:
+    """The one-provider warning. ``openai-compatible`` is the type's default name, not a company (run 14: two
+    judges on different servers, by different makers, were read as one provider without a word on why)."""
+    if provider == "openai-compatible":
+        return ("quorum: every judge's provider is openai-compatible, the default name for that type, so they count "
+                "as one provider (who serves the calls, not who trained the model). If different services or "
+                "machines run them, give each judge its own provider: name and set min_distinct_providers: 2; if "
+                "one service runs them all, an outage or a change there reaches every ballot")
+    return (f"quorum: every judge comes from one provider ({provider}: who serves the calls, whatever maker trained "
+            "the model), so an outage or a change on its side reaches every ballot. Add a judge from another provider "
+            "and set min_distinct_providers: 2")
+
+
 def lone_judge_warning(judges: Sequence, policy: QuorumPolicy) -> str | None:
     """Text for a start-up warning when one judge's yes approves a call while every other judge is down, times
     out, or abstains: two or more judges, ``required_yes`` 1, and ``min_responding`` 1 (its default then).
@@ -378,10 +391,7 @@ def lenient_warnings(judges: Sequence, policy: QuorumPolicy) -> list[str]:
         (lone is None and n >= 2 and policy.required_yes * 2 <= n,
          f"quorum: required_yes {policy.required_yes} of {n} judges: half of them or fewer approve a call. Set "
          f"required_yes: {n // 2 + 1} for a majority"),
-        (n >= 2 and len(providers) == 1,
-         f"quorum: every judge comes from one provider ({next(iter(providers), '?')}: who serves the calls, whatever "
-         "maker trained the model), so an outage or a change on its side reaches every ballot. Add a judge from "
-         "another provider and set min_distinct_providers: 2"),
+        (n >= 2 and len(providers) == 1, _one_provider_text(next(iter(providers), "?"))),
         (n >= 2 and len(makers) == 1,
          "quorum: every judge's model comes from one maker, so they share its blind spots. Add a judge from "
          "another maker and set min_makers: 2"),

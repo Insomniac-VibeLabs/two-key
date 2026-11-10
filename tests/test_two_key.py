@@ -215,7 +215,7 @@ class CoreTests(unittest.TestCase):
             _, tk = _engine(tmp)
             raw = Path(tmp, "ledger", "entries.jsonl").read_text()
             self.assertNotIn("constitution_loaded", raw)
-            self.assertIn("two-key-ledger-enc/1", raw)
+            self.assertIn("two-key-ledger-enc/2", raw)
             self.assertFalse(any(p.name == "witness.pem" for p in Path(tmp, "ledger").iterdir()))
             self.assertTrue(tk.ledger.witness_path.exists())
             self.assertFalse(str(tk.ledger.witness_path).startswith(str(Path(tmp, "ledger")) + "/"))
