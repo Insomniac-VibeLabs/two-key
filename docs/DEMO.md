@@ -276,7 +276,9 @@ echo 'umask 022' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-The prompt now starts with `twokey@`. Copy in the three demo files. Use the line for the way you picked in
+The prompt now starts with `twokey@`. The `PATH` line is read by a shell you type in. A script, or
+`sudo -u twokey bash -lc '...'`, does not read `~/.bashrc`, so there use the full path,
+`/opt/two-key/.venv/bin/two-key`. Copy in the three demo files. Use the line for the way you picked in
 Part 4, and only that one:
 
 ```bash
@@ -329,7 +331,9 @@ Then ask Two-Key whether everything is ready:
 two-key config check --config /opt/two-key/demo/proxy.yaml
 ```
 
-The last line should say `0 failure(s), 1 warning(s)`:
+Run it from the `twokey` home folder, where `sudo -iu twokey` starts. From a folder other accounts can write,
+such as `/tmp`, it can also warn `writable_path: /tmp` when Python looks for modules in the folder it started
+in (as `python -m two_key` does). The last line should say `0 failure(s), 1 warning(s)`:
 
 ![two-key config check printing ok on every line except the one-judge warning, then 0 failures and 1 warning](images/demo/02-config-check.png)
 
@@ -614,7 +618,9 @@ sudo deluser agent && sudo rm -rf /home/agent
 rm -f node-v24.22.2-linux-x64.tar.xz
 ```
 
-Run the last line in the folder you downloaded Node.js in. `deluser --remove-home` can stop with "invalid
+Run the last line in the folder you downloaded Node.js in. If you put anything else on the computer for the
+demo (another Python, a folder of wheels, a copy of the ledger), remove it too; the lines above do not know
+about it. `deluser --remove-home` can stop with "invalid
 characters in input string" on a file a Python 3.14 virtual environment makes (named `𝜋thon`), so the home
 folders are removed with `rm -rf` instead. This deletes the demo's private key, its ledger and the notes too. Nothing else uses them. To remove the models,
 run `ollama rm llama3.2:3b` on Ubuntu, and delete the model in LM Studio's **My Models** tab on Windows. Close the

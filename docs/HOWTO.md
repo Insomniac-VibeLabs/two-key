@@ -2703,6 +2703,11 @@ moment. An older ledger left next to the current anchor does not open
 spent after the backup can look unspent. It also replaces a key file that
 differs from the backup. The restored ledger opens only with the keys from
 that same moment, so a witness key rotated after the backup is put back too.
+Stop every `two-key mcp-proxy` on that ledger first: while one holds its agent's
+lock, `--replace-ledger` refuses (`backup_refused: a two-key mcp-proxy is running
+on this ledger`). A proxy for a shared roster group, or one with
+`one_proxy_per_agent: false`, holds no lock, so restore cannot see it; it denies
+its next call (`internal_error:history`) and must be restarted.
 
 If restore says `backup_conflict`, a file on disk is not the file in the
 backup. Move that file aside and run restore again. Do not delete

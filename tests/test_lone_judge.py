@@ -55,6 +55,13 @@ class LoneJudge(unittest.TestCase):
         text = warned(same, QuorumPolicy())
         self.assertIn("every judge comes from one provider", text)
         self.assertIn("every judge's model comes from one maker", text)
+        # Run 14: the type's default provider name is not a company; the line says so and how to name each one.
+        default = [FixedJudge("a", "yes", provider="openai-compatible", maker="qwen"),
+                   FixedJudge("b", "yes", provider="openai-compatible", maker="meta")]
+        text = warned(default, QuorumPolicy())
+        self.assertIn("the default name for that type", text)
+        self.assertIn("give each judge its own provider: name", text)
+        self.assertNotIn("every judge's model comes from one maker", text)
 
     def test_start_prints_it_and_the_call_still_passes(self):
         key = generate_private_key()

@@ -420,10 +420,25 @@ class Command(unittest.TestCase):
         self.assertIn("--print", err)
 
     def test_integrity_reports_decision_digest_problems(self):
-        ledger = types.SimpleNamespace(entries=[], size=lambda: 0)
+        ledger = types.SimpleNamespace(entries=[], size=lambda: 0, segment_start=lambda: 0)
         self.assertEqual(integrity(ledger), {"ok": True, "size": 0, "decision_digest_problems": []})
         with mock.patch("two_key.audit.check_decision_digests", return_value=["seq 3: bad"]):
             self.assertIs(integrity(ledger)["ok"], False)
+
+    def test_integrity_says_where_the_listed_rows_start_after_a_rollover(self):
+        """Run 14 K3: the banner counted 14 entries while the table showed the active segment's one."""
+        ledger = types.SimpleNamespace(entries=[], size=lambda: 14, segment_start=lambda: 13)
+        self.assertEqual(integrity(ledger, archives=False)["listed_from"], 13)
+        self.assertNotIn("listed_from", integrity(ledger, archives=True))
+
+    def test_whole_second_times_show_as_iso_text(self):
+        """Run 14 K3: decisions write ISO text and the rollover kinds Unix seconds; the column shows one form."""
+        sealed = flatten({"seq": 3, "prev": "0", "kind": "ledger_sealed", "entry_hash": "h", "body": {"at": 1794281006}})
+        self.assertEqual(sealed.text("at"), "2026-11-10T03:23:26Z")
+        self.assertEqual(sealed.entry["body"]["at"], 1794281006)        # the entry itself is unchanged
+        text = flatten({"seq": 4, "prev": "0", "kind": "decision", "entry_hash": "h",
+                        "body": {"at": "2026-11-10T02:43:26+00:00"}})
+        self.assertEqual(text.text("at"), "2026-11-10T02:43:26+00:00")
 
 
 if __name__ == "__main__":

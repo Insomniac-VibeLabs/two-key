@@ -180,6 +180,8 @@ class SetupWindow:
         self.ha_box = ttk.LabelFrame(tab, text="Set and locked by high assurance", padding=8)
         for name, what in HIGH_ASSURANCE_SETTINGS:
             ttk.Label(self.ha_box, text=f"{name}: {what}", state="disabled").pack(anchor="w")
+        # Run 14 V5: the override was explained only on the Proxy tab; say it in the lock box too.
+        ttk.Label(self.ha_box, textvariable=self.unanswered_note_text, wraplength=640).pack(anchor="w")
 
     def _build_judges(self, tab) -> None:
         _help(tab, "The judges that vote on each call. Name each judge's API key by its environment variable. "
@@ -193,8 +195,9 @@ class SetupWindow:
         self._buttons(tab, ("Add", self.add_judge), ("Apply", self.apply_judge), ("Remove", self.remove_judge))
 
     def _build_quorum(self, tab) -> None:
-        _help(tab, "The profile's numbers for these judges are filled in. A lower number is weaker and needs the "
-                   "typed yes on the Review page; under high assurance a number can only be raised.")
+        _help(tab, "These are the profile's numbers for these judges. Keeping or raising them needs nothing more. "
+                   "Only a number lowered below the profile is weaker and asks for the typed yes on the Review page; "
+                   "under high assurance a number can only be raised.")
         form = ttk.Frame(tab)
         form.pack(fill="x")
         self.spin = {}
@@ -593,7 +596,7 @@ class SetupWindow:
                                                    *(f"weaker: {w}" for w in found.weaker)]))
         self.yes_label.configure(foreground=BAD if found.weaker else "")
         if self.result is None:     # after setup the Review page keeps its log and next steps
-            _set_text(self.review_box, self._review_text(answers, found))
+            _set_text(self.review_box, self._review_text(answers, found, self.unanswered_note_text.get()))
         ready = found.ready and bool(self.var["dir"].get().strip()) and self.result is None
         self.setup_button.configure(state="normal" if ready else "disabled")
         if self.result is not None:
@@ -616,10 +619,11 @@ class SetupWindow:
                                   foreground=BAD)
 
     @staticmethod
-    def _review_text(answers: dict, found) -> str:
+    def _review_text(answers: dict, found, override: str = "") -> str:
         parts = []
         for title, lines in (("Problems (setup refuses)", found.problems), ("Warnings", found.warnings),
-                             ("Weaker than the profile", found.weaker)):
+                             ("Weaker than the profile", found.weaker),
+                             ("Changed by high assurance", [override] if override else [])):
             if lines:
                 parts.append(f"{title}:\n" + "\n".join(f"  - {line}" for line in lines))
         parts.append("Answers:\n" + json.dumps(answers, indent=2, sort_keys=True))

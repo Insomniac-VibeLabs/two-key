@@ -95,6 +95,24 @@ class TornLastRecord(unittest.TestCase):
             with self.assertRaises(LedgerError) as raised:
                 Ledger(path2, key)
             self.assertIn("tampered ciphertext", str(raised.exception))
+            # Run 14 L3: the refusal says where, so audit points at the record to look at.
+            self.assertIn("at entries.jsonl line 1, where seq 0 was expected", str(raised.exception))
+            self.assertIn("last record does not decrypt: entries.jsonl line 2, where seq 1 was expected",
+                          str(_torn_message(tmp, key)))
+
+
+def _torn_message(tmp, key) -> LedgerError:
+    path = Path(tmp, "ledger3")
+    led = Ledger(path, key)
+    led.append("note", {"n": 1})
+    led.checkpoint()
+    entries = path / "entries.jsonl"
+    entries.write_bytes(entries.read_bytes()[:-8])
+    try:
+        Ledger(path, key)
+    except LedgerError as e:
+        return e
+    raise AssertionError("a torn last record opened")
 
 
 if __name__ == "__main__":

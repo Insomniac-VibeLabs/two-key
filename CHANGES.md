@@ -201,6 +201,7 @@ SPDX-License-Identifier: Apache-2.0
 - [0.9.0 review fixes: a stale witness pin, path-field messages — 2026-11-09](#090-review-fixes-a-stale-witness-pin-path-field-messages--2026-11-09)
 - [The TypeScript tool-check helper — 2026-11-09](#the-typescript-tool-check-helper--2026-11-09)
 - [Ledger rollover — 2026-11-09](#ledger-rollover--2026-11-09)
+- [GrokBot run 14 fixes — 2026-11-10](#grokbot-run-14-fixes--2026-11-10)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5813,3 +5814,34 @@ D1 to D8 as recommended, except D3: open tokens are carried across a seal, not w
 - Tests: `tests/test_ledger_rollover.py` (51): one chain across segments, every crash point of the rollover,
   tampered, truncated, reordered and padded archives, a decompression bomb, two processes, carried tokens, SIEM
   export and verify, backup and restore, and `ledger-view --archives`.
+
+## GrokBot run 14 fixes — 2026-11-10
+
+Run 14 (the 0.9.1 release gate, `working` 19e329d) let no forbidden call run. These are its product, harness and
+docs findings.
+
+- **`config check` lists `ledger_rollover`** (R13, J4). The rollover section above said it did; only `config show`
+  had it. One line: on or off, the size (and days) it seals at, the hard limit, compression, archives kept.
+- **`config check` with an unreadable `judges.yaml`** (V4) no longer leads with "off": the line says the hold is
+  not known until judges.yaml reads, on if it sets `high_assurance`, otherwise off.
+- **A ledger record that does not read names where it is** (L3). Opening (and so `audit`) says the line of
+  `entries.jsonl` and the seq the chain expected there; a chain break names the seq too.
+- **`backup-restore --replace-ledger` refuses while a proxy runs on that ledger** (Z7). It left the running proxy
+  denying every call `internal_error:history`. A proxy holds its agent's lock beside the ledger for its whole life,
+  so a lock that cannot be taken refuses the restore before anything is written. A proxy for a shared roster
+  group, or one with `one_proxy_per_agent: false`, takes no lock; it still fails closed on its next call.
+- **The one-provider quorum warning** says when the one provider is `openai-compatible`, the type's default name:
+  judges on different services count as one until each has its own `provider:`. The setup window's Quorum page
+  says keeping or raising the profile's numbers needs nothing; only a lowered number asks for the typed yes.
+- **Ledger view.** Without "Include archives" the banner says the table starts at the active segment and how many
+  entries are archived (it counted all of them over a table of the active ones). Whole-second `at` values (the
+  rollover kinds) show as UTC ISO text like the decisions'; the entry's JSON keeps the number.
+- **Setup window.** When high assurance overrides an answers file's `unanswered_hold: false`, the high-assurance
+  box and the Review page say so, not only the Proxy page (V5).
+- **Live harness (C174).** A library `lookup_patron` now hands the tool bot the card's record from `lib_facts.py`,
+  and the tool header says to answer with exactly those values. The bot had answered CH-5501 as 100 cents, so the
+  agent waived 100 and the legit case graded FAIL; the product was right.
+- **DEMO.** A script does not read `~/.bashrc` (use the full path); run `config check` from the `twokey` home, not
+  `/tmp`; clean-up names anything else staged for the demo.
+- Tests: `test_config_cmd`, `test_lone_judge`, `test_ledger_scale`, `test_key_backup`, `test_ledger_view`,
+  `test_ledger_gui`, `test_setup_gui`.

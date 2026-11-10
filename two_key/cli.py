@@ -542,11 +542,12 @@ def _ledger_view(args) -> int:
     def reload(archives: bool = args.archives):
         again = _reopen_ledger(args, key)
         try:
-            return rows_from_entries(e.to_json() for e in _view_entries(again, archives)), integrity(again)
+            return (rows_from_entries(e.to_json() for e in _view_entries(again, archives)),
+                    integrity(again, archives=archives))
         except LedgerError as e:
             raise ViewError(str(e)) from None
-    return show(rows, title=str(args.ledger), report=integrity(ledger), reload=reload, query=query,
-                max_rows=args.max_rows, archives=args.archives if ledger.segment_start() else None)
+    return show(rows, title=str(args.ledger), report=integrity(ledger, archives=args.archives), reload=reload,
+                query=query, max_rows=args.max_rows, archives=args.archives if ledger.segment_start() else None)
 
 
 def _view_entries(ledger, archives: bool):

@@ -54,8 +54,13 @@ def report_text(report: dict) -> tuple[str, bool]:
     if problems:
         more = f" (and {len(problems) - 1} more; press Show problems)" if len(problems) > 1 else ""
         return f"{report.get('size', 0)} entries. Decision digest problem: {problems[0]}{more}", True
-    return (f"{report.get('size', 0)} entries, verified when opened: hash chain, signed head and witness pins "
-            "check out, and every decision's digests match its constitution_loaded."), False
+    text = (f"{report.get('size', 0)} entries, verified when opened: hash chain, signed head and witness pins "
+            "check out, and every decision's digests match its constitution_loaded.")
+    start = report.get("listed_from")
+    if start:       # run 14 K3: the count is the whole ledger, the table only the active segment
+        text += (f" The table lists the active segment, from seq {start}; tick Include archives to list the "
+                 f"{start} archived entries too.")
+    return text, False
 
 
 class FilterRow:

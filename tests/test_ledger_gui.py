@@ -347,6 +347,10 @@ class Window(unittest.TestCase):
         self.assertEqual(view.details_now(), "seq 2: one\nseq 4: two")
         self.assertEqual(report_text({"ok": False, "size": 1, "decision_digest_problems": ["x"]})[0],
                          "1 entries. Decision digest problem: x")
+        # Run 14 K3: without Include archives the banner says the table starts at the active segment.
+        rolled = report_text({"ok": True, "size": 14, "decision_digest_problems": [], "listed_from": 13})[0]
+        self.assertIn("14 entries, verified", rolled)
+        self.assertIn("from seq 13; tick Include archives to list the 13 archived entries too", rolled)
 
     def test_reload_keeps_the_view_and_reports_a_failure(self):
         more = rows_from_entries([*ENTRIES, entry(5, "decision", allowed=True, reason="both_paths_allow",

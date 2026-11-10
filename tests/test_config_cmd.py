@@ -191,7 +191,9 @@ class Check(Workspace):
     def test_a_quorum_that_could_be_too_lenient_warns(self):
         warned = [text for level, text in self.check() if level == config_cmd.WARN and text.startswith("quorum:")]
         self.assertTrue(any("one judge approves a call alone" in text for text in warned), warned)
-        self.assertTrue(any("every judge comes from one provider" in text for text in warned), warned)
+        # Run 14: both judges are openai_compatible with no provider: set, so the line says why they count as one.
+        self.assertTrue(any("openai-compatible, the default name for that type, so they count as one provider" in text
+                            for text in warned), warned)
 
     @unittest.skipIf(os.name == "nt", "POSIX mode bits")
     def test_a_constitution_readable_by_others_warns(self):
@@ -237,6 +239,25 @@ class Check(Workspace):
     def test_a_missing_judges_file_fails(self):
         (self.dir / "judges.yaml").unlink()
         self.assertTrue(any(level == config_cmd.FAIL and "judges_invalid" in text for level, text in self.check()))
+
+    def test_an_unread_judges_file_does_not_call_the_hold_off(self):
+        """Run 14 V4: with judges.yaml unread the profile is unknown, so the line does not lead with off."""
+        (self.dir / "judges.yaml").write_text("judges: [", encoding="utf-8")
+        line = next(text for _, text in self.check() if text.startswith("unanswered_hold:"))
+        self.assertTrue(line.startswith("unanswered_hold: not known until judges.yaml reads"), line)
+
+    def test_the_ledger_rollover_settings_are_listed(self):
+        """Run 14 R13/J4: config show had ledger_rollover and config check did not."""
+        line = next(text for _, text in self.check() if text.startswith("ledger_rollover:"))
+        self.assertEqual(line, "ledger_rollover: on; seals at 64 MB, no new token past 128 MB until it has run; "
+                               "compression zlib; archives kept: all")
+        self.write_proxy("ledger_rollover: {segment_mb: 8, segment_days: 30, compression: none}\n")
+        line = next(text for _, text in self.check() if text.startswith("ledger_rollover:"))
+        self.assertIn("seals at 8 MB or after 30 days, no new token past 16 MB", line)
+        self.assertIn("compression none", line)
+        self.write_proxy("ledger_rollover: {enabled: false}\n")
+        line = next(text for _, text in self.check() if text.startswith("ledger_rollover:"))
+        self.assertTrue(line.startswith("ledger_rollover: off;"), line)
 
     def test_plaintext_siem_warns_here(self):
         self.write_proxy("siem:\n  sinks:\n    - {type: syslog, host: 127.0.0.1, transport: udp}\n")

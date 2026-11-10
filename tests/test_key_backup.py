@@ -333,6 +333,24 @@ class Restore(BackupFixture):
         self.assertEqual(self._anchor().read_bytes(), old_anchor)
         self.assertLess(Ledger(self.ledger, self.key).size(), newer)
 
+    def test_replace_ledger_refuses_while_a_proxy_holds_its_agent_lock(self):
+        """Run 14 Z7: a running proxy kept failing every call after the ledger was replaced under it."""
+        from two_key import _platform
+        self.export()
+        self.tk.ledger.append("note", {"later": True})
+        self.tk.ledger.checkpoint()
+        before = (self.ledger / "entries.jsonl").read_bytes()
+        fd = _platform.open_lock_file(self.tk.ledger.agent_lock_path("agent"))
+        self.addCleanup(os.close, fd)
+        self.assertIs(_platform.try_lock(fd), True)
+        with self.assertRaisesRegex(BackupError, "a two-key mcp-proxy is running on this ledger"):
+            restore_backup(self.ledger, self.key_path, self.out, PHRASES, replace_ledger=True)
+        self.assertEqual((self.ledger / "entries.jsonl").read_bytes(), before)
+        _platform.unlock(fd)            # the proxy stopped: the same restore goes ahead
+        with redirect_stderr(io.StringIO()):
+            result = restore_backup(self.ledger, self.key_path, self.out, PHRASES, replace_ledger=True)
+        self.assertTrue(result["replaced_ledger"])
+
     def test_wrong_passphrase_writes_nothing(self):
         self.export()
         cap = self.tk.ledger.capability_key_path()

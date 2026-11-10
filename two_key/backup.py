@@ -724,36 +724,9 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
     with tempfile.TemporaryDirectory(prefix="two-key-backup-") as tmp:
         _materialize(bundles, Path(tmp), Path(bundles_dir) / ARCHIVE_DIR)
         opened = _open_staged(Path(tmp), witness_public_key=witness_public_key, key_passphrase=key_passphrase)
-    files_differ = any(_exists_differs(dest[name], files[name], name) for name in _LEDGER_BODY)
-    files_missing = any(not os.path.lexists(dest[name]) for name in _LEDGER_BODY)
-    anchor_differs = _exists_differs(dest["head.anchor"], files["head.anchor"], "head.anchor")
-    anchor_missing = not os.path.lexists(dest["head.anchor"])
-    write_files = False
-    write_anchor = False
-    key_only = False
-    if files_differ or (files_missing and anchor_differs):
-        if not replace_ledger:
-            if files_differ and not files_missing:
-                _preflight_live(dest, files, witness_public_key=witness_public_key, key_passphrase=key_passphrase)
-                key_only = True
-            else:
-                raise BackupError(
-                    "backup_refused: the destination ledger differs from the backup. "
-                    "Pass replace_ledger to put the backup's ledger and head.anchor back together. "
-                    "Deleting the anchor is not the restore procedure.")
-        else:
-            if files_differ or files_missing:
-                print("two-key: WARNING: replace_ledger writes the backup's ledger and head.anchor over "
-                      "the destination. Entries checkpointed after that backup are gone, and a token spent "
-                      "after it can look unspent.", file=sys.stderr)
-            write_files = True
-            write_anchor = True
-    elif files_missing:
-        write_files = True
-        write_anchor = True
-    elif anchor_missing or anchor_differs:
-        # The ledger bytes are the backup's bytes. Put that moment's anchor back. Do not delete it.
-        write_anchor = True
+    write_files, write_anchor, key_only = _restore_plan(
+        dest, files, ledger_path, replace_ledger=replace_ledger, witness_public_key=witness_public_key,
+        key_passphrase=key_passphrase)
     actions = {}
     # Ledger body, then keys, then the anchor. A crash before the anchor leaves a ledger that
     # refuses to open (ledger_rolled_back) instead of advancing a newer anchor past the backup.
@@ -791,9 +764,68 @@ def restore_backup(ledger_path, principal_path, bundles_dir, passphrases, *,
     for name in pending:
         actions[name] = _install(dest[name], files[name], overwrite=True, name=name)
     _restore_public_files(dest, files, actions)
-    return {"ok": True, "actions": actions, "replaced_ledger": bool(replace_ledger and (files_differ or files_missing)),
+    return {"ok": True, "actions": actions, "replaced_ledger": bool(replace_ledger and write_files),
             "fingerprints": fingerprints, "ledger_size": opened["ledger_size"],
             "format": FORMAT, "alg": ALG}
+
+
+def _restore_plan(dest: dict, files: dict, ledger_path, *, replace_ledger: bool, witness_public_key,
+                  key_passphrase) -> tuple[bool, bool, bool]:
+    """``(write_files, write_anchor, key_only)``: what a restore writes, decided before anything is written."""
+    files_differ = any(_exists_differs(dest[name], files[name], name) for name in _LEDGER_BODY)
+    files_missing = any(not os.path.lexists(dest[name]) for name in _LEDGER_BODY)
+    anchor_differs = _exists_differs(dest["head.anchor"], files["head.anchor"], "head.anchor")
+    if files_differ or (files_missing and anchor_differs):
+        if replace_ledger:
+            _replace_warning(ledger_path, files_differ=files_differ, files_missing=files_missing)
+            return True, True, False
+        if files_differ and not files_missing:
+            _preflight_live(dest, files, witness_public_key=witness_public_key, key_passphrase=key_passphrase)
+            return False, False, True
+        raise BackupError(
+            "backup_refused: the destination ledger differs from the backup. "
+            "Pass replace_ledger to put the backup's ledger and head.anchor back together. "
+            "Deleting the anchor is not the restore procedure.")
+    if files_missing:
+        return True, True, False
+    # The ledger bytes are the backup's bytes. Put that moment's anchor back. Do not delete it.
+    anchor_missing = not os.path.lexists(dest["head.anchor"])
+    return False, anchor_missing or anchor_differs, False
+
+
+def _replace_warning(ledger_path, *, files_differ: bool, files_missing: bool) -> None:
+    """``replace_ledger`` over a ledger that differs: refused while a proxy runs on it (run 14 Z7), else a warning."""
+    if files_differ:
+        _refuse_if_proxy_running(ledger_path)
+    if files_differ or files_missing:
+        print("two-key: WARNING: replace_ledger writes the backup's ledger and head.anchor over "
+              "the destination. Entries checkpointed after that backup are gone, and a token spent "
+              "after it can look unspent.", file=sys.stderr)
+
+
+def _refuse_if_proxy_running(ledger_path) -> None:
+    """Run 14 Z7: ``replace_ledger`` under a running ``two-key mcp-proxy`` left that proxy failing every call
+    (``internal_error:history``) until it was restarted. Each proxy holds its agent's lock beside the ledger for its
+    whole life (``Ledger.agent_lock_path``), so a lock that cannot be taken is a running proxy: refuse before
+    anything is written. A proxy for a shared roster group, or one with ``one_proxy_per_agent: false``, takes no
+    lock and is not seen here; it fails closed on its next call as before."""
+    folder = Path(ledger_path).parent / f"{Path(ledger_path).name}.agents"
+    try:
+        locks = sorted(folder.glob("*.lock"))
+    except OSError:
+        return
+    for path in locks:
+        try:
+            fd = _platform.open_lock_file(path)
+        except OSError:
+            continue
+        try:
+            if not _platform.try_lock(fd):
+                raise BackupError("backup_refused: a two-key mcp-proxy is running on this ledger (it holds "
+                                  f"{path.name} in {folder}). Stop every proxy on this ledger, then restore again")
+            _platform.unlock(fd)
+        finally:
+            os.close(fd)
 
 
 def _restore_public_files(dest: dict, files: dict, actions: dict) -> None:

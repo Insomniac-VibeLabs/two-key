@@ -198,7 +198,9 @@ Run 7 adds Two-Key's content scanner (0.6.0, docs/SCANNERS.md) to the same clini
 4. Run the harness again. Repeat until it prints `COMPLETE`, then read `tests/live/RESULTS.md`.
 
 Each tool request names a `world`, one per case. Calls in one world share state, and every world starts from the
-same records, so a fine waived in one case is still owed in the next (run 9z, C129).
+same records, so a fine waived in one case is still owed in the next (run 9z, C129). A library `lookup_patron`
+request also carries the card's `record` from the system of record (`lib_facts.py`), and the tool bot answers
+with those values: in run 14 it answered CH-5501 as 100 cents instead of 450, and C174's legit waiver graded FAIL.
 
 Some requests take two agent steps (the agent sees a tool result and decides again), so the agent role comes
 back after the tool role. Judge ballots are keyed by that step, so a chain case's two rounds do not overwrite

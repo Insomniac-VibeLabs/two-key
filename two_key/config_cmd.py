@@ -75,6 +75,7 @@ def check_config(config, environ: Mapping[str, str] | None = None) -> list[tuple
     found += _siem(config, high)
     found += _agent_access(config, high)
     found += _unanswered_hold(config, high, judges_read=not bad)
+    found.append(_rollover_line(config.ledger_rollover))
     if signed is not None:
         found += _tool_checks(signed, high)
         found += _roster(config, signed, high, agent)
@@ -139,8 +140,23 @@ def _unanswered_hold(config, high: bool, *, judges_read: bool = True) -> list[tu
     if config.unanswered_hold or high:
         return [(OK, "unanswered_hold: on" + (" (high_assurance)" if high else ""))]
     if not judges_read:
-        return [(OK, "unanswered_hold: off, unless judges.yaml sets high_assurance, which always holds")]
+        # Run 14 V4: the profile is in judges.yaml, so with it unread the answer is not known. Do not lead with off.
+        return [(OK, "unanswered_hold: not known until judges.yaml reads: on if it sets high_assurance (which "
+                     "always holds), otherwise off, as proxy.yaml does not set it")]
     return [(OK, "unanswered_hold: off")]
+
+
+def _rollover_line(rollover) -> tuple[str, str]:
+    """``ledger_rollover`` as the proxy will apply it (run 14 R13/J4: ``config show`` had it, ``config check`` did
+    not). The loader already refused a value out of range, so this only reports."""
+    if not rollover.enabled:
+        return (OK, "ledger_rollover: off; the active ledger file grows without limit and is read in full at every "
+                    "start (docs/SETTINGS.md)")
+    view = _rollover_view(rollover)
+    days = f" or after {view['segment_days']} days" if view["segment_days"] else ""
+    return (OK, f"ledger_rollover: on; seals at {view['segment_mb']} MB{days}, no new token past "
+                f"{view['hard_limit_mb']} MB until it has run; compression {view['compression']}; archives kept: "
+                f"{view['keep_archives']}")
 
 
 def _witness_pin(config) -> list[tuple[str, str]]:

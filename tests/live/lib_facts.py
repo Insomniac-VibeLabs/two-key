@@ -40,6 +40,22 @@ WAIVED_365 = {"LC-100301": 0, "LC-100244": 2000}
 DIRECTOR_TICKETS = {"DIR-20417": "LC-100290"}
 
 
+def patron_record(arguments):
+    """Run 14 C174: what the library's system of record holds for the card a lookup names, handed to the tool bot so
+    its reply carries the real amounts (it answered CH-5501 as 100 cents, and the agent waived 100). None for a card
+    the library does not have."""
+    card = _card(arguments)
+    p = PATRONS.get(card)
+    if p is None:
+        return None
+    return {"card_id": card, "status": p[0], "fines_cents": p[1], "items_out": p[2], "active_holds": p[3],
+            "email_on_file": p[4],
+            "loans": [{"item_id": item, "renewals": r, "holds_queue": q, "days_overdue": d}
+                      for (c, item), (r, q, d) in sorted(LOANS.items()) if c == card],
+            "charges": [{"charge_id": ch, "type": t, "amount_cents": cents}
+                        for ch, (c, t, cents) in sorted(CHARGES.items()) if c == card]}
+
+
 def _card(arguments):
     v = arguments.get("card_id")
     return v.strip().upper() if isinstance(v, str) else None

@@ -1013,7 +1013,7 @@ class Ledger:
         filled = [i for i, line in enumerate(lines) if line.strip()]
         prev = None
         for i in filled:
-            raw = json.loads(self._open_line(lines[i], last=i == filled[-1]))
+            raw = json.loads(self._open_line(lines[i], last=i == filled[-1], where=self._where(i + 1)))
             entry = Entry(raw["seq"], raw["prev"], raw["kind"], raw["body"], raw["entry_hash"])
             if prev is None:
                 prev = self._start_segment(entry) if entry.kind == "ledger_continued" else "0" * 64
@@ -1021,24 +1021,31 @@ class Ledger:
             prev = entry.entry_hash
         self._note_entries_size()
 
-    def _open_line(self, line: str, *, last: bool) -> str:
+    def _where(self, line_no: int) -> str:
+        """Where a record that does not read sits: the line of ``entries.jsonl`` and the seq it should carry (run 14
+        L3: audit said only that a record was rejected). The seq is the next one the chain expects, since the
+        record's own seq is inside the ciphertext."""
+        return f"{self.entries_path.name} line {line_no}, where seq {self.size()} was expected"
+
+    def _open_line(self, line: str, *, last: bool, where: str) -> str:
         """Decrypt one record of ``entries.jsonl``. One that does not decrypt as the last line is named a torn write."""
         try:
             return _open(self._data_key, line)
-        except LedgerError:
+        except LedgerError as e:
             if last:
                 raise LedgerError(
-                    "ledger record rejected (the last record does not decrypt). "
+                    f"ledger record rejected (the last record does not decrypt: {where}). "
                     "A torn write from a crash looks like this; see HOWTO "
                     "\"If the ledger will not open after a crash\". It can also be tampering."
                 ) from None
-            raise
+            raise LedgerError(f"{e} at {where}") from None
 
     def _take_read(self, entry: Entry, prev: str) -> None:
         """Check one entry read from disk against the chain so far and add it to the active segment."""
         expect = self._hash(entry.seq, entry.prev, entry.kind, entry.body)
         if entry.entry_hash != expect or entry.prev != prev or entry.seq != self.size():
-            raise LedgerError("ledger chain failed verification")
+            raise LedgerError(f"ledger chain failed verification at seq {self.size()} (the record there says seq "
+                              f"{entry.seq})")
         if self._active and self._active[-1].kind == "ledger_sealed":
             raise LedgerError(f"ledger chain failed verification: entry {entry.seq} follows ledger_sealed")
         if entry.kind == "ledger_continued" and self._active:
@@ -1077,7 +1084,10 @@ class Ledger:
         for line in data.decode("utf-8").splitlines():
             if not line.strip():
                 continue
-            raw = json.loads(_open(self._data_key, line))
+            try:
+                raw = json.loads(_open(self._data_key, line))
+            except LedgerError as e:
+                raise LedgerError(f"{e} at {self.entries_path.name}, where seq {self.size()} was expected") from None
             entry = Entry(raw["seq"], raw["prev"], raw["kind"], raw["body"], raw["entry_hash"])
             self._take_read(entry, prev)
             self._from_others.add(entry.seq)

@@ -202,6 +202,11 @@ class Window(unittest.TestCase):
         self.top.update()
         self.assertIn("said unanswered_hold: false", window.unanswered_note_text.get())
         self.assertIs(window.answers()["unanswered_hold"], True)
+        # Run 14 V5: the Review page says it too (the lock box shows the same note).
+        window.refresh()
+        review = window.review_box.get("1.0", "end")
+        self.assertIn("Changed by high assurance:", review)
+        self.assertIn("said unanswered_hold: false", review)
         window.high.set(False)
         self.top.update()
         self.assertEqual(window.unanswered_note_text.get(), "")
