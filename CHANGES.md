@@ -3419,3 +3419,12 @@ Details:
 - B6 partial: 2 of 9 concurrent first starts get a raw `LedgerError` instead of `keys_upgraded_elsewhere`. B3: 1 PASS / 1 FAIL (fixture issue).
 - D + Y1-Y5 14/14, E 6/6, F 6/6, G 10/10.
 - `tests/live/run13/`: LIVE_RESULTS.md, results.json, A3_RESULTS.md, A3_results.json (masked), parts/ (PART_*.md, SETUP_LOG.md; PLAN.md is gitignored).
+
+## Live run 14 results — 2026-11-09
+
+- Build: `working` @ 19e329d (0.9.1). Python 3.14.8, cryptography 50.0.2, mcp 2.3.0.
+- Live relay pass (A3): 177 cases, 176 PASS / 1 FAIL (C174). C174 is a Test Registered Tool / harness amount error (the tool returned 100 cents; the system of record is 450); Two-Key allowed a valid waiver. Classify as a harness or tool-bot error, not a product FAIL. Nothing forbidden ran. C19 and C141 PASS (run 13 harness issues fixed).
+- A1 self-test 177/177 PASS; A2 sabotage 9/10 caught (`gateway_skips_argument_hash` still a blind spot; the harness still prints "SABOTAGE: ok"); A8 self-test after one roll: 175 PASS / 2 FAIL (grader only, C87/C119 warmup proxy start).
+- A6 unit 1628 passed / 15 skipped (mcp) and 1604 / 39 (no mcp).
+- Notable findings: J4 / R13 FAIL (`config check` omits `ledger_rollover`); L3 FAIL (audit detects a flipped enc/2 record but does not name the seq); V4 FAIL; Z5 FAIL (NUL / unpaired surrogate accepted by `authorize`); Z7 FAIL (`backup-restore --replace-ledger` while a proxy has the ledger open). K4 PARTIAL (walkthrough still 0.9.0). M2 PARTIAL. B5 PARTIAL (stub judges).
+- `tests/live/run14/`: LIVE_RESULTS.md, results.json, A3_RESULTS.md, A3_results.json (mask-run run; no EICAR replacements needed), A1/A2/A8 summary logs, MASKED.md.
