@@ -311,7 +311,7 @@ class Setup(Deployment):
                    "agent", "some-model", "other", "https://agent.example/v1", "", "AGENT_KEY_VAR",
                    "",                      # the agent's account: none, so no signed roster
                    "", "", "", "",          # judge history: on, deny on failure, 5 denies, 10 minutes
-                   "", "", "tool_a", "no", "public", "", "", "server --stdio", DIGEST, "",
+                   "", "", "tool_a", "no", "public", "", "", "", "server --stdio", DIGEST, "",
                    "",                      # one proxy per agent: yes
                    "yes"]                   # hold a tool that leaves calls unanswered: yes
         asked = []
@@ -348,7 +348,7 @@ class Setup(Deployment):
         replies = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:8081/v1", "", "api.x.ai",
                    "", "no", "", "", "", "", "",
                    "agent", "claude-sonnet", "anthropic", "https://api.anthropic.com", "AGENT_KEY_VAR", "",
-                   "", "", "", "", "", "", "tool_a", "no", "public", "", "", "server --stdio", DIGEST, "", "", ""]
+                   "", "", "", "", "", "", "tool_a", "no", "public", "", "", "", "server --stdio", DIGEST, "", "", ""]
         asked = []
 
         def ask(prompt):
@@ -494,7 +494,7 @@ class SetupQuorum(unittest.TestCase):
     START = ["proxy", "default", "openai_compatible", "j1", "m", "http://127.0.0.1:11434/v1", "", "", ""]
     AGENT = ["agent", "some-model", "other", "https://agent.example/v1", "", "AGENT_KEY_VAR", "", "", "", "",
              "", "", "",
-             "tool_a", "no", "public", "", "", "server", DIGEST]
+             "tool_a", "no", "public", "", "", "", "server", DIGEST]
 
     def test_the_interview_keeps_a_lower_number_only_after_a_typed_yes(self):
         second = ["yes", "openai_compatible", "j2", "m2", "http://127.0.0.1:11435/v1", "maker2", "", "", "no"]
@@ -696,6 +696,14 @@ class Secrets(Deployment):
             chmod(path, 0o644)
             with self.assertRaisesRegex(ConfigChangeError, "value_file_insecure"):
                 config_set.read_value_file(str(path))
+
+    def test_a_value_file_that_cannot_be_read_is_a_refusal(self):
+        # 0.9.1 walkthrough: `--value 32` abbreviates to --value-file, and the missing file ended in a traceback.
+        code, _, err = quiet(cli.main, ["config", "set", "--config", str(self.proxy), "ttl_seconds",
+                                        "--value-file", str(self.base / "no-such-file")])
+        self.assertEqual(code, 1)
+        self.assertIn("two-key: config set: refused: --value-file:", err)
+        self.assertNotIn("Traceback", err)
 
     def test_the_command_line_takes_one_source_of_value(self):
         code, _, err = quiet(cli.main, ["config", "set", "--config", str(self.proxy), "ttl_seconds", "60",

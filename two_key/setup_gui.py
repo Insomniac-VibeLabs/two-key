@@ -44,7 +44,7 @@ READ_ONLY = "readonly"
 SHOWN_ONLY = "disabled"
 JUDGE_KEYS = ("id", "type", "model", "base_url", "maker", "upstream", "auth_env")
 AGENT_KEYS = ("id", "model", "provider", "base_url", "upstream", "credential_env", "account")
-TOOL_COLUMNS = ("id", "irreversible", "data_class_floor", "tool_check", "agents")
+TOOL_COLUMNS = ("id", "irreversible", "data_class_floor", "tool_check", "agents", "nul_in_arguments")
 ROSTER_COLUMNS = ("id", "account", "shared")
 ON_FAILURE = ("deny", "judge_without_history")
 HA_HELP = ("High assurance: two judges from two different model makers, at least one on this machine, and a yes "
@@ -125,6 +125,8 @@ class SetupWindow:
         self.history = tk.BooleanVar(master=root, value=True)
         self.one_proxy = tk.BooleanVar(master=root, value=True)
         self.unanswered_hold = tk.BooleanVar(master=root, value=False)
+        self.unanswered_note_text = tk.StringVar(master=root, value="")
+        self._hold_refused_in_answers = False       # the answers file said unanswered_hold: false
         self.judge_var = {k: tk.StringVar(master=root) for k in JUDGE_KEYS}
         self.agent_var = {k: tk.StringVar(master=root) for k in AGENT_KEYS}
         self.tool_var = {"id": tk.StringVar(master=root), "data_class_floor": tk.StringVar(master=root),
@@ -132,6 +134,7 @@ class SetupWindow:
         self.roster_var = {"id": tk.StringVar(master=root), "account": tk.StringVar(master=root)}
         self.roster_shared = tk.BooleanVar(master=root, value=False)
         self.tool_irreversible = tk.BooleanVar(master=root, value=True)
+        self.tool_nul = tk.BooleanVar(master=root, value=False)    # run 14 Z5: refusing a NUL is the default
         self.quorum = {name: tk.IntVar(master=root, value=1) for name in QUORUM_COUNTS}
         self.status = ttk.Label(root, padding=8, anchor="w")
         self.status.pack(side="bottom", fill="x")       # first, so a small window never hides it
@@ -178,6 +181,8 @@ class SetupWindow:
         self.ha_box = ttk.LabelFrame(tab, text="Set and locked by high assurance", padding=8)
         for name, what in HIGH_ASSURANCE_SETTINGS:
             ttk.Label(self.ha_box, text=f"{name}: {what}", state="disabled").pack(anchor="w")
+        # Run 14 V5: the override was explained only on the Proxy tab; say it in the lock box too.
+        ttk.Label(self.ha_box, textvariable=self.unanswered_note_text, wraplength=640).pack(anchor="w")
 
     def _build_judges(self, tab) -> None:
         _help(tab, "The judges that vote on each call. Name each judge's API key by its environment variable. "
@@ -191,8 +196,9 @@ class SetupWindow:
         self._buttons(tab, ("Add", self.add_judge), ("Apply", self.apply_judge), ("Remove", self.remove_judge))
 
     def _build_quorum(self, tab) -> None:
-        _help(tab, "The profile's numbers for these judges are filled in. A lower number is weaker and needs the "
-                   "typed yes on the Review page; under high assurance a number can only be raised.")
+        _help(tab, "These are the profile's numbers for these judges. Keeping or raising them needs nothing more. "
+                   "Only a number lowered below the profile is weaker and asks for the typed yes on the Review page; "
+                   "under high assurance a number can only be raised.")
         form = ttk.Frame(tab)
         form.pack(fill="x")
         self.spin = {}
@@ -258,6 +264,9 @@ class SetupWindow:
         _row(form, "agents that may call it (blank or any: every listed agent; or ids)", self.tool_var["agents"], 3)
         ttk.Checkbutton(form, text="a call cannot be undone", variable=self.tool_irreversible).grid(
             row=4, column=1, sticky="w")
+        ttk.Checkbutton(form, text="let a NUL character through in its arguments (weaker: only for a tool that needs "
+                                   "one; a tool that reads C strings may act on less than the judges read)",
+                        variable=self.tool_nul).grid(row=5, column=1, sticky="w")
         self._buttons(tab, ("Add", self.add_tool), ("Remove", self.remove_tool))
 
     def _build_proxy(self, tab) -> None:
@@ -274,6 +283,8 @@ class SetupWindow:
                                          text="Hold a checked tool that leaves calls unanswered: 3 in a row or within "
                                               "10 minutes hold it for 15 minutes (always on under high assurance)")
         self.unanswered_box.pack(anchor="w")
+        self.unanswered_note = ttk.Label(tab, textvariable=self.unanswered_note_text, wraplength=640)
+        self.unanswered_note.pack(anchor="w", padx=22)
 
     def _build_review(self, tab) -> None:
         self.review_box = tk.Text(tab, height=22, wrap="word", state=SHOWN_ONLY)
@@ -394,6 +405,7 @@ class SetupWindow:
         self.var["schema_digest"].set(upstream.get("schema_digest") or "")
         self.one_proxy.set(answers.get("one_proxy_per_agent", True) is not False)
         self.unanswered_hold.set(answers.get("unanswered_hold") is True)
+        self._hold_refused_in_answers = answers.get("unanswered_hold") is False
 
     def _profile(self) -> str:
         return HIGH_ASSURANCE if self.high.get() else "default"
@@ -443,6 +455,8 @@ class SetupWindow:
         self.tools = [t for t in self.tools if t["id"] != tool_id]
         tool = {"id": tool_id, "irreversible": bool(self.tool_irreversible.get()),
                 "data_class_floor": self.tool_var["data_class_floor"].get() or "classified"}
+        if self.tool_nul.get():
+            tool["nul_in_arguments"] = "allow"
         check = self.tool_var["tool_check"].get().strip()
         if check:
             tool["tool_check"] = check if check == "exempt" else {"key": check}
@@ -470,6 +484,7 @@ class SetupWindow:
             self.tool_var["id"].set(tool["id"])
             self.tool_var["data_class_floor"].set(tool.get("data_class_floor", "classified"))
             self.tool_irreversible.set(bool(tool.get("irreversible", True)))
+            self.tool_nul.set(tool.get("nul_in_arguments") == "allow")
             self.tool_var["tool_check"].set(_check_text(tool.get("tool_check")))
             self.tool_var["agents"].set(_cell("agents", tool.get("agents")))
 
@@ -565,7 +580,12 @@ class SetupWindow:
         """High assurance always holds a tool that keeps leaving calls unanswered: the box shows it on and cannot be changed."""
         if self.high.get():
             self.unanswered_box.state(["disabled", "selected"])
+            # Unanswered-hold report: an answers file's false was turned on without a word.
+            self.unanswered_note_text.set(
+                "The answers file said unanswered_hold: false. High assurance always holds, so setup writes true."
+                if self._hold_refused_in_answers else "")
         else:
+            self.unanswered_note_text.set("")
             self.unanswered_box.state(["!disabled", "selected" if self.unanswered_hold.get() else "!selected"])
 
     def refresh(self) -> None:
@@ -583,7 +603,7 @@ class SetupWindow:
                                                    *(f"weaker: {w}" for w in found.weaker)]))
         self.yes_label.configure(foreground=BAD if found.weaker else "")
         if self.result is None:     # after setup the Review page keeps its log and next steps
-            _set_text(self.review_box, self._review_text(answers, found))
+            _set_text(self.review_box, self._review_text(answers, found, self.unanswered_note_text.get()))
         ready = found.ready and bool(self.var["dir"].get().strip()) and self.result is None
         self.setup_button.configure(state="normal" if ready else "disabled")
         if self.result is not None:
@@ -606,10 +626,11 @@ class SetupWindow:
                                   foreground=BAD)
 
     @staticmethod
-    def _review_text(answers: dict, found) -> str:
+    def _review_text(answers: dict, found, override: str = "") -> str:
         parts = []
         for title, lines in (("Problems (setup refuses)", found.problems), ("Warnings", found.warnings),
-                             ("Weaker than the profile", found.weaker)):
+                             ("Weaker than the profile", found.weaker),
+                             ("Changed by high assurance", [override] if override else [])):
             if lines:
                 parts.append(f"{title}:\n" + "\n".join(f"  - {line}" for line in lines))
         parts.append("Answers:\n" + json.dumps(answers, indent=2, sort_keys=True))

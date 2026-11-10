@@ -57,7 +57,7 @@ there, unless the operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10; CI tests 3.10 to 3.14 (3.15 in a Linux job that does not block, until PyYAML ships 3.15 wheels; no `requires-python` cap). Package name `two-key`, import name `two_key`,
-version `0.9.0` on PyPI (`pip install "two-key[yaml]==0.9.0"`), tag `v0.9.0` on `main`. Tags are not moved. docs/PYPI.md is the release process. `server.json` (the MCP Registry listing) carries the same version as `pyproject.toml`; bump them together.
+version `0.9.1` on PyPI (`pip install "two-key[yaml]==0.9.1"`), tag `v0.9.1` on `main`. Tags are not moved. docs/PYPI.md is the release process. `server.json` (the MCP Registry listing) carries the same version as `pyproject.toml`; bump them together.
 Linux, macOS, and Windows (from 0.6.0). CI runs tests, the demo,
 the build, bandit, and CodeQL on all three (CONTRIBUTING).
 
@@ -84,7 +84,7 @@ there), not in `pyproject.toml`. CI installs them with `--require-hashes`.
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 | `mcp` | MCP Python SDK (`mcp>=2.2,<3`), PyYAML | `two-key mcp-proxy`, `two-key mcp-draft-specs` (0.5.0); `two-key config show`, `get`, `check`, `set`, and `undo`, and `two-key setup`, read and write the proxy config without the SDK (`setup` needs it only to read a schema digest from the server) |
 
-Index install: `pip install "two-key[yaml]==0.9.0"`.
+Index install: `pip install "two-key[yaml]==0.9.1"`.
 From the tag: `pip install "two-key[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key.git@v0.8.0"`.
 
 ## Tests and docs
@@ -152,6 +152,9 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   neither path runs, never a token. A decline that also carries a tool,
   arguments, or a claim is `malformed_proposal` (`tests/test_agent_decline.py`).
 - `require_path_a_first` is not a skip.
+- An argument key or value with a lone surrogate is denied `invalid_call:text_not_unicode` for every tool, and
+  one with a NUL `invalid_call:nul_in_arguments` unless the tool's signed spec says `nul_in_arguments: allow`
+  (weaker; run 14 Z5), before either path (`tests/test_args_text.py`). Do not make allowing a NUL the default.
 - JSON/YAML inputs refuse duplicate keys and YAML merge keys. Oversized or malformed calls deny
   before either path.
 - Default quorum needs one judge and has no diversity floors.

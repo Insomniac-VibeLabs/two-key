@@ -194,6 +194,23 @@ class Window(unittest.TestCase):
         self.assertFalse(window.unanswered_box.instate(["disabled"]))
         self.assertNotIn("unanswered_hold", window.answers())
 
+    def test_an_answers_files_false_under_high_assurance_is_explained(self):
+        """Unanswered-hold report: the box was locked on without saying the answers file had said false."""
+        window = self.window({"route": "proxy", "unanswered_hold": False})
+        self.assertEqual(window.unanswered_note_text.get(), "")
+        window.high.set(True)
+        self.top.update()
+        self.assertIn("said unanswered_hold: false", window.unanswered_note_text.get())
+        self.assertIs(window.answers()["unanswered_hold"], True)
+        # Run 14 V5: the Review page says it too (the lock box shows the same note).
+        window.refresh()
+        review = window.review_box.get("1.0", "end")
+        self.assertIn("Changed by high assurance:", review)
+        self.assertIn("said unanswered_hold: false", review)
+        window.high.set(False)
+        self.top.update()
+        self.assertEqual(window.unanswered_note_text.get(), "")
+
     def test_high_assurance_needs_each_tools_check(self):
         window = self.window()
         self.fill(window, judges=(LOCAL, dict(JUDGE, id="j2")))
@@ -210,6 +227,19 @@ class Window(unittest.TestCase):
         window.add_tool()
         self.assertEqual(window.answers()["tools"][0]["tool_check"], "exempt")
         self.assertIn("tool_specs.tool_a.tool_check: exempt", window.review_box.get("1.0", "end"))
+
+    def test_a_nul_is_refused_unless_the_box_is_ticked_and_ticking_it_is_weaker(self):
+        """Run 14 Z5: the starter tool's box writes nul_in_arguments: allow, and Review lists it as weaker."""
+        window = self.window()
+        self.fill(window, judges=(LOCAL,))
+        self.assertNotIn("nul_in_arguments", window.answers()["tools"][0])
+        window.tool_table.selection_set(window.tool_table.get_children()[0])
+        window._tool_clicked()
+        window.tool_nul.set(True)
+        window.add_tool()
+        self.assertEqual(window.answers()["tools"][0]["nul_in_arguments"], "allow")
+        window.refresh()
+        self.assertIn("tool_specs.tool_a.nul_in_arguments: allow", window.review_box.get("1.0", "end"))
 
     def test_the_signed_roster_and_each_tools_agents(self):
         window = self.window()

@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(ROOT))
 
 from test_doc_toc import with_toc  # noqa: E402
-from two_key import (agents, constitution, fields, history, identity, policy_vm, roster, scan, scanners,  # noqa: E402
+from two_key import (agents, constitution, fields, history, identity, ledger, policy_vm, roster, scan, scanners,  # noqa: E402
                      settings, siem_sinks)
 from two_key.judges import config as judges_config  # noqa: E402
 from two_key.mcp_proxy import config as proxy_config  # noqa: E402
@@ -42,6 +42,7 @@ def code_keys() -> set[tuple[str, str]]:
     add("proxy.yaml", "tools.<id>.files[].", scan._FILE_KEYS)
     add("proxy.yaml", "scan.", scanners._COMMON | set().union(*scanners._TYPE_KEYS.values()))
     add("proxy.yaml", "siem.", siem_sinks._TOP_KEYS)
+    add("proxy.yaml", "ledger_rollover.", ledger.ROLLOVER_KEYS)
     add("proxy.yaml", "siem.sinks[syslog].", siem_sinks._SYSLOG_KEYS)
     add("proxy.yaml", "siem.sinks[webhook].", siem_sinks._WEBHOOK_KEYS)
     add("judges.yaml", "", judges_config.TOP_LEVEL_KEYS)

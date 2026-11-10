@@ -197,6 +197,13 @@ SPDX-License-Identifier: Apache-2.0
 - [Regression test of the agent roster — 2026-11-05](#regression-test-of-the-agent-roster--2026-11-05)
 - [Roadmap: the SSH live run and the 1.0 freeze before 1.0.0 — 2026-11-05](#roadmap-the-ssh-live-run-and-the-10-freeze-before-100--2026-11-05)
 - [PYPI.md after the 0.9.0 release — 2026-11-05](#pypimd-after-the-090-release--2026-11-05)
+- [0.9.1 in development — 2026-11-09](#091-in-development--2026-11-09)
+- [0.9.0 review fixes: a stale witness pin, path-field messages — 2026-11-09](#090-review-fixes-a-stale-witness-pin-path-field-messages--2026-11-09)
+- [The TypeScript tool-check helper — 2026-11-09](#the-typescript-tool-check-helper--2026-11-09)
+- [Ledger rollover — 2026-11-09](#ledger-rollover--2026-11-09)
+- [GrokBot run 14 fixes — 2026-11-10](#grokbot-run-14-fixes--2026-11-10)
+- [The walkthrough for 0.9.1, and two fixes it found — 2026-11-10](#the-walkthrough-for-091-and-two-fixes-it-found--2026-11-10)
+- [Release v0.9.1: ledger rollover, the TypeScript helper — 2026-11-10](#release-v091-ledger-rollover-the-typescript-helper--2026-11-10)
 <!-- /toc -->
 
 ## 0.1.0 — 2026-10-02
@@ -5699,3 +5706,197 @@ tool-check helper and fixes from the 0.9.0 review.
 PYPI.md no longer calls 0.9.0 the next release; it followed 0.8.0. DeepSource's PTC-W6004 on
 `config_cmd.py` (the constitution's mode check opens the operator's own configured file, already read) was
 audited as a false positive and gets a file-level ignore rule in DeepSource, not a code suppression.
+
+## 0.9.1 in development — 2026-11-09
+
+`working` moves to 0.9.1 (pyproject.toml, `two_key.__version__`, uv.lock, server.json). 0.9.0 stays the release
+on PyPI and `main` until 0.9.1 is released. 0.9.1 is the TypeScript tool-check helper and fixes from the 0.9.0
+review (ROADMAP).
+
+## 0.9.0 review fixes: a stale witness pin, path-field messages — 2026-11-09
+
+- **`config check` compares an out-of-ledger witness pin with `witness.pem`.** After `rotate-witness` or the key
+  upgrade, a `witness_public_key` the operator had not replaced passed `config check`, and then the proxy refused
+  to start (`witness_key_changed`). It is now a FAIL that names the file to copy, and says when the pin is the
+  0.8.0 key the upgrade replaced. It reads the two key files only, never the ledger; a `witness.pem` it cannot
+  read is a WARN, and none yet (before the first start) is no line.
+- **A path field's `under` folders**: a folder listed twice, or inside another, is named in the refusal
+  (`'/srv/notes/a' is inside '/srv/notes'; list only '/srv/notes'`), not "a folder is listed twice or inside
+  another" (run 13 #32).
+- **An undescribed path field gets path advice.** At `mcp-draft-specs --constitution` and proxy start, an
+  argument a `type: path` field reads with no description in the upstream schema now suggests "Absolute path
+  inside <folder>, such as <folder>/todo.txt", not "Folder id, exactly as the directory shows it" (run 13 #32).
+- **`config check` no longer says `unanswered_hold: off` when it could not read `judges.yaml`**, as during a
+  high_assurance terminal setup before the file is written; under `high_assurance` it says
+  `on (high_assurance)` (run 13 G, F6).
+- **The setup window says why the unanswered-hold box is on** when an answers file said
+  `unanswered_hold: false` and high assurance is switched on (unanswered-hold regression report).
+- Docs: HOWTO says the 4,096-character limit counts the path as sent, before cleaning, and that Path A does no
+  URL decoding (`%2e%2e` is a folder name), so a path field does not belong on a tool that decodes one;
+  SETTINGS explains `tools[*]` and `tool_specs[*]` (run 13 #32).
+- Tests: the path-advice test indexes its two lines instead of unpacking them (DeepSource PYL-W0632).
+
+## The TypeScript tool-check helper — 2026-11-09
+
+- **`@insomniac-vibelabs/two-key-toolcheck`** (new, `typescript/toolcheck/`): the tool check (#28) for MCP servers
+  on the TypeScript SDK. The same eight checks in the same order, the same refusals, the same receipt and the same
+  seen record (SQLite through Node's built-in `node:sqlite`) as `two_key.toolcheck`, from the same `check.json`.
+  `mcpCall(args, meta, run)` never calls `run` on a refusal, and signs a thrown error as `tool failed: <error
+  class>`. Hybrid Ed25519 (Node's `crypto`) + ML-DSA-65 (`@noble/post-quantum` 0.7.1, the one dependency, pinned
+  exactly), with the context string `two-key`. Node 22.13 or later, or 24. Its own version line, starting at
+  0.9.1, published to npm separately from PyPI (design note approved by the maintainer, 2026-11-09).
+- Canonical JSON matches Python byte for byte: keys sorted by code point, DEL and every non-ASCII character
+  escaped, numbers in Python's `repr` form. JavaScript reads Python's `12.0` as `12` and loses digits above 2^53,
+  so such arguments are refused `args_mismatch` (fail-closed); TOOL_CHECK says how to declare them.
+- The helper writes `isError` and `resultType` into the result it signs (`wireResult`). The gateway's MCP SDK fills
+  them in when they are missing, so a result without them hashed differently on the two sides and the receipt was
+  `mismatch`; the end-to-end test found it. TOOL_CHECK's "Write the check in another language" now says so.
+- Tests: the helper's own (the published vectors, each refusal, `mcpCall`, the key files and `check.json`, 98%
+  of lines) on Node 22.13, 22 and 24 on Linux, macOS and Windows; and `tests/test_toolcheck_typescript.py` on the
+  Python side: canonical JSON on 3,000 random values, a Python stamp passing the TypeScript checks, a TypeScript
+  receipt passing the gateway, a seen record shared by both helpers, and the proxy tests of
+  `test_toolcheck_mcp.py` run again against a TypeScript SDK server behind a real `two-key mcp-proxy`.
+- CI: workflow `typescript` (audit, ESLint, tests, cross-language); SonarCloud reads the helper with its LCOV
+  coverage; a manual `npm-publish` workflow on the `PyPI` branch publishes with npm trusted publishing (OIDC, no
+  token) and provenance. docs/NPM.md is the procedure, including the one-time first publish from a Codespace.
+
+## Ledger rollover — 2026-11-09
+
+The ledger no longer grows in one file without end (design note approved by the maintainer, 2026-11-09; decisions
+D1 to D8 as recommended, except D3: open tokens are carried across a seal, not waited out).
+
+- **Sealed segments.** When `entries.jsonl` reaches `ledger_rollover.segment_mb` (64 MB by default, 8 to 1024), or
+  its first entry is `segment_days` old, the ledger appends `ledger_sealed`, writes the segment and its signed head
+  to `ledger/archive/segment-NNNNNN.tkla`, and starts a new `entries.jsonl` holding only `ledger_continued`. One hash
+  chain, one seq and one Merkle tree run across every segment, so the signed head still commits to every archived
+  entry. `ledger_continued` carries the archive's length and SHA-256, the catalogue of every archive, the Merkle
+  range, the witness pin, the state start-up checks read (the last `constitution_loaded`, `keys_upgraded` and
+  `capability_issued`, the top serials, tool holds and their trail), and the open tokens. Nothing deletes an
+  archive (`keep_archives: all`). The three kinds are written by the ledger only; `append` refuses them.
+- **The archive format, `two-key-ledger-archive/1`.** zlib, then AES-256-GCM in 1 MiB chunks under an HKDF-SHA256
+  key per segment from the ledger's data key; each nonce holds the chunk counter and a last-chunk flag, the header
+  is bound in as associated data, and the body is padded with zeros to a 64 KiB multiple inside the encryption.
+  The reader stops at the recorded plaintext length (no decompression bomb), and refuses a short, reordered or
+  extended file and non-zero padding. The folder and files are owner-only, and a link is refused.
+- **The order differs from the note in one place, on purpose:** the archive is written to a temporary file and
+  read back in full *before* the seal is appended, so a failure leaves the active segment untouched and records
+  `ledger_rollover_failed`. A crash after the seal is finished on the next open (three states, HOWTO "If a ledger
+  rollover did not finish"); anything else refuses `ledger_rollover_incomplete`.
+- **When.** After a call, under the ledger lock, never in the middle of a decision. Put off for a minute with less
+  than twice the segment free on disk, or more than 4,096 open tokens. Past `hard_limit_mb` (twice `segment_mb` by
+  default) no token is issued (`ledger_rollover_overdue`) until a rollover runs. `two-key ledger roll` seals now;
+  `two-key ledger archives` lists them.
+- **Tokens.** `capability_issued` now records `ledger_size` and `issued_at`. A token younger than 305 s, unspent and
+  not revoked, is carried into `ledger_continued`; the gateway takes a token that names an archived size only when
+  it was carried and its hash matches, and refuses any other `ledger_size_archived`. Redeem-lock files older than
+  300 s are pruned at each rollover.
+- **Records are written in base64** (`two-key-ledger-enc/2`), a third smaller than hex; `enc/1` is still read. This
+  is the one format change before the 1.0 freeze.
+- **Readers.** `ledger.entries` reaches every seq, streaming an archive when needed; `iter_entries` and
+  `state_entries` are the cheap paths. Opening reads only the active segment, checks every archive's length and the
+  newest one's SHA-256. `two-key audit` checks every archive (digest, chain, seal, Merkle range, signed head under
+  the witness key valid then, and each `ledger_continued` against the archive before it); `--active-only` skips
+  them. The judge history reads only the archives sealed inside `window_days`; a decision's `history_basis` gains
+  `from_seq`, and `audit --check-history` starts there, reading the ledger once. `ledger-view --archives` and the
+  window's "Include archives" box show archived entries. SIEM export and replay read through the archives; the
+  three new kinds are on the allowlist with their counts and digests, never the carried entries or tokens.
+- **Backups.** `backup export` copies the archives into `archive/` beside the bundles (they are already encrypted
+  under the ledger key, and bundles cap their plaintext at 45 MB); verify and restore read them from there and
+  check them.
+- **Settings.** The block is a top-level `ledger_rollover:` in proxy.yaml (`ledger:` is already the path), shown by
+  `config check` and in docs/SETTINGS.md.
+- **Fix found while building it:** a process that shares the ledger now tells a replaced `entries.jsonl` from the
+  old one by its first bytes as well as its inode; after two rollovers the file system may reuse the inode.
+- **Upgrading:** a ledger that 0.9.1 has written to does not open on 0.9.0 (UPGRADING). Back up first.
+- **Timings** (this build machine, decision-sized test entries): a 64 MB active segment (about 47,000 to 62,000
+  entries) took 1.9 s to open and 1.5 to 2.1 s to seal; after the seal, opening took 0.01 s. With ten 64 MB
+  segments archived (470,000 entries), opening still took 0.01 s, `audit_archives` 20 s, and the decision-digest
+  audit over every archive 16 s. The test entries repeat a long field, so each archive was 4.4 MB; real entries
+  compress less.
+- Tests: `tests/test_ledger_rollover.py` (51): one chain across segments, every crash point of the rollover,
+  tampered, truncated, reordered and padded archives, a decompression bomb, two processes, carried tokens, SIEM
+  export and verify, backup and restore, and `ledger-view --archives`.
+
+## GrokBot run 14 fixes — 2026-11-10
+
+Run 14 (the 0.9.1 release gate, `working` 19e329d) let no forbidden call run. These are its product, harness and
+docs findings.
+
+- **`config check` lists `ledger_rollover`** (R13, J4). The rollover section above said it did; only `config show`
+  had it. One line: on or off, the size (and days) it seals at, the hard limit, compression, archives kept.
+- **`config check` with an unreadable `judges.yaml`** (V4) no longer leads with "off": the line says the hold is
+  not known until judges.yaml reads, on if it sets `high_assurance`, otherwise off.
+- **A ledger record that does not read names where it is** (L3). Opening (and so `audit`) says the line of
+  `entries.jsonl` and the seq the chain expected there; a chain break names the seq too.
+- **`backup-restore --replace-ledger` refuses while a proxy runs on that ledger** (Z7). It left the running proxy
+  denying every call `internal_error:history`. A proxy holds its agent's lock beside the ledger for its whole life,
+  so a lock that cannot be taken refuses the restore before anything is written. A proxy for a shared roster
+  group, or one with `one_proxy_per_agent: false`, takes no lock; it still fails closed on its next call.
+- **The one-provider quorum warning** says when the one provider is `openai-compatible`, the type's default name:
+  judges on different services count as one until each has its own `provider:`. The setup window's Quorum page
+  says keeping or raising the profile's numbers needs nothing; only a lowered number asks for the typed yes.
+- **Ledger view.** Without "Include archives" the banner says the table starts at the active segment and how many
+  entries are archived (it counted all of them over a table of the active ones). Whole-second `at` values (the
+  rollover kinds) show as UTC ISO text like the decisions'; the entry's JSON keeps the number.
+- **Setup window.** When high assurance overrides an answers file's `unanswered_hold: false`, the high-assurance
+  box and the Review page say so, not only the Proxy page (V5).
+- **Live harness (C174).** A library `lookup_patron` now hands the tool bot the card's record from `lib_facts.py`,
+  and the tool header says to answer with exactly those values. The bot had answered CH-5501 as 100 cents, so the
+  agent waived 100 and the legit case graded FAIL; the product was right.
+- **DEMO.** A script does not read `~/.bashrc` (use the full path); run `config check` from the `twokey` home, not
+  `/tmp`; clean-up names anything else staged for the demo.
+- **Characters a tool call may not carry** (Z5, Stephan's decision 2026-11-10). `authorize` issued a token for an
+  argument with a NUL or a lone surrogate that no rule read. A lone surrogate is now always denied
+  `invalid_call:text_not_unicode` (it cannot reach the tool as written). A NUL is denied
+  `invalid_call:nul_in_arguments` by default, because a tool that reads C strings may act on less than the judges
+  read; a tool that needs one gets `nul_in_arguments: allow` in its signed spec, which is weaker (typed yes). Setup
+  asks per starter tool, the setup window has a box, and `config set` and the rules file take it. Both are checked
+  before either path, so no judge is asked. A spec without the key signs the same bytes as before.
+- Tests: `test_config_cmd`, `test_lone_judge`, `test_ledger_scale`, `test_key_backup`, `test_ledger_view`,
+  `test_ledger_gui`, `test_setup_gui`, `test_args_text` (new); DeepSource PTC-W0063 in `test_config_cmd`.
+
+## The walkthrough for 0.9.1, and two fixes it found — 2026-11-10
+
+Run 14's K4 and U5 notes: the illustrated walkthrough still showed 0.9.0, and UPGRADING left three things
+unsaid.
+
+- `docs/GUI_WALKTHROUGH.md` is redone on 0.9.1 with 36 new pictures from one live run: the setup window's agent
+  account and roster table, the tool form's agents column and NUL box with their defaults, the high-assurance
+  lock box naming the `unanswered_hold` it overrides, the Quorum page's provider warning explained, and the
+  Review page after Set up (the `config check` log and next steps); the editor's Custom fields and Agents tabs
+  and New tool's defaults; `config check`'s `ledger_rollover` and `agents` lines; a new part that rolls the
+  ledger over and shows Include archives; and a 0.9.0 to 0.9.1 upgrade in place of 0.8.0 to 0.9.0. The page now
+  says how the windows were driven: a script filled each field through the window's own code.
+- The ledger window, at its own default 1400 pixels, ran the toolbar past the edge once a ledger had rolled
+  over, hiding **Include archives**, and the archives note ran off the banner. The search box starts narrower
+  (it still grows), and the banner wraps (`tests/test_ledger_gui.py`).
+- `two-key config set` ended in a traceback, not a refusal, when `--value-file` could not be read or `--prompt`
+  had no terminal (`--value 32` abbreviates to `--value-file`). It now refuses
+  (`tests/test_config_set.py`).
+- UPGRADING's 0.9.1 row: 0.9.0 refuses a ledger 0.9.1 wrote only with its own read error, not a message naming
+  0.9.1; coming straight from 0.8.0 still runs the key upgrade, which signs `constitution.signed.json` again; and
+  `backup-export` on a copy that has never started refuses until Two-Key has started once.
+- The ledger's signed head (`head.json`) is written owner-only (0600) every time, whatever the umask
+  (Stephan's decision 2026-11-10). Before, each write took the caller's umask, so `two-key ledger roll` from a
+  022 shell left it 0644 inside the 0700 ledger folder (`tests/test_ledger_rollover.py`).
+
+## Release v0.9.1: ledger rollover, the TypeScript helper — 2026-11-10
+
+Package version 0.9.1 (`pyproject.toml`, `two_key.__version__`, `uv.lock`, `server.json`). To be tagged `v0.9.1`
+on `main` after the merge. The sections from "0.9.1 in development" on are the detail.
+
+- **Ledger rollover**: the active ledger file is sealed into an encrypted, compressed archive at 64 MB (or an age),
+  on one hash chain and one Merkle tree, so opening stays fast and nothing is deleted. Open tokens are carried
+  across a seal. Audit, backups, the ledger view (Include archives) and the SIEM export read the archives.
+  `two-key ledger roll` seals by hand. New records are `two-key-ledger-enc/2` (base64).
+- **The TypeScript tool-check helper**, `@insomniac-vibelabs/two-key-toolcheck` (`typescript/toolcheck/`), its own
+  npm package with its own release (docs/NPM.md): the same checks, refusals and receipts as `two_key.toolcheck`.
+- **Characters a tool call may not carry**: a lone surrogate in an argument is always `invalid_call:text_not_unicode`,
+  and a NUL is `invalid_call:nul_in_arguments` unless the tool's signed spec allows it (weaker), both before either
+  path.
+- **Fixes** from the 0.9.0 review and GrokBot run 14 (no forbidden call ran): `config check` catches a stale
+  witness pin and shows the rollover settings, `backup-restore --replace-ledger` refuses while a proxy is running,
+  ledger read errors name the line, the setup window explains the high-assurance overrides, and the head is always
+  owner-only.
+- **No way back to 0.9.0** once 0.9.1 has written to a ledger: back up first (UPGRADING). Constitutions and keys
+  load unchanged; nothing is re-signed. The walkthrough (docs/GUI_WALKTHROUGH.md) is redone on 0.9.1. 1,659 tests.

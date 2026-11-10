@@ -71,16 +71,65 @@ KEYS_UPGRADE_NEEDED = ("keys_upgrade_needed: the principal key is a 0.8.0 Ed2551
                        "--ledger DIR --constitution FILE, or two_key.upgrade.open_upgraded; docs/UPGRADING.md)")
 
 
+NUL_ALLOW = "allow"
+
+
+def nul_allowed(spec) -> bool:
+    """Whether the tool's signed spec lets a NUL through in its arguments (run 14 Z5, off by default)."""
+    return isinstance(spec, Mapping) and spec.get("nul_in_arguments") == NUL_ALLOW
+
+
+def args_text_problem(value: Any, *, nul_allowed: bool = False) -> str | None:
+    """``text_not_unicode`` when a string (a key or a value) holds a lone surrogate, ``nul_in_arguments`` when one
+    holds a NUL that the spec does not allow, else None. ``value`` is already plain and depth-bounded."""
+    stack, nul = [value], False
+    while stack:
+        item = stack.pop()
+        if isinstance(item, Mapping):
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            stack.extend(item)
+        elif isinstance(item, str):
+            try:
+                item.encode("utf-8")
+            except UnicodeEncodeError:
+                return "text_not_unicode"
+            nul = nul or "\x00" in item
+    return "nul_in_arguments" if nul and not nul_allowed else None
+
+
 def _require_hybrid(public_key) -> None:
     """The library route has no first start to upgrade at: a 0.8.0 key is refused, never run on Ed25519 alone."""
     if not is_hybrid(public_key):
         raise TwoKeyConfigError(KEYS_UPGRADE_NEEDED)
 
 
+def state_entries(ledger) -> list:
+    """The entries a start-up check reads: ``Ledger.state_entries`` (the active segment and what each rollover
+    carried), or every entry of a ledger-like object without it."""
+    pick = getattr(ledger, "state_entries", None)
+    return pick() if callable(pick) else list(getattr(ledger, "entries", ()))
+
+
+def _history_start(ledger, now: float, window_days: int) -> int:
+    """Where the judge history index starts reading: 0, or after a rollover the first archive sealed within the
+    window (the active segment when none is)."""
+    start = getattr(ledger, "segment_start", int)()
+    if not start:
+        return 0
+    horizon = now - window_days * 86400
+    for meta in reversed(ledger.catalogue()):
+        if meta["sealed_at"] < horizon:
+            break
+        start = meta["first_seq"]
+    return start
+
+
 def _pinned_stamp_key(ledger) -> str | None:
     """The stamp key fingerprint the last ``constitution_loaded`` or ``keys_upgraded`` entry that records one pins
     (#28), or None."""
-    for entry in reversed(getattr(ledger, "entries", [])):
+    for entry in reversed(state_entries(ledger)):
         if entry.kind in ("constitution_loaded", "keys_upgraded") and entry.body.get("stamp_key_fingerprint"):
             return entry.body["stamp_key_fingerprint"]
     return None
@@ -165,7 +214,7 @@ def _serial_history(ledger) -> tuple[str | None, int | None, set]:
     """From the ledger's ``constitution_loaded`` entries: the digest it last ran, the highest serial it has run
     (None if none had a serial), and every digest it ran under that serial."""
     last_digest, top, top_digests = None, None, set()
-    for entry in getattr(ledger, "entries", ()):
+    for entry in state_entries(ledger):
         if entry.kind != "constitution_loaded":
             continue
         last_digest = entry.body.get("digest")
@@ -325,6 +374,10 @@ class TwoKey:
             # added since. Episodes found in entries already on disk were ledgered when they were found.
             self._history = HistoryIndex(self.quorum.judge_history, self.compiled.tool_specs,
                                          blocked_from_rules(self.compiled.rules), self._history_agent_ids)
+            # After a rollover, only the archives sealed inside the window are read (0.9.1); every decision's
+            # history_basis says where the index began, so two-key audit --check-history starts there too.
+            self._history_from = self._history.seen = _history_start(self.ledger, self._now(),
+                                                                     self.quorum.judge_history.window_days)
             self._history.sync(self.ledger.entries)
         # Calls this process is still deciding, by (tool, counterparties), so a duplicate sent twice at once to
         # one proxy shows each copy to the other's judges as in_flight.
@@ -517,9 +570,18 @@ class TwoKey:
             return outcome, ("scanner_recovered", {"scanner": scanner.label})
         return outcome, None
 
+    def _issue_blocked(self, body_omitted: bool) -> str | None:
+        """Why an approved call gets no token: a ledger body that had to be cut, or a ledger past
+        ``ledger_rollover.hard_limit_mb`` whose put-off rollover must run first (0.9.1). None when neither."""
+        if body_omitted:
+            return REASON_LEDGER_BODY
+        if getattr(self.ledger, "over_hard_limit", bool)():
+            return "ledger_rollover_overdue"
+        return None
+
     @staticmethod
     def _has_capability_key(ledger) -> bool:
-        if any(e.kind == "capability_issued" for e in getattr(ledger, "entries", ())):
+        if any(e.kind == "capability_issued" for e in state_entries(ledger)):
             return True
         path_of = getattr(ledger, "capability_key_path", None)
         return callable(path_of) and os.path.lexists(path_of())
@@ -680,7 +742,7 @@ class TwoKey:
             # The signed roster gives this tool to other agents (two_key/roster.py): no judge sees the call.
             return self._deny(origin, "tool_not_for_agent", agent, None, None, {"tool": normalized.tool},
                               subject_tool=normalized.tool)
-        held = self._held_deny(spec, normalized.tool, origin, agent)
+        held = self._early_deny(spec, normalized.tool, arguments, origin, agent)
         if held:
             return held
         form = None
@@ -874,8 +936,9 @@ class TwoKey:
                                                       "tool": subject["tool"]})
                 # body_omitted is only for an already-decided DENY audit entry. If it would
                 # fire on a path about to issue a token, fail closed instead.
-                if allowed and body_omitted:
-                    allowed, reason = False, REASON_LEDGER_BODY
+                blocked = self._issue_blocked(body_omitted) if allowed else None
+                if blocked:
+                    allowed, reason = False, blocked
                 if allowed:
                     if self.issuer is None:
                         allowed, reason = False, "no_issuer_key"
@@ -890,9 +953,12 @@ class TwoKey:
                             scan=scanned.token_claim() if scanned is not None else None,
                             tool_args_digest=tool_args_digest)
                         token = issued.token
+                        # ledger_size and issued_at (0.9.1): what a rollover carries for a token still open at a seal.
                         _bounded("capability_issued", {"jti": issued.payload["jti"],
                                                        "token_hash": issued.token_hash,
-                                                       "ledger_root": issued.payload["ledger_root"]})
+                                                       "ledger_root": issued.payload["ledger_root"],
+                                                       "ledger_size": issued.payload["ledger_size"],
+                                                       "issued_at": int(issued.payload["iat"])})
                         if body_omitted:
                             allowed, reason, token = False, REASON_LEDGER_BODY, None
                 _bounded("decision", {"allowed": allowed, "reason": reason, "agent": agent,
@@ -988,8 +1054,10 @@ class TwoKey:
                                                 amount_mapped=amount_mapped, agent=agent, in_flight=in_flight,
                                                 scanned=scanned)
             canonical_bytes(summary)      # what the judges and the digest read; it must encode
-            return summary, {"now": now, "ledger_size": built, "in_flight": in_flight,
-                             "format": self._history.format}, None
+            basis = {"now": now, "ledger_size": built, "in_flight": in_flight, "format": self._history.format}
+            if self._history_from:
+                basis["from_seq"] = self._history_from
+            return summary, basis, None
         except Exception as e:      # deny, or judge without it (on_failure); recorded either way
             return None, None, _history_error(e)
 
@@ -1027,6 +1095,22 @@ class TwoKey:
         with self.ledger.exclusive():
             self.ledger.append("revocation", {"reason": reason})
             self.ledger.checkpoint()
+
+    def _early_deny(self, spec, tool: str, arguments, origin: str | None, agent) -> Decision | None:
+        """The denies that come before either path once the tool is known: text the tool would not get as written,
+        then a held tool."""
+        return self._text_deny(spec, tool, arguments, origin, agent) or self._held_deny(spec, tool, origin, agent)
+
+    def _text_deny(self, spec, tool: str, arguments, origin: str | None, agent) -> Decision | None:
+        """Run 14 Z5: an argument string the tool would not get as written is denied before either path. A lone
+        surrogate is not Unicode, so it cannot reach the tool unchanged: always refused. A NUL ends a string in C and
+        in many tools, so the tool may act on less than the judges read: refused unless the tool's signed spec says
+        ``nul_in_arguments: allow`` (weaker; docs/HOWTO.md "Characters a tool call may not carry")."""
+        problem = args_text_problem(arguments, nul_allowed=nul_allowed(spec))
+        if problem is None:
+            return None
+        return self._deny(origin, f"invalid_call:{problem}", agent, None, None,
+                          {"tool_args_omitted": True, "tool_args_error": problem}, subject_tool=tool)
 
     def _held_deny(self, spec, tool: str, origin: str | None, agent) -> Decision | None:
         """A checked tool held after a bad receipt (#28) is denied before either path: the gateway refuses it anyway,

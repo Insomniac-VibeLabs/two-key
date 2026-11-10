@@ -123,6 +123,18 @@ PROXY = _rows(PROXY_YAML, [
      "verified receipt between, or 3 within 10 minutes, hold it for 15 minutes, and then the hold ends by itself "
      "(TOOL_CHECK, \"When the tool does not answer\"). `false` only ledgers each unanswered call and sends it to the SIEM. "
      "Turning it off counts as weaker in `config set`. Since 0.9.0.", {"ha": "always on; `false` is refused"}),
+    ("ledger_rollover", "on, at 64 MB", "When the ledger seals its active segment into an encrypted archive "
+     "(`ledger/archive/`), so the file read at every start stays small. Every value is checked at start. Since 0.9.1."),
+    ("ledger_rollover.enabled", "true", "`false` never rolls over automatically; `two-key ledger roll` still does."),
+    ("ledger_rollover.segment_mb", "64", "Seal once the active segment (`entries.jsonl`) reaches this many MB, 8 to "
+     "1024."),
+    ("ledger_rollover.segment_days", "0 (off)", "Also seal once the active segment's first entry is this many days "
+     "old, 0 to 3650."),
+    ("ledger_rollover.hard_limit_mb", "2 x `segment_mb`", "Past this size, a rollover that was put off (low disk, "
+     "more than 4,096 open tokens, a failed check) must run before another token is issued "
+     "(`ledger_rollover_overdue`). From `segment_mb` to 4096."),
+    ("ledger_rollover.compression", "zlib", "`zlib`, or `none` (still encrypted and chunked, about twice as large)."),
+    ("ledger_rollover.keep_archives", "all", "`all`: no archive is ever deleted."),
     ("upstream", "required", "The MCP server the proxy starts and forwards signed calls to."),
     ("upstream.command", "required", "Program and arguments, as a list. Run without a shell."),
     ("upstream.env", "none", "Variables for the child: a literal, or `{env: NAME}` read from the proxy's "
@@ -403,6 +415,10 @@ RULES = _rows(RULES_YAML, [
     ("tool_specs.<tool>.agents", "any", "The roster agents that may call the tool: `any`, or a list of agent ids. "
      "Another agent does not see the tool and a call is denied `tool_not_for_agent`. Needs `agents:`. `any` is "
      "weaker.", {"ha": "a list of ids (`agent_list_required`)"}),
+    ("tool_specs.<tool>.nul_in_arguments", "refused", "`allow` lets a NUL character through in this tool's "
+     "arguments. Without it a call with one is denied `invalid_call:nul_in_arguments` before either path, because a "
+     "tool that reads C strings may act on less than the judges read. `allow` is weaker. A lone surrogate is always "
+     "refused (`invalid_call:text_not_unicode`). Since 0.9.1."),
     ("tool_specs.<tool>.fields", "none", "Maps each custom field to an argument, or marks it `not_applicable`."),
     ("tool_specs.<tool>.fields.<name>.json_path", "none", "The argument that holds the field's value."),
     ("tool_specs.<tool>.fields.<name>.source", "the arguments", "`caller` for a fact the proxy's hook supplies."),
@@ -477,6 +493,11 @@ variable or the path of an owner-only file; a loader refuses a secret written in
 
 A running proxy keeps the settings it started with. A change to an operator file takes effect at the next start,
 whether it was made by hand or with `config set`.
+
+The tables name a per-tool setting `tools.<tool>.<setting>` or `tool_specs.<tool>.<setting>`. In `config set` and
+`config get`, `[*]` in place of the tool, as in `tools[*].claim` or `tool_specs[*].irreversible`, stands for every
+signed tool: one change, one confirmation, one `config_changed` entry, and one `config undo`. `[*]` stands only for
+the tool there; anywhere else it is refused (`every_tool`). [SETUP](SETUP.md) has the details.
 
 `two-key config show` prints the effective value of every `proxy.yaml` setting, with defaults filled in. It
 does not say whether a value was set or defaulted. `two-key config get` prints one setting: its value, the file

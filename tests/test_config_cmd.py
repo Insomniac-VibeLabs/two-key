@@ -13,7 +13,7 @@ from pathlib import Path
 
 from two_key import cli, config_cmd
 from two_key.constitution import save_envelope, sign_constitution
-from two_key.keys import generate_private_key, save_private_key
+from two_key.keys import classical_half, generate_private_key, save_private_key, save_public_key
 
 DIGEST = "sha256:" + "0" * 64
 JUDGES = """\
@@ -191,7 +191,9 @@ class Check(Workspace):
     def test_a_quorum_that_could_be_too_lenient_warns(self):
         warned = [text for level, text in self.check() if level == config_cmd.WARN and text.startswith("quorum:")]
         self.assertTrue(any("one judge approves a call alone" in text for text in warned), warned)
-        self.assertTrue(any("every judge comes from one provider" in text for text in warned), warned)
+        # Run 14: both judges are openai_compatible with no provider: set, so the line says why they count as one.
+        self.assertTrue(any("openai-compatible, the default name for that type, so they count as one provider" in text
+                            for text in warned), warned)
 
     @unittest.skipIf(os.name == "nt", "POSIX mode bits")
     def test_a_constitution_readable_by_others_warns(self):
@@ -238,6 +240,31 @@ class Check(Workspace):
         (self.dir / "judges.yaml").unlink()
         self.assertTrue(any(level == config_cmd.FAIL and "judges_invalid" in text for level, text in self.check()))
 
+    def only_line(self, prefix):
+        """The one config check line that starts with ``prefix``."""
+        lines = [text for _, text in self.check() if text.startswith(prefix)]
+        self.assertEqual(len(lines), 1, lines)
+        return lines[0]
+
+    def test_an_unread_judges_file_does_not_call_the_hold_off(self):
+        """Run 14 V4: with judges.yaml unread the profile is unknown, so the line does not lead with off."""
+        (self.dir / "judges.yaml").write_text("judges: [", encoding="utf-8")
+        line = self.only_line("unanswered_hold:")
+        self.assertTrue(line.startswith("unanswered_hold: not known until judges.yaml reads"), line)
+
+    def test_the_ledger_rollover_settings_are_listed(self):
+        """Run 14 R13/J4: config show had ledger_rollover and config check did not."""
+        line = self.only_line("ledger_rollover:")
+        self.assertEqual(line, "ledger_rollover: on; seals at 64 MB, no new token past 128 MB until it has run; "
+                               "compression zlib; archives kept: all")
+        self.write_proxy("ledger_rollover: {segment_mb: 8, segment_days: 30, compression: none}\n")
+        line = self.only_line("ledger_rollover:")
+        self.assertIn("seals at 8 MB or after 30 days, no new token past 16 MB", line)
+        self.assertIn("compression none", line)
+        self.write_proxy("ledger_rollover: {enabled: false}\n")
+        line = self.only_line("ledger_rollover:")
+        self.assertTrue(line.startswith("ledger_rollover: off;"), line)
+
     def test_plaintext_siem_warns_here(self):
         self.write_proxy("siem:\n  sinks:\n    - {type: syslog, host: 127.0.0.1, transport: udp}\n")
         found = self.check()
@@ -258,6 +285,39 @@ class Check(Workspace):
                                              encoding="utf-8")
         self.assertTrue(any(level == config_cmd.WARN and text.startswith("upstream_paths_unchecked: ")
                             for level, text in self.check()))
+
+    def witness_lines(self):
+        return [(level, text) for level, text in self.check()
+                if text.startswith(("witness_public_key", "witness_key_changed"))]
+
+    def test_a_stale_witness_pin_fails_before_the_proxy_refuses(self):
+        """0.9.0 regression report, item 2: a pin left behind by rotate-witness passed config check, and then the
+        proxy refused witness_key_changed. config check compares it with witness.pem, reading no ledger."""
+        self.assertEqual(self.witness_lines(), [], "no pin, no line")
+        folder = self.dir / "ledger.witness"
+        folder.mkdir(mode=0o700)
+        witness = generate_private_key()
+        save_private_key(folder / "witness.pem", witness)
+        save_public_key(self.dir / "pin.pem", witness.public_key())
+        self.write_proxy("witness_public_key: pin.pem\n")
+        self.assertEqual(self.witness_lines(), [(config_cmd.OK, f"witness_public_key: matches {folder / 'witness.pem'}")])
+        (folder / "witness.pem").unlink()
+        save_private_key(folder / "witness.pem", generate_private_key())       # rotate-witness, pin not copied
+        [(level, text)] = self.witness_lines()
+        self.assertEqual(level, config_cmd.FAIL)
+        self.assertIn("rotate-witness or the key upgrade changed the witness key", text)
+        self.assertIn(str(folder / "witness.pub.pem"), text)
+
+    def test_a_0_8_0_witness_pin_after_the_key_upgrade_is_named(self):
+        folder = self.dir / "ledger.witness"
+        folder.mkdir(mode=0o700)
+        witness = generate_private_key()
+        save_private_key(folder / "witness.pem", witness)
+        save_public_key(self.dir / "pin.pem", classical_half(witness).public_key())
+        self.write_proxy("witness_public_key: pin.pem\n")
+        [(level, text)] = self.witness_lines()
+        self.assertEqual(level, config_cmd.FAIL)
+        self.assertIn("it is the 0.8.0 key", text)
 
     def test_cli_exit_code_follows_failures(self):
         code, out, _ = run("config", "check", "--config", str(self.dir / "missing.yaml"))

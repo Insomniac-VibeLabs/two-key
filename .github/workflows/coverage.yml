@@ -23,6 +23,16 @@ jobs:
           pip install --require-hashes --only-binary :all: -r .github/requirements/uv.txt
           uv sync --locked --no-build --extra yaml --extra mcp --no-dev --python python --no-managed-python --no-python-downloads
           uv pip install --python .venv --require-hashes --only-binary :all: -r .github/requirements/coverage.txt
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+      - name: TypeScript helper coverage (LCOV)
+        # Builds the helper's tests too, so the Python run below includes the cross-language tests.
+        working-directory: typescript/toolcheck
+        run: |
+          npm ci --ignore-scripts
+          npm run coverage
+          sed -i 's#^SF:#SF:typescript/toolcheck/#' lcov.info
       - name: Run coverage and produce XML
         # xvfb-run gives the window tests (tests/test_ledger_gui.py, tests/test_constitution_gui.py) a display; Linux jobs without one skip them.
         run: |
@@ -39,5 +49,6 @@ jobs:
             -Dsonar.organization=insomniac-vibelabs
             -Dsonar.projectKey=Insomniac-VibeLabs_two-key
             -Dsonar.python.coverage.reportPaths=coverage.xml
-            -Dsonar.sources=two_key
-            -Dsonar.tests=tests
+            -Dsonar.javascript.lcov.reportPaths=typescript/toolcheck/lcov.info
+            -Dsonar.sources=two_key,typescript/toolcheck/src
+            -Dsonar.tests=tests,typescript/toolcheck/test

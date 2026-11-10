@@ -97,6 +97,20 @@ class Drafting(unittest.TestCase):
         self.assertIn(f"vendor (a counterparty) {undescribed_advice('a counterparty')}", draft_tool(PAY).warnings)
         self.assertIn("is not declared in the upstream input schema", got[1])
 
+    def test_an_undescribed_path_field_gets_path_advice(self):
+        """Run 13 #32: a ``type: path`` field was told to describe a 'Folder id', which is not what it compares."""
+        from two_key.mcp_proxy.core import undescribed_inputs
+        upstream = [{"name": "read_note", "inputSchema": {"type": "object", "properties": {
+            "path": {"type": "string"}, "label": {"type": "string"}}}}]
+        specs = {"read_note": {"fields": {"note": {"json_path": "path"}, "label": {"json_path": "label"}}}}
+        registry = {"note": {"type": "path", "under": ["/srv/notes"]}, "label": {"type": "string"}}
+        got = undescribed_inputs(select_tools(upstream, specs, {}), specs, registry)
+        self.assertEqual(len(got), 2, got)
+        label, note = got[0], got[1]
+        self.assertIn("'Absolute path inside /srv/notes, such as /srv/notes/todo.txt'", note)
+        self.assertNotIn("Folder id", note)
+        self.assertIn("Folder id", label)
+
     def test_read_only_hint_and_upstream_names(self):
         t = draft_tool(REPORT)
         self.assertEqual((t.tool_id, t.upstream_name, t.spec["irreversible"]), ("readreport", "readReport", False))

@@ -7,7 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 # The tool check: a tool that checks its own calls
 
 This guide is for operators who run an MCP server behind `two-key mcp-proxy`,
-and for anyone who writes such a server, in Python or any other language.
+and for anyone who writes such a server, in Python, TypeScript or any other
+language.
 It describes the tool check added in 0.9.0 (#28). Two-Key is beta and not
 independently audited. If this guide disagrees with the code, the code wins.
 
@@ -17,6 +18,7 @@ independently audited. If this guide disagrees with the code, the code wins.
 - [In plain words](#in-plain-words)
 - [Turn it on](#turn-it-on)
 - [The Python helper](#the-python-helper)
+- [The TypeScript helper](#the-typescript-helper)
 - [The wire format](#the-wire-format)
 - [The checks, in order](#the-checks-in-order)
 - [What Two-Key does with the receipt](#what-two-key-does-with-the-receipt)
@@ -163,8 +165,45 @@ For another framework, call `checker.check(arguments, meta)` (it raises
 refusal, send `checker.refusal(reason, meta)`. If the tool raises, sign an
 error result the same way rather than sending none.
 
-The helper is Python only. A TypeScript helper, as its own npm package, is
-planned for 0.9.1 (ROADMAP.md).
+## The TypeScript helper
+
+New in 0.9.1. An MCP server on the TypeScript SDK uses the npm package
+[`@insomniac-vibelabs/two-key-toolcheck`](https://www.npmjs.com/package/@insomniac-vibelabs/two-key-toolcheck)
+(source in `typescript/toolcheck/`, Node 22.13 or later, or Node 24):
+
+```ts
+import { ToolChecker } from "@insomniac-vibelabs/two-key-toolcheck";
+
+const checker = await ToolChecker.load("/srv/billing/two-key/check.json");
+
+server.registerTool("pay_vendor", { inputSchema }, (args, extra) =>
+  checker.mcpCall(args, extra._meta, (checked) => pay(checked)));
+```
+
+It makes the same checks in the same order, with the same refusals, the
+same receipt and the same seen record as the Python helper, and it reads the
+same `check.json`. A deployment can move a tool from one helper to the
+other without signing anything again, and copies in both languages can
+share one seen record. For another framework, use `check`, `receipt` and
+`refusal` as above, and send and sign `wireResult(result)` (below).
+
+Two differences come from JavaScript:
+
+- **Numbers.** JavaScript reads Python's `12.0` as `12`, and loses digits
+  of an integer above 2^53, before the helper sees the arguments. Such a
+  call hashes differently and is refused `args_mismatch`. It fails closed.
+  Declare such inputs as integers within 2^53, as non-whole decimals, or as
+  strings.
+- **Windows.** The helper refuses a key file or seen record that others can
+  read on Linux and macOS. On Windows it does not read access lists: keep
+  the files in a folder only the tool's account can open.
+
+Its own tests read the vectors below, and the Python test
+`tests/test_toolcheck_typescript.py` checks it against this side: canonical
+JSON on thousands of random values, a Python stamp passing its checks, its
+receipt passing the gateway, a shared seen record, and a TypeScript SDK
+server behind a real `two-key mcp-proxy`. Publishing is
+[NPM.md](NPM.md).
 
 ## The wire format
 
@@ -381,6 +420,9 @@ below. Two details matter most:
   over the body alone must fail.
 - Hash the arguments exactly as received, in canonical JSON. A reordered key
   or a reformatted number gives another hash, and the check refuses.
+- Write `isError` and `resultType` into the result you send and sign. The
+  gateway's MCP SDK fills in `false` and `"complete"` when they are left
+  out, so a result that leaves them out hashes differently there.
 
 ## Test vectors
 

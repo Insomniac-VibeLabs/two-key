@@ -54,8 +54,13 @@ def report_text(report: dict) -> tuple[str, bool]:
     if problems:
         more = f" (and {len(problems) - 1} more; press Show problems)" if len(problems) > 1 else ""
         return f"{report.get('size', 0)} entries. Decision digest problem: {problems[0]}{more}", True
-    return (f"{report.get('size', 0)} entries, verified when opened: hash chain, signed head and witness pins "
-            "check out, and every decision's digests match its constitution_loaded."), False
+    text = (f"{report.get('size', 0)} entries, verified when opened: hash chain, signed head and witness pins "
+            "check out, and every decision's digests match its constitution_loaded.")
+    start = report.get("listed_from")
+    if start:       # run 14 K3: the count is the whole ledger, the table only the active segment
+        text += (f" The table lists the active segment, from seq {start}; tick Include archives to list the "
+                 f"{start} archived entries too.")
+    return text, False
 
 
 class FilterRow:
@@ -87,9 +92,11 @@ class LedgerViewer:
     """The window's contents. ``reload`` returns fresh rows and a report, or raises ``ViewError``."""
 
     def __init__(self, root, rows: Sequence[Row], *, title: str = "", report: dict | None = None,
-                 reload: Callable[[], tuple[Sequence[Row], dict]] | None = None, query: Query | None = None,
-                 max_rows: int = 10000) -> None:
+                 reload: Callable[..., tuple[Sequence[Row], dict]] | None = None, query: Query | None = None,
+                 max_rows: int = 10000, archives: bool | None = None) -> None:
         query = query or Query()
+        # "Include archives" (0.9.1): shown for a ledger that has rolled over; None hides it.
+        self.include_archives = None if archives is None or reload is None else tk.BooleanVar(value=archives)
         self.root, self.rows, self.reload_rows, self.max_rows = root, list(rows), reload, max_rows
         self.fields = field_names(self.rows)
         self.columns = default_columns(self.fields)
@@ -125,7 +132,7 @@ class LedgerViewer:
         bar = ttk.Frame(self.root, padding=8)
         bar.pack(fill="x")
         ttk.Label(bar, text="Search all fields:").pack(side="left")
-        self.search_entry = ttk.Entry(bar, textvariable=self.search, width=40)
+        self.search_entry = ttk.Entry(bar, textvariable=self.search, width=24)  # grows; 40 hid Include archives
         self.search_entry.pack(side="left", padx=4, fill="x", expand=True)
         ttk.Checkbutton(bar, text="Also match field names", variable=self.search_names).pack(
             side="left", padx=(0, 8))
@@ -136,12 +143,17 @@ class LedgerViewer:
         ttk.Button(bar, text="Columns", command=self.choose_columns).pack(side="left")
         if self.reload_rows is not None:
             ttk.Button(bar, text="Reload", command=self.reload).pack(side="left", padx=4)
+        if self.include_archives is not None:
+            ttk.Checkbutton(bar, text="Include archives", variable=self.include_archives,
+                            command=self.reload).pack(side="left", padx=4)
 
     def _build_banner(self) -> None:
         line = ttk.Frame(self.root, padding=(8, 4))
         line.pack(fill="x")
         self.banner = tk.Label(line, anchor="w", justify="left")
         self.banner.pack(side="left", fill="x", expand=True)
+        # A long banner (the archives note) wraps instead of running off the window's edge.
+        self.banner.bind("<Configure>", lambda e: self.banner.configure(wraplength=max(200, e.width - 8)))
         self.problems_button = ttk.Button(line, text="Show problems", command=self.show_problems)
 
     def _build_panes(self) -> None:
@@ -377,7 +389,10 @@ class LedgerViewer:
     def reload(self) -> None:
         """Open and verify the ledger again; the search, filters, sort, and columns stay."""
         try:
-            rows, report = self.reload_rows()
+            if self.include_archives is None:
+                rows, report = self.reload_rows()
+            else:
+                rows, report = self.reload_rows(archives=self.include_archives.get())
         except ViewError as e:
             self.show_report({"error": str(e)})
             return
