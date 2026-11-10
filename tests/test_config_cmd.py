@@ -240,23 +240,29 @@ class Check(Workspace):
         (self.dir / "judges.yaml").unlink()
         self.assertTrue(any(level == config_cmd.FAIL and "judges_invalid" in text for level, text in self.check()))
 
+    def only_line(self, prefix):
+        """The one config check line that starts with ``prefix``."""
+        lines = [text for _, text in self.check() if text.startswith(prefix)]
+        self.assertEqual(len(lines), 1, lines)
+        return lines[0]
+
     def test_an_unread_judges_file_does_not_call_the_hold_off(self):
         """Run 14 V4: with judges.yaml unread the profile is unknown, so the line does not lead with off."""
         (self.dir / "judges.yaml").write_text("judges: [", encoding="utf-8")
-        line = next(text for _, text in self.check() if text.startswith("unanswered_hold:"))
+        line = self.only_line("unanswered_hold:")
         self.assertTrue(line.startswith("unanswered_hold: not known until judges.yaml reads"), line)
 
     def test_the_ledger_rollover_settings_are_listed(self):
         """Run 14 R13/J4: config show had ledger_rollover and config check did not."""
-        line = next(text for _, text in self.check() if text.startswith("ledger_rollover:"))
+        line = self.only_line("ledger_rollover:")
         self.assertEqual(line, "ledger_rollover: on; seals at 64 MB, no new token past 128 MB until it has run; "
                                "compression zlib; archives kept: all")
         self.write_proxy("ledger_rollover: {segment_mb: 8, segment_days: 30, compression: none}\n")
-        line = next(text for _, text in self.check() if text.startswith("ledger_rollover:"))
+        line = self.only_line("ledger_rollover:")
         self.assertIn("seals at 8 MB or after 30 days, no new token past 16 MB", line)
         self.assertIn("compression none", line)
         self.write_proxy("ledger_rollover: {enabled: false}\n")
-        line = next(text for _, text in self.check() if text.startswith("ledger_rollover:"))
+        line = self.only_line("ledger_rollover:")
         self.assertTrue(line.startswith("ledger_rollover: off;"), line)
 
     def test_plaintext_siem_warns_here(self):
