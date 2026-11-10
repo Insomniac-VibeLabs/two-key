@@ -42,7 +42,7 @@ _V3_SIGNED_KEYS = _V2_SIGNED_KEYS | {"serial", "agents"}
 # (two_key/settings.py) read the same sets the validators use.
 RULES_FILE_KEYS = ("hard_rules", "tool_specs", "fields", "serial", "agents")
 TOOL_SPEC_KEYS = ("irreversible", "data_class_floor", "amount", "counterparties", "payload", "deny_unmapped",
-                  "fields", "tool_check", "agents")
+                  "fields", "tool_check", "agents", "nul_in_arguments")
 # A tool's check (#28, docs/TOOL_CHECK.md): the fingerprint of the tool's receipt key, or "exempt".
 # Hybrid only (0.9.0): the tool check has no classical keys to stay compatible with.
 TOOL_CHECK_KEY = re.compile(r"hybrid-sha256:[0-9a-f]{64}")
@@ -66,6 +66,17 @@ def _tool_check(tool: str, spec: Mapping) -> dict:
         return {"tool_check": {"key": value["key"]}}
     raise ConstitutionError(f"tool_specs.{tool}.tool_check: expected exempt or {{key: hybrid-sha256:<64 hex digits>}} "
                             "(two-key tool-key new prints the fingerprint)")
+
+
+def _nul_setting(tool: str, spec: Mapping) -> dict:
+    """``{"nul_in_arguments": "allow"}`` when the spec lets a NUL through in this tool's arguments (run 14 Z5), else
+    ``{}``, so a spec without it signs the same bytes as before. Refusing is the default and has no spelling."""
+    if "nul_in_arguments" not in spec:
+        return {}
+    if spec["nul_in_arguments"] != "allow":
+        raise ConstitutionError(f"tool_specs.{tool}.nul_in_arguments: expected allow, or leave it out to refuse a "
+                                "NUL (the default)")
+    return {"nul_in_arguments": "allow"}
 
 
 class ConstitutionSignatureError(ValueError):
@@ -446,6 +457,7 @@ def _tool_spec(tool: str, spec: Any, registry: Mapping, agents: list | None) -> 
     if fields_out:      # absent for a tool with no custom fields, so its spec hashes as before
         out["fields"] = fields_out
     out.update(_tool_check(tool, spec))      # absent unless set, for the same reason
+    out.update(_nul_setting(tool, spec))     # absent unless set
     out.update(_tool_agents(tool, spec, agents))      # absent unless set: no roster means any caller
     return out
 

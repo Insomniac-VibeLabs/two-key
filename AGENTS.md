@@ -152,6 +152,9 @@ security findings privately, per [SECURITY.md](SECURITY.md).
   neither path runs, never a token. A decline that also carries a tool,
   arguments, or a claim is `malformed_proposal` (`tests/test_agent_decline.py`).
 - `require_path_a_first` is not a skip.
+- An argument key or value with a lone surrogate is denied `invalid_call:text_not_unicode` for every tool, and
+  one with a NUL `invalid_call:nul_in_arguments` unless the tool's signed spec says `nul_in_arguments: allow`
+  (weaker; run 14 Z5), before either path (`tests/test_args_text.py`). Do not make allowing a NUL the default.
 - JSON/YAML inputs refuse duplicate keys and YAML merge keys. Oversized or malformed calls deny
   before either path.
 - Default quorum needs one judge and has no diversity floors.

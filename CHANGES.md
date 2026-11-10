@@ -5843,5 +5843,12 @@ docs findings.
   agent waived 100 and the legit case graded FAIL; the product was right.
 - **DEMO.** A script does not read `~/.bashrc` (use the full path); run `config check` from the `twokey` home, not
   `/tmp`; clean-up names anything else staged for the demo.
+- **Characters a tool call may not carry** (Z5, Stephan's decision 2026-11-10). `authorize` issued a token for an
+  argument with a NUL or a lone surrogate that no rule read. A lone surrogate is now always denied
+  `invalid_call:text_not_unicode` (it cannot reach the tool as written). A NUL is denied
+  `invalid_call:nul_in_arguments` by default, because a tool that reads C strings may act on less than the judges
+  read; a tool that needs one gets `nul_in_arguments: allow` in its signed spec, which is weaker (typed yes). Setup
+  asks per starter tool, the setup window has a box, and `config set` and the rules file take it. Both are checked
+  before either path, so no judge is asked. A spec without the key signs the same bytes as before.
 - Tests: `test_config_cmd`, `test_lone_judge`, `test_ledger_scale`, `test_key_backup`, `test_ledger_view`,
-  `test_ledger_gui`, `test_setup_gui`.
+  `test_ledger_gui`, `test_setup_gui`, `test_args_text` (new); DeepSource PTC-W0063 in `test_config_cmd`.

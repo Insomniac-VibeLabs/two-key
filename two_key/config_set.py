@@ -633,6 +633,8 @@ def _weaker_specs(a: Mapping, b: Mapping) -> list[str]:
 
 def _how_changed(key: str, new) -> str:
     """What a weaker spec change did, in words; the tool check says which way it went (run 12)."""
+    if key == "nul_in_arguments":
+        return "allow (a NUL reaches the tool)"
     if key != "tool_check":
         return "changed"
     if new == "exempt":
@@ -650,6 +652,8 @@ def _same_or_tighter(key: str, old, new) -> bool:
         return not old and new is True
     if key == "data_class_floor":
         return _FLOOR_RANK.get(new, 4) > _FLOOR_RANK.get(old, 4)
+    if key == "nul_in_arguments":       # run 14 Z5: allowing a NUL is weaker, refusing it again is not
+        return new is None
     if key == "tool_check":     # #28: turning the check on is stronger; exempt, off or another key is not
         return (old in (None, "exempt") and isinstance(new, Mapping)) or (old == "exempt" and new is None)
     return False

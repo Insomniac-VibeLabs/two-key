@@ -1372,6 +1372,27 @@ with `invalid_call:tool args are nested too deeply`; the ledger keeps
 `tool_args_omitted: true` and `tool_args_error`. Encoding runs before the
 size check, so the reason is the same on every Python from 3.10 to 3.14.
 
+**Characters a tool call may not carry** (0.9.1, run 14). A key or value in
+the arguments that holds a lone surrogate (half of a UTF-16 pair, which is
+not Unicode) is denied `invalid_call:text_not_unicode`: it cannot be sent to
+the tool as written, so the tool would get other text than the judges read.
+A NUL character (U+0000) is denied `invalid_call:nul_in_arguments`: a tool
+written in C, or one that passes the text to a C library or a file name,
+stops reading at the NUL and so may act on less than the judges read
+(`/notes/a<NUL>../../etc` judged in full, opened as `/notes/a`). Both are
+checked after the call is read and before either path, so no judge is asked
+and the ledger keeps `tool_args_omitted: true` and `tool_args_error`. Typed
+fields and `path` fields already refuse both.
+
+A tool that really needs a NUL in its arguments (binary text, some database
+or protocol tools) can be allowed one at a time: `nul_in_arguments: allow` in
+its signed spec, from `two-key setup` (it asks per starter tool; the window
+has a box), `config set tool_specs.<tool>.nul_in_arguments allow`, or the
+rules file. It is weaker and needs `--confirm-weaker` and a typed yes. The
+risk is the one above: only allow it for a tool whose code you know handles
+a NUL as an ordinary character. A lone surrogate stays refused for every tool,
+since no tool can be sent one unchanged.
+
 With a content scanner (0.6.0), the files a scanned tool's call carries are
 held to limits too, before the scanner and both paths and under every
 stance: each declared file's `max_bytes`, 32 files, and 100 MiB of files in
@@ -2303,6 +2324,8 @@ an argument value.
 | Reason | Meaning |
 | --- | --- |
 | `tool_not_offered` | A name the proxy does not show. Nothing is authorized, since no token can exist for it. The attempt is ledgered as `tool_not_offered` (the name only when it is a short identifier, else its size and digest), and a line goes to stderr |
+| `invalid_call:nul_in_arguments` | An argument key or value holds a NUL character and the tool's signed spec does not say `nul_in_arguments: allow` (0.9.1, run 14). Denied before either path; see "Characters a tool call may not carry" |
+| `invalid_call:text_not_unicode` | An argument key or value holds a lone surrogate, which is not Unicode and cannot reach the tool as written (0.9.1, run 14). Denied before either path for every tool |
 | `duplicate_keys` | The `tools/call` message's JSON repeats a key, in the arguments or anywhere else (0.9.0, run 13). The MCP SDK would keep the last one; the proxy refuses the call before `authorize`, as `two-key authorize` and agent proposals refuse a repeated key. Ledgered as `tool_call_refused` with `why: duplicate_keys` and the tool name as for `tool_not_offered`, and a line goes to stderr |
 | `derive_failed:caller_field_in_arguments:<field>` | The agent wrote a caller-supplied fact itself, although the proxy hides it |
 | `derive_failed:field_missing:<field>` | The fact hook returned nothing (for example, an unknown invoice) or raised |

@@ -71,6 +71,34 @@ KEYS_UPGRADE_NEEDED = ("keys_upgrade_needed: the principal key is a 0.8.0 Ed2551
                        "--ledger DIR --constitution FILE, or two_key.upgrade.open_upgraded; docs/UPGRADING.md)")
 
 
+NUL_ALLOW = "allow"
+
+
+def nul_allowed(spec) -> bool:
+    """Whether the tool's signed spec lets a NUL through in its arguments (run 14 Z5, off by default)."""
+    return isinstance(spec, Mapping) and spec.get("nul_in_arguments") == NUL_ALLOW
+
+
+def args_text_problem(value: Any, *, nul_allowed: bool = False) -> str | None:
+    """``text_not_unicode`` when a string (a key or a value) holds a lone surrogate, ``nul_in_arguments`` when one
+    holds a NUL that the spec does not allow, else None. ``value`` is already plain and depth-bounded."""
+    stack, nul = [value], False
+    while stack:
+        item = stack.pop()
+        if isinstance(item, Mapping):
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            stack.extend(item)
+        elif isinstance(item, str):
+            try:
+                item.encode("utf-8")
+            except UnicodeEncodeError:
+                return "text_not_unicode"
+            nul = nul or "\x00" in item
+    return "nul_in_arguments" if nul and not nul_allowed else None
+
+
 def _require_hybrid(public_key) -> None:
     """The library route has no first start to upgrade at: a 0.8.0 key is refused, never run on Ed25519 alone."""
     if not is_hybrid(public_key):
@@ -714,7 +742,7 @@ class TwoKey:
             # The signed roster gives this tool to other agents (two_key/roster.py): no judge sees the call.
             return self._deny(origin, "tool_not_for_agent", agent, None, None, {"tool": normalized.tool},
                               subject_tool=normalized.tool)
-        held = self._held_deny(spec, normalized.tool, origin, agent)
+        held = self._early_deny(spec, normalized.tool, arguments, origin, agent)
         if held:
             return held
         form = None
@@ -1067,6 +1095,22 @@ class TwoKey:
         with self.ledger.exclusive():
             self.ledger.append("revocation", {"reason": reason})
             self.ledger.checkpoint()
+
+    def _early_deny(self, spec, tool: str, arguments, origin: str | None, agent) -> Decision | None:
+        """The denies that come before either path once the tool is known: text the tool would not get as written,
+        then a held tool."""
+        return self._text_deny(spec, tool, arguments, origin, agent) or self._held_deny(spec, tool, origin, agent)
+
+    def _text_deny(self, spec, tool: str, arguments, origin: str | None, agent) -> Decision | None:
+        """Run 14 Z5: an argument string the tool would not get as written is denied before either path. A lone
+        surrogate is not Unicode, so it cannot reach the tool unchanged: always refused. A NUL ends a string in C and
+        in many tools, so the tool may act on less than the judges read: refused unless the tool's signed spec says
+        ``nul_in_arguments: allow`` (weaker; docs/HOWTO.md "Characters a tool call may not carry")."""
+        problem = args_text_problem(arguments, nul_allowed=nul_allowed(spec))
+        if problem is None:
+            return None
+        return self._deny(origin, f"invalid_call:{problem}", agent, None, None,
+                          {"tool_args_omitted": True, "tool_args_error": problem}, subject_tool=tool)
 
     def _held_deny(self, spec, tool: str, origin: str | None, agent) -> Decision | None:
         """A checked tool held after a bad receipt (#28) is denied before either path: the gateway refuses it anyway,

@@ -324,6 +324,7 @@ Tier: signed policy. The rules Path A runs, the per-tool specs that say where Pa
 | `tool_specs.<tool>.tool_check` | none (off) |  | The tool check (docs/TOOL_CHECK.md), for a tool behind `two-key mcp-proxy`: `{key: hybrid-sha256:...}` turns it on, `exempt` leaves it off. `high_assurance` refuses to start with a tool that has neither; `exempt` and turning it off are weaker. |
 | `tool_specs.<tool>.tool_check.key` | required with a mapping |  | The fingerprint of the key that signs the tool's receipts, as `two-key tool-key new` prints it. |
 | `tool_specs.<tool>.agents` | any | a list of ids (`agent_list_required`) | The roster agents that may call the tool: `any`, or a list of agent ids. Another agent does not see the tool and a call is denied `tool_not_for_agent`. Needs `agents:`. `any` is weaker. |
+| `tool_specs.<tool>.nul_in_arguments` | refused |  | `allow` lets a NUL character through in this tool's arguments. Without it a call with one is denied `invalid_call:nul_in_arguments` before either path, because a tool that reads C strings may act on less than the judges read. `allow` is weaker. A lone surrogate is always refused (`invalid_call:text_not_unicode`). Since 0.9.1. |
 | `tool_specs.<tool>.fields` | none |  | Maps each custom field to an argument, or marks it `not_applicable`. |
 | `tool_specs.<tool>.fields.<name>.json_path` | none |  | The argument that holds the field's value. |
 | `tool_specs.<tool>.fields.<name>.source` | the arguments |  | `caller` for a fact the proxy's hook supplies. |

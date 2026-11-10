@@ -307,6 +307,9 @@ def _ask_tools(ask: Ask, profile: str | None, agent_ids: list[str] | None = None
                  "data_class_floor": _ask(ask, f"Tool {tool}: lowest data class", "classified", DATA_CLASSES)}
         if profile is not None:
             _ask_tool_check(entry, ask, profile)
+        if _yes(ask, f"Tool {tool}: let a NUL character through in its arguments? Only if the tool needs one; a tool "
+                     "that reads C strings may act on less than the judges read (weaker)", False):
+            entry["nul_in_arguments"] = NUL_ALLOW
         if agent_ids:
             _ask_tool_agents(entry, ask, agent_ids, profile == "high_assurance")
         tools.append(entry)
@@ -394,6 +397,8 @@ def weaker_reasons(answers: Mapping) -> list[str]:
     profile = answers.get("profile", "default")
     exempt = [f"tool_specs.{t['id']}.tool_check: exempt" for t in _tools(answers)
               if profile == "high_assurance" and t.get("tool_check") == EXEMPT]
+    exempt += [f"tool_specs.{t['id']}.nul_in_arguments: allow (a NUL reaches the tool)" for t in _tools(answers)
+               if t.get("nul_in_arguments") == NUL_ALLOW]
     counts = _quorum_answer(answers)
     if not counts:
         return exempt
@@ -403,6 +408,7 @@ def weaker_reasons(answers: Mapping) -> list[str]:
 
 
 ANY_AGENT = "any"
+NUL_ALLOW = "allow"     # tool_specs.<tool>.nul_in_arguments (run 14 Z5); refusing is the default
 SETUP_AGENT_KEYS = ("account",)        # monitored_agent keys setup reads for the roster, not for judges.yaml
 
 
@@ -510,6 +516,8 @@ def _starter_spec(tool: Any, roster: list | None, high: bool) -> dict:
             "data_class_floor": tool.get("data_class_floor", "classified")}
     if tool.get("tool_check") is not None:
         spec["tool_check"] = tool["tool_check"]
+    if tool.get("nul_in_arguments") is not None:       # run 14 Z5; constitution.py refuses anything but allow
+        spec["nul_in_arguments"] = tool["nul_in_arguments"]
     agents = tool.get("agents")
     if agents is not None and not roster:
         raise SetupError(f"tools: {tool['id']}: agents needs monitored_agent.account (a signed roster)")

@@ -44,7 +44,7 @@ READ_ONLY = "readonly"
 SHOWN_ONLY = "disabled"
 JUDGE_KEYS = ("id", "type", "model", "base_url", "maker", "upstream", "auth_env")
 AGENT_KEYS = ("id", "model", "provider", "base_url", "upstream", "credential_env", "account")
-TOOL_COLUMNS = ("id", "irreversible", "data_class_floor", "tool_check", "agents")
+TOOL_COLUMNS = ("id", "irreversible", "data_class_floor", "tool_check", "agents", "nul_in_arguments")
 ROSTER_COLUMNS = ("id", "account", "shared")
 ON_FAILURE = ("deny", "judge_without_history")
 HA_HELP = ("High assurance: two judges from two different model makers, at least one on this machine, and a yes "
@@ -134,6 +134,7 @@ class SetupWindow:
         self.roster_var = {"id": tk.StringVar(master=root), "account": tk.StringVar(master=root)}
         self.roster_shared = tk.BooleanVar(master=root, value=False)
         self.tool_irreversible = tk.BooleanVar(master=root, value=True)
+        self.tool_nul = tk.BooleanVar(master=root, value=False)    # run 14 Z5: refusing a NUL is the default
         self.quorum = {name: tk.IntVar(master=root, value=1) for name in QUORUM_COUNTS}
         self.status = ttk.Label(root, padding=8, anchor="w")
         self.status.pack(side="bottom", fill="x")       # first, so a small window never hides it
@@ -263,6 +264,9 @@ class SetupWindow:
         _row(form, "agents that may call it (blank or any: every listed agent; or ids)", self.tool_var["agents"], 3)
         ttk.Checkbutton(form, text="a call cannot be undone", variable=self.tool_irreversible).grid(
             row=4, column=1, sticky="w")
+        ttk.Checkbutton(form, text="let a NUL character through in its arguments (weaker: only for a tool that needs "
+                                   "one; a tool that reads C strings may act on less than the judges read)",
+                        variable=self.tool_nul).grid(row=5, column=1, sticky="w")
         self._buttons(tab, ("Add", self.add_tool), ("Remove", self.remove_tool))
 
     def _build_proxy(self, tab) -> None:
@@ -451,6 +455,8 @@ class SetupWindow:
         self.tools = [t for t in self.tools if t["id"] != tool_id]
         tool = {"id": tool_id, "irreversible": bool(self.tool_irreversible.get()),
                 "data_class_floor": self.tool_var["data_class_floor"].get() or "classified"}
+        if self.tool_nul.get():
+            tool["nul_in_arguments"] = "allow"
         check = self.tool_var["tool_check"].get().strip()
         if check:
             tool["tool_check"] = check if check == "exempt" else {"key": check}
@@ -478,6 +484,7 @@ class SetupWindow:
             self.tool_var["id"].set(tool["id"])
             self.tool_var["data_class_floor"].set(tool.get("data_class_floor", "classified"))
             self.tool_irreversible.set(bool(tool.get("irreversible", True)))
+            self.tool_nul.set(tool.get("nul_in_arguments") == "allow")
             self.tool_var["tool_check"].set(_check_text(tool.get("tool_check")))
             self.tool_var["agents"].set(_cell("agents", tool.get("agents")))
 

@@ -228,6 +228,19 @@ class Window(unittest.TestCase):
         self.assertEqual(window.answers()["tools"][0]["tool_check"], "exempt")
         self.assertIn("tool_specs.tool_a.tool_check: exempt", window.review_box.get("1.0", "end"))
 
+    def test_a_nul_is_refused_unless_the_box_is_ticked_and_ticking_it_is_weaker(self):
+        """Run 14 Z5: the starter tool's box writes nul_in_arguments: allow, and Review lists it as weaker."""
+        window = self.window()
+        self.fill(window, judges=(LOCAL,))
+        self.assertNotIn("nul_in_arguments", window.answers()["tools"][0])
+        window.tool_table.selection_set(window.tool_table.get_children()[0])
+        window._tool_clicked()
+        window.tool_nul.set(True)
+        window.add_tool()
+        self.assertEqual(window.answers()["tools"][0]["nul_in_arguments"], "allow")
+        window.refresh()
+        self.assertIn("tool_specs.tool_a.nul_in_arguments: allow", window.review_box.get("1.0", "end"))
+
     def test_the_signed_roster_and_each_tools_agents(self):
         window = self.window()
         self.fill(window)
