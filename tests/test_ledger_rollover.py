@@ -92,6 +92,18 @@ class Rollover(LedgerCase):
         self.assertEqual(again.audit_archives()["archives"], 1)
         self.assertTrue(private(self.archive()))
 
+    @unittest.skipIf(os.name == "nt", "POSIX modes")
+    def test_the_head_stays_owner_only_under_a_wide_umask(self):
+        # 0.9.1 walkthrough: `ledger roll` from a 022 shell rewrote head.json 0644 (Stephan: always 0600).
+        old = os.umask(0o022)
+        try:
+            self.notes(self.led, 0, 3)
+            self.led.roll("manual")
+            self.notes(self.led, 3, 1)
+        finally:
+            os.umask(old)
+        self.assertEqual(self.led.head_path.stat().st_mode & 0o777, 0o600)
+
     def test_the_active_file_holds_only_the_new_segment(self):
         self.notes(self.led, 0, 20)
         before = self.led.entries_path.stat().st_size

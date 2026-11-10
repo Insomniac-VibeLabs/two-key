@@ -1435,7 +1435,8 @@ class Ledger:
         """
         tmp = self.head_path.with_suffix(".json.tmp")
         data = text.encode("utf-8")
-        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _platform.O_BINARY, 0o666)
+        # Owner-only whatever the umask (Stephan 2026-11-10): `ledger roll` from a 022 shell left it 0644.
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _platform.O_BINARY, 0o600)
         try:
             view = memoryview(data)
             while view:

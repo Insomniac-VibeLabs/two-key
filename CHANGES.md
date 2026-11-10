@@ -5875,3 +5875,6 @@ unsaid.
 - UPGRADING's 0.9.1 row: 0.9.0 refuses a ledger 0.9.1 wrote only with its own read error, not a message naming
   0.9.1; coming straight from 0.8.0 still runs the key upgrade, which signs `constitution.signed.json` again; and
   `backup-export` on a copy that has never started refuses until Two-Key has started once.
+- The ledger's signed head (`head.json`) is written owner-only (0600) every time, whatever the umask
+  (Stephan's decision 2026-11-10). Before, each write took the caller's umask, so `two-key ledger roll` from a
+  022 shell left it 0644 inside the 0700 ledger folder (`tests/test_ledger_rollover.py`).
